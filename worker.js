@@ -58,10 +58,15 @@ async function checkRate(kv, key, limit, ttlSec) {
 }
 
 function cleanStr(s, max) {
-  return String(s == null ? '' : s)
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
-    .trim()
-    .slice(0, max);
+  // Strip ASCII control chars except tab/newline/CR; no regex escapes needed.
+  const str = String(s == null ? '' : s);
+  let out = '';
+  for (const ch of str) {
+    const n = ch.codePointAt(0);
+    if (n === 9 || n === 10 || n === 13 || n >= 32) out += ch;
+    if (out.length >= max + 200) break;
+  }
+  return out.trim().slice(0, max);
 }
 
 function makeId() {
