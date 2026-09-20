@@ -9,7 +9,8 @@
  * The static site (assets/site.js) calls these endpoints same-origin (/api/…).
  */
 
-function json(data, status = 200) {
+function json(data, status) {
+  status = status || 200;
   return new Response(JSON.stringify(data), {
     status,
     headers: {
@@ -33,7 +34,8 @@ function handleOptions() {
   });
 }
 
-async function readJson(request, maxBytes = 16384) {
+async function readJson(request, maxBytes) {
+  maxBytes = maxBytes || 16384;
   const buf = await request.arrayBuffer();
   if (buf.byteLength > maxBytes) throw new Error('payload too large');
   return JSON.parse(new TextDecoder().decode(buf));
@@ -103,8 +105,8 @@ async function postReactions(request, env) {
     return json({ error: 'bad input' }, 400);
   }
   if (unvote && !okVote(prev)) return json({ error: 'bad input' }, 400);
-  if (!(await checkRate(env.AFP_DATA, `react:${clientIp(request)}:${slug}`, 30, 3600))) {
-    return json({ error: 'slow down — too many votes' }, 429);
+  if (!(await checkRate(env.AFP_DATA, 'react:' + clientIp(request) + ':' + slug, 30, 3600))) {
+    return json({ error: 'too many votes, slow down' }, 429);
   }
   const k = reactKey(slug);
   const cur = sanitizeCounts(JSON.parse((await env.AFP_DATA.get(k)) || 'null'));
@@ -155,8 +157,8 @@ async function postComments(request, env) {
   const text = cleanStr(body.text, 2000);
   if (name.length < 2) return json({ error: 'Please add your name.' }, 400);
   if (text.length < 3) return json({ error: 'Please write a comment first.' }, 400);
-  if (!(await checkRate(env.AFP_DATA, `comment:${clientIp(request)}:${slug}`, 5, 3600))) {
-    return json({ error: 'slow down — too many comments' }, 429);
+  if (!(await checkRate(env.AFP_DATA, 'comment:' + clientIp(request) + ':' + slug, 5, 3600))) {
+    return json({ error: 'too many comments, slow down' }, 429);
   }
 
   const held = HAS_LINK.test(text);
