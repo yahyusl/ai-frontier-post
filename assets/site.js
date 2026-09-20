@@ -149,10 +149,14 @@
       });
     }
 
+    var nameEl = form.querySelector('input[name="name"]');
+    var textEl = form.querySelector('textarea[name="text"]');
+    var hpEl = form.querySelector('input[name="website"]');
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      var name = form.name.value.trim();
-      var text = form.text.value.trim();
+      var name = nameEl.value.trim();
+      var text = textEl.value.trim();
       if (name.length < 2) { status.textContent = 'Please add your name.'; return; }
       if (text.length < 3) { status.textContent = 'Please write a comment first.'; return; }
       var btn = form.querySelector('button[type="submit"]');
@@ -161,9 +165,9 @@
       api('/api/comments', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slug: slug, name: name, text: text, website: form.website.value })
+        body: JSON.stringify({ slug: slug, name: name, text: text, website: hpEl.value })
       }).then(function (d) {
-        form.text.value = '';
+        textEl.value = '';
         status.textContent = d.held
           ? 'Thanks — your comment is awaiting moderation.'
           : 'Comment posted. Thanks for joining in.';
