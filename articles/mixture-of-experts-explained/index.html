@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mixture-of-Experts, explained: why frontier models are going sparse — AI Frontier Post</title>
+<meta name="description" content="The biggest models today don&#x27;t use all their parameters on every token. Here&#x27;s how mixture-of-experts routing works, why it slashes inference cost, and wh…">
+<link rel="canonical" href="https://aifrontierpost.com/articles/mixture-of-experts-explained/">
+<meta property="og:title" content="Mixture-of-Experts, explained: why frontier models are going sparse">
+<meta property="og:description" content="The biggest models today don&#x27;t use all their parameters on every token. Here&#x27;s how mixture-of-experts routing works, why it slashes inference cost, and wh…">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mixture-of-experts-explained/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="article:published_time" content="2026-08-14">
+<meta property="article:section" content="Research">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Mixture-of-Experts, explained: why frontier models are going sparse", "description": "The biggest models today don't use all their parameters on every token. Here's how mixture-of-experts routing works, why it slashes inference cost, and wh…", "datePublished": "2026-08-14", "dateModified": "2026-08-14", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/#about"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com"}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/mixture-of-experts-explained/"}}</script>
+<style>
+:root{--ink:#16161a;--muted:#5c5c66;--line:#e5e3dd;--accent:#c73e1d;--bg:#fbfaf7;--panel:#fff}
+*{box-sizing:border-box;margin:0}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.65}
+.wrap{max-width:860px;margin:0 auto;padding:0 22px}
+.site-head{background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+.nav{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:14px 22px}
+.wordmark{font-weight:800;font-size:20px;color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.nav nav a{margin-left:18px;font-size:14px;color:var(--muted);text-decoration:none}
+.nav nav a:hover{color:var(--accent)}
+main{padding:44px 0 60px}
+.crumb{font-size:13px;color:var(--muted);margin-bottom:14px}
+.crumb a{color:var(--accent);text-decoration:none}
+h1{font-size:clamp(30px,4.5vw,44px);line-height:1.12;letter-spacing:-.02em;margin:8px 0 14px}
+.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:3px 11px;margin-bottom:6px}
+.byline{color:var(--muted);font-size:14px;margin:10px 0 26px}
+.lede{font-size:19px;color:var(--muted);margin-bottom:6px}
+.article-body{font-size:17px}
+.article-body h2{font-size:26px;margin:36px 0 12px;letter-spacing:-.01em}
+.article-body h3{font-size:20px;margin:28px 0 10px}
+.article-body p{margin:0 0 18px}
+.article-body ul,.article-body ol{margin:0 0 18px 24px}
+.article-body li{margin-bottom:8px}
+.article-body a{color:var(--accent)}
+.article-body img{max-width:100%;height:auto;border-radius:8px}
+.article-body pre{overflow-x:auto;background:#f1efe9;padding:16px;border-radius:8px;font-size:14px}
+.article-body code{font-size:.9em}
+.article-body table{border-collapse:collapse;width:100%;margin:0 0 18px;font-size:15px}
+.article-body th,.article-body td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+.disclosure{background:#fff7ed;border:1px solid #f5d9a8;border-radius:10px;padding:14px 18px;font-size:14px;margin-bottom:24px;color:#7c5a1d}
+.related{margin-top:56px;border-top:1px solid var(--line);padding-top:28px}
+.related h2{font-size:22px;margin-bottom:18px}
+.rel-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px}
+.rel-card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;text-decoration:none;color:inherit}
+.rel-card h3{font-size:16px;line-height:1.35;margin:6px 0}
+.rel-card .meta{font-size:13px;color:var(--muted)}
+.cat-head h1{margin-bottom:6px}
+.cat-desc{color:var(--muted);margin-bottom:30px}
+.art-item{border-bottom:1px solid var(--line);padding:22px 0}
+.art-item h2{font-size:21px;margin:4px 0 8px;letter-spacing:-.01em}
+.art-item h2 a{color:var(--ink);text-decoration:none}
+.art-item h2 a:hover{color:var(--accent)}
+.art-item p{color:var(--muted);font-size:15px;margin:0 0 8px}
+.art-item .meta{font-size:13px;color:var(--muted)}
+.site-foot{border-top:1px solid var(--line);background:var(--panel);padding:34px 0;font-size:13px;color:var(--muted)}
+.site-foot .disclosure{font-size:12.5px;margin-bottom:12px}
+@media(max-width:640px){.nav nav a{margin-left:12px}}
+</style>
+</head>
+<body>
+<header class="site-head"><div class="wrap nav">
+<a class="wordmark" href="/">AI Frontier Post</a>
+<nav><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/category/tutorials/">Tutorials</a><a href="/#about">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/research/">Research</a></nav>
+<article>
+<span class="chip">Research</span>
+<h1>Mixture-of-Experts, explained: why frontier models are going sparse</h1>
+<p class="lede">The biggest models today don&#x27;t use all their parameters on every token. Here&#x27;s how mixture-of-experts routing works, why it slashes inference cost, and what sparse models mean for builders.</p>
+<p class="byline">Priya Nair · Research Editor · 2026-08-14 · 7 min read</p>
+<div class="article-body"><p>Here's a strange fact about modern frontier models: the biggest ones don't use most of themselves. A model advertised at 400 billion parameters might only <em>activate</em> 30 billion of them for any given token. The rest sit idle, waiting for tokens they're actually good at.</p>
+<p>This is the mixture-of-experts (MoE) architecture, and it's quietly become the default way to scale language models. Here's how it works and why it matters to anyone building on these models.</p>
+<h2 id="dense-vs-sparse-the-core-trade-off">Dense vs. sparse: the core trade-off<a class="anchor" href="#dense-vs-sparse-the-core-trade-off" aria-label="Link to section">#</a></h2>
+<p>A traditional "dense" model uses every parameter for every token. If you want a smarter model, you make it bigger — and every token gets more expensive, forever. Capability and inference cost are locked together.</p>
+<p>MoE breaks the lock. Instead of one giant feed-forward network in each Transformer block, you have many smaller ones — the <strong>experts</strong> — plus a tiny <strong>router</strong> (or gating network) that decides, per token, which experts should handle it. Only the chosen experts run. The rest stay dark.</p>
+<p>The result: you can scale total parameters (knowledge capacity) enormously while keeping active parameters per token (compute cost) roughly flat. Big brain, small electricity bill — relatively speaking.</p>
+<h2 id="how-routing-actually-works">How routing actually works<a class="anchor" href="#how-routing-actually-works" aria-label="Link to section">#</a></h2>
+<p>For each token, at each MoE layer:</p>
+<ol><li>The router — a small learned linear layer — scores every expert for that token.</li><li>The top-k experts are selected (k is usually 1 or 2).</li><li>The token is processed by those experts, and their outputs are combined, weighted by the router's scores.</li></ol>
+<p>A concrete example: <strong>Mixtral 8x7B</strong> (Mistral, December 2023) has 8 experts per MoE layer and routes each token to the top 2. Total parameters: ~47B. Active per token: ~13B. So it carries the knowledge capacity of a 47B model at roughly the inference cost of a 13B one.</p>
+<p>The idea isn't new — the modern form traces to Google's <strong>Switch Transformer</strong> (2021), which showed that routing each token to just <em>one</em> expert (top-1) could scale to trillions of parameters. What changed is that the technique matured from research curiosity to production default.</p>
+<p>Do experts specialize in interpretable topics — one for code, one for French? Early researchers hoped so. In practice, specialization is murky: experts develop statistical niches, but they rarely map to clean human categories. Think of it less like departments in a company and more like... habits the model fell into.</p>
+<h2 id="why-labs-love-it">Why labs love it<a class="anchor" href="#why-labs-love-it" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Capability per dollar.</strong> The binding constraint on frontier AI is training and inference cost. MoE buys more capability per FLOP than dense scaling — the single most important property in the industry right now.</li><li><strong>Serving economics.</strong> Cheaper per-token inference means lower API prices and better margins. When you see a surprisingly capable model at a surprisingly low API price, MoE is often why.</li><li><strong>Faster iteration.</strong> Smaller active compute per step means faster experimental turnaround during training.</li></ul>
+<h2 id="the-honest-trade-offs">The honest trade-offs<a class="anchor" href="#the-honest-trade-offs" aria-label="Link to section">#</a></h2>
+<p>MoE is not free lunch. Builders — especially those self-hosting open-weights models — should know the costs:</p>
+<ul><li><strong>Memory, not compute, becomes the bottleneck.</strong> All experts must live in VRAM even though only a few run per token. Mixtral 8x7B needs ~100GB of VRAM in full precision — you pay memory for 47B parameters to get the compute of 13B. Quantization helps enormously here, which is why the open-weights MoE ecosystem runs on quantized builds.</li><li><strong>Load balancing is fiddly.</strong> Left alone, routers develop favorites — a few experts get all the tokens, the rest atrophy. Training adds auxiliary losses to force even distribution. It's a solved problem but an inelegant one, and it interacts badly with some fine-tuning recipes.</li><li><strong>Fine-tuning is harder.</strong> Updating an MoE model without wrecking the router's delicate balancing act takes more care than fine-tuning a dense model. Parameter-efficient methods (LoRA and friends) mostly work, but full fine-tunes need attention.</li><li><strong>Latency variance.</strong> Different tokens take different expert paths, which can make batched inference less uniform. Serving systems have had to get clever about expert parallelism — splitting experts across GPUs.</li></ul>
+<h2 id="what-it-means-for-builders">What it means for builders<a class="anchor" href="#what-it-means-for-builders" aria-label="Link to section">#</a></h2>
+<p><strong>If you use APIs:</strong> MoE is why frontier-class intelligence keeps getting cheaper per token. You don't need to think about it — but when comparing models, "total parameters" is now a vanity metric. Ask about <em>active</em> parameters per token; that's what determines speed and cost.</p>
+<p><strong>If you self-host:</strong> MoE models are the best capability-per-VRAM deal in open weights, <em>provided</em> you can fit all experts in memory. A quantized MoE often beats a dense model of the same memory footprint. Check VRAM requirements before falling in love with a parameter count.</p>
+<p><strong>If you fine-tune:</strong> prefer dense models for small custom fine-tunes (simpler, more predictable), and reach for MoE when you need maximum base capability — using LoRA-style methods that leave the router mostly alone.</p>
+<p><strong>If you evaluate models for procurement:</strong> ask vendors whether a model is dense or MoE, and what the active parameter count is. Two models with the same "total parameters" can differ 3x in inference cost and latency. The spec sheets that only quote totals are telling you the vanity number.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Mixture-of-experts is the industry's answer to the cruelest equation in AI: smarter models cost more per token. By activating only the experts each token needs, MoE scales knowledge without proportionally scaling compute — at the price of memory hunger and training complexity. It's the reason the frontier keeps advancing while API prices keep falling, and understanding it is the difference between reading a spec sheet and actually understanding what you're buying.</p></div>
+</article>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/ai-evals-benchmarking-science/"><span class="chip">Research</span><h3>Evals are broken: the science of measuring what models can really do</h3><div class="meta">2026-09-16 · 7 min read</div></a><a class="rel-card" href="/articles/bitter-lesson-2026-edition/"><span class="chip">Research</span><h3>The bitter lesson, 2026 edition: why compute keeps beating cleverness</h3><div class="meta">2026-08-24 · 7 min read</div></a><a class="rel-card" href="/articles/constitutional-ai-explained/"><span class="chip">Research</span><h3>Constitutional AI: training models with written rules instead of crowd votes</h3><div class="meta">2026-08-21 · 7 min read</div></a><a class="rel-card" href="/articles/diffusion-models-explained/"><span class="chip">Research</span><h3>How diffusion models actually make images: noise, schedules, and conditioning</h3><div class="meta">2026-08-19 · 8 min read</div></a></div></section>
+</div></main>
+<footer class="site-foot"><div class="wrap">
+<p class="disclosure">Some links on AI Frontier Post are affiliate links. If you buy through them, we may earn a commission at no extra cost to you. This never affects our reviews or rankings.</p>
+<p>© 2026 AI Frontier Post. All rights reserved.</p>
+</div></footer>
+</body>
+</html>

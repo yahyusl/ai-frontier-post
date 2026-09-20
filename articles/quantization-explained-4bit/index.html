@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantization, demystified: how 4-bit models keep their smarts — AI Frontier Post</title>
+<meta name="description" content="A 70B-parameter LLM needs 140GB of memory in full precision — yet runs on a single consumer GPU at 4 bits. Here&#x27;s the math and the methods (GPTQ, AWQ, NF4…">
+<link rel="canonical" href="https://aifrontierpost.com/articles/quantization-explained-4bit/">
+<meta property="og:title" content="Quantization, demystified: how 4-bit models keep their smarts">
+<meta property="og:description" content="A 70B-parameter LLM needs 140GB of memory in full precision — yet runs on a single consumer GPU at 4 bits. Here&#x27;s the math and the methods (GPTQ, AWQ, NF4…">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/quantization-explained-4bit/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="article:published_time" content="2026-07-17">
+<meta property="article:section" content="Research">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Quantization, demystified: how 4-bit models keep their smarts", "description": "A 70B-parameter LLM needs 140GB of memory in full precision — yet runs on a single consumer GPU at 4 bits. Here's the math and the methods (GPTQ, AWQ, NF4…", "datePublished": "2026-07-17", "dateModified": "2026-07-17", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/#about"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com"}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/quantization-explained-4bit/"}}</script>
+<style>
+:root{--ink:#16161a;--muted:#5c5c66;--line:#e5e3dd;--accent:#c73e1d;--bg:#fbfaf7;--panel:#fff}
+*{box-sizing:border-box;margin:0}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.65}
+.wrap{max-width:860px;margin:0 auto;padding:0 22px}
+.site-head{background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+.nav{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:14px 22px}
+.wordmark{font-weight:800;font-size:20px;color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.nav nav a{margin-left:18px;font-size:14px;color:var(--muted);text-decoration:none}
+.nav nav a:hover{color:var(--accent)}
+main{padding:44px 0 60px}
+.crumb{font-size:13px;color:var(--muted);margin-bottom:14px}
+.crumb a{color:var(--accent);text-decoration:none}
+h1{font-size:clamp(30px,4.5vw,44px);line-height:1.12;letter-spacing:-.02em;margin:8px 0 14px}
+.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:3px 11px;margin-bottom:6px}
+.byline{color:var(--muted);font-size:14px;margin:10px 0 26px}
+.lede{font-size:19px;color:var(--muted);margin-bottom:6px}
+.article-body{font-size:17px}
+.article-body h2{font-size:26px;margin:36px 0 12px;letter-spacing:-.01em}
+.article-body h3{font-size:20px;margin:28px 0 10px}
+.article-body p{margin:0 0 18px}
+.article-body ul,.article-body ol{margin:0 0 18px 24px}
+.article-body li{margin-bottom:8px}
+.article-body a{color:var(--accent)}
+.article-body img{max-width:100%;height:auto;border-radius:8px}
+.article-body pre{overflow-x:auto;background:#f1efe9;padding:16px;border-radius:8px;font-size:14px}
+.article-body code{font-size:.9em}
+.article-body table{border-collapse:collapse;width:100%;margin:0 0 18px;font-size:15px}
+.article-body th,.article-body td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+.disclosure{background:#fff7ed;border:1px solid #f5d9a8;border-radius:10px;padding:14px 18px;font-size:14px;margin-bottom:24px;color:#7c5a1d}
+.related{margin-top:56px;border-top:1px solid var(--line);padding-top:28px}
+.related h2{font-size:22px;margin-bottom:18px}
+.rel-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px}
+.rel-card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;text-decoration:none;color:inherit}
+.rel-card h3{font-size:16px;line-height:1.35;margin:6px 0}
+.rel-card .meta{font-size:13px;color:var(--muted)}
+.cat-head h1{margin-bottom:6px}
+.cat-desc{color:var(--muted);margin-bottom:30px}
+.art-item{border-bottom:1px solid var(--line);padding:22px 0}
+.art-item h2{font-size:21px;margin:4px 0 8px;letter-spacing:-.01em}
+.art-item h2 a{color:var(--ink);text-decoration:none}
+.art-item h2 a:hover{color:var(--accent)}
+.art-item p{color:var(--muted);font-size:15px;margin:0 0 8px}
+.art-item .meta{font-size:13px;color:var(--muted)}
+.site-foot{border-top:1px solid var(--line);background:var(--panel);padding:34px 0;font-size:13px;color:var(--muted)}
+.site-foot .disclosure{font-size:12.5px;margin-bottom:12px}
+@media(max-width:640px){.nav nav a{margin-left:12px}}
+</style>
+</head>
+<body>
+<header class="site-head"><div class="wrap nav">
+<a class="wordmark" href="/">AI Frontier Post</a>
+<nav><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/category/tutorials/">Tutorials</a><a href="/#about">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/research/">Research</a></nav>
+<article>
+<span class="chip">Research</span>
+<h1>Quantization, demystified: how 4-bit models keep their smarts</h1>
+<p class="lede">A 70B-parameter LLM needs 140GB of memory in full precision — yet runs on a single consumer GPU at 4 bits. Here&#x27;s the math and the methods (GPTQ, AWQ, NF4, GGUF) that make it possible.</p>
+<p class="byline">Marcus Doyle · Senior Technology Writer · 2026-07-17 · 7 min read</p>
+<div class="article-body"><p>A 70-billion-parameter language model weighs about 140 GB in its original BF16 precision. That's more memory than even a flagship datacenter GPU like the NVIDIA H100 holds (80 GB). And yet, the same model runs on a single consumer GPU — or even a laptop CPU — at 4 bits per weight, at roughly 35 GB, and still writes coherent essays and debugs code.</p>
+<p>The magic is called <strong>quantization</strong>: rounding a trained model's weights down from 16-bit floats to a compact number format. The surprise is that it works as well as it does — a 4× shrink with barely any quality loss. Here's how, and why naive rounding would fail where clever methods succeed.</p>
+<h2 id="why-memory-not-compute-is-the-bottleneck">Why memory, not compute, is the bottleneck<a class="anchor" href="#why-memory-not-compute-is-the-bottleneck" aria-label="Link to section">#</a></h2>
+<p>Running an LLM is mostly a memory-bandwidth problem, not a compute problem. Each generated token requires streaming every weight through the processor once. In BF16, that's 2 bytes per parameter, so generating one token from a 70B model means reading 140 GB from memory. Cut the weights to 4 bits (half a byte) and you're reading ~35 GB instead — roughly 4× faster per token, and the model fits in hardware a quarter of the price.</p>
+<p>The question is how much you can throw away. A weight stored in BF16 has about 4 decimal digits of precision. Round everything crudely and the model breaks: the quantization noise compounds through dozens of transformer layers until the output is garbage.</p>
+<h2 id="the-core-problem-outliers">The core problem: outliers<a class="anchor" href="#the-core-problem-outliers" aria-label="Link to section">#</a></h2>
+<p>Naive quantization fails for a specific reason. In large models, a small number of <strong>outlier</strong> weights and activations have magnitudes tens to hundreds of times larger than the average. If you set your rounding grid wide enough to cover the outliers, the ordinary weights all round to nearly zero. If you set it to cover ordinary weights, the outliers saturate and get clipped — and those outliers turn out to be disproportionately important.</p>
+<p>The landmark demonstration of this was LLM.int8() (Dettmers et al., 2022), which showed that protecting a small fraction of outlier weights at 16-bit while quantizing the rest to 8-bit avoided measurable quality loss all the way up to 175B-parameter models. The lesson stuck: every good quantization method is really an outlier-management strategy.</p>
+<h2 id="method-1-gptq-repair-the-rounding-error">Method 1: GPTQ — repair the rounding error<a class="anchor" href="#method-1-gptq-repair-the-rounding-error" aria-label="Link to section">#</a></h2>
+<p>GPTQ (Frantar et al., 2023) is the classic 4-bit weight quantization method. It works layer by layer on the already-trained model — no retraining needed — using a small calibration dataset (typically a few thousand tokens of text).</p>
+<p>The trick comes from classical model-compression math (Optimal Brain Surgeon). When you quantize one column of a weight matrix, you can compute exactly how much error that introduced, using the <strong>Hessian</strong> — a matrix describing how sensitive the layer's output is to each weight. GPTQ then nudges the not-yet-quantized weights in the opposite direction to cancel that error out. In plain language: it quantizes greedily, and fixes each mistake using information about which weights the layer can least afford to distort.</p>
+<p>GPTQ typically works with a <strong>group size of 128</strong> — each block of 128 consecutive weights shares a scale factor — which costs about 0.25 extra bits per weight on top of the 4, for roughly 4.25 effective bits. At 4-bit, GPTQ keeps perplexity within a few percent of the full-precision model on standard benchmarks; at 3-bit the quality falls off a cliff. Quantizing one 70B model with GPTQ is slow (hours on a good GPU), but you only do it once.</p>
+<h2 id="method-2-awq-find-the-weights-that-matter">Method 2: AWQ — find the weights that matter<a class="anchor" href="#method-2-awq-find-the-weights-that-matter" aria-label="Link to section">#</a></h2>
+<p>AWQ (Lin et al., MIT, 2023) took a different route to the same destination. The authors observed that only about <strong>1% of weight channels</strong> are "salient" — they interact with large-magnitude activations, and errors there propagate much further than errors elsewhere.</p>
+<p>Before quantizing, AWQ scans a calibration dataset, finds the channels with large activation magnitudes, and applies a per-channel scaling that stretches the important weights so that more of the 4-bit grid is spent on them (mathematically dividing the activations by the same scale keeps the layer's output identical). It's like printing the fine print in a larger font before photocopying a page at low resolution.</p>
+<p>On benchmark comparisons, 4-bit AWQ generally edges out GPTQ at the same bit-width — and it calibrates much faster, in tens of minutes rather than hours. For new deployments on NVIDIA hardware, AWQ is the default recommendation.</p>
+<h2 id="method-3-nf4-match-the-distribution">Method 3: NF4 — match the distribution<a class="anchor" href="#method-3-nf4-match-the-distribution" aria-label="Link to section">#</a></h2>
+<p>If you're fine-tuning rather than just serving a model, you've likely met <strong>NF4</strong>, the 4-bit format introduced with QLoRA (Dettmers et al., 2023). NF4 stands for NormalFloat4, and its insight is about the <em>shape</em> of the grid, not just its resolution.</p>
+<p>Four bits give you 16 representable levels. Uniform int4 spaces them evenly — say, -8 to 7. But neural-network weights are approximately <strong>normally distributed</strong>: most are near zero, a few are large. NF4 places its 16 levels at the quantiles of a standard normal distribution, so the levels are dense near zero (where most weights live) and sparse at the extremes. This is provably optimal for normally distributed data and measurably better than uniform 4-bit.</p>
+<p>Practical NF4 details, as used in <code>bitsandbytes</code>:</p>
+<ul><li>Weights are normalized per block (typically 64 values) to [-1, 1], with a scale factor stored per block.</li><li><strong>Double quantization</strong> quantizes the scale factors themselves to 8-bit, saving roughly 0.4 bits per weight with no practical quality impact.</li><li>Compute still happens in BF16: weights are dequantized on the fly for each matrix multiply, so numerical stability is preserved.</li></ul>
+<p>This is what makes QLoRA possible: a 65B model that needed over 780 GB of GPU memory to fine-tune the conventional way can be fine-tuned on a single 48 GB GPU.</p>
+<h2 id="the-format-you-actually-download-gguf">The format you actually download: GGUF<a class="anchor" href="#the-format-you-actually-download-gguf" aria-label="Link to section">#</a></h2>
+<p>If you've run a local model through Ollama, LM Studio, or llama.cpp, you've downloaded a <code>.gguf</code> file — and the alphabet soup of <code>Q4_K_M</code>, <code>Q5_K_M</code>, <code>Q8_0</code> inside it. One clarification: <strong>GGUF is a container format, not a quantization algorithm.</strong> It replaced the older GGML format in 2023 and bundles weights, tokenizer, and metadata in one portable file.</p>
+<p>The quantizations inside GGUF files are block-based "K-quants." The default everyone reaches for, <code>Q4_K_M</code>, stores weights at roughly 4.8 bits each (extra precision for the most sensitive blocks, with scales folded in). A Llama-class 8B model lands around 4.9 GB at Q4<em>K</em>M; a 70B model around 48 GB. Community evaluations consistently show Q4<em>K</em>M holding onto the vast majority of full-precision quality, which is why Ollama ships most models at that level by default. Stepping up to <code>Q5_K_M</code> or <code>Q8_0</code> buys progressively smaller gains for progressively more memory.</p>
+<h2 id="where-the-losses-actually-land">Where the losses actually land<a class="anchor" href="#where-the-losses-actually-land" aria-label="Link to section">#</a></h2>
+<p>Quantization doesn't degrade a model uniformly. Common text generation holds up remarkably well at 4-bit. The tasks that suffer most are the ones requiring precise numerical reasoning, rare factual knowledge, or very long coherent chains — exactly the places where small rounding errors compound. This is why the honest advice is always the same: <strong>evaluate the quantized model on your actual workload</strong>, not on generic perplexity, and calibrate on domain-representative data when possible. A model quantized with medical-text calibration will treat medical text better than one calibrated on Wikipedia.</p>
+<h2 id="the-direction-of-travel">The direction of travel<a class="anchor" href="#the-direction-of-travel" aria-label="Link to section">#</a></h2>
+<p>Weight-only 4-bit quantization was the state of the art in 2023. Since then the field has pushed in two directions. <strong>SmoothQuant</strong> (Xiao et al., 2022) migrates outlier difficulty from activations into weights, enabling true W8A8 quantization where activations are also 8-bit — faster integer arithmetic, same accuracy. Meanwhile, hardware is catching up: NVIDIA's Hopper GPUs added native FP8, and Blackwell's B200 supports native FP4, roughly doubling FP8 throughput on the same silicon.</p>
+<p>The deeper story is that quantization keeps working because of something fundamental: trained networks carry a lot of redundancy. Four bits is enough not because 4 is a magic number, but because most of what a 16-bit weight says is noise the network never needed. The methods that win — GPTQ, AWQ, NF4 — are all ways of spending the limited bits where the signal actually is.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<ul><li>Quantization attacks the memory wall: a 70B model drops from 140 GB (BF16) to ~35 GB (4-bit), which is what makes local and single-GPU inference possible.</li><li>Naive rounding fails because of outlier weights and activations; every good method is an outlier-management strategy.</li><li><strong>GPTQ</strong> repairs rounding errors with second-order (Hessian) math. <strong>AWQ</strong> protects the ~1% of weight channels that matter most. <strong>NF4</strong> reshapes the 4-bit grid to match the normal distribution of weights — and powers QLoRA fine-tuning on a single GPU.</li><li><strong>GGUF</strong> is the container, not the algorithm; <code>Q4_K_M</code> (~4.8 bits/weight) is the community's default sweet spot.</li><li>Degradation is uneven: test on your own workload, and calibrate on representative data.</li></ul>
+<p>The bottom line: a 4-bit model isn't a damaged 16-bit model. It's a model with the noise squeezed out — usually indistinguishable from the original, until you ask it to do math.</p></div>
+</article>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/ai-evals-benchmarking-science/"><span class="chip">Research</span><h3>Evals are broken: the science of measuring what models can really do</h3><div class="meta">2026-09-16 · 7 min read</div></a><a class="rel-card" href="/articles/bitter-lesson-2026-edition/"><span class="chip">Research</span><h3>The bitter lesson, 2026 edition: why compute keeps beating cleverness</h3><div class="meta">2026-08-24 · 7 min read</div></a><a class="rel-card" href="/articles/constitutional-ai-explained/"><span class="chip">Research</span><h3>Constitutional AI: training models with written rules instead of crowd votes</h3><div class="meta">2026-08-21 · 7 min read</div></a><a class="rel-card" href="/articles/diffusion-models-explained/"><span class="chip">Research</span><h3>How diffusion models actually make images: noise, schedules, and conditioning</h3><div class="meta">2026-08-19 · 8 min read</div></a></div></section>
+</div></main>
+<footer class="site-foot"><div class="wrap">
+<p class="disclosure">Some links on AI Frontier Post are affiliate links. If you buy through them, we may earn a commission at no extra cost to you. This never affects our reviews or rankings.</p>
+<p>© 2026 AI Frontier Post. All rights reserved.</p>
+</div></footer>
+</body>
+</html>

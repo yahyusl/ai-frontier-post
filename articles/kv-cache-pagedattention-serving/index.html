@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KV caches and PagedAttention: the memory engineering behind fast serving — AI Frontier Post</title>
+<meta name="description" content="Serving a long-context LLM is mostly a GPU memory-management problem. This piece explains the KV cache bottleneck and how PagedAttention&#x27;s OS-style paging…">
+<link rel="canonical" href="https://aifrontierpost.com/articles/kv-cache-pagedattention-serving/">
+<meta property="og:title" content="KV caches and PagedAttention: the memory engineering behind fast serving">
+<meta property="og:description" content="Serving a long-context LLM is mostly a GPU memory-management problem. This piece explains the KV cache bottleneck and how PagedAttention&#x27;s OS-style paging…">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/kv-cache-pagedattention-serving/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="article:published_time" content="2026-08-02">
+<meta property="article:section" content="Research">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "KV caches and PagedAttention: the memory engineering behind fast serving", "description": "Serving a long-context LLM is mostly a GPU memory-management problem. This piece explains the KV cache bottleneck and how PagedAttention's OS-style paging…", "datePublished": "2026-08-02", "dateModified": "2026-08-02", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/#about"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com"}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/kv-cache-pagedattention-serving/"}}</script>
+<style>
+:root{--ink:#16161a;--muted:#5c5c66;--line:#e5e3dd;--accent:#c73e1d;--bg:#fbfaf7;--panel:#fff}
+*{box-sizing:border-box;margin:0}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.65}
+.wrap{max-width:860px;margin:0 auto;padding:0 22px}
+.site-head{background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+.nav{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:14px 22px}
+.wordmark{font-weight:800;font-size:20px;color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.nav nav a{margin-left:18px;font-size:14px;color:var(--muted);text-decoration:none}
+.nav nav a:hover{color:var(--accent)}
+main{padding:44px 0 60px}
+.crumb{font-size:13px;color:var(--muted);margin-bottom:14px}
+.crumb a{color:var(--accent);text-decoration:none}
+h1{font-size:clamp(30px,4.5vw,44px);line-height:1.12;letter-spacing:-.02em;margin:8px 0 14px}
+.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:3px 11px;margin-bottom:6px}
+.byline{color:var(--muted);font-size:14px;margin:10px 0 26px}
+.lede{font-size:19px;color:var(--muted);margin-bottom:6px}
+.article-body{font-size:17px}
+.article-body h2{font-size:26px;margin:36px 0 12px;letter-spacing:-.01em}
+.article-body h3{font-size:20px;margin:28px 0 10px}
+.article-body p{margin:0 0 18px}
+.article-body ul,.article-body ol{margin:0 0 18px 24px}
+.article-body li{margin-bottom:8px}
+.article-body a{color:var(--accent)}
+.article-body img{max-width:100%;height:auto;border-radius:8px}
+.article-body pre{overflow-x:auto;background:#f1efe9;padding:16px;border-radius:8px;font-size:14px}
+.article-body code{font-size:.9em}
+.article-body table{border-collapse:collapse;width:100%;margin:0 0 18px;font-size:15px}
+.article-body th,.article-body td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+.disclosure{background:#fff7ed;border:1px solid #f5d9a8;border-radius:10px;padding:14px 18px;font-size:14px;margin-bottom:24px;color:#7c5a1d}
+.related{margin-top:56px;border-top:1px solid var(--line);padding-top:28px}
+.related h2{font-size:22px;margin-bottom:18px}
+.rel-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px}
+.rel-card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;text-decoration:none;color:inherit}
+.rel-card h3{font-size:16px;line-height:1.35;margin:6px 0}
+.rel-card .meta{font-size:13px;color:var(--muted)}
+.cat-head h1{margin-bottom:6px}
+.cat-desc{color:var(--muted);margin-bottom:30px}
+.art-item{border-bottom:1px solid var(--line);padding:22px 0}
+.art-item h2{font-size:21px;margin:4px 0 8px;letter-spacing:-.01em}
+.art-item h2 a{color:var(--ink);text-decoration:none}
+.art-item h2 a:hover{color:var(--accent)}
+.art-item p{color:var(--muted);font-size:15px;margin:0 0 8px}
+.art-item .meta{font-size:13px;color:var(--muted)}
+.site-foot{border-top:1px solid var(--line);background:var(--panel);padding:34px 0;font-size:13px;color:var(--muted)}
+.site-foot .disclosure{font-size:12.5px;margin-bottom:12px}
+@media(max-width:640px){.nav nav a{margin-left:12px}}
+</style>
+</head>
+<body>
+<header class="site-head"><div class="wrap nav">
+<a class="wordmark" href="/">AI Frontier Post</a>
+<nav><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/category/tutorials/">Tutorials</a><a href="/#about">About</a></nav>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/research/">Research</a></nav>
+<article>
+<span class="chip">Research</span>
+<h1>KV caches and PagedAttention: the memory engineering behind fast serving</h1>
+<p class="lede">Serving a long-context LLM is mostly a GPU memory-management problem. This piece explains the KV cache bottleneck and how PagedAttention&#x27;s OS-style paging — and its successors like radix-tree prefix caches — made high-throughput inference practical.</p>
+<p class="byline">Priya Nair · Research Editor · 2026-08-02 · 8 min read</p>
+<div class="article-body"><p>When you ask a chatbot a question, most of the GPU's effort isn't thinking — it's remembering. To avoid recomputing everything it has already seen, a transformer stores the key and value vectors of every past token at every layer. That store, the <strong>KV cache</strong>, is what makes generation fast. It is also what makes <em>serving</em> many users at once an engineering nightmare: the cache is huge, it grows and shrinks with every request, and managing it badly wastes most of your GPU memory. Modern inference engines like vLLM and SGLang exist, at their core, to manage this memory well.</p>
+<h2 id="what-the-kv-cache-actually-is">What the KV cache actually is<a class="anchor" href="#what-the-kv-cache-actually-is" aria-label="Link to section">#</a></h2>
+<p>In a transformer, each token is processed through every layer, and each layer computes a key (K) and value (V) vector for it. When generating the next token, the model only needs attention over <em>past</em> tokens — so it caches their K and V vectors instead of recomputing them. This turns each decoding step into a cheap operation over cached data rather than a full re-read of the prompt.</p>
+<p>The catch is size. The memory for one token's cache is:</p>
+<blockquote><strong>2 (K and V) × layers × heads × head dimension × bytes per value</strong></blockquote>
+<p>For a typical 8B-class dense model in FP16 (say 32 layers, 32 heads, head dimension 128), the math is 2 × 32 × 32 × 128 × 2 bytes ≈ 0.5 MB per token. Scale that to a 4,096-token conversation and you need <strong>~2 GB of GPU memory per request</strong> just for the cache — before the model weights are even loaded. Older dense 70B-class models without grouped-query attention ran closer to 2–3 MB per token, so a single 32K-token request could demand tens of gigabytes of cache alone.</p>
+<p>And here's the crux: the cache size is <strong>dynamic</strong>. A request starts with a short prompt, grows token by token during generation, and shrinks when it finishes. A serving system must pack dozens of these growing, shrinking caches onto one GPU at the same time. Throughput is, in practice, limited not by raw compute but by how many caches fit in memory — serving is memory-bound, not compute-bound.</p>
+<h2 id="the-old-way-contiguous-buffers-and-60-80-waste">The old way: contiguous buffers and 60–80% waste<a class="anchor" href="#the-old-way-contiguous-buffers-and-60-80-waste" aria-label="Link to section">#</a></h2>
+<p>Early serving systems gave each request a single <strong>contiguous</strong> chunk of GPU memory for its KV cache, sized to the maximum sequence length (<code>max_seq_len</code>). That was simple — and brutally wasteful. The problems, measured in the PagedAttention paper (Figure 2), were threefold:</p>
+<ul><li><strong>Internal fragmentation:</strong> most requests finish well before <code>max_seq_len</code>, so the unused tail of each allocation sits idle.</li><li><strong>External fragmentation:</strong> as requests of different lengths start and stop, free memory becomes scattered into holes too small to use.</li><li><strong>Reserved slots:</strong> conservative pre-allocation for worst-case beams and samples.</li></ul>
+<p>Together, these wasted the majority of allocated KV memory — analyses put total waste in the 60–80% range in naive systems. The GPU had the FLOPs to serve more users; it simply had nowhere to put their caches.</p>
+<h2 id="pagedattention-virtual-memory-for-gpus">PagedAttention: virtual memory for GPUs<a class="anchor" href="#pagedattention-virtual-memory-for-gpus" aria-label="Link to section">#</a></h2>
+<p>The 2023 paper <em>"Efficient Memory Management for Large Language Model Serving with PagedAttention"</em> (Kwon et al., UC Berkeley; arXiv 2309.06180, presented at SOSP '23) made the key observation: this is exactly the problem operating systems solved in the 1960s with <strong>virtual memory paging</strong>. So it borrowed the solution wholesale.</p>
+<p>Instead of one contiguous buffer per request, PagedAttention splits each sequence's KV cache into <strong>fixed-size blocks</strong> — typically 16 tokens each in vLLM — stored anywhere in physical GPU memory, not necessarily adjacent. A per-request <strong>block table</strong> maps logical block indices to physical block locations, exactly like a CPU page table maps virtual to physical addresses. New blocks are allocated on demand as generation proceeds, so waste is bounded by a fraction of one block. A fused attention kernel then computes attention directly over these non-contiguous blocks, using the block table for addressing — no need to gather the data into a contiguous region first.</p>
+<p>The results, reported in the paper: <strong>near-zero KV cache waste</strong> and <strong>2–4× higher throughput</strong> than the state-of-the-art systems of the time (FasterTransformer and Orca) at the same latency. The gains were most pronounced with longer sequences, larger models, and more complex decoding algorithms — precisely the workloads that matter most.</p>
+<h2 id="the-bonus-sharing-via-copy-on-write">The bonus: sharing via copy-on-write<a class="anchor" href="#the-bonus-sharing-via-copy-on-write" aria-label="Link to section">#</a></h2>
+<p>Paging unlocked a second win almost for free. Because blocks are referenced through a table, multiple sequences can point at the <em>same</em> physical blocks. The paper's block manager adds <strong>reference counting</strong>, enabling:</p>
+<ul><li><strong>Shared prompts:</strong> a batch of requests with the same system prompt stores that prompt's KV once, not once per request.</li><li><strong>Parallel sampling:</strong> generating <em>n</em> completions from one prompt shares the entire prompt's blocks; when one completion diverges, <strong>copy-on-write</strong> duplicates only the changed blocks.</li><li><strong>Beam search:</strong> beams share everything up to the point where they fork.</li></ul>
+<p>The paper also demonstrated significant memory savings on beam-search workloads from sharing alone — one detailed analysis of the paper cites savings of around 55%. This is also the mechanism behind the cross-request <strong>prefix caching</strong> now offered by major providers — Anthropic's prompt caching, for example, has been reported to cut costs by up to 90% and latency by up to 85% on cache-heavy long-prompt workloads (numbers from provider documentation, workloads vary).</p>
+<h2 id="beyond-paging-radix-trees-and-continuous-batching">Beyond paging: radix trees and continuous batching<a class="anchor" href="#beyond-paging-radix-trees-and-continuous-batching" aria-label="Link to section">#</a></h2>
+<p>PagedAttention didn't end the story; it changed what serving engines optimize. Two ideas built directly on it:</p>
+<p><strong>Radix-tree prefix caching (SGLang's RadixAttention).</strong> vLLM's block-hashed prefix caching matches prefixes at block granularity — a 103-token prompt with 16-token blocks can only reuse 96 of them; the trailing 7 tokens must be recomputed. SGLang organizes cached KV in a <strong>radix tree</strong> (a compressed trie keyed by token sequences), which supports longest-prefix matches at <em>any token boundary</em> and naturally handles branching structures like tree-of-thought or multi-turn conversations. Blocks (or tree nodes) remain reference-counted and are evicted LRU when the pool fills.</p>
+<p><strong>Continuous batching.</strong> Older static batching waited for the slowest request in a batch to finish before admitting new ones. Modern engines admit and retire requests at <em>every decoding step</em> — and that flexibility is what makes demand paging pay off: memory freed by a finished request is immediately reusable by an incoming one, because there are no fixed-size slots to reshape.</p>
+<p>When the cache pool does fill, engines choose between <strong>preemption strategies</strong>: drop a running sequence's KV and recompute its prefill later (cheap in memory, costs compute — fine for short prompts), or <strong>swap</strong> the KV to CPU RAM over PCIe and page it back (saves recompute, costs bandwidth — better for long prompts).</p>
+<h2 id="why-this-matters-to-you">Why this matters to you<a class="anchor" href="#why-this-matters-to-you" aria-label="Link to section">#</a></h2>
+<p>If you're building on LLM APIs, these internals surface as dollars:</p>
+<ul><li><strong>Batch size is the lever.</strong> Throughput per GPU roughly tracks how many requests' KV caches fit at once, so memory efficiency directly sets API pricing.</li><li><strong>Share prefixes deliberately.</strong> Keeping a stable system prompt and putting shared context first maximizes prefix-cache hits — whether that's vLLM's block hash, SGLang's radix tree, or a provider's prompt cache.</li><li><strong>Beware the long tail.</strong> A request that fills most of one block's worth of waste is cheap; the real cost is sequences that balloon to hundreds of thousands of tokens, where the KV cache can exceed the model weights many times over. That's why long-context serving is priced the way it is.</li></ul>
+<p><strong>The takeaway:</strong> generating the next token is cheap compute over expensive memory. The labs that serve models at scale aren't mainly in a FLOPs race — they're in a memory-management race, and paging is how they won the first round.</p>
+<hr>
+<p><em>Word on sources: the core facts here come from the PagedAttention paper (arXiv 2309.06180); the prefix-caching and SGLang details from the Modular inference handbook and SGLang documentation; the eviction/strategy overview from the vanta inference-caching skill notes. The per-token memory arithmetic is illustrative — exact figures vary by architecture (GQA grouping, dtype, RoPE) — so treat the MB-per-token figures as order-of-magnitude, not spec sheets.</em></p></div>
+</article>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/ai-evals-benchmarking-science/"><span class="chip">Research</span><h3>Evals are broken: the science of measuring what models can really do</h3><div class="meta">2026-09-16 · 7 min read</div></a><a class="rel-card" href="/articles/bitter-lesson-2026-edition/"><span class="chip">Research</span><h3>The bitter lesson, 2026 edition: why compute keeps beating cleverness</h3><div class="meta">2026-08-24 · 7 min read</div></a><a class="rel-card" href="/articles/constitutional-ai-explained/"><span class="chip">Research</span><h3>Constitutional AI: training models with written rules instead of crowd votes</h3><div class="meta">2026-08-21 · 7 min read</div></a><a class="rel-card" href="/articles/diffusion-models-explained/"><span class="chip">Research</span><h3>How diffusion models actually make images: noise, schedules, and conditioning</h3><div class="meta">2026-08-19 · 8 min read</div></a></div></section>
+</div></main>
+<footer class="site-foot"><div class="wrap">
+<p class="disclosure">Some links on AI Frontier Post are affiliate links. If you buy through them, we may earn a commission at no extra cost to you. This never affects our reviews or rankings.</p>
+<p>© 2026 AI Frontier Post. All rights reserved.</p>
+</div></footer>
+</body>
+</html>
