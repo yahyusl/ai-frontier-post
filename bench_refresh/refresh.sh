@@ -39,7 +39,7 @@ for name in ['scoreStrip','scoreCard','scoreRows','bfmt','bbar']:
     b = len(re.findall(r'function %s\(' % name, html))
     assert a == b == 1, f'function inventory changed for {name}: {a} -> {b}'
 ids = re.findall(r'\{id:"([a-z]+)"', html.split('/*__BENCH_DATA__*/')[1].split('/*__BENCH_END__*/')[0])
-assert ids == ['ab','tbs','aa','hle','fc','tb'], f'unexpected benchmark ids: {ids}'
+assert ids == ['aa','tb','fc','ab','tbs','hle'], f'unexpected benchmark ids: {ids}'
 print('inventory OK:', ids)
 EOF
 
