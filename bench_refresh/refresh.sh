@@ -7,7 +7,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Never sweep someone else's uncommitted work into the benchmark commit.
-if [ -n "$(git status --porcelain -- index.html bench_refresh/)" ]; then
+# (benchmarks.json is a pure pipeline artifact: reset any leftover from an
+# aborted run, then guard the real sources.)
+git checkout -q -- bench_refresh/benchmarks.json 2>/dev/null || true
+if [ -n "$(git status --porcelain -- index.html bench_refresh/fetch_benchmarks.py bench_refresh/build.py bench_refresh/meta.json bench_refresh/refresh.sh)" ]; then
   echo "bench files have uncommitted changes; aborting" >&2
   exit 1
 fi
