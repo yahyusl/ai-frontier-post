@@ -29,7 +29,7 @@ EOF
 node --check /tmp/inline.js
 python3 - <<'EOF'
 import re
-html = open('index.html')
+html = open('index.html').read()
 before = open('/tmp/index.html.bench-bak').read()
 for name in ['scoreStrip','scoreCard','scoreRows','bfmt','bbar']:
     a = len(re.findall(r'function %s\(' % name, before))
