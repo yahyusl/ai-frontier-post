@@ -6,6 +6,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Never sweep someone else's uncommitted work into the benchmark commit.
+if [ -n "$(git status --porcelain -- index.html bench_refresh/)" ]; then
+  echo "bench files have uncommitted changes; aborting" >&2
+  exit 1
+fi
+
 echo "== fetching =="
 python3 bench_refresh/fetch_benchmarks.py
 
@@ -41,7 +47,15 @@ if git diff --cached --quiet; then
   echo "no changes"
 else
   git commit -m "Benchmarks: daily refresh ${STAMP}" -q
-  git pull --rebase -q
-  git push -q
+  git fetch -q origin
+  BEHIND=$(git rev-list --count HEAD..origin/main)
+  if [ "${BEHIND}" -gt 0 ]; then
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "origin moved but tree is dirty; leaving commit unpushed" >&2
+      exit 1
+    fi
+    git rebase -q origin/main
+  fi
+  git push -q origin main
   echo "pushed"
 fi
