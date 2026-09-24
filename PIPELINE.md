@@ -37,6 +37,11 @@ signals, policy, public figures) as a fallback; missing slugs are skipped silent
 
 ## Cover images
 
+Standing rule (Yahya, 2026-09-24): always look for a FREE PUBLIC image of the
+subject first (official/lab/event photos, public-domain or CC images — no
+attribution-required licenses unless you credit the source); only generate an AI
+image with `media.generate_image` if no suitable free image exists.
+
 Generate catchy cover images only for articles visible on the homepage (hero + top
 stories), max ~10 at a time — keep the article selection deliberate.
 
