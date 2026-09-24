@@ -1,0 +1,29 @@
+name: consistency
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: homepage JS syntax + function inventory
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open('index.html').read()
+          blocks = re.findall(r'<script>(.*?)</script>', html, re.S)
+          open('/tmp/inline.js', 'w').write(max(blocks, key=len))
+          PY
+          node --check /tmp/inline.js
+      - name: worker tests
+        run: node --test worker.test.mjs
+      - name: consistency (posts.json, categories, sitemap, feeds)
+        run: python3 tools/check_consistency.py

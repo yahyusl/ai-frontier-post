@@ -2,6 +2,18 @@
 
 How the homepage is assembled (all logic lives in `index.html`; styles in `assets/site.css`).
 
+## Homepage data (`posts.json`)
+
+The homepage is a thin shell: it fetches `posts.json` (slim index — title, slug,
+thumbnail path, category, excerpt, tags, author, date, reading_minutes, sponsored)
+and renders from it. Article bodies and images are NOT inlined (the 8 MB homepage
+era ended 2026-09-24: bodies live in `articles/<slug>/index.html`, covers in
+`articles/<slug>/cover.webp` referenced by path — never base64).
+When publishing, prepend the slim entry to `posts.json`, then run
+`python3 tools/build_feed.py` and `python3 tools/check_consistency.py`.
+Legacy `#post/`, `#category/`, `#about` hash routes 301-style redirect to the
+static URLs (`/articles/<slug>/`, `/category/<name>/`, `/about/`).
+
 ## Homepage order
 
 1. **Frontier models scoreboard** — dark sports-ticker strip directly under the masthead,

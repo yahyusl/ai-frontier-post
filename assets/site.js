@@ -101,7 +101,9 @@
       }).finally(function () { busy = false; btn.classList.remove('busy'); });
     });
 
-    // Server-side unvote: prev === vote means decrement instead of increment.
+    // Server-side: the stored vote (keyed by hashed client IP) is authoritative.
+    // An unvote only retracts when it matches the stored vote; re-voting the
+    // same option is a no-op, switching moves one count.
     refresh();
   }
 

@@ -19,21 +19,27 @@ echo "== fetching =="
 python3 bench_refresh/fetch_benchmarks.py
 
 echo "== building =="
-cp index.html /tmp/index.html.bench-bak
+# Unique temp files so two concurrent runs never clash on fixed /tmp paths.
+# Cleaned up on any exit (success or abort) via the trap below.
+BENCH_BAK=$(mktemp /tmp/index.html.bench-bak.XXXXXX)
+INLINE_JS=$(mktemp /tmp/inline.js.XXXXXX)
+trap 'rm -f "$BENCH_BAK" "$INLINE_JS"' EXIT
+export BENCH_BAK INLINE_JS
+cp index.html "$BENCH_BAK"
 python3 bench_refresh/build.py
 
 echo "== validating =="
 python3 - <<'EOF'
-import re
+import os, re
 html = open('index.html').read()
 scripts = re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', html, re.S)
-open('/tmp/inline.js','w').write('\n;\n'.join(scripts))
+open(os.environ['INLINE_JS'],'w').write('\n;\n'.join(scripts))
 EOF
-node --check /tmp/inline.js
+node --check "$INLINE_JS"
 python3 - <<'EOF'
-import re
+import os, re
 html = open('index.html').read()
-before = open('/tmp/index.html.bench-bak').read()
+before = open(os.environ['BENCH_BAK']).read()
 for name in ['scoreStrip','scoreCard','scoreRows','bfmt','bbar']:
     a = len(re.findall(r'function %s\(' % name, before))
     b = len(re.findall(r'function %s\(' % name, html))

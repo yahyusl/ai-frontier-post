@@ -6,7 +6,11 @@
  * Dashboard setup: Worker Settings -> Bindings -> KV namespace, variable
  *   AFP_DATA -> namespace afp-data. Domains & Routes -> route
  *   aifrontierpost.com/api/* -> this worker (takes precedence over Pages).
- * The static site (assets/site.js) calls these endpoints same-origin (/api/…).
+ *   To enable comment moderation, add a secret (Settings -> Variables and
+ *   Secrets -> Add secret) named AFP_ADMIN_TOKEN with a random token.
+ * The static site (assets/site.js) calls these endpoints same-origin (/api/…),
+ * so no CORS headers are sent on JSON responses. Votes are tracked per hashed
+ * client IP in the stored react state; comment moderation requires the admin token.
  */
 
 function json(data, status) {
@@ -15,23 +19,14 @@ function json(data, status) {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET,POST,OPTIONS',
-      'access-control-allow-headers': 'content-type',
       'cache-control': 'no-store',
     },
   });
 }
 
+// Same-origin only: preflights get a bare 204 with no CORS headers.
 function handleOptions() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET,POST,OPTIONS',
-      'access-control-allow-headers': 'content-type',
-    },
-  });
+  return new Response(null, { status: 204 });
 }
 
 async function readJson(request, maxBytes) {
@@ -43,6 +38,16 @@ async function readJson(request, maxBytes) {
 
 function clientIp(request) {
   return request.headers.get('cf-connecting-ip') || 'unknown';
+}
+
+// Privacy: raw client IPs are never persisted in KV. Voter identity is the
+// SHA-256 of a fixed prefix + the IP — good enough to stop casual reversal
+// and accidental PII exposure in stored state (not a secret-keyed MAC).
+async function voterId(ip) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('afp-voter:' + ip));
+  let hex = '';
+  for (const b of new Uint8Array(buf)) hex += b.toString(16).padStart(2, '0');
+  return hex;
 }
 
 // Slugs are lowercase alnum + dashes, e.g. "agent-evals-tutorial".
@@ -79,17 +84,32 @@ function makeId() {
 
 const reactKey = (slug) => 'react:' + slug;
 
-function sanitizeCounts(cur) {
-  return {
+// Stored shape: { like, dislike, voters: { "<sha256(ip)>": "like"|"dislike" } }.
+// Voters are only trusted from our own writes; read-time sanitization strips
+// anything unexpected (and never leaks the voter map to readers).
+function sanitizeReactionState(cur) {
+  const state = {
     like: Math.max(0, parseInt(cur && cur.like, 10) || 0),
     dislike: Math.max(0, parseInt(cur && cur.dislike, 10) || 0),
+    voters: {},
   };
+  const raw = cur && cur.voters;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [ip, v] of Object.entries(raw)) {
+      if ((v === 'like' || v === 'dislike') && typeof ip === 'string' && ip.length <= 64) {
+        state.voters[ip] = v;
+      }
+    }
+  }
+  return state;
 }
 
 async function getReactions(env, slug) {
   if (!validSlug(slug)) return json({ error: 'bad slug' }, 400);
-  const cur = sanitizeCounts(JSON.parse((await env.AFP_DATA.get(reactKey(slug))) || 'null'));
-  return json(cur);
+  const { like, dislike } = sanitizeReactionState(
+    JSON.parse((await env.AFP_DATA.get(reactKey(slug))) || 'null')
+  );
+  return json({ like, dislike });
 }
 
 async function postReactions(request, env) {
@@ -105,19 +125,32 @@ async function postReactions(request, env) {
     return json({ error: 'bad input' }, 400);
   }
   if (unvote && !okVote(prev)) return json({ error: 'bad input' }, 400);
-  if (!(await checkRate(env.AFP_DATA, 'react:' + clientIp(request) + ':' + slug, 30, 3600))) {
+  const ip = clientIp(request);
+  const vid = await voterId(ip);
+  if (!(await checkRate(env.AFP_DATA, 'react:' + vid + ':' + slug, 30, 3600))) {
     return json({ error: 'too many votes, slow down' }, 429);
   }
   const k = reactKey(slug);
-  const cur = sanitizeCounts(JSON.parse((await env.AFP_DATA.get(k)) || 'null'));
+  // NOTE: KV has no transactions — this read-modify-write is best-effort and
+  // two concurrent requests can lose one update. True atomicity would need
+  // Durable Objects or D1 (deliberately not migrated: needs dashboard setup).
+  const cur = sanitizeReactionState(JSON.parse((await env.AFP_DATA.get(k)) || 'null'));
+  const prior = cur.voters[vid];
   if (unvote) {
-    if (cur[prev] > 0) cur[prev] -= 1;
-  } else {
-    if (prev && prev !== vote && cur[prev] > 0) cur[prev] -= 1;
+    // Only retract a vote this client actually cast: unvote with no matching
+    // stored vote is a no-op, so strangers can no longer drive counts down.
+    if (prior === prev && cur[prev] > 0) {
+      cur[prev] -= 1;
+      delete cur.voters[vid];
+    }
+  } else if (prior !== vote) {
+    if (prior && cur[prior] > 0) cur[prior] -= 1;
     cur[vote] += 1;
+    cur.voters[vid] = vote;
   }
+  // prior === vote is a no-op: re-voting never double-counts.
   await env.AFP_DATA.put(k, JSON.stringify(cur));
-  return json(cur);
+  return json({ like: cur.like, dislike: cur.dislike });
 }
 
 /* ---------------- comments ---------------- */
@@ -157,7 +190,7 @@ async function postComments(request, env) {
   const text = cleanStr(body.text, 2000);
   if (name.length < 2) return json({ error: 'Please add your name.' }, 400);
   if (text.length < 3) return json({ error: 'Please write a comment first.' }, 400);
-  if (!(await checkRate(env.AFP_DATA, 'comment:' + clientIp(request) + ':' + slug, 5, 3600))) {
+  if (!(await checkRate(env.AFP_DATA, 'comment:' + (await voterId(clientIp(request))) + ':' + slug, 5, 3600))) {
     return json({ error: 'too many comments, slow down' }, 429);
   }
 
@@ -169,6 +202,47 @@ async function postComments(request, env) {
   return json({ ok: true, held });
 }
 
+/* ---------------- comment moderation ---------------- */
+
+// Held comments (those containing links) can be approved or deleted here.
+// Auth: header "authorization: Bearer <AFP_ADMIN_TOKEN>". Dashboard step: in
+// the Worker settings add a secret (Settings -> Variables and Secrets ->
+// Add secret) named AFP_ADMIN_TOKEN with a random token. Until that secret
+// exists, this endpoint is disabled (403 "moderation not configured").
+async function moderateComments(request, env) {
+  if (!env.AFP_ADMIN_TOKEN) return json({ error: 'moderation not configured' }, 403);
+  const auth = request.headers.get('authorization') || '';
+  if (auth !== 'Bearer ' + env.AFP_ADMIN_TOKEN) return json({ error: 'forbidden' }, 403);
+  let body;
+  try {
+    body = await readJson(request);
+  } catch {
+    return json({ error: 'bad request' }, 400);
+  }
+  const { slug, id, action } = body || {};
+  if (!validSlug(slug) || typeof id !== 'string' || (action !== 'approve' && action !== 'delete')) {
+    return json({ error: 'bad input' }, 400);
+  }
+  const list = await readCommentList(env, slug);
+  if (action === 'approve') {
+    let found = false;
+    for (const c of list) {
+      if (c && c.id === id) {
+        c.approved = true;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return json({ error: 'not found' }, 404);
+    await env.AFP_DATA.put(commentsKey(slug), JSON.stringify(list.slice(-MAX_STORED)));
+    return json({ ok: true, action: 'approve' });
+  }
+  const next = list.filter((c) => !(c && c.id === id));
+  if (next.length === list.length) return json({ error: 'not found' }, 404);
+  await env.AFP_DATA.put(commentsKey(slug), JSON.stringify(next.slice(-MAX_STORED)));
+  return json({ ok: true, action: 'delete' });
+}
+
 /* ---------------- router ---------------- */
 
 async function handleRequest(request, env) {
@@ -177,6 +251,10 @@ async function handleRequest(request, env) {
   if (url.pathname === '/api/reactions') {
     if (request.method === 'GET') return getReactions(env, url.searchParams.get('slug') || '');
     if (request.method === 'POST') return postReactions(request, env);
+    return json({ error: 'method not allowed' }, 405);
+  }
+  if (url.pathname === '/api/comments/moderate') {
+    if (request.method === 'POST') return moderateComments(request, env);
     return json({ error: 'method not allowed' }, 405);
   }
   if (url.pathname === '/api/comments') {

@@ -20,9 +20,8 @@ def js(s):
 def main():
     meta = json.load(open("bench_refresh/meta.json"))
     data = json.load(open("bench_refresh/benchmarks.json"))
+    # "%d" is zero-padded; strip the leading zero for e.g. "Sep 5, 2026".
     updated = datetime.strptime(data["fetched_at"][:10], "%Y-%m-%d").strftime("%b %d, %Y").replace(" 0", " ")
-    # "%b %d" gives "Sep 23" already (no zero-pad with %d? %d is zero-padded). normalize:
-    updated = re.sub(r" (\d),", r" \1,", datetime.strptime(data["fetched_at"][:10], "%Y-%m-%d").strftime("%b %d, %Y"))
 
     entries = []
     for bid in meta["order"]:
