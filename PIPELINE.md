@@ -35,12 +35,21 @@ prefer same-day stories for "top stories of the day". If `TOP_PICKS` is left sta
 `viewScore()` ranks by a heuristic (recency, major-lab names, launches, money/IPO
 signals, policy, public figures) as a fallback; missing slugs are skipped silently.
 
-## Cover images
+## Article images
 
-Standing rule (Yahya, 2026-09-24): always look for a FREE PUBLIC image of the
-subject first (official/lab/event photos, public-domain or CC images — no
-attribution-required licenses unless you credit the source); only generate an AI
-image with `media.generate_image` if no suitable free image exists.
+Standing rule (Yahya, 2026-09-24): every article ships with 2–3 images — the
+hero cover plus 1–2 inline images in the body. Per image, always look for a FREE
+PUBLIC image of the subject first (official/lab/event photos, portraits,
+public-domain or CC images); only generate an AI image with
+`media.generate_image` if no suitable free image exists.
+
+Inline images: `articles/<slug>/img2.webp`, `img3.webp` (16:9 webp, ~<50KB),
+placed as `<figure class="inline-art"><img class="story-image" src="/articles/<slug>/img2.webp" alt="..."><figcaption><credit></figcaption></figure>`
+at natural body breaks (never mid-paragraph).
+
+Every image carries a `<figcaption>` credit line — the site CSS
+(`assets/site.css`) hides figcaptions visually (screen-reader-only) while keeping
+them in the DOM for accessibility/licensing.
 
 Generate catchy cover images only for articles visible on the homepage (hero + top
 stories), max ~10 at a time — keep the article selection deliberate.
