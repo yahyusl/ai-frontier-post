@@ -22,7 +22,7 @@ echo "== building =="
 # Unique temp files so two concurrent runs never clash on fixed /tmp paths.
 # Cleaned up on any exit (success or abort) via the trap below.
 BENCH_BAK=$(mktemp /tmp/index.html.bench-bak.XXXXXX)
-INLINE_JS=$(mktemp /tmp/inline.js.XXXXXX)
+INLINE_JS=$(mktemp /tmp/inline_check.XXXXXX.js)
 trap 'rm -f "$BENCH_BAK" "$INLINE_JS"' EXIT
 export BENCH_BAK INLINE_JS
 cp index.html "$BENCH_BAK"
