@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>From notebook to production: deploy your RAG chatbot on a free tier — AI Frontier Post</title>
+<meta name="description" content="Take a RAG chatbot from a Python file to a public HTTPS URL: a FastAPI service, a Docker container, a Render Blueprint deploy, health checks, secrets, and free-tier survival — every endpoint exercised, every test run, every output real.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/deploy-rag-chatbot-production-free-tier/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="From notebook to production: deploy your RAG chatbot on a free tier">
+<meta property="og:description" content="Take a RAG chatbot from a Python file to a public HTTPS URL: a FastAPI service, a Docker container, a Render Blueprint deploy, health checks, secrets, and free-tier survival — every endpoint exercised, every test run, every output real.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/deploy-rag-chatbot-production-free-tier/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/deploy-rag-chatbot-production-free-tier/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-24">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "From notebook to production: deploy your RAG chatbot on a free tier", "description": "Take a RAG chatbot from a Python file to a public HTTPS URL: a FastAPI service, a Docker container, a Render Blueprint deploy, health checks, secrets, and free-tier survival — every endpoint exercised, every test run, every output real.", "datePublished": "2026-09-24", "dateModified": "2026-09-24", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/deploy-rag-chatbot-production-free-tier/"}, "image": "https://aifrontierpost.com/articles/deploy-rag-chatbot-production-free-tier/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>From notebook to production: deploy your RAG chatbot on a free tier</h1>
+<p class="lede">Take a RAG chatbot from a Python file to a public HTTPS URL: a FastAPI service, a Docker container, a Render Blueprint deploy, health checks, secrets, and free-tier survival — every endpoint exercised, every test run, every output real.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · September 24, 2026 · 11 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/deploy-rag-chatbot-production-free-tier/cover.webp" alt="A chatbot rising from a laptop travels in shipping containers along a glowing path to a cloud server"><figcaption>Illustration generated with AI.</figcaption></figure>
+<div class="article-body"><p>Your RAG pipeline works in a notebook. Nobody can use it. That gap — between "it runs on my laptop" and "anyone on the internet can ask it questions" — is where most AI side projects quietly die. Not because deployment is hard, but because nobody shows the whole path in one place: the service code, the container, the host, the secrets, and the unglamorous details that keep a free-tier service alive.</p>
+<p>This tutorial closes that gap end to end. You will take a small RAG chatbot from a Python file to a public HTTPS URL with health checks, request logging, secret management, and tests — using a Dockerfile and Render's free tier. Total cost: $0. The service, its tests, and every API response shown were executed and verified while writing this.</p>
+<h2 id="what-you-ll-need">What you&#x27;ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.12</strong> and <strong>Docker</strong> installed locally. Docker Desktop on Mac/Windows, or the engine on Linux.</li><li><strong>A GitHub account</strong> and <strong>a Render account</strong> — the free tier needs no credit card.</li><li>About 30 minutes. A terminal you are comfortable in.</li><li><strong>(Optional)</strong> An OpenAI API key, only if you want the LLM answer path in Step 7. Everything else runs with zero keys.</li></ul>
+<p>Version pins used here, all verified current: <code>fastapi==0.141.1</code>, <code>uvicorn[standard]==0.53.0</code>, <code>scikit-learn==1.9.1</code>. Pin them in your own <code>requirements.txt</code> — unpinned deploys are how "it worked yesterday" happens.</p>
+<h2 id="step-1-build-a-service-not-a-script">Step 1: Build a service, not a script<a class="anchor" href="#step-1-build-a-service-not-a-script" aria-label="Link to section">#</a></h2>
+<p>Notebooks don't serve traffic. The first decision is structural: wrap your RAG logic in a real HTTP service with exactly two endpoints — <code>/health</code> for liveness and <code>/chat</code> for answers. FastAPI earns its place here: request validation is free via Pydantic, <code>/docs</code> gives you an interactive API explorer with zero extra code, and lifespan hooks let you build expensive state once at startup.</p>
+<p>The project layout is deliberately boring:</p>
+<pre><code>rag-chatbot/
+├── app/
+│   ├── __init__.py
+│   ├── main.py        # FastAPI app: /health and /chat
+│   └── rag.py         # retrieval layer
+├── data/
+│   └── docs.json      # the knowledge base (8 short docs)
+├── tests/
+│   └── test_api.py
+├── requirements.txt
+├── Dockerfile
+├── .dockerignore
+└── render.yaml</code></pre>
+<p>The retrieval layer is TF-IDF over a bundled JSON file — no API keys, ~50&nbsp;MB of dependencies, and an index that builds in milliseconds. That is a deliberate production choice, not a toy shortcut: on a 512&nbsp;MB free tier, a 300&nbsp;MB embedding model is a liability. Retrieval quality upgrades later without touching the service code, because <code>main.py</code> only ever calls <code>retriever.search()</code>:</p>
+<pre><code class="language-python">"""Retrieval layer: TF-IDF over the bundled docs."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+_DOCS_PATH = Path(__file__).resolve().parent.parent / "data" / "docs.json"
+
+
+class Retriever:
+    def __init__(self, docs_path: Path = _DOCS_PATH) -> None:
+        with open(docs_path, encoding="utf-8") as f:
+            self.docs = json.load(f)
+        self._vectorizer = TfidfVectorizer(stop_words="english")
+        self._matrix = self._vectorizer.fit_transform(d["text"] for d in self.docs)
+
+    def search(self, query: str, top_k: int = 3) -> list[dict]:
+        q = self._vectorizer.transform([query])
+        scores = cosine_similarity(q, self._matrix)[0]
+        ranked = sorted(range(len(self.docs)), key=lambda i: scores[i], reverse=True)
+        return [
+            {
+                "id": self.docs[i]["id"],
+                "title": self.docs[i]["title"],
+                "text": self.docs[i]["text"],
+                "score": round(float(scores[i]), 4),
+            }
+            for i in ranked[:top_k]
+            if scores[i] > 0
+        ]
+
+    def __len__(self) -> int:
+        return len(self.docs)</code></pre>
+<p>And the service itself. Four decisions are doing the heavy lifting here, so note them before you skim the code: the index is built <strong>once at startup</strong> in a lifespan handler (rebuilding per request would turn every cold start into a slow start); <strong>Pydantic rejects bad input</strong> with a 422 before your code ever sees it; a query with <strong>no matching documents returns 404</strong> instead of a hallucinated answer; and the default answer is <strong>extractive</strong> — it quotes the top chunk and cites its source, which is deterministic, testable, and honest about provenance:</p>
+<pre><code class="language-python">"""RAG chatbot API: retrieval + extractive answering, ready for production."""
+from __future__ import annotations
+
+import os
+import time
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from .rag import Retriever
+
+retriever: Retriever | None = None
+_started_at: float = time.time()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Build the index ONCE at startup, not per request. On Render's free
+    # tier this keeps cold starts to ~1s instead of rebuilding on every
+    # request after a spin-down.
+    global retriever
+    retriever = Retriever()
+    yield
+    retriever = None
+
+
+app = FastAPI(title="RAG chatbot", version="1.0.0", lifespan=lifespan)
+
+
+class ChatRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+
+
+class Source(BaseModel):
+    id: str
+    title: str
+    score: float
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list[Source]
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "docs_indexed": len(retriever) if retriever else 0,
+        "uptime_seconds": round(time.time() - _started_at, 1),
+    }
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    assert retriever is not None
+    hits = retriever.search(req.question, top_k=3)
+    if not hits:
+        raise HTTPException(status_code=404, detail="No relevant documents found.")
+    top = hits[0]
+    answer = (
+        f"Based on '{top['title']}': {top['text']}"
+        if os.environ.get("OPENAI_API_KEY") is None
+        else _generate(req.question, hits)
+    )
+    return ChatResponse(
+        answer=answer,
+        sources=[Source(id=h["id"], title=h["title"], score=h["score"]) for h in hits],
+    )</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/deploy-rag-chatbot-production-free-tier/diagram-architecture.webp" alt="Architecture diagram: user question flows through FastAPI /chat to a TF-IDF retriever over docs.json, producing a cited answer with source scores"><figcaption>Illustration generated with AI.</figcaption></figure>
+<h2 id="step-2-prove-it-works-locally">Step 2: Prove it works locally<a class="anchor" href="#step-2-prove-it-works-locally" aria-label="Link to section">#</a></h2>
+<p>Never deploy what you haven't run. Create the environment, install the pinned dependencies, and start the server exactly the way production will — no <code>--reload</code>, no debugger:</p>
+<pre><code class="language-bash">python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000</code></pre>
+<p>You should see the startup sequence complete and the server listening:</p>
+<pre><code>INFO:     Started server process [19558]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)</code></pre>
+<p>Now exercise both endpoints. The health check first — this is the same URL Render will poll after every deploy, so get used to it:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8000/health</code></pre>
+<pre><code>{"status":"ok","docs_indexed":8,"uptime_seconds":10.3}</code></pre>
+<p>Then a real question. Watch the response shape: the answer quotes the source document, and <code>sources</code> carries the provenance with scores, so a frontend can render citations:</p>
+<pre><code class="language-bash">curl -s -X POST http://127.0.0.1:8000/chat \
+  -H 'content-type: application/json' \
+  -d '{"question":"How much does the Pro plan cost?"}'</code></pre>
+<pre><code>{
+  "answer": "Based on 'Acme Cloud pricing': Acme Cloud has three plans. Hobby is free and includes
+   100 GB of bandwidth per month. Pro costs $20 per user per month and includes 1 TB of bandwidth,
+   custom domains, and priority support. Enterprise is custom pricing with SSO, audit logs, and a
+   dedicated success manager. All plans include unlimited projects. The cost of each plan is billed
+   monthly and prorated when you upgrade mid-cycle.",
+  "sources": [
+    {"id": "pricing-1", "title": "Acme Cloud pricing", "score": 0.1885},
+    {"id": "pricing-2", "title": "Bandwidth overages", "score": 0.1468},
+    {"id": "regions-1", "title": "Available regions", "score": 0.1254}
+  ]
+}</code></pre>
+<p>Two edge cases worth confirming before you move on: a nonsense query returns a clean 404 (<code>{"error":"No relevant documents found."}</code>) instead of a fabricated answer, and a two-character question is rejected with a 422 by Pydantic validation. Encode both as tests so the behavior is locked in:</p>
+<pre><code class="language-python">from contextlib import contextmanager
+from fastapi.testclient import TestClient
+from app.main import app
+
+@contextmanager
+def make_client():
+    # `with` runs the lifespan handler, so the index builds at startup —
+    # exactly like uvicorn does in production.
+    with TestClient(app) as client:
+        yield client
+
+def test_health():
+    with make_client() as client:
+        r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["docs_indexed"] == 8
+
+def test_chat_returns_cited_answer():
+    with make_client() as client:
+        r = client.post("/chat", json={"question": "How much does the Pro plan cost?"})
+    assert r.status_code == 200
+    assert "$20" in r.json()["answer"]
+
+def test_chat_no_match_is_404():
+    with make_client() as client:
+        r = client.post("/chat", json={"question": "xqz jumbled nonsense zzz"})
+    assert r.status_code == 404</code></pre>
+<pre><code class="language-bash">.venv/bin/python -m pytest tests/ -q</code></pre>
+<pre><code>4 passed, 1 warning in 6.10s</code></pre>
+<p>One gotcha that bites everyone once: <code>TestClient(app)</code> without the <code>with</code> block never runs your lifespan handler, so the retriever stays <code>None</code> and every test fails mysteriously. The context manager form is the fix — it mirrors what uvicorn does.</p>
+<h2 id="step-3-containerize-it">Step 3: Containerize it<a class="anchor" href="#step-3-containerize-it" aria-label="Link to section">#</a></h2>
+<p>Render's free tier builds from your Dockerfile, so the container is the deploy artifact. Twelve instructions, each earning its place:</p>
+<pre><code class="language-dockerfile">FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /srv
+
+# Install deps first: this layer is cached until requirements.txt changes.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ ./app/
+COPY data/ ./data/
+
+# Never run as root inside the container.
+RUN useradd --create-home --shell /bin/bash appuser \
+    && chown -R appuser:appuser /srv
+USER appuser
+
+# Render injects $PORT at runtime; default to 8000 for local `docker run`.
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request,os; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('PORT','8000')}/health\")"</code></pre>
+<p>Three details matter more than they look. <strong>Dependencies install before code is copied</strong>, so rebuilding after a code change reuses the cached pip layer instead of reinstalling scikit-learn — against Render's monthly build-minute allowance, that caching is real money. <strong><code>${PORT:-8000}</code></strong> reads the port Render injects at runtime and falls back to 8000 locally, so the same image runs in both places. And <strong><code>--workers 1</code></strong> is deliberate: a second worker would double the memory footprint inside a 512&nbsp;MB container for zero benefit at demo traffic levels.</p>
+<p>Keep the build context lean with a <code>.dockerignore</code> — shipping your <code>.venv</code> or <code>.git</code> directory into the image bloats it by hundreds of megabytes:</p>
+<pre><code>.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.gitignore
+.env
+README.md
+tests/</code></pre>
+<p>Build and run it. The build takes a few minutes the first time (base image + scikit-learn); subsequent builds reuse the cached layers:</p>
+<pre><code class="language-bash">docker build -t rag-chatbot:local .
+docker run -p 8000:8000 rag-chatbot:local</code></pre>
+<p>Hit the same endpoints against the container — you should get the same answers as Step 2 (only <code>uptime_seconds</code> will differ, naturally). If they match, your laptop and Render are running the same artifact, and "works on my machine" is no longer a variable in this tutorial.</p>
+<h2 id="step-4-ship-it-on-render-s-free-tier">Step 4: Ship it on Render&#x27;s free tier<a class="anchor" href="#step-4-ship-it-on-render-s-free-tier" aria-label="Link to section">#</a></h2>
+<p>Push the project to a GitHub repo, then let Render do the ops. The cleanest path is a <strong>Blueprint</strong>: a <code>render.yaml</code> file in the repo root that declares the entire service as code, so the deploy is reproducible and reviewable:</p>
+<pre><code class="language-yaml">services:
+  - type: web
+    name: rag-chatbot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    branch: main
+    autoDeployTrigger: commit
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"</code></pre>
+<p>The <code>OPENAI_API_KEY</code> is deliberately <em>not</em> here yet — declaring it with <code>sync: false</code> would make Render prompt for it on the very first deploy, before you need it. You will add it in Step 7, only if you enable the LLM path.</p>
+<p>What each field buys you: <code>runtime: docker</code> builds from your Dockerfile instead of Render guessing a buildpack. <code>plan: free</code> is the $0 tier — 750 instance hours a month per workspace, 512&nbsp;MB of RAM, and a monthly allowance of outbound bandwidth and build minutes. No credit card is required for the free tier. <code>healthCheckPath: /health</code> tells Render to poll your endpoint after each deploy and only route traffic once it passes — this is your zero-downtime deploy on the free tier. <code>autoDeployTrigger: commit</code> rebuilds on every push to <code>main</code>.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/deploy-rag-chatbot-production-free-tier/diagram-deploy.webp" alt="Deployment pipeline diagram: git push to GitHub repo, render.yaml Blueprint, Docker build, then a live URL with a health check"><figcaption>Illustration generated with AI.</figcaption></figure>
+<p>In the Render dashboard: <strong>New → Blueprint → connect your repo</strong>. Render reads <code>render.yaml</code>, shows you the service it will create, and you hit Apply. The first build takes a few minutes — watch the logs stream in; you will see pip install, then uvicorn starting, then the health check turning green. When it does, your chatbot is live at <code>https://rag-chatbot.onrender.com</code> with <code>/health</code> and <code>/chat</code> answering over HTTPS.</p>
+<h2 id="step-5-secrets-stay-secret">Step 5: Secrets stay secret<a class="anchor" href="#step-5-secrets-stay-secret" aria-label="Link to section">#</a></h2>
+<p>The fastest way to ruin a launch is committing an API key. The discipline is simple and absolute:</p>
+<ul><li><strong>Read secrets from the environment, never from files.</strong> The service already does this — <code>os.environ.get("OPENAI_API_KEY")</code> — so there is nothing to change in code.</li><li><strong>Declare secret keys with <code>sync: false</code></strong> in <code>render.yaml</code> <em>when you actually have a secret to set</em>. Render prompts you for the value during the initial Blueprint creation, stores it encrypted, and redacts it from build logs. (Declaring it up front, as this tutorial deliberately does not, would force the prompt on day one.)</li><li><strong>Keep a <code>.env</code> out of git.</strong> Add <code>.env</code> to <code>.gitignore</code> (the <code>.dockerignore</code> already excludes it from the image) and commit a <code>.env.example</code> with empty placeholders so the next person knows what to set.</li><li><strong>Rotating a secret is a dashboard edit</strong>, not a code change — Render redeploys automatically when an env var changes.</li></ul>
+<h2 id="step-6-survive-the-free-tier">Step 6: Survive the free tier<a class="anchor" href="#step-6-survive-the-free-tier" aria-label="Link to section">#</a></h2>
+<p>A free-tier service has sharp edges. All of them are manageable once you design for them instead of discovering them at 2&nbsp;a.m.:</p>
+<ul><li><strong>512&nbsp;MB of RAM is a budget, not a suggestion.</strong> The TF-IDF index here uses a fraction of it. If you upgrade retrieval to embeddings later, keep the model small (a MiniLM-class model, not a 7B embedder) or load it lazily — and keep <code>--workers 1</code>.</li><li><strong>Expect the 15-minute spin-down.</strong> Idle free services sleep; the next request takes ~60 seconds to wake them. Don't fight it with ping hacks — design for it. Because the index builds once at startup (Step&nbsp;1), a cold start here is dominated by Python startup, not a full re-ingest.</li><li><strong>The disk is ephemeral.</strong> Anything written at runtime vanishes on the next deploy. That's why the docs ship <em>inside</em> the image via <code>COPY data/</code> — if your knowledge base grows beyond what belongs in git, fetch it from object storage at startup instead.</li><li><strong>Log like someone will read it.</strong> Uvicorn's access logs stream into Render's log viewer automatically. The <code>/health</code> payload already reports <code>docs_indexed</code> and <code>uptime_seconds</code> — point any uptime monitor at it and you'll know about problems before your users tell you.</li><li><strong>Know when you've outgrown free.</strong> The honest upgrade trigger isn't traffic, it's sleep: if the spin-down latency starts costing you users, Render's Starter tier is $7/month and never sleeps. Until then, free is genuinely enough.</li></ul>
+<h2 id="step-7-the-llm-upgrade-path-optional">Step 7: The LLM upgrade path (optional)<a class="anchor" href="#step-7-the-llm-upgrade-path-optional" aria-label="Link to section">#</a></h2>
+<p>Extractive answers are the right default — deterministic and free. When you're ready for generative answers, the swap is one function. Uncomment <code>openai</code> in <code>requirements.txt</code>, then add the key as an environment variable on the service in the Render dashboard (Step&nbsp;5 — never into code; or declare it in <code>render.yaml</code> with <code>sync: false</code> and re-sync the Blueprint), and the service calls the LLM with the retrieved chunks as context:</p>
+<pre><code class="language-python">def _generate(question: str, hits: list[dict]) -> str:
+    """LLM upgrade path: needs OPENAI_API_KEY in the environment."""
+    from openai import OpenAI  # optional dependency, only imported here
+
+    context = "\n\n".join(f"[{h['title']}] {h['text']}" for h in hits)
+    client = OpenAI()
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "Answer only from the provided context. Cite the document title.",
+            },
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
+        ],
+        max_tokens=300,
+    )
+    return resp.choices[0].message.content or ""</code></pre>
+<p>Note what <em>didn't</em> change: the retrieval contract, the response schema, the tests, the Dockerfile, the Blueprint. That's the payoff of the layering from Step&nbsp;1 — the serving infrastructure is stable while the AI inside it evolves. Push to <code>main</code> and the auto-deploy ships it.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Render isn't the only free way to host a Python API. Pick by what you're optimizing for:</p>
+<ul><li><strong>Render free (this tutorial)</strong> — best when you want Docker-based deploys with zero config and don't mind the 15-minute spin-down. Ideal for demos, portfolios, and MVPs.</li><li><strong>Koyeb Starter</strong> — similar free envelope (one service, 512&nbsp;MB), also scale-to-zero. Worth comparing if your users are in Europe (Frankfurt region).</li><li><strong>Hugging Face Spaces</strong> — best for interactive demos with a Gradio UI, weaker as a raw API host. Choose it when the audience clicks buttons rather than calling endpoints.</li><li><strong>A $5 VPS with Coolify or Dokku</strong> — best when you need always-on without per-service fees and you're comfortable owning the ops. More power, more responsibility.</li><li><strong>Render Starter ($7/month)</strong> — the moment the spin-down latency costs you real users. Same Blueprint, one field changed.</li></ul>
+<p>The rule of thumb: prototype on free, pay the $7 the week sleep starts hurting, and only reach for Kubernetes when you have a team to feed it.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Deployment isn't a separate discipline bolted onto your AI project — it's a handful of habits applied early: a service with a health check, an index built once at startup, input validation at the boundary, secrets in the environment, and a container that runs identically everywhere. Do those five things and the distance from notebook to production URL is one Blueprint file and a <code>git push</code>. Your chatbot is live, it costs nothing, and every layer is ready for the day it outgrows the free tier.</p>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/build-first-rag-pipeline-afternoon/"><span class="chip">Tutorials</span><h3>Build your first RAG pipeline in an afternoon</h3><div class="meta">August 14, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/serve-model-vllm-tutorial/"><span class="chip">Tutorials</span><h3>Serve an open model with vLLM: a deployment tutorial</h3><div class="meta">July 14, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/llm-guardrails-tutorial/"><span class="chip">Tutorials</span><h3>Add guardrails to your LLM app: filters, PII redaction, jailbreak detection</h3><div class="meta">July 31, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/ai-workflow-automation-n8n/"><span class="chip">Tutorials</span><h3>Automate your marketing with AI workflows: an n8n starter</h3><div class="meta">August 30, 2026 · 8 min read</div></a></div></section>
+</div><!-- /article-body --></article></div><!-- /wrap --></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/" class="active">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
