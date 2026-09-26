@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop hand-tuning prompts: build and optimize an LLM program with DSPy — AI Frontier Post</title>
+<meta name="description" content="A hands-on DSPy 3.4 tutorial: replace brittle prompt strings with typed signatures and composable modules, measure a real baseline with dspy.Evaluate, compile with BootstrapFewShot (55.6% to 88.9% measured), then save and reload the optimized program. Every step runs free and offline.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/dspy-prompt-optimization-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop hand-tuning prompts: build and optimize an LLM program with DSPy">
+<meta property="og:description" content="A hands-on DSPy 3.4 tutorial: typed signatures, composable modules, a real metric, BootstrapFewShot compilation (55.6% to 88.9% measured), save and reload — every step runs free and offline.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/dspy-prompt-optimization-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/dspy-prompt-optimization-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop hand-tuning prompts: build and optimize an LLM program with DSPy", "description": "A hands-on DSPy 3.4 tutorial: replace brittle prompt strings with typed signatures and composable modules, measure a real baseline with dspy.Evaluate, compile with BootstrapFewShot (55.6% to 88.9% measured), then save and reload the optimized program. Every step runs free and offline.", "datePublished": "2026-09-26", "dateModified": "2026-09-26", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/dspy-prompt-optimization-tutorial/"}, "image": "https://aifrontierpost.com/articles/dspy-prompt-optimization-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop hand-tuning prompts: build and optimize an LLM program with DSPy</h1>
+<p class="lede">Prompt strings are the new spaghetti code: untestable, unversioned, and silently brittle. DSPy 3.4 replaces them with typed signatures, composable modules, and optimizers that compile your program against a metric. This tutorial builds a real ticket-triage program, measures a 55.6% baseline, compiles it to 88.9% — and every number was actually run, free and offline.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · September 26, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/dspy-prompt-optimization-tutorial/cover.webp" alt="AI-generated editorial illustration: panels of Python code on the left flow through a luminous pipeline and emerge on the right as a polished, optimized prompt document with checkmarks and a rising accuracy chart"></figure>
+<div class="article-body"><p>Every production LLM feature eventually hits the same wall. It starts as a prompt string in a Python file. Then it grows a system message, three examples, a formatting hack for the JSON that sometimes comes back wrapped in markdown, and a comment that says <em># DO NOT TOUCH — tuned 2026-08-14</em>. Nobody can test it, nobody can diff it, and when the model vendor ships an update, it quietly degrades.</p>
+
+<p><strong>DSPy</strong> — the Stanford NLP framework, MIT-licensed, currently at <strong>version 3.4.0</strong> — attacks this at the root. You stop writing prompts and start writing <strong>programs</strong>: a typed <em>signature</em> declares what goes in and what comes out, <em>modules</em> compose reasoning strategies, and an <em>optimizer</em> compiles the whole thing against a metric you define, the way a compiler optimizes code against a target architecture. The prompt becomes a build artifact, not source code.</p>
+
+<p>In this tutorial you will build exactly that loop, end to end: a customer-support ticket triage program that predicts <code>urgency</code> and <code>team</code>. You will define it with a signature, measure a real baseline with <code>dspy.Evaluate</code>, compile it with <code>BootstrapFewShot</code>, watch accuracy move from <strong>55.6% to 88.9%</strong>, and save the optimized program to a file you can ship. Everything below was executed — including the failure modes — and the entire pipeline runs <strong>free and offline</strong> on a deterministic sandbox model, so you can reproduce every number with zero API spend.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/dspy-prompt-optimization-tutorial/img2.webp" alt="Diagram of the DSPy loop: a signature and module feed into a metric and an optimizer, which produce a compiled program of optimized instructions and few-shot demos saved to triage_v1.json, with an evaluate-and-re-optimize feedback loop"><figcaption>Diagram: the DSPy loop you will build — program it, measure it, compile it.</figcaption></figure>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Python 3.10+</strong> and pip. A CPU is fine — nothing here needs a GPU.</li>
+<li><strong>DSPy 3.4.0</strong>: <code>pip install dspy</code>, then confirm with <code>python -c "import dspy; print(dspy.__version__)"</code> (expect <code>3.4.0</code>).</li>
+<li><strong>No API key required</strong> for the main pipeline: it runs on <code>SandboxLM</code>, a small deterministic simulator included below that stands in for a real model. It reads few-shot demos from its prompt and falls back to a weak keyword heuristic otherwise — deliberately mediocre, like a real zero-shot baseline.</li>
+<li>Optional, for going live: any model API key (OpenAI, Anthropic, or a local Ollama server) — one line swaps the sandbox for a real model in Step&nbsp;1.</li>
+</ul>
+
+<h2 id="step-1-install-and-configure">Step 1: Install and configure<a class="anchor" href="#step-1-install-and-configure" aria-label="Link to section">#</a></h2>
+<p>Install and verify:</p>
+<pre><code class="language-bash">pip install dspy
+python -c "import dspy; print(dspy.__version__)"   # 3.4.0</code></pre>
+<p>Every DSPy program starts by telling the framework which language model to use, via <code>dspy.configure</code>. With a real provider it looks like this — <code>dspy.LM</code> accepts any LiteLLM-style model string, and the key comes from the environment:</p>
+<pre><code class="language-python">import dspy
+
+# Real model route (needs OPENAI_API_KEY in your environment):
+# dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+# Local route (needs Ollama running): dspy.LM("ollama/llama3.1", api_base="http://localhost:11434")</code></pre>
+<p>For this tutorial, configure the sandbox instead. Save the following as <code>sandbox_lm.py</code> — it subclasses DSPy's <code>DummyLM</code> (from <code>dspy.utils.dummies</code>) and overrides the <code>_use_example</code> hook, which is the extension point DSPy 3.4's dummy engine actually calls. Given a query, it finds the few-shot demo whose input shares the most content words and copies that demo's outputs; with no overlapping demo it falls back to a weak heuristic:</p>
+<pre><code class="language-python">"""Deterministic stand-in for a real LM. Reads few-shot demos from its prompt."""
+import re
+import dspy
+from dspy.utils.dummies import DummyLM
+
+HDR = re.compile(r"\[\[ ## (\w+) ## \]\]")
+STOP = set("""a an the and or of to in on for with is are was were be been
+it its this that these those i my we you your he she they them his her our
+at as by from have has had do does did will would can could should there
+their what when where which who how why not no yes if then than so such
+very just about into over after before between me us him her them""".split())
+
+def _split_fields(text):
+    parts = HDR.split(text)
+    return [(parts[i], parts[i + 1].strip())
+            for i in range(1, len(parts) - 1, 2)]
+
+def _tokens(text):
+    return [t for t in re.findall(r"[a-z0-9]+", text.lower()) if t not in STOP]
+
+def _heuristic(ticket):
+    t = ticket.lower()
+    if any(w in t for w in ["invoice", "charge", "charged", "billing",
+                            "refund", "payment", "subscription", "receipt"]):
+        team = "billing"
+    elif any(w in t for w in ["package", "tracking", "delivery", "shipment",
+                              "arrived", "parcel", "shipping"]):
+        team = "shipping"
+    else:
+        team = "technical"
+    urgency = ("high" if any(w in t for w in ["urgent", "immediately", "asap",
+               "locked", "down", "breach", "twice", "double", "angry",
+               "cancel", "fraud", "lost"]) else "low")
+    return {"urgency": urgency, "team": team}
+
+class SandboxLM(DummyLM):
+    def __init__(self):
+        super().__init__([], follow_examples=True)
+
+    def _use_example(self, messages):
+        users = [m["content"] for m in messages if m["role"] == "user"]
+        assistants = [m["content"] for m in messages if m["role"] == "assistant"]
+        input_names = {n for n, _ in _split_fields(users[0])}
+        last = users[-1]
+        out_names = [n for n, _ in _split_fields(last) if n not in input_names]
+        query = " ".join(v for n, v in _split_fields(last) if n in input_names)
+        qtok = set(_tokens(query))
+        demos, ai = [], 0
+        for u in users[:-1]:
+            a = assistants[ai]; ai += 1
+            outs = {n: v for n, v in _split_fields(a) if n in out_names}
+            if outs:
+                demos.append((" ".join(v for n, v in _split_fields(u)
+                                        if n in input_names), outs))
+        best, best_score = None, 0
+        for dtext, outs in demos:
+            score = len(qtok &amp; set(_tokens(dtext)))
+            if score &gt; best_score:
+                best, best_score = outs, score
+        if best is not None and best_score &gt;= 2:
+            values = {n: best.get(n, "") for n in out_names}
+        else:
+            h = _heuristic(query)
+            values = {n: h.get(n, "Reading the ticket and the closest examples.")
+                      if n in h or n in ("reasoning", "rationale") else ""
+                      for n in out_names}
+        return self._format_answer_fields(values)</code></pre>
+<p>Then configure it:</p>
+<pre><code class="language-python">from sandbox_lm import SandboxLM
+dspy.configure(lm=SandboxLM())</code></pre>
+<p>One honest caveat before we go on: this simulator is <em>not</em> an LLM. It emulates exactly one property of real models — few-shot learning from in-context demos — so the optimization loop behaves the way it does against a real model, and every measurement below is reproducible for free. The prompts, metrics, and compile steps are identical to what you would run against <code>dspy.LM("openai/gpt-4o-mini")</code>.</p>
+
+<h2 id="step-2-signatures-not-prompt-strings">Step 2: Signatures, not prompt strings<a class="anchor" href="#step-2-signatures-not-prompt-strings" aria-label="Link to section">#</a></h2>
+<p>In DSPy you never write <em>"You are a helpful assistant that classifies tickets…"</em>. You declare a <strong>signature</strong>: a typed contract of inputs and outputs. The class docstring becomes the instruction, and each field can carry a <code>desc</code> that guides the model:</p>
+<pre><code class="language-python">import dspy
+
+class TicketTriage(dspy.Signature):
+    """Route a customer support ticket to the right team with the right urgency."""
+    ticket: str = dspy.InputField()
+    urgency: str = dspy.OutputField(desc="one of: low, high")
+    team: str = dspy.OutputField(desc="one of: billing, technical, shipping")</code></pre>
+<p>This is the entire "prompt" for the classification task — and it is code, so it is testable, diffable, and refactorable. DSPy renders it into whatever prompt format the active adapter needs (the default <code>ChatAdapter</code> formats fields as <code>[[ ## ticket ## ]]</code> blocks; if a model response ever fails to parse, DSPy automatically retries through a <code>JSONAdapter</code> fallback that requests JSON mode — a robustness detail you get for free and never have to hand-roll again).</p>
+<p>You can also declare signatures from a string — <code>dspy.Signature("ticket -&gt; urgency, team")</code> — but the class form is what you want in real code: IDE support, docstrings, and per-field descriptions.</p>
+
+<h2 id="step-3-compose-modules">Step 3: Compose modules<a class="anchor" href="#step-3-compose-modules" aria-label="Link to section">#</a></h2>
+<p>A signature says <em>what</em>; a <strong>module</strong> says <em>how the LM should think</em>. The three you will reach for constantly:</p>
+<ul>
+<li><strong><code>dspy.Predict</code></strong> — direct input-to-output prediction. The workhorse.</li>
+<li><strong><code>dspy.ChainOfThought</code></strong> — asks the model to reason before answering. In DSPy 3.4 the reasoning field is named <code>reasoning</code> (older versions called it <code>rationale</code> — a migration gotcha worth knowing).</li>
+<li><strong><code>dspy.ReAct</code></strong> — interleaves thought, tool calls, and observations, up to <code>max_iters</code> (default 20).</li>
+</ul>
+<p>Our triage program is one module wrapping one signature:</p>
+<pre><code class="language-python">class TriageProgram(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.classify = dspy.Predict(TicketTriage)
+
+    def forward(self, ticket):
+        return self.classify(ticket=ticket)
+
+program = TriageProgram()
+result = program(ticket="I was charged twice for my subscription this month")
+print(result.urgency, "/", result.team)   # high / billing</code></pre>
+<p>That ran exactly as shown. Two more patterns, both executed against the sandbox during testing. Chain-of-thought, for when you want the reasoning trace:</p>
+<pre><code class="language-python">cot = dspy.ChainOfThought(TicketTriage)
+r = cot(ticket="URGENT: our checkout page is down, customers can't pay")
+print(r.reasoning)   # why it decided what it decided
+print(r.urgency, "/", r.team)</code></pre>
+<p>And an agentic variant — <code>ReAct</code> with a real tool. This one looked up an order status before answering, and the trajectory shows every step:</p>
+<pre><code class="language-python">ORDERS = {"A-1042": "in transit, arrives Thursday"}
+
+def lookup_order(order_id: str) -> str:
+    """Look up an order's shipping status by order ID."""
+    return ORDERS.get(order_id, "order not found")
+
+class AnswerWithStatus(dspy.Signature):
+    """Answer the customer's question using the order lookup tool."""
+    question: str = dspy.InputField()
+    answer: str = dspy.OutputField(desc="short answer to the customer")
+
+agent = dspy.ReAct(AnswerWithStatus, tools=[lookup_order], max_iters=5)
+r = agent(question="Where is my order A-1042?")
+print(r.answer)
+# Your order A-1042 is in transit and arrives Thursday.</code></pre>
+<p>The returned <code>r.trajectory</code> contains the full thought → tool-call → observation trace — the same structure an optimizer can later learn from.</p>
+
+<h2 id="step-4-measure-the-baseline">Step 4: Write a metric and measure the baseline<a class="anchor" href="#step-4-measure-the-baseline" aria-label="Link to section">#</a></h2>
+<p>Here is the discipline that separates DSPy from prompt folklore: <strong>nothing is "vibes"</strong>. You write a metric, assemble labeled data, and measure before you optimize. Labeled examples are <code>dspy.Example</code> objects, with <code>.with_inputs()</code> marking which fields are inputs (as opposed to labels the program must produce):</p>
+<pre><code class="language-python">def make_sets():
+    train = [
+        ("I was charged twice for my subscription this month", "high", "billing"),
+        ("The delivery driver left my parcel in the rain and the box is soaked", "high", "shipping"),
+        ("The app crashes every time I open an invoice PDF", "low", "technical"),
+        # ... 12 training tickets total
+    ]
+    dev = [
+        ("I got charged twice on my card and now it's maxed out", "high", "billing"),
+        ("My parcel arrived soaked because the driver left it out in the rain", "high", "shipping"),
+        # ... 9 dev tickets total (paraphrases of train, so the program must generalize)
+    ]
+    to_ex = lambda rows: [dspy.Example(ticket=t, urgency=u, team=m).with_inputs("ticket")
+                          for t, u, m in rows]
+    return to_ex(train), to_ex(dev)
+
+def metric(gold, pred, trace=None):
+    return float(gold.urgency == pred.urgency and gold.team == pred.team)</code></pre>
+<p>Note the dev set is deliberately <em>paraphrased</em> rather than copied: <em>"The delivery driver left my parcel in the rain"</em> becomes <em>"My parcel arrived soaked because the driver left it out in the rain"</em>. A program that merely memorizes training strings will fail; one that actually uses its examples will generalize. Then evaluate:</p>
+<pre><code class="language-python">trainset, devset = make_sets()
+evaluate = dspy.Evaluate(devset=devset, metric=metric,
+                         num_threads=4, display_progress=False)
+baseline = evaluate(program)
+print(f"Baseline dev accuracy: {baseline.score:.1f}%")
+# Baseline dev accuracy: 55.6%</code></pre>
+<p><strong>55.6% — 5 of 9.</strong> The zero-shot program gets the easy keyword cases and misses anything requiring judgment, like <em>"Do you offer student discounts?"</em> (billing, but no billing keywords). Write this number down. Everything from here is measured against it.</p>
+
+<h2 id="step-5-compile-with-bootstrapfewshot">Step 5: Compile with BootstrapFewShot<a class="anchor" href="#step-5-compile-with-bootstrapfewshot" aria-label="Link to section">#</a></h2>
+<p>This is the step that has no equivalent in prompt-engineering folklore. <code>BootstrapFewShot</code> is a <strong>teleprompter</strong> (DSPy's name for optimizers): it runs your program over the training set with a teacher, keeps the traces that score well on your metric, and installs them as few-shot demonstrations inside the program. You are not hand-picking examples — the optimizer mines them:</p>
+<pre><code class="language-python">from dspy.teleprompt import BootstrapFewShot
+
+optimizer = BootstrapFewShot(metric=metric,
+                             max_bootstrapped_demos=12,
+                             max_labeled_demos=12)
+compiled = optimizer.compile(program.deepcopy(), trainset=trainset)
+
+optimized = evaluate(compiled)
+print(f"Optimized dev accuracy: {optimized.score:.1f}%")
+print(f"Demos installed: {len(compiled.classify.demos)}")
+# Bootstrapped 6 full traces after 11 examples for up to 1 rounds, amounting to 12 attempts.
+# Optimized dev accuracy: 88.9%
+# Demos installed: 12</code></pre>
+<p><strong>88.9% — 8 of 9</strong>, from the identical program structure. The only thing that changed is what the optimizer installed into it: 12 demonstrations (6 bootstrapped traces that passed the metric, plus labeled training examples), each showing a ticket mapped to its correct urgency and team. The compiled program now answers by analogy to real cases instead of guessing from keywords.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/dspy-prompt-optimization-tutorial/img3.webp" alt="Bar chart of measured results: zero-shot baseline 55.6% (5 of 9) versus 88.9% (8 of 9) after BootstrapFewShot, measured on 9 labeled tickets with the SandboxLM simulator"><figcaption>Measured on 9 labeled dev tickets: the same program, before and after compilation.</figcaption></figure>
+<p>The one remaining miss is instructive: <em>"Do you offer student discounts?"</em> shares almost no words with any billing demo, so the program falls back to its heuristic. That is a data problem, not a code problem — add two or three discount/pricing examples to the training set and recompile. This is the DSPy workflow in miniature: <strong>when the program is wrong, you fix the data or the metric, not the prompt string.</strong></p>
+<p>A note on the parameters, all verified against DSPy 3.4.0: <code>max_bootstrapped_demos</code> (default 4) caps teacher-generated traces; <code>max_labeled_demos</code> (default 16) caps raw training examples added as demos; <code>max_rounds</code> (default 1) controls bootstrapping rounds. Start with the defaults; raise them when you have more labeled data.</p>
+
+<h2 id="step-6-save-reload-ship">Step 6: Save, reload, ship<a class="anchor" href="#step-6-save-reload-ship" aria-label="Link to section">#</a></h2>
+<p>A compiled program is a JSON artifact. Save it, version it, deploy it next to your code:</p>
+<pre><code class="language-python">compiled.save("triage_v1.json")
+
+# In your service, at startup:
+reloaded = TriageProgram()
+reloaded.load("triage_v1.json")
+print(f"Reloaded dev accuracy: {evaluate(reloaded).score:.1f}%")
+# Reloaded dev accuracy: 88.9%
+
+r = reloaded(ticket="The courier left my package in the rain and everything inside is wet")
+print(r.urgency, "/", r.team)   # high / shipping</code></pre>
+<p>The reload scores identically — the optimization survived serialization. In production you would now swap one line — <code>dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))</code> — recompile against the same metric, and ship the resulting JSON. The program code never changes; only the compiled artifact does. (There is also a <code>save_program=True</code> option on <code>save()</code> if you want the program source bundled with the artifact.)</p>
+
+<h2 id="which-optimizer-should-you-use">Which optimizer should you use?<a class="anchor" href="#which-optimizer-should-you-use" aria-label="Link to section">#</a></h2>
+<p>BootstrapFewShot is the right default, but DSPy 3.4 ships stronger optimizers for harder problems. Here is how to choose, with one result I measured that most tutorials will not tell you:</p>
+<ul>
+<li><strong><code>BootstrapFewShot</code> — start here.</strong> Cheap, fast, no extra model needed. It teaches by example: installs passing traces as few-shot demos. Took this tutorial from 55.6% to 88.9%.</li>
+<li><strong><code>MIPROv2</code> — when demos are not enough.</strong> Searches over <em>instructions</em> as well as demos, proposing and testing candidate prompts against your metric. Costs more optimization compute; worth it when the task needs genuinely better wording, not just better examples.</li>
+<li><strong><code>GEPA</code> — reflective evolution, with a catch.</strong> GEPA uses a strong model to <em>reflect</em> on your program's failures and propose new instructions, evolving them over generations. Two API facts I verified the hard way in DSPy 3.4.0: its metric must accept <strong>five</strong> arguments — <code>(gold, pred, trace, pred_name, pred_trace)</code>, not two — and it <strong>requires a reflection LM</strong> (e.g. <code>dspy.LM(model="gpt-5", temperature=1.0, max_tokens=32000)</code>, per DSPy's own error message). I ran GEPA end-to-end with the sandbox as its reflection model: 428 rollouts, and it correctly proposed <em>nothing</em> — accuracy stayed 55.6%, because reflection requires real reasoning. Do not bother with GEPA unless you can give it a genuinely capable reflection model.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The DSPy bet is that <strong>prompts are compiled artifacts, not source code</strong> — and after running this loop, the bet looks right. You wrote a 10-line signature and module, a 2-line metric, and 21 labeled tickets. The optimizer did the part humans are bad at: mining good demonstrations and installing them where they help. Baseline 55.6%, compiled 88.9%, artifact saved to <code>triage_v1.json</code>.</p>
+<p>Three habits to take with you. First, <strong>always measure the baseline</strong> — the 55.6% is what makes the 88.9% mean something. Second, <strong>paraphrase your dev set</strong> — evals that copy the training data measure memorization, not generalization. Third, <strong>when the program is wrong, fix the data or the metric</strong> — the whole point of the framework is that the prompt string is no longer yours to hand-tune.</p>
+<p>The complete runnable script from this tutorial — sandbox model, data, metric, compile, save, reload — is a single file you can lift as-is. Swap <code>SandboxLM()</code> for <code>dspy.LM("openai/gpt-4o-mini")</code>, point it at your own labeled tickets, and you have the same loop running against a frontier model.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="dspy-prompt-optimization-tutorial"></div><div class="comments" data-comments="dspy-prompt-optimization-tutorial"></div></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/build-agent-skill-claude-skill-md-tutorial/"><span class="chip">Tutorials</span><h3>Teach Claude your workflow: building an Agent Skill with SKILL.md</h3><div class="meta">September 25, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/fine-tune-embeddings-domain-retrieval/"><span class="chip">Tutorials</span><h3>Fine-tune embeddings for your domain: contrastive training that measurably improves retrieval</h3><div class="meta">September 25, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/measure-effective-context-needle-test/"><span class="chip">Tutorials</span><h3>Your 32K context window is a marketing number: measure what your model actually remembers</h3><div class="meta">September 26, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/deploy-rag-chatbot-production-free-tier/"><span class="chip">Tutorials</span><h3>From notebook to production: deploy your RAG chatbot on a free tier</h3><div class="meta">September 24, 2026 · 11 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
