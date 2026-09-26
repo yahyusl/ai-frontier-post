@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Your 32K context window is a marketing number: measure what your model actually remembers — AI Frontier Post</title>
+<meta name="description" content="Vendors advertise 128K, 200K, million-token context windows — but how much of that window does a model actually use? Build the classic needle-in-a-haystack test, run it on a local model, and read the heatmap like an eval engineer.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/measure-effective-context-needle-test/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Your 32K context window is a marketing number: measure what your model actually remembers">
+<meta property="og:description" content="Vendors advertise 128K, 200K, million-token context windows — but how much of that window does a model actually use? Build the classic needle-in-a-haystack test, run it on a local model, and read the heatmap like an eval engineer.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/measure-effective-context-needle-test/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/measure-effective-context-needle-test/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Your 32K context window is a marketing number: measure what your model actually remembers", "description": "Vendors advertise 128K, 200K, million-token context windows — but how much of that window does a model actually use? Build the classic needle-in-a-haystack test, run it on a local model, and read the heatmap like an eval engineer.", "datePublished": "2026-09-26", "dateModified": "2026-09-26", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/agent-evals-tutorial/"}, "image": "https://aifrontierpost.com/articles/measure-effective-context-needle-test/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Your 32K context window is a marketing number: measure what your model actually remembers</h1>
+<p class="lede">Vendors advertise 128K, 200K, million-token context windows — but how much of that window does a model actually use? Build the classic needle-in-a-haystack test, run it on a local model, and read the heatmap like an eval engineer.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · September 26, 2026 · 10 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/measure-effective-context-needle-test/cover.webp" alt="A glowing golden needle standing out in a vast dark field of document stacks, illustrating the needle-in-a-haystack test for language model context windows"></figure>
+<div class="article-body"><p>Every major model release this year has advertised a bigger context window — 128K, 200K, a million tokens and beyond. The number on the box keeps growing, and it is tempting to treat it as a capability: stuff the whole codebase, the whole inbox, the whole document archive into the prompt and let the model sort it out.</p>
+<p>That number is a capacity, not a capability. What matters for your application is <em>effective</em> context: how much of the window the model actually uses when the fact you need sits 40,000 tokens deep. Those two numbers are not the same, and the gap between them has been measured repeatedly since late 2023. The uncomfortable part is that nobody will measure it for <em>your</em> model, <em>your</em> prompt shape, <em>your</em> task — the effective context of a small local model answering terse questions looks nothing like the effective context of a frontier model doing multi-hop reasoning.</p>
+<p>This tutorial fixes that. You will build the classic needle-in-a-haystack test from scratch, run it against a real model on your own machine, and read the resulting heatmap the way eval engineers do. No API keys, no GPU, about twenty minutes of compute. When you finish, you will know exactly how far you can trust <em>your</em> setup — and what to do when the answer is "not as far as the brochure says."</p>
+<h2 id="the-test-in-sixty-seconds">The test in sixty seconds<a class="anchor" href="#the-test-in-sixty-seconds" aria-label="Link to section">#</a></h2>
+<p>The method comes from Greg Kamradt's November 2023 pressure test of GPT-4 and Claude 2.1, and it has barely changed since because the core idea is airtight:</p>
+<ol><li><strong>Plant a needle</strong> — one short, distinctive fact — inside a large body of filler text (the haystack) at a controlled depth: 10% of the way in, 50%, 90%.</li><li><strong>Ask the model to retrieve it</strong>, with the haystack as context.</li><li><strong>Sweep two axes</strong> — total context length and needle depth — and score each cell pass/fail.</li><li><strong>Render the grid as a heatmap.</strong> Green where the model remembers, red where it forgets.</li></ol>
+<p>Kamradt's headline finding still frames the whole field: at the largest context lengths, neither GPT-4 (128K) nor Claude 2.1 (200K) reliably retrieved a planted fact, and recall degraded non-uniformly with depth. A few months later, Liu et al.'s <em>Lost in the Middle</em> (2023) gave the phenomenon its name and its shape: accuracy follows a <strong>U-shaped curve</strong> — best when the needed information sits at the very beginning or the very end of the context, worst in the middle — even in models explicitly built for long contexts. In one of their setups, GPT-3.5-Turbo with the answer buried mid-context scored <em>below</em> its own closed-book accuracy: the extra context actively hurt.</p>
+<p>Your heatmap is a compressed version of the same experiment, calibrated to your model. Here is what the machinery looks like:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/measure-effective-context-needle-test/img2.webp" alt="Diagram of the needle-in-a-haystack harness: haystack sentences, splice needle at measured depth, prompt with question, model answers, exact-match score feeds one heatmap cell"><figcaption>Diagram: the four moves of the harness. AI Frontier Post illustration.</figcaption></figure>
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10+</strong> and <strong>pip</strong>. Everything runs on CPU.</li><li><strong>~1.2 GB of disk</strong> for the model weights. No GPU, no API key, no account anywhere.</li><li><strong>PyTorch (CPU build) + Hugging Face Transformers</strong> — the standard local-inference stack, installed from prebuilt wheels.</li><li><strong>A small instruction-tuned model:</strong> Qwen2.5-0.5B-Instruct (~1 GB). Half a billion parameters is deliberately modest: it keeps the full sweep under an hour on a laptop CPU, and the <em>shape</em> of the result — where performance breaks — is what you are after, not the absolute scores.</li></ul>
+<pre><code class="language-bash">python3 -m venv needle && source needle/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install transformers matplotlib huggingface_hub
+# ~1 GB download — Qwen2.5-0.5B-Instruct weights
+# (huggingface-cli is deprecated in huggingface_hub 5.x; use hf)
+hf download Qwen/Qwen2.5-0.5B-Instruct --local-dir ./qwen2.5-0.5b</code></pre>
+<p>Two notes before you start. First, the model is small on purpose, and small models forget sooner — treat your absolute numbers as a floor for your setup, not as a verdict on the technique. Second, this is a demonstration grid (one trial per cell); a production eval would run multiple trials per cell and average, exactly as Kamradt's original did. The harness below is structured so you can add that in one line.</p>
+<h2 id="step-1-plant-a-needle-build-a-haystack">Step 1: Plant a needle, build a haystack<a class="anchor" href="#step-1-plant-a-needle-build-a-haystack" aria-label="Link to section">#</a></h2>
+<p>The haystack must be boring and uniform — if the filler is too distinctive, the model can cheat by pattern-matching instead of retrieving. Thirty neutral sentences about harbor logistics, shuffled and repeated, work well. The needle is one sentence that could not be guessed:</p>
+<pre><code class="language-python">NEEDLE = "The access code for the Harbor Street warehouse is 847291."
+
+FILLER = [
+    "The harbor district wakes early, with gulls circling above the container ships.",
+    "Maritime law requires every vessel to log its cargo before entering the port.",
+    "The old lighthouse was converted into a museum in the late nineteen hundreds.",
+    "Tide charts are published quarterly by the coastal survey office.",
+    "A shipment of machine parts arrived on the morning ferry from the mainland.",
+    "The warehouse district spans fourteen blocks along the northern waterfront.",
+    "Customs officers inspect roughly one in every twelve incoming containers.",
+    "The ferry schedule changes twice a year, in spring and in autumn.",
+    "Local fishermen report that the salmon run arrived two weeks early this year.",
+    "The port authority approved funding for three new docking cranes.",
+    "Fog is most common in the harbor during the early autumn months.",
+    "The maritime museum hosts guided tours every Saturday afternoon.",
+    "Shipping insurance rates rose slightly after last winter's storms.",
+    "The coastal railway connects the port to five inland distribution centers.",
+    "A new cold-storage facility opened near the southern pier last spring.",
+    "Harbor pilots board incoming vessels about two miles offshore.",
+    "The annual regatta draws sailing crews from across the region.",
+    "Dockworkers begin their shifts an hour before the first tide change.",
+    "The lighthouse keeper's logbook dates back over a hundred years.",
+    "Seagulls follow the fishing boats back into the harbor each evening.",
+    "The port's container yard can hold up to eight thousand steel boxes.",
+    "A tugboat escorts every large tanker through the narrow channel.",
+    "The fish market opens to wholesalers well before sunrise.",
+    "Coastal erosion studies are conducted along the cliffs every summer.",
+    "The harbor master keeps a detailed record of every vessel movement.",
+    "Storm shutters are tested on all waterfront buildings each October.",
+    "The old cannery building now houses artists' studios and a cafe.",
+    "Buoys mark the safe channel for ships entering the bay.",
+    "The maritime academy graduates about two hundred cadets per year.",
+    "Night ferries run on a reduced schedule during the winter months.",
+]</code></pre>
+<p>The critical detail is <strong>depth control in tokens, not sentences</strong>. "Halfway through the document" must mean half the tokens, because the model's context window is measured in tokens and attention dilutes per token. Tokenize the filler, cut it at the target length, and splice the needle in at the requested fraction:</p>
+<pre><code class="language-python">import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+torch.set_num_threads(4)
+tokenizer = AutoTokenizer.from_pretrained("./qwen2.5-0.5b")
+model = AutoModelForCausalLM.from_pretrained("./qwen2.5-0.5b",
+                                            torch_dtype=torch.float32)
+model.eval()
+
+def build_haystack(target_tokens, depth_frac, rng):
+    filler_ids = []
+    order = FILLER[:]
+    rng.shuffle(order)
+    i = 0
+    while len(filler_ids) < target_tokens:
+        filler_ids.extend(tokenizer.encode("
+" + order[i % len(order)],
+                                           add_special_tokens=False))
+        i += 1
+    filler_ids = filler_ids[:target_tokens]
+    needle_ids = tokenizer.encode(NEEDLE, add_special_tokens=False)
+    split = int(len(filler_ids) * depth_frac)
+    ids = filler_ids[:split] + needle_ids + filler_ids[split:]
+    text = tokenizer.decode(ids)
+    assert text.count(NEEDLE) == 1, "needle splice failed"
+    return text</code></pre>
+<p>Verify the splice the paranoid way: after building each haystack, assert the needle string is present exactly once. A needle that got truncated by your token budget invalidates the cell silently — this is the most common bug in DIY harnesses.</p>
+<h2 id="step-2-ask-one-question-score-it-ruthlessly">Step 2: Ask one question, score it ruthlessly<a class="anchor" href="#step-2-ask-one-question-score-it-ruthlessly" aria-label="Link to section">#</a></h2>
+<p>Ask the retrieval question with the haystack as context, then score with the strictest check available: does the response contain the exact code? No LLM judge, no partial credit — binary scoring is what makes the heatmap honest.</p>
+<pre><code class="language-python">QUESTION = ("What is the access code for the Harbor Street warehouse? "
+            "Reply with only the code, nothing else.")
+
+@torch.inference_mode()
+def ask(haystack):
+    prompt = tokenizer.apply_chat_template(
+        [{"role": "user",
+          "content": f"Read the following document carefully.
+
+{haystack}
+
+Question: {QUESTION}"}],
+        tokenize=False, add_generation_prompt=True)
+    inputs = tokenizer(prompt, return_tensors="pt")
+    out = model.generate(**inputs, max_new_tokens=24, do_sample=False,
+                         pad_token_id=tokenizer.eos_token_id)
+    new_tokens = out[0][inputs["input_ids"].shape[1]:]
+    return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+
+answer = ask(haystack)
+correct = "847291" in answer</code></pre>
+<p>Three choices here are load-bearing. <strong><code>do_sample=False</code></strong> (greedy decoding) removes sampling noise so the grid measures the model, not the dice. <strong><code>max_new_tokens=24</code></strong> keeps generations short — prefill dominates the runtime, and a six-digit answer needs no more. And the question goes <strong>after</strong> the document, matching how retrieval prompts work in practice (and matching Kamradt's original setup).</p>
+<h2 id="step-3-run-the-grid">Step 3: Run the grid<a class="anchor" href="#step-3-run-the-grid" aria-label="Link to section">#</a></h2>
+<p>Now sweep both axes. Four context lengths (1K, 2K, 4K, 8K tokens) against three depths (10%, 50%, 90%) gives twelve cells — enough to see the shape of the failure without burning an afternoon:</p>
+<pre><code class="language-python">import random, time, json
+
+results = []
+for length in [1000, 2000, 4000, 8000]:
+    for depth in [0.10, 0.50, 0.90]:
+        haystack = build_haystack(length, depth, random.Random(42))
+        t = time.time()
+        answer = ask(haystack)
+        results.append({"tokens": length, "depth": depth,
+                        "correct": "847291" in answer,
+                        "answer": answer, "seconds": round(time.time() - t, 1)})
+json.dump(results, open("results.json", "w"), indent=2)</code></pre>
+<p>On a 2-thread CPU this took about 53 minutes for all twelve cells — the cost is almost entirely prefill (reading the haystack), which is why short <code>max_tokens</code> matters. Here is the heatmap from that run:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/measure-effective-context-needle-test/img3.webp" alt="Heatmap of needle retrieval accuracy: rows are context lengths from 1K to 8K tokens, columns are needle depths of 10, 50 and 90 percent, cells colored green for retrieved and red for missed"><figcaption>Measured needle-retrieval heatmap for Qwen2.5-0.5B-Instruct on CPU (float32, greedy decoding). Each cell is one retrieval trial: green means the model returned the planted code, red means it did not. Generated from the author's own run, 2026-09-26.</figcaption></figure>
+<h2 id="step-4-read-the-heatmap-like-an-eval-engineer">Step 4: Read the heatmap like an eval engineer<a class="anchor" href="#step-4-read-the-heatmap-like-an-eval-engineer" aria-label="Link to section">#</a></h2>
+<p>Here is the honest read of this particular heatmap: it is all green. Qwen2.5-0.5B-Instruct retrieved the code in all twelve cells — every length from 1K to 8K tokens, the needle at 10%, 50%, and 90% depth. No rightward fade, no middle dip, no cliff. That is a real measurement, and it tells you something useful: for this task shape — one distinctive, high-signal fact, greedy decoding, a terse question — this model stays reliable through 8K tokens. But notice what it does <em>not</em> tell you. The sweep stopped at 8K, a quarter of the model's advertised 32K window, and a single code buried in neutral filler is the <em>easiest</em> long-context task there is; multi-hop reasoning over diffuse evidence breaks much earlier. So the all-green grid is not a verdict that the full 32K is usable — it is the baseline against which you push the length axis further (16K, 32K) and add more trials per cell until red appears. The value of the harness is not the colors you got; it is that you now own the instrument that finds where <em>your</em> setup turns red.</p>
+<p>Three patterns to check for in any heatmap, yours included:</p>
+<ul><li><strong>The rightward fade.</strong> Accuracy decays as context grows, even at fixed depth. This is <em>context rot</em>: every extra thousand tokens of filler steals a little attention from the needle. If your application's "long" prompts sit in the faded zone, you are paying for context that hurts.</li><li><strong>The middle dip.</strong> At a fixed length, the 50%-depth cell underperforms the 10% and 90% cells — the U-shape from <em>Lost in the Middle</em>. The mechanism is structural: attention sinks and positional encodings privilege the start and end of a sequence, so the middle is where facts go to be forgotten.</li><li><strong>The cliff.</strong> A sharp vertical boundary where everything past some length fails regardless of depth. That is your model's <em>effective</em> context for this task shape — write it down, because it is almost certainly smaller than the number on the model card.</li></ul>
+<p>One caution from the literature before you generalize: the U-shape is well established for single-pass factual retrieval, but it is not a law of physics. Follow-up work has found it weaker or absent in some newer models on some task shapes, attributing the difference to better positional encodings and training curricula. Your heatmap measures <em>your</em> model on <em>your</em> task — which is exactly why running it beats citing a paper.</p>
+<h2 id="what-to-do-when-the-number-disappoints-you">What to do when the number disappoints you<a class="anchor" href="#what-to-do-when-the-number-disappoints-you" aria-label="Link to section">#</a></h2>
+<p>A disappointing heatmap is not a dead end; it is a design input. Four mitigations, in order of effort:</p>
+<ol><li><strong>Put critical facts at the edges.</strong> The cheapest fix in existence: place the instruction and the must-remember facts at the very start or the very end of the prompt. If both matter, state them twice — once up top, once at the bottom. You are designing around the U-shape instead of fighting it.</li><li><strong>Retrieve, don't stuff.</strong> Liu et al. found that retriever recall keeps climbing as you add documents while <em>reader</em> accuracy saturates early — past a point, each extra retrieved chunk is pure noise tax. A tight top-k (3–5 chunks) into a short prompt routinely beats dumping fifty chunks into a long one, and it is cheaper twice over: fewer input tokens, better accuracy.</li><li><strong>Keep the haystack lean on purpose.</strong> Kamradt's own conclusion from the original test: less context means more accuracy. Strip boilerplate, dedupe repeated content, and summarize what the model only needs approximately. Every token you cut is attention returned to the tokens that matter.</li><li><strong>Make the model show its receipt.</strong> Ask for the answer <em>plus a quote of the supporting span</em>. A model that can quote the needle verbatim is far less likely to be hallucinating than one that blurts a plausible-looking code — and when it quotes the wrong span, you have a precise debugging signal instead of a mystery.</li></ol>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>The heatmap tells you where your model stops being reliable. What you build on top depends on where your workload sits relative to that boundary:</p>
+<div class="table-wrap"><table><thead><tr><th>Your situation</th><th>Use</th><th>Why</th></tr></thead><tbody><tr><td>Everything you need fits inside the green zone</td><td><strong>Stuff it in the prompt</strong>, facts at the edges</td><td>Simplest architecture; no retrieval infra to maintain</td></tr><tr><td>Corpus is 10–100× the green zone</td><td><strong>RAG with tight top-k</strong> (3–5 chunks)</td><td>Reader accuracy saturates early — extra chunks are noise tax</td></tr><tr><td>You need many facts from across a long document</td><td><strong>Map-reduce over chunks</strong>, then synthesize</td><td>Each chunk is read in its own green-zone pass; the middle dip never triggers</td></tr><tr><td>Facts must be found <em>and</em> reasoned over jointly</td><td><strong>Agentic retrieval</strong> (search tools + iterative reads)</td><td>The agent re-queries instead of holding everything at once</td></tr></tbody></table></div>
+<p>The through-line: never design a system that <em>requires</em> the model to reliably use its red zone. The brochure number is for marketing; the heatmap number is for architecture.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Context windows are cheap to advertise and expensive to trust. In about twenty minutes, with no GPU and no API key, you measured the gap between the two for a real model: where retrieval holds, where the middle dip bites, and where the cliff drops off. That measurement — a twelve-cell grid and an honest heatmap — is worth more than any model card, because model cards describe capacity and your application lives or dies on effective use.</p>
+<p>Run the harness again whenever something changes: a new model, a new quant, a new prompt shape, a longer document type. The grid is the same; only the colors move. And the next time someone proposes "just put the whole thing in context," you will have a picture that answers the question before the debate starts.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="measure-effective-context-needle-test"></div><div class="comments" data-comments="measure-effective-context-needle-test"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/fine-tune-embeddings-domain-retrieval/"><span class="chip">Tutorials</span><h3>Fine-tune embeddings for your domain: contrastive training that measurably improves retrieval</h3><div class="meta">September 25, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/build-agent-skill-claude-skill-md-tutorial/"><span class="chip">Tutorials</span><h3>Teach Claude your workflow: building an Agent Skill with SKILL.md</h3><div class="meta">September 25, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/qwen3-8-27b-local-setup/"><span class="chip">Tutorials</span><h3>Qwen3.8-27B on your own hardware: the complete local setup guide</h3><div class="meta">September 25, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/deploy-rag-chatbot-production-free-tier/"><span class="chip">Tutorials</span><h3>From notebook to production: deploy your RAG chatbot on a free tier</h3><div class="meta">September 24, 2026 · 11 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
