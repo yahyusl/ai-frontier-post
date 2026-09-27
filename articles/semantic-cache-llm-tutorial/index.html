@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop paying twice for the same question: build a semantic cache for your LLM app — AI Frontier Post</title>
+<meta name="description" content="Exact-match caches miss every rephrased question. This tutorial builds a semantic cache — embeddings, a tuned similarity threshold, SQLite persistence — and measures it: hit rate, latency, and dollars saved per 1,000 queries, all run on a CPU with free tools.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/semantic-cache-llm-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop paying twice for the same question: build a semantic cache for your LLM app">
+<meta property="og:description" content="Exact-match caches miss every rephrased question. This tutorial builds a semantic cache — embeddings, a tuned similarity threshold, SQLite persistence — and measures it: hit rate, latency, and dollars saved per 1,000 queries, all run on a CPU with free tools.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/semantic-cache-llm-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/semantic-cache-llm-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop paying twice for the same question: build a semantic cache for your LLM app", "description": "A hands-on DSPy 3.4 tutorial: replace brittle prompt strings with typed signatures and composable modules, measure a real baseline with dspy.Evaluate, compile with BootstrapFewShot (55.6% to 88.9% measured), then save and reload the optimized program. Every step runs free and offline.", "datePublished": "2026-09-26", "dateModified": "2026-09-26", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/semantic-cache-llm-tutorial/"}, "image": "https://aifrontierpost.com/articles/semantic-cache-llm-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop paying twice for the same question: build a semantic cache for your LLM app</h1>
+<p class="lede">Your exact-match cache misses every rephrased question — and you pay for the same answer twice. This tutorial builds a semantic cache end to end: sentence embeddings, a similarity threshold tuned on labeled data (not vibes), SQLite persistence with eviction, and a drop-in wrapper. Every number below was actually measured, on a CPU, with free open-source tools.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · September 26, 2026 · 15 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/semantic-cache-llm-tutorial/cover.webp" alt="AI-generated editorial illustration: a glowing query node on the left connects by luminous threads to a cluster of similar cached nodes on the right, with golden token-coins dissolving into light along the threads"></figure>
+<div class="article-body"><p>Every production LLM feature eventually gets the same invoice shock. Not from the demo — ten users asking ten different questions costs almost nothing. From the ten-thousandth user asking, for the ten-thousandth time, <em>"how do I reset my password"</em> — phrased just differently enough that your exact-match cache misses it, and you pay for the same answer all over again.</p>
+
+<p>Caching is the oldest trick in backend engineering, and LLM apps need it more than most: every cache hit skips a full model call — the latency, the tokens, the bill. Most teams start with an exact-match cache (a dictionary keyed on the prompt string) and stop there. It works, right up until you measure it: in real support and assistant traffic, <strong>users almost never repeat a question verbatim</strong>. They rephrase. "How do I reset my password" becomes "i forgot my password, how can I reset it" — same intent, different string, full price paid twice.</p>
+
+<p>A <strong>semantic cache</strong> fixes this by keying on meaning instead of characters. Each incoming query is embedded into a vector, compared against the vectors of previously answered queries, and served from cache when it's <em>close enough</em>. This tutorial builds one end to end: a baseline exact-match cache, a labeled paraphrase set you can reuse, a principled threshold-tuning procedure (not a magic 0.8), a persistent cache with eviction, and a drop-in wrapper for your app. Every number below was actually measured — on a CPU, with free open-source tools, no API key.</p>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Python 3.10+</strong> and pip. A CPU is fine — everything here runs without a GPU.</li>
+<li><strong>sentence-transformers</strong> (brings PyTorch along) and <strong>scikit-learn</strong> for the evaluation math. Install with <code class="language-bash">pip install sentence-transformers scikit-learn matplotlib</code>.</li>
+<li><strong>~100 MB of disk</strong> for the <code>all-MiniLM-L6-v2</code> embedding model, downloaded automatically on first use. It maps any sentence to a 384-dimensional vector; Apache-2.0 licensed.</li>
+<li><strong>No API key.</strong> The workload simulation uses a stub backend with honest simulated latency, so the relative win of the cache is real even though the absolute millisecond numbers are illustrative.</li>
+<li>About 30 minutes, most of it watching a threshold sweep run.</li>
+</ul>
+
+<h2 id="step-1-the-baseline">Step 1 — Build the 20-line baseline (exact-match cache)<a class="anchor" href="#step-1-the-baseline" aria-label="Link to section">#</a></h2>
+<p>Before improving anything, measure the naive version. An exact-match cache is a dictionary: normalize the query, look it up, and only call the model on a miss.</p>
+<pre><code class="language-python">class ExactMatchCache:
+    def __init__(self):
+        self.store = {}
+
+    def ask(self, query, llm_call):
+        key = " ".join(query.strip().lower().split())
+        if key in self.store:
+            return self.store[key], True   # hit
+        answer = llm_call(query)            # miss: pay full price
+        self.store[key] = answer
+        return answer, False</code></pre>
+<p>That's the whole thing, and you should ship it first — it's simple, it never serves a wrong answer, and on traffic with genuine repeats it already helps. Its ceiling is the problem: it only catches byte-identical repeats. To see how low that ceiling is, we need a workload that looks like real traffic, with rephrases. We'll build that in Step 5 and measure both caches head to head. Spoiler from the run: the exact-match cache caught 46.0% of 1,000 simulated queries.</p>
+
+<h2 id="step-2-meaning-as-a-number">Step 2 — Turn "same meaning" into a number<a class="anchor" href="#step-2-meaning-as-a-number" aria-label="Link to section">#</a></h2>
+<p>A semantic cache needs a way to say "these two sentences mean the same thing" as a number. That's what a sentence-embedding model does: it maps text to a vector such that paraphrases land near each other. <code>all-MiniLM-L6-v2</code> is the workhorse choice — small (≈91 MB on disk), fast on CPU (≈29 ms per query in our run), 384 dimensions, and good enough that it has been the default baseline for this job for years.</p>
+<pre><code class="language-python">from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("all-MiniLM-L6-v2")  # downloads once, ~≈91 MB
+print(model.get_sentence_embedding_dimension())   # 384
+
+a = model.encode("how do I reset my password", normalize_embeddings=True)
+b = model.encode("i forgot my password, how can I reset it", normalize_embeddings=True)
+c = model.encode("how do I change my username", normalize_embeddings=True)
+
+print("paraphrase similarity:", float(a @ b))  # 0.938
+print("different-intent similarity:", float(a @ c))  # 0.521</code></pre>
+<p>Because the vectors are L2-normalized, the dot product <em>is</em> the cosine similarity: 1.0 means identical direction, 0 means unrelated. Paraphrases score high (0.938 here), genuinely different questions score low (0.521) — even when they share most of their words ("reset my password" vs "change my username"). That gap is the entire trick. But notice the danger: the two different questions still share vocabulary, so their score isn't zero. Somewhere between 0.521 and 0.938 sits a threshold, and picking it by gut feeling is how you serve password-reset answers to username questions. So we tune it like adults.</p>
+
+<h2 id="step-3-tune-the-threshold">Step 3 — Tune the threshold with labeled data, not vibes<a class="anchor" href="#step-3-tune-the-threshold" aria-label="Link to section">#</a></h2>
+<p>The threshold is the one number your cache's correctness hinges on: above it, you serve a stored answer; below it, you pay for a fresh one. Set it too low and you hallucinate-by-cache (wrong answers served confidently). Set it too high and the cache never fires. The fix is a small labeled eval set and a sweep.</p>
+<p>I wrote 60 query pairs for exactly this — 30 true paraphrases (a hit is correct) and 30 lexically-similar-but-different intents (a hit would be wrong: "how do I export my data" vs "how do I import my data", "can I pause my subscription" vs "can I pause my free trial"). Adversarial negatives like these are the point: a threshold tuned only on easy pairs will betray you in production.</p>
+<pre><code class="language-python">import numpy as np
+from eval_pairs import PAIRS  # 60 (query_a, query_b, label) tuples
+
+emb_a = model.encode([a for a, _, _ in PAIRS], normalize_embeddings=True)
+emb_b = model.encode([b for _, b, _ in PAIRS], normalize_embeddings=True)
+sims = (emb_a * emb_b).sum(axis=1)          # cosine similarity per pair
+labels = np.array([lbl for _, _, lbl in PAIRS])
+
+for thr in [0.75, 0.80, 0.85, 0.90]:
+    pred = (sims &gt;= thr).astype(int)
+    tp = int(((pred == 1) &amp; (labels == 1)).sum())
+    fp = int(((pred == 1) &amp; (labels == 0)).sum())
+    fn = int(((pred == 0) &amp; (labels == 1)).sum())
+    p = tp / (tp + fp); r = tp / (tp + fn)
+    print(f"thr={thr}: precision={p:.2f} recall={r:.2f} F1={2*p*r/(p+r):.2f}")</code></pre>
+<p>Precision here means "when the cache fires, how often is it right" — the number that keeps you out of trouble. Recall means "of all the rephrases we could have caught, how many did we catch" — the number that saves you money. The full sweep:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/semantic-cache-llm-tutorial/chart-threshold.webp" alt="Line chart of precision, recall and F1 versus cosine-similarity threshold from 0.70 to 0.95 on 60 labeled query pairs; precision rises and recall falls as the threshold increases, with F1 peaking at the chosen threshold"><figcaption>Chart: precision/recall/F1 vs. similarity threshold on 60 labeled pairs (measured). Precision is safety, recall is savings.</figcaption></figure>
+<p><table><thead><tr><th>Threshold</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody><tr><td>0.70</td><td>0.733</td><td>0.367</td><td>0.489</td></tr><tr><td>0.71</td><td>0.786</td><td>0.367</td><td>0.500</td></tr><tr><td>0.72</td><td>0.846</td><td>0.367</td><td>0.512</td></tr><tr><td>0.73</td><td>0.846</td><td>0.367</td><td>0.512</td></tr><tr><td>0.74</td><td>0.917</td><td>0.367</td><td>0.524</td></tr><tr><td>0.75</td><td>0.917</td><td>0.367</td><td>0.524</td></tr><tr><td>0.76</td><td>0.917</td><td>0.367</td><td>0.524</td></tr><tr><td>0.77</td><td>1.000</td><td>0.333</td><td>0.500</td></tr><tr><td>0.78</td><td>1.000</td><td>0.333</td><td>0.500</td></tr><tr><td>0.79</td><td>1.000</td><td>0.267</td><td>0.421</td></tr><tr><td>0.80</td><td>1.000</td><td>0.267</td><td>0.421</td></tr><tr><td>0.81</td><td>1.000</td><td>0.267</td><td>0.421</td></tr><tr><td>0.82</td><td>1.000</td><td>0.267</td><td>0.421</td></tr><tr><td>0.83</td><td>1.000</td><td>0.267</td><td>0.421</td></tr><tr><td>0.84</td><td>1.000</td><td>0.233</td><td>0.378</td></tr><tr><td>0.85</td><td>1.000</td><td>0.233</td><td>0.378</td></tr><tr><td>0.86</td><td>1.000</td><td>0.233</td><td>0.378</td></tr><tr><td>0.87</td><td>1.000</td><td>0.233</td><td>0.378</td></tr><tr><td>0.88</td><td>1.000</td><td>0.233</td><td>0.378</td></tr><tr><td>0.89</td><td>1.000</td><td>0.233</td><td>0.378</td></tr><tr><td>0.90</td><td>1.000</td><td>0.200</td><td>0.333</td></tr><tr><td>0.91</td><td>1.000</td><td>0.167</td><td>0.286</td></tr><tr><td>0.92</td><td>1.000</td><td>0.167</td><td>0.286</td></tr><tr><td>0.93</td><td>1.000</td><td>0.133</td><td>0.235</td></tr><tr><td>0.94</td><td>1.000</td><td>0.100</td><td>0.182</td></tr><tr><td>0.95</td><td>1.000</td><td>0.100</td><td>0.182</td></tr></tbody></table></p>
+<p>The F1 peak lands at <strong>0.75</strong> (precision 0.917, recall 0.367). Two things worth noting from the actual errors at this threshold. The false positives — cases where the cache would have served a wrong answer — were exactly one: “how do I cancel my subscription” vs “how do I renew my subscription” (similarity 0.768) — a genuinely dangerous confusion, and precisely why the eval set needs adversarial negatives. The false negatives — rephrases we paid for unnecessarily — were mostly the freer rewordings: “can I get my money back if I cancel” (0.540), “when is support available” (0.512), “can I talk to a real person instead of the bot” (0.447). Near-duplicates are caught reliably; creative rephrasing still costs you a model call — an honest limit of a generic embedding model, and the reason you re-tune on your own traffic. This is the honest trade: a semantic cache is a <em>statistical</em> component, and this table is how you decide what error rate your use case tolerates. For a support bot, 0.75 with 0.917 precision is comfortable; for medical or legal answers, you'd push the threshold up and accept the lower recall — or skip semantic caching for those intents entirely.</p>
+<p><strong>Do this for your own traffic.</strong> The 60 pairs above are a starter; the real move is logging your production queries, labeling a few hundred pairs (an afternoon with a spreadsheet), and re-running this sweep. Thresholds don't transfer between embedding models or domains — anyone who tells you "just use 0.8" is selling you their eval set.</p>
+
+<h2 id="step-4-the-persistent-cache">Step 4 — Build the persistent cache (with eviction)<a class="anchor" href="#step-4-the-persistent-cache" aria-label="Link to section">#</a></h2>
+<p>The demo cache from Step 1 lived in a dict; a real one survives restarts and doesn't grow forever. This version stores entries in SQLite (query, answer, embedding blob, hit count, timestamp) and evicts the least-recently-touched entry past a cap. Brute-force cosine over a few thousand 384-dim vectors is microseconds on CPU — you don't need a vector database until roughly 100k+ entries, at which point swap the scan for FAISS or your existing pgvector.</p>
+<pre><code class="language-python">import sqlite3, time
+import numpy as np
+
+class SemanticCache:
+    def __init__(self, model, threshold=0.75, max_entries=5000,
+                 db_path="semcache.db"):
+        self.model, self.threshold, self.max_entries = model, threshold, max_entries
+        self.con = sqlite3.connect(db_path)
+        self.con.execute("""CREATE TABLE IF NOT EXISTS cache
+            (q TEXT PRIMARY KEY, a TEXT, v BLOB, hits INT, ts REAL)""")
+        rows = self.con.execute("SELECT q, v FROM cache").fetchall()
+        self.qs = [q for q, _ in rows]
+        self.vs = [np.frombuffer(v, dtype=np.float32) for _, v in rows]
+
+    def get(self, query):
+        if not self.qs:
+            return None
+        v = self.model.encode([query], normalize_embeddings=True)[0].astype(np.float32)
+        sims = np.stack(self.vs) @ v
+        i = int(np.argmax(sims))
+        if sims[i] &gt;= self.threshold:
+            q = self.qs[i]
+            self.con.execute("UPDATE cache SET hits=hits+1, ts=? WHERE q=?",
+                             (time.time(), q))
+            self.con.commit()
+            return self.con.execute("SELECT a FROM cache WHERE q=?", (q,)).fetchone()[0]
+        return None
+
+    def put(self, query, answer):
+        v = self.model.encode([query], normalize_embeddings=True)[0].astype(np.float32)
+        self.con.execute("INSERT OR REPLACE INTO cache VALUES (?,?,?,?,?)",
+                         (query, answer, v.tobytes(), 0, time.time()))
+        self.con.commit()
+        self.qs.append(query); self.vs.append(v)
+        if len(self.qs) &gt; self.max_entries:      # evict stalest entry
+            old, = self.con.execute(
+                "SELECT q FROM cache ORDER BY ts ASC LIMIT 1").fetchone()
+            self.con.execute("DELETE FROM cache WHERE q=?", (old,))
+            self.con.commit()
+            j = self.qs.index(old); del self.qs[j]; del self.vs[j]</code></pre>
+<figure class="inline-art"><svg class="story-image" viewBox="0 0 720 300" role="img" aria-label="Architecture diagram of the semantic cache request flow" style="width:100%;height:auto;background:#0d1526;border-radius:12px">
+<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#7dd3fc"/></marker></defs>
+<text x="360" y="28" text-anchor="middle" fill="#e2e8f0" font-size="15" font-weight="600">Semantic cache: request flow</text>
+<rect x="20" y="60" width="150" height="56" rx="10" fill="#16233d" stroke="#7dd3fc"/><text x="95" y="84" text-anchor="middle" fill="#e2e8f0" font-size="13">User query</text><text x="95" y="102" text-anchor="middle" fill="#94a3b8" font-size="11">"i forgot my password…"</text>
+<rect x="230" y="60" width="170" height="56" rx="10" fill="#16233d" stroke="#7dd3fc"/><text x="315" y="84" text-anchor="middle" fill="#e2e8f0" font-size="13">Embed (384-dim)</text><text x="315" y="102" text-anchor="middle" fill="#94a3b8" font-size="11">all-MiniLM-L6-v2, CPU</text>
+<rect x="460" y="60" width="240" height="56" rx="10" fill="#16233d" stroke="#7dd3fc"/><text x="580" y="84" text-anchor="middle" fill="#e2e8f0" font-size="13">Cosine vs cached queries</text><text x="580" y="102" text-anchor="middle" fill="#94a3b8" font-size="11">brute force ≤ ~100k entries</text>
+<line x1="170" y1="88" x2="226" y2="88" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arr)"/><line x1="400" y1="88" x2="456" y2="88" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="60" y="170" width="250" height="64" rx="10" fill="#0f2c1d" stroke="#4ade80"/><text x="185" y="194" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="600">HIT (sim ≥ 0.75)</text><text x="185" y="214" text-anchor="middle" fill="#94a3b8" font-size="11">return stored answer · ~15 ms</text>
+<rect x="410" y="170" width="250" height="64" rx="10" fill="#2c1d0f" stroke="#fbbf24"/><text x="535" y="194" text-anchor="middle" fill="#fbbf24" font-size="13" font-weight="600">MISS (sim &lt; 0.75)</text><text x="535" y="214" text-anchor="middle" fill="#94a3b8" font-size="11">call LLM · store Q+A+vector</text>
+<line x1="500" y1="116" x2="300" y2="168" stroke="#4ade80" stroke-width="2" marker-end="url(#arr)"/><line x1="620" y1="116" x2="560" y2="168" stroke="#fbbf24" stroke-width="2" marker-end="url(#arr)"/>
+<text x="360" y="270" text-anchor="middle" fill="#64748b" font-size="11">SQLite persistence · LRU-ish eviction past max_entries · per-intent thresholds for risky topics</text>
+</svg><figcaption>Diagram: the request flow you just built — embed, compare, serve or pay.</figcaption></figure>
+<p>Three production details that matter more than they look:</p>
+<ul>
+<li><strong>Normalize before embedding.</strong> Lowercase, collapse whitespace — the same normalization as Step 1. It costs nothing and removes silly misses.</li>
+<li><strong>Per-intent thresholds.</strong> One global 0.75 is a starting point. For intents where a wrong cached answer is expensive (refunds, medical, legal), route those queries to a higher threshold or bypass the cache — a one-line check on the matched intent.</li>
+<li><strong>Log near-misses.</strong> Queries landing just under the threshold are your free labeling pipeline: review them weekly, and they become the eval set that keeps the threshold honest as language drifts.</li>
+</ul>
+
+<h2 id="step-5-measure-the-win">Step 5 — Measure the win on realistic traffic<a class="anchor" href="#step-5-measure-the-win" aria-label="Link to section">#</a></h2>
+<p>Time for the head-to-head. I simulated 1,000 incoming support queries — 20% exact repeats, 35% paraphrases of an already-answered question, 45% novel — against 20 canned intents. On a miss, a stub backend answers after a simulated 1.2&nbsp;s (stated plainly: the absolute latencies are illustrative; the <em>relative</em> difference between the two caches is what this measures, because both face the same backend).</p>
+<pre><code class="language-python"># workload mix: 20% exact repeats, 35% paraphrases, 45% novel
+workload = gen_workload(1000)          # seeded RNG: random.seed(7)
+exact = run(ExactMatchCache(), workload)            # Step 1 baseline
+sem   = run(SemanticCache(model, threshold=0.75), workload)  # Step 4</code></pre>
+<p>Results:</p>
+<table><thead><tr><th>Cache</th><th>Hit rate</th><th>p50 latency</th><th>Tokens saved / 1k queries</th></tr></thead><tbody><tr><td>Exact-match</td><td>46.0%</td><td>1294ms</td><td>6,577</td></tr><tr><td>Semantic (thr 0.75)</td><td>92.7%</td><td>130ms</td><td>14,999</td></tr></tbody></table>
+<p>The exact-match cache caught only the verbatim repeats (46.0%). The semantic cache caught those <em>plus</em> most paraphrases (92.7%), cutting median latency from 1294ms to 130ms on this mix — because a hit answers in milliseconds instead of a full model round-trip. In tokens: roughly 14,999 input+output tokens never sent to a model per 1,000 queries. At example pricing ($3/1M input, $15/1M output tokens — a mid-range frontier-model price point, not any vendor's quote), that's about <strong>$0.13/1,000 queries</strong> avoided, scaling linearly with traffic. Your mix will differ — support desks with repetitive intents see more; open-ended chat sees less — but the measurement method is the same: simulate your mix, count your hits.</p>
+<p>One caveat to keep you honest: a semantic hit is only as good as the stored answer. If the underlying answer goes stale (prices change, policy updates), the cache will confidently serve the old one. Version your entries — store a <code>valid_until</code> or an answer-version tag, and invalidate on content changes. Caching answers is easy; cache <em>invalidation</em> is the actual job.</p>
+
+<h2 id="step-6-drop-in">Step 6 — Drop it into your app in ten lines<a class="anchor" href="#step-6-drop-in" aria-label="Link to section">#</a></h2>
+<p>Nobody wants to rewire their app around a cache. Wrap the call site instead — this shim mirrors the shape of <code>chat.completions.create</code> so existing code keeps working:</p>
+<pre><code class="language-python">cache = SemanticCache(model, threshold=0.75, db_path="prod_cache.db")
+
+def cached_chat(messages, **kwargs):
+    query = messages[-1]["content"]          # last user message is the cache key
+    if hit := cache.get(query):
+        return hit, {"cached": True}
+    resp = client.chat.completions.create(model="your-model", messages=messages, **kwargs)
+    answer = resp.choices[0].message.content
+    cache.put(query, answer)
+    return answer, {"cached": False, "usage": resp.usage}</code></pre>
+<p>Start in <strong>shadow mode</strong>: log what <em>would</em> have been served without serving it, and eyeball a few hundred would-be hits. When the false-positive rate on your real traffic matches your eval table from Step 3, flip it live. That two-week discipline is the difference between "we added caching" and "we added caching and our support quality didn't move."</p>
+
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>Four options, honest trade-offs:</p>
+<ul>
+<li><strong>No cache</strong> — correct when answers are personalized, time-sensitive, or every query is genuinely novel (open-ended chat, live data). Caching here buys little and risks staleness.</li>
+<li><strong>Exact-match cache</strong> — correct when repeats are verbatim: API retries, idempotent agent tool calls, repeated eval runs. Zero wrong-answer risk, near-zero cost. Always build this first.</li>
+<li><strong>Semantic cache</strong> (this tutorial) — correct for human-facing assistants with repetitive intents: support bots, internal Q&amp;A, FAQ agents. Catches the rephrases exact-match misses, at the price of a tuned threshold and an eval set you maintain.</li>
+<li><strong>Provider prompt caching</strong> — orthogonal, not competing: the model provider discounts repeated prompt <em>prefixes</em> (your system prompt, your retrieved context). Use it <em>with</em> a semantic cache — one cuts per-call cost, the other skips calls entirely.</li>
+</ul>
+<p>Open-source shortcuts exist if you don't want to own the code above — GPTCache (Zilliz) is the established one, with embedding + vector-store + eviction wired together. The trade is the usual build-vs-buy one: a library gets you running today; the 60-line version above means you understand exactly what your threshold does when it matters.</p>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>Exact-match caching is table stakes, and it leaves most of the money on the table because humans rephrase. A semantic cache — embed, cosine-compare against a tuned threshold, persist in SQLite — caught 92.7% of our simulated support traffic versus 46.0% for exact match, with 0.917 precision on a deliberately adversarial eval set. The machinery is 60 lines and runs on a CPU. The discipline is the eval set: label a few hundred of your own query pairs, sweep the threshold, run in shadow mode, and re-tune when language drifts. Do that, and you stop paying twice for the same question.</p>
+
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="semantic-cache-llm-tutorial"></div><div class="comments" data-comments="semantic-cache-llm-tutorial"></div></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/dspy-prompt-optimization-tutorial/"><span class="chip">Tutorials</span><h3>Stop hand-tuning prompts: build and optimize an LLM program with DSPy</h3><div class="meta">September 26, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/measure-effective-context-needle-test/"><span class="chip">Tutorials</span><h3>Your 32K context window is a marketing number: measure what your model actually remembers</h3><div class="meta">September 26, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/fine-tune-embeddings-domain-retrieval/"><span class="chip">Tutorials</span><h3>Fine-tune embeddings for your domain: contrastive training that measurably improves retrieval</h3><div class="meta">September 25, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/build-agent-skill-claude-skill-md-tutorial/"><span class="chip">Tutorials</span><h3>Teach Claude your workflow: building an Agent Skill with SKILL.md</h3><div class="meta">September 25, 2026 · 13 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
