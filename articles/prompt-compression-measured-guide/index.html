@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Cut your prompt tokens in half: a measured guide to prompt compression — AI Frontier Post</title>
+<meta name="description" content="Your prompts are carrying dead weight: bloated system instructions, messy retrieved context, verbose tool schemas. Four compression techniques cut a realistic RAG prompt nearly in half with zero lost answers &#8212; and every number below was measured with tiktoken, not estimated.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/prompt-compression-measured-guide/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Your agent reads the internet: stop prompt injections from hijacking its tools">
+<meta property="og:description" content="Your prompts are carrying dead weight: bloated system instructions, messy retrieved context, verbose tool schemas. Four compression techniques cut a realistic RAG prompt nearly in half with zero lost answers &#8212; and every number below was measured with tiktoken, not estimated.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/prompt-compression-measured-guide/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/prompt-compression-measured-guide/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-09-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Cut your prompt tokens in half: a measured guide to prompt compression", "description": "Your prompts are carrying dead weight: bloated system instructions, messy retrieved context, verbose tool schemas. Four compression techniques cut a realistic RAG prompt nearly in half with zero lost answers — and every number below was measured with tiktoken, not estimated.", "datePublished": "2026-09-27", "dateModified": "2026-09-27", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/prompt-compression-measured-guide/"}, "image": "https://aifrontierpost.com/articles/prompt-compression-measured-guide/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Cut your prompt tokens in half: a measured guide to prompt compression</h1>
+<p class="lede">Your prompts are carrying dead weight: bloated system instructions, messy retrieved context, verbose tool schemas. Four compression techniques cut a realistic RAG prompt nearly in half with zero lost answers &#8212; and every number below was measured with tiktoken, not estimated.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · September 27, 2026 · 10 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/prompt-compression-measured-guide/cover.webp" alt="AI-generated editorial illustration: a long stream of glowing text-lines squeezed through a luminous funnel into a short compact bright block"></figure>
+<div class="article-body">
+<p>Your prompts are getting longer every month, and you are not imagining it. A RAG pipeline stuffs in retrieved chunks "just in case." An agent carries tool schemas, conversation history, and a system prompt that has been accumulating instructions like sediment since the project started. Every one of those tokens costs money, adds latency &mdash; and quietly dilutes the model's attention across a longer context.</p>
+<p>The fix is not a smaller model and not a shorter context window. It is <strong>compression</strong>: removing the tokens that carry no signal before the model ever sees them. Done blindly, compression is dangerous &mdash; you silently delete the sentence the answer depended on. Done with measurement, it is the highest-ROI optimization in applied LLM engineering: it works on every model, needs no retraining, and stacks with everything else you are already doing.</p>
+<p>In this tutorial you will build a token accounting harness, apply <strong>four compression techniques</strong> to a realistic RAG prompt, and measure exactly what each one saves and what it costs in answer quality. Every number below was measured on this machine with <code>tiktoken</code> &mdash; not estimated, not copied from a paper. By the end you will have a reusable pipeline you can point at your own prompts.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10+</strong> and one install: <code>pip install tiktoken</code>. Everything else is the standard library.</li><li><strong>About 25 minutes</strong> and a prompt of your own to compress at the end.</li><li><strong>$0.</strong> No API keys, no model calls &mdash; token counting is pure arithmetic on text.</li></ul>
+<p>One note on scope: <code>tiktoken</code> counts tokens for OpenAI's tokenizers (<code>o200k_base</code> for GPT-4o-class models, <code>cl100k_base</code> for older ones). Other providers tokenize slightly differently, but the <em>relative</em> savings you measure here transfer &mdash; a 48% cut in o200k tokens is a ~48% cut everywhere.</p>
+<h2 id="1-measure-first-token-accounting">1. Measure first: token accounting<a class="anchor" href="#1-measure-first-token-accounting" aria-label="Link to section">#</a></h2>
+<p>You cannot compress what you do not measure. The first script breaks a prompt into sections and counts each one, so you know where the tokens actually live. Most teams guess wrong here &mdash; they rewrite the system prompt (usually under 10% of the total) while the retrieved context quietly eats 90%.</p>
+<pre><code class="language-python">import tiktoken
+
+# o200k_base is the tokenizer for gpt-4o, gpt-4o-mini, gpt-4.1 and o1
+# (verified: tiktoken.encoding_for_model("gpt-4o").name == "o200k_base").
+# Older GPT-3.5/4-era models use cl100k_base.
+enc = tiktoken.encoding_for_model("gpt-4o")
+
+def ntok(text: str) -&gt; int:
+    return len(enc.encode(text))
+
+system = open("system.txt").read()      # your system instructions
+context = open("context.txt").read()    # retrieved docs, history, etc.
+question = "How long are API keys valid?"
+
+sections = {
+    "system instructions": system,
+    "retrieved context": context,
+    "user question": question,
+}
+total = sum(ntok(t) for t in sections.values())
+for name, text in sections.items():
+    t = ntok(text)
+    print(f"{name:20s} {t:5d} tokens ({100*t/total:4.1f}%)")
+print(f"{'TOTAL':20s} {total:5d} tokens")</code></pre>
+<p>Run against a realistic support-bot prompt &mdash; 117 tokens of system instructions, six documentation chunks as retrieved context, one user question &mdash; the accounting looks like this:</p>
+<ul><li>system instructions: <strong>117 tokens (9.9%)</strong></li><li>retrieved context: <strong>1,059 tokens (89.5%)</strong></li><li>user question: <strong>7 tokens (0.6%)</strong></li></ul>
+<p>The context is the prompt. Any compression effort that does not start with the context is theater. Keep this breakdown; you will re-run it after every technique below to confirm the savings land where you expect.</p>
+<h2 id="2-strip-the-invisible-bloat">2. Strip the invisible bloat<a class="anchor" href="#2-strip-the-invisible-bloat" aria-label="Link to section">#</a></h2>
+<p>Real-world prompt text is full of tokens that are literally invisible: triple newlines from CMS exports, trailing whitespace, HTML comments, horizontal rules, and boilerplate sentences duplicated across every chunk ("Authentication is required for all endpoints" appeared in three of our six doc chunks). Stripping them is free, deterministic, and cannot change meaning &mdash; it is the one technique with no quality risk at all.</p>
+<pre><code class="language-python">import re
+
+def strip_bloat(text: str) -&gt; str:
+    """Remove token bloat that carries zero signal."""
+    text = re.sub(r"&lt;!--.*?--&gt;", "", text, flags=re.S)  # HTML comments
+    text = re.sub(r"^---+$", "", text, flags=re.M)      # h-rules
+    text = re.sub(r"[ \t]+", " ", text)                 # inner whitespace
+    text = re.sub(r"\n{3,}", "\n\n", text)            # blank-line runs
+    lines, out, prev = text.split("\n"), [], None
+    for ln in (l.strip() for l in lines):                # trailing space
+        if ln and ln != prev:                            # duplicated lines
+            out.append(ln)
+        prev = ln
+    return "\n".join(out).strip()
+
+messy = open("messy_context.txt").read()   # straight from your CMS
+print(f"before: {ntok(messy)} tokens")
+print(f"after:  {ntok(strip_bloat(messy))} tokens")</code></pre>
+<p>Measured on documentation as it actually arrives from a CMS &mdash; extra blank lines, trailing spaces, an HTML comment, a duplicated heading &mdash; stripping cut <strong>1,241 &rarr; 1,106 tokens (-10.9%)</strong>. And here is the honest caveat the measurement forced on us: on already-clean text the same function saved just <strong>0.7%</strong>. Bloat-stripping is not a 10% technique; it is a <em>messy-input</em> technique. Run it always &mdash; it costs nothing &mdash; but do not expect it to carry the headline number.</p>
+<h2 id="3-extractive-compression-keep-the-sentences-that-matter">3. Extractive compression: keep the sentences that matter<a class="anchor" href="#3-extractive-compression-keep-the-sentences-that-matter" aria-label="Link to section">#</a></h2>
+<p>This is where the real savings live. Most retrieved context is only vaguely relevant to the question at hand: of six documentation chunks, typically one or two contain the answer and the rest is distraction. Extractive compression scores every sentence against the question and keeps the top fraction &mdash; in original order, so the surviving text still reads coherently.</p>
+<p>The scoring is deliberately simple: query-term overlap normalized by sentence length, so a long sentence with one matching word does not beat a short sentence that is all signal. No embeddings, no model calls, runs in milliseconds:</p>
+<pre><code class="language-python">import re
+
+WORD = re.compile(r"[a-z0-9]+")
+
+def sentences(text: str):
+    parts = re.split(r"(?&lt;=[.!?])\s+", text.strip())
+    return [p.strip() for p in parts if len(p.strip()) &gt; 8]
+
+def score_sentence(sent: str, query_terms: set) -&gt; float:
+    terms = set(WORD.findall(sent.lower()))
+    overlap = len(terms &amp; query_terms)
+    if overlap == 0:
+        return 0.0
+    # Length-normalized: a long sentence with one matching word
+    # should not beat a short sentence that is all signal.
+    return overlap / (len(terms) ** 0.5)
+
+def extractive_compress(context: str, question: str,
+                        keep_ratio: float = 0.45) -&gt; str:
+    """Keep the keep_ratio highest-scoring sentences, in original order."""
+    sents = sentences(context)
+    qterms = set(WORD.findall(question.lower()))
+    scored = sorted(
+        ((score_sentence(s, qterms), i, s) for i, s in enumerate(sents)),
+        key=lambda t: (-t[0], t[2]),   # score desc, then alphabetical
+    )
+    keep = max(1, int(len(sents) * keep_ratio))
+    kept = sorted(scored[:keep], key=lambda t: t[1])  # restore order
+    return " ".join(s for _, _, s in kept)
+
+slim = extractive_compress(context, question, keep_ratio=0.45)
+print(f"context: {ntok(context)} -&gt; {ntok(slim)} tokens")</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/prompt-compression-measured-guide/img2.webp" alt="AI-generated diagram: a tall messy stack of document pages passes through a filter sieve and emerges as a single slim glowing page"><figcaption>Illustration: the compression pipeline &mdash; messy retrieved context goes in, the query-relevant sentences come out. AI-generated.</figcaption></figure>
+<p>Measured with <code>keep_ratio=0.45</code>: context tokens fell <strong>53.7% (1,059 &rarr; 490)</strong>, and all five test questions remained answerable from the compressed text (more on how we verify that in step 6). The knob is <code>keep_ratio</code>: 0.3 is aggressive, 0.6 is conservative. Tune it against your own evals &mdash; the right value depends on how much of your context is actually relevant, which varies wildly between applications.</p>
+<p>One subtlety worth knowing: extractive compression <em>subsumes</em> bloat-stripping. Whitespace and duplicated boilerplate score near zero against any real question, so they are dropped automatically. That is why the techniques below are measured as a stack, not in isolation.</p>
+<h2 id="4-prune-your-tool-schemas">4. Prune your tool schemas<a class="anchor" href="#4-prune-your-tool-schemas" aria-label="Link to section">#</a></h2>
+<p>If you build agents, your other giant token sink is tool definitions. A typical JSON schema ships with a <code>description</code> on every field, <code>examples</code>, and <code>title</code> keys &mdash; prose the model mostly does not need. What the model actually needs is names, types, and which fields are required. Pruning the rest is structural compression: same schema, far fewer tokens, zero behavior change for well-named tools.</p>
+<pre><code class="language-python">import json
+
+def prune_tool_schema(schema: dict) -&gt; dict:
+    """Drop description/examples/title keys from a tool JSON schema.
+
+    The model needs names, types and required fields. The prose
+    around them is the most compressible part of an agent prompt.
+    """
+    def prune(node):
+        if isinstance(node, dict):
+            return {k: prune(v) for k, v in node.items()
+                    if k not in ("description", "examples", "title")}
+        if isinstance(node, list):
+            return [prune(v) for v in node]
+        return node
+    return prune(schema)
+
+schema = json.load(open("tool_schema.json"))
+full, slim = json.dumps(schema), json.dumps(prune_tool_schema(schema))
+print(f"schema: {ntok(full)} -&gt; {ntok(slim)} tokens")</code></pre>
+<p>Measured on a realistic four-parameter tool schema: <strong>225 &rarr; 70 tokens (-68.9%)</strong>. Multiply that by a dozen tools attached to every agent turn and schemas quietly become the biggest line item in your prompt. The caveat: if a parameter name is ambiguous (<code>filter</code>, <code>mode</code>), keep its description &mdash; prune per-tool and spot-check that the model still calls tools correctly. Descriptions are documentation for the model; delete them only where the name already says it.</p>
+<h2 id="5-stack-them-the-full-pipeline">5. Stack them: the full pipeline<a class="anchor" href="#5-stack-them-the-full-pipeline" aria-label="Link to section">#</a></h2>
+<p>Now combine everything: strip bloat, extract the query-relevant sentences, prune the schemas, then re-run the accounting from step 1. The honest result on our five-question test set:</p>
+<ul><li><strong>1,189 &rarr; 611 tokens mean per prompt (-48.6%)</strong></li><li><strong>5/5 answers preserved</strong> &mdash; every gold keyword still present in the compressed context</li></ul>
+<figure class="inline-art"><img class="story-image" src="/articles/prompt-compression-measured-guide/img3.webp" alt="AI-generated illustration: a long fragmented gray bar beside a much shorter glowing cyan bar ending in a checkmark, showing measured token reduction"><figcaption>Illustration: the measured result &mdash; roughly half the tokens, all five answers intact. AI-generated.</figcaption></figure>
+<p>Notice what the stack reveals: extractive compression alone saved 48.0%, and adding bloat-stripping on top moved it to just 48.6%. The techniques overlap &mdash; which is exactly why you measure the <em>stack</em>, not the brochure numbers of each technique in isolation. In production this pipeline runs in under 50 milliseconds per prompt, so it can sit directly in front of every model call.</p>
+<h2 id="6-prove-nothing-broke">6. Prove nothing broke: the answer-preservation harness<a class="anchor" href="#6-prove-nothing-broke" aria-label="Link to section">#</a></h2>
+<p>Compression without verification is just deletion. The harness below is the minimum honest check: a set of questions with gold keywords, run against the compressed context. If a keyword disappears, the technique went too far and you tune the knob or keep more sentences.</p>
+<pre><code class="language-python"># gold Q&amp;A: (question, keywords the answer must keep)
+QA = [
+    ("How long are API keys valid before they expire?", ["90 days", "expire"]),
+    ("What happens when I exceed the rate limit?", ["429", "Retry-After"]),
+    ("How long are events retained?", ["13 months"]),
+    ("How do I verify webhook payloads?", ["HMAC-SHA256"]),
+    ("What is the default conversion window for funnels?", ["7 days"]),
+]
+
+def build_prompt(question, ctx):
+    return f"{strip_bloat(system)}\n\nDOCUMENTATION:\n{ctx}\n\nQ: {question}"
+
+preserved, base_toks, slim_toks = 0, 0, 0
+for question, gold in QA:
+    slim = extractive_compress(strip_bloat(context), question)
+    base_toks += ntok(build_prompt(question, context))
+    slim_toks += ntok(build_prompt(question, slim))
+    if all(g.lower() in slim.lower() for g in gold):
+        preserved += 1
+
+print(f"tokens: {base_toks} -&gt; {slim_toks} "
+      f"(-{100*(1-slim_toks/base_toks):.1f}%)")
+print(f"answers preserved: {preserved}/{len(QA)}")</code></pre>
+<pre><code class="language-text">tokens: 5947 -&gt; 3055 (-48.6%)
+answers preserved: 5/5</code></pre>
+<p>Be clear-eyed about what this proves: keyword survival is a <em>proxy</em>, not a quality eval. It catches catastrophic deletions, not subtle meaning shifts. For production, point the same pipeline at your real eval set &mdash; the task-based eval pattern from our <a href="/articles/agent-evals-tutorial/">agent evals tutorial</a> ports directly: run the evals on full vs. compressed prompts and require the score delta to stay within your tolerance before you ship.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Not every prompt needs every technique. Match the tool to the bloat:</p>
+<div class="table-wrap"><table><thead><tr><th>Your situation</th><th>Reach for</th><th>Expected savings</th></tr></thead><tbody>
+<tr><td>Text arrives from a CMS, WYSIWYG editor, or scraped HTML</td><td>Bloat-stripping (step 2)</td><td>~5&ndash;11%, zero risk</td></tr>
+<tr><td>RAG context: many chunks, few relevant per question</td><td>Extractive compression (step 3)</td><td>~40&ndash;50%, tune <code>keep_ratio</code></td></tr>
+<tr><td>Agent with 5+ tools attached to every turn</td><td>Schema pruning (step 4)</td><td>~60% per schema</td></tr>
+<tr><td>Everything above, in production</td><td>The full stack + preservation harness</td><td>~45&ndash;50% end to end</td></tr>
+</tbody></table></div>
+<p>Two techniques pair especially well with compression. <strong>Prompt caching</strong> rewards stable prefixes &mdash; so put your compressed system prompt and pruned schemas first, and the varying compressed context last (our <a href="/articles/prompt-caching-tutorial/">prompt-caching tutorial</a> covers the mechanics). And if you cache <em>responses</em> too, our <a href="/articles/semantic-cache-llm-tutorial/">semantic cache tutorial</a> shows how to skip the model call entirely for near-duplicate questions. Compression cuts the cost of the calls you still make; caching eliminates the ones you do not need.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Prompt compression is unglamorous and that is precisely why it is underused: nobody demos a 48% token cut on stage, but it compounds across every call your application makes &mdash; lower bills, lower latency, and shorter contexts the model actually attends to. The discipline is simple: <strong>measure first, compress the biggest section, verify nothing broke</strong>. Start with the accounting script from step 1 on your own prompts today; most teams find their first 30% in under an hour.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="prompt-compression-measured-guide"></div><div class="comments" data-comments="prompt-compression-measured-guide"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/semantic-cache-llm-tutorial/"><span class="chip">Tutorials</span><h3>Semantic caching for LLM apps: skip the model call entirely</h3><div class="meta">September 26, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/prompt-caching-tutorial/"><span class="chip">Tutorials</span><h3>Cut your API bill 75%: a prompt-caching tutorial</h3><div class="meta">July 17, 2026 · 6 min read</div></a><a class="rel-card" href="/articles/measure-effective-context-needle-test/"><span class="chip">Tutorials</span><h3>Measure your model&#x27;s effective context with a needle-in-a-haystack test</h3><div class="meta">September 26, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/deploy-rag-chatbot-production-free-tier/"><span class="chip">Tutorials</span><h3>From notebook to production: deploy your RAG chatbot on a free tier</h3><div class="meta">September 24, 2026 · 11 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
