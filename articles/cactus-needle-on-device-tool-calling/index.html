@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>A 2-bit model that calls your tools: hands-on with Cactus Needle 3 — AI Frontier Post</title>
+<meta name="description" content="Cactus Needle 3 is a 121M-parameter model quantized to ~2 bits that picks the right tool, fills every argument, and refuses to invent the ones it was never given — all offline, in under 100 MB of RAM. Install it, wire up real tools, and watch the grounding guardrails work; every step executed.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/cactus-needle-on-device-tool-calling/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="A 2-bit model that calls your tools: hands-on with Cactus Needle 3">
+<meta property="og:description" content="Cactus Needle 3 is a 121M-parameter model quantized to ~2 bits that picks the right tool, fills every argument, and refuses to invent the ones it was never given — all offline, in under 100 MB of RAM. Install it, wire up real tools, and watch the grounding guardrails work; every step executed.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/cactus-needle-on-device-tool-calling/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/cactus-needle-on-device-tool-calling/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "A 2-bit model that calls your tools: hands-on with Cactus Needle 3", "description": "Cactus Needle 3 is a 121M-parameter model quantized to ~2 bits that picks the right tool, fills every argument, and refuses to invent the ones it was never given — all offline, in under 100 MB of RAM. Install it, wire up real tools, and watch the grounding guardrails work; every step executed.", "datePublished": "2026-09-27", "dateModified": "2026-09-27", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/cactus-needle-on-device-tool-calling/"}, "image": "https://aifrontierpost.com/articles/cactus-needle-on-device-tool-calling/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>A 2-bit model that calls your tools: hands-on with Cactus Needle 3</h1>
+<p class="lede">Cactus Needle 3 is a 121M-parameter model quantized to ~2 bits that picks the right tool, fills every argument, and refuses to invent the ones it was never given — all offline, in under 100 MB of RAM. Install it, wire up real tools, and watch the grounding guardrails work; every step executed.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · September 27, 2026 · 10 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/cactus-needle-on-device-tool-calling/cover.webp" alt="Editorial illustration: a tiny glowing microcontroller chip connected by luminous circuit traces to floating icons of a thermostat dial, a light bulb and a padlock"></figure>
+<div class="article-body"><p>Your smart-home hub has no internet connection, 256 MB of RAM, and a user who just said "goodnight." Somewhere in that sentence are three actions — kill the lights, drop the thermostat, lock the door — and exactly zero room for a language model to improvise. This is the job <strong>Cactus Needle 3</strong> was built for: a 121-million-parameter model quantized to about two bits per weight that turns plain-language commands into tool calls, structured data, and embeddings, entirely on-device. In the next twenty minutes you will install it, wire up real tools, watch it execute a multi-step routine, and see what happens when it tries to invent an argument it was never given.</p>
+<h2 id="why-this-is-blowing-up-now">Why this is blowing up now<a class="anchor" href="#why-this-is-blowing-up-now" aria-label="Link to section">#</a></h2>
+<p>Needle sits at <strong>≈12,700 stars and 866 forks</strong> (checked September 27, 2026) on GitHub's weekly trending charts, up hundreds of stars in days — the strongest signal this week for a model you can actually download rather than just read about. The repo (<code>cactus-compute/needle</code>, Apache-2.0, maintained by Cactus Compute) has 319 commits behind it, so this is not a weekend demo; it is a maintained runtime with platform engines for Linux, macOS, Windows, Android, iOS, watchOS, and even WASM.</p>
+<p>The reason for the spike is architectural, not marketing. General-purpose small models are trained to chat and then retrofitted for tool use; Needle 3 is a <strong>Laddered Simple Attention Network</strong> trained from the start for three narrow jobs — tool calls, structured extraction, embeddings — and it trades away general chat capacity to win there. The project's own benchmark chart reports it beating models ten times its size on mobile tool-call exact-match accuracy and matching models two to three times bigger on extraction field F1. Those are the vendor's numbers from their own suite, not mine — I did not re-run their benchmarks — but the claim I <em>could</em> test, that a ~35&nbsp;MB download runs useful tool-calling on a CPU with under 100&nbsp;MB of RAM, checked out exactly as described.</p>
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.9 or newer</strong> (I used 3.12 on Linux; macOS and Windows are supported). The package's only hard dependency is <code>huggingface_hub</code>.</li><li><strong>~40&nbsp;MB of disk and no GPU.</strong> The engine is a ~1.3&nbsp;MB native library and the full 20-layer weights are a ~35&nbsp;MB <code>.cact</code> file (the project describes 8–29&nbsp;MB binaries for shallower depth slices). My runs peaked at <strong>98.6&nbsp;MB of RAM</strong> — measured, not estimated.</li><li><strong>No accounts, no API keys, no network at inference time.</strong> Everything below runs offline once the one-time download finishes. Cost: $0.</li></ul>
+<h2 id="step-1-install-and-fetch-the-model">Step 1: Install and fetch the model<a class="anchor" href="#step-1-install-and-fetch-the-model" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">pip install "cactus-needle==3.0.4"</code></pre>
+<p>The pin is deliberate, not superstition. Version 3.0.5 was current when I wrote this, but it points its engine auto-download at a build (<code>3.0.2</code>) that is not published on the project's Hugging Face repo — the fetch 404s. Version 3.0.4 points at engine <code>3.0.1</code>, which exists, so the first-run download works. If you are reading this later and 3.0.5+ is fixed upstream, unpin; until then, <code>==3.0.4</code> is the version whose install path I verified end to end.</p>
+<p>On first use, the package fetches two files once and caches them under <code>~/.cache/cactus-needle/</code>: the platform engine and <code>needle3.cact</code>, the weights. One privacy note from the README, worth knowing before you run anything: <strong>telemetry is on by default</strong> in the binary. Turn it off with environment variables:</p>
+<pre><code class="language-bash">export NEEDLE_TELEMETRY=0
+export DO_NOT_TRACK=1</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/cactus-needle-on-device-tool-calling/img2.webp" alt="Editorial illustration: sound waves flow from a human silhouette into a small home-assistant robot, which emits a neat row of glowing structured data blocks"><figcaption>Image: AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="step-2-your-first-tool-call">Step 2: Your first tool call<a class="anchor" href="#step-2-your-first-tool-call" aria-label="Link to section">#</a></h2>
+<p>Needle's whole programming model fits in one decorator. The function's <strong>signature gives the argument types</strong>, the <strong>docstring becomes the tool description</strong> the model reads, and <code>run()</code> closes the loop — the model picks the tool, fills the arguments, your function executes, and the results come back:</p>
+<pre><code class="language-python">import needle
+
+@needle.tool
+def get_weather(city: str):
+    "Get the current weather for a city."
+    return {"city": city, "temp_c": 27, "sky": "clear"}
+
+agent = needle.Needle(tools=[get_weather])
+out = agent.run("what's it like in Lagos right now?")
+print(out["results"])
+# [{'city': 'Lagos', 'temp_c': 27, 'sky': 'clear'}]</code></pre>
+<p>This ran exactly as shown on a CPU-only Linux VM. The model extracted <code>"Lagos"</code> from the sentence, called <code>get_weather</code>, and <code>run()</code> executed it and returned the result. Total new concepts: one decorator, one constructor, one method.</p>
+<h2 id="step-3-read-the-response-like-an-operator">Step 3: Read the response like an operator<a class="anchor" href="#step-3-read-the-response-like-an-operator" aria-label="Link to section">#</a></h2>
+<p>The full response object is where Needle shows it was designed for automation rather than chat. Here is the real, untrimmed response from the call above:</p>
+<pre><code class="language-json">{
+  "type": "respond",
+  "success": true,
+  "function_calls": [],
+  "results": [{"city": "Lagos", "temp_c": 27, "sky": "clear"}],
+  "reasoning": "User asked a question; respond with the concrete value from result.",
+  "confidence": 0.6698,
+  "prefill_tps": 8.8,
+  "decode_tps": 4.5,
+  "peak_ram_mb": 98.6
+}</code></pre>
+<p>Four fields deserve your attention. <strong><code>confidence</code></strong> is a calibrated score from a learned head (0.67 here) — the project's docs describe routing on it: act above your threshold, ask to confirm in the middle, refuse below it. <strong><code>prefill_tps</code> / <code>decode_tps</code></strong> tell you the model did ~9 prompt tokens/sec and ~4.5 generated tokens/sec on a plain CPU; tool calls are short, so a full turn completes in seconds. <strong><code>peak_ram_mb</code></strong> is self-reported memory — under 100&nbsp;MB, which is why this fits on hardware where even a 1B-parameter chat model does not.</p>
+<p>One sharp edge I verified the hard way: <strong>turns accumulate</strong>. Every <code>run()</code> stays in the conversation, so after several queries an off-topic request once returned a <em>previous</em> turn's weather result instead of an empty list. The fix is in the API — call <code>agent.reset()</code> between independent queries, or construct with <code>stateless=True</code>. With a fresh agent, the off-topic behavior the README promises is exactly what you get:</p>
+<pre><code class="language-python">agent = needle.Needle(tools=[get_weather])
+out = agent.run("Write me a haiku about the ocean.")
+print(out["function_calls"], out["results"], out["reasoning"])
+# [] [] 'No tool available for creating or editing text.'</code></pre>
+<p>No tool covers poetry, so the model returns empty lists and says so, with confidence 1.0. For an automation runtime, a clean refusal beats a creative guess every time.</p>
+<h2 id="step-4-a-real-end-to-end-routine">Step 4: A real end-to-end routine<a class="anchor" href="#step-4-a-real-end-to-end-routine" aria-label="Link to section">#</a></h2>
+<p>Now the scenario from the intro: three real tools, one sentence, all local.</p>
+<pre><code class="language-python">import needle
+
+@needle.tool
+def set_light(room: str, state: str):
+    "Turn a room light on or off. state must be 'on' or 'off'."
+    return {"room": room, "light": state}
+
+@needle.tool
+def set_thermostat(temp_c: int):
+    "Set the home thermostat temperature in Celsius."
+    return {"thermostat_c": temp_c}
+
+@needle.tool
+def set_door_lock(locked: bool):
+    "Lock (true) or unlock (false) the front door."
+    return {"front_door": "locked" if locked else "unlocked"}
+
+agent = needle.Needle(tools=[set_light, set_thermostat, set_door_lock])
+out = agent.run(
+    "Goodnight: turn off all the lights, "
+    "set the thermostat to 19, and lock the front door."
+)
+print(out["results"])
+# [{'room': 'all', 'light': 'off'},
+#  {'thermostat_c': 19},
+#  {'front_door': 'locked'}]</code></pre>
+<p>Three actions, one turn, confidence 0.75 — real output from my run. But look closely at the first result: the model collapsed "all the lights" into <strong>a single call with <code>room="all"</code></strong> instead of one call per room. Your tool received it and executed it; whether <code>"all"</code> means anything is <em>your</em> code's decision. This is the single most important design lesson for Needle, and the project's own tool-design guide says the same thing: <strong>one tool per action, and handle group names inside the tool</strong> (fan out to every room yourself), because the model will happily hand you a collective noun. I kept the quirk in because it is the kind of thing that only shows up when you actually run the system.</p>
+<p>Now the more important test — what happens when the model wants an argument the user never gave:</p>
+<pre><code class="language-python">agent = needle.Needle(tools=[set_thermostat])
+out = agent.run("set the bedroom thermostat")  # no temperature given
+print(out["function_calls"], out["results"])
+# [] []
+print(out["validation"])
+# {'ungrounded': ['set_thermostat.temp_c'], 'negation': False}</code></pre>
+<p>The model internally proposed <code>set_thermostat(room="bedroom", temp_c=20)</code> — inventing 20 degrees. Needle's strict grounding check caught it: the fabricated argument is flagged in <code>validation.ungrounded</code>, the call is moved to <code>suppressed_calls</code>, and <strong>nothing executes</strong>. For a model that drives physical devices, this is the feature that matters most: a missing argument produces a refusal, not a hallucinated thermostat setting. (The check targets numbers, dates, and other groundable values; keep <code>strict=True</code>, the default.)</p>
+<figure class="inline-art"><img class="story-image" src="/articles/cactus-needle-on-device-tool-calling/img3.webp" alt="Editorial illustration: a vast glowing neural network funneling down into a tiny luminous cube balanced on a fingertip"><figcaption>Image: AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="step-5-structured-extraction-that-always-parses">Step 5: Structured extraction that always parses<a class="anchor" href="#step-5-structured-extraction-that-always-parses" aria-label="Link to section">#</a></h2>
+<p>Same model, second job: declare a shape, hand over messy text, get typed fields back. A byte-level grammar compiled from your schema constrains every generated token, so the output parses by construction:</p>
+<pre><code class="language-python">schema = {
+    "name": "invoice",
+    "description": "Extract invoice fields from text.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "vendor":   {"type": "string", "description": "Vendor name"},
+            "total":    {"type": "number", "description": "Total amount"},
+            "currency": {"type": "string", "description": "Currency code"},
+            "due_date": {"type": "string", "description": "Due date YYYY-MM-DD"},
+        },
+        "required": ["vendor", "total"],
+    },
+}
+
+res = needle.extract(
+    "Invoice from Acme Corp for $1,250.00 USD, due 2026-10-15. "
+    "Thank you for your business.",
+    schema,
+)
+print(res)
+# {'vendor': 'Acme Corp', 'total': 1250.0,
+#  'currency': 'USD', 'due_date': '2026-10-15'}</code></pre>
+<p>Every field correct, types correct (<code>total</code> came back a float, not the string <code>"$1,250.00"</code>). In strict mode — the default — values that contradict the input raise <code>ExtractionValidationError</code> instead of being returned silently, the same grounding philosophy as the tool-call suppression in Step 4. This is the boring, reliable core of on-device automation: receipts, forms, notifications, and voice commands turned into typed records with no cloud round-trip.</p>
+<h2 id="step-6-embeddings-from-the-same-model">Step 6: Embeddings from the same model<a class="anchor" href="#step-6-embeddings-from-the-same-model" aria-label="Link to section">#</a></h2>
+<p>The third job needs no tools at all — the same weights return a vector per sentence, so a device can do local similarity matching and routing:</p>
+<pre><code class="language-python">agent = needle.Needle(tools=[])
+v = agent.embed("turn on the living room lights")
+print(len(v))  # 3072</code></pre>
+<p>I measured cosine similarities across five sentence pairs. Paraphrases scored 0.94–0.96 ("turn on the living room lights" vs "switch the living room lights on": 0.9603; "set an alarm for 7am" vs "wake me up at seven in the morning": 0.9580), while unrelated pairs scored 0.89–0.92. The ordering is correct — similar above, unrelated below — but the margin is narrow, so treat these as a coarse local signal and calibrate your own threshold on your own data rather than trusting a magic number. For on-device intent routing ("does this utterance look like a lighting command?") it is usable; for fine-grained semantic search, a dedicated embedding model still wins.</p>
+<h2 id="when-to-use-this-vs-the-alternatives">When to use this vs the alternatives<a class="anchor" href="#when-to-use-this-vs-the-alternatives" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Best for</th><th>Size / compute</th><th>Honest limitation</th></tr></thead><tbody><tr><td><strong>Needle 3</strong></td><td>On-device tool calls, extraction, and routing with refusal + grounding guardrails</td><td>~35&nbsp;MB weights, ~1.3&nbsp;MB engine, &lt;100&nbsp;MB RAM, CPU</td><td>Not a chat model; narrow embedding margins; young ecosystem</td></tr><tr><td><strong>Small chat SLMs via llama.cpp</strong> (e.g. Qwen3 0.6B)</td><td>General on-device chat with occasional function calling</td><td>~0.5–1&nbsp;GB, CPU OK</td><td>10–30× the footprint; structured-output reliability is prompt-dependent, not guaranteed</td></tr><tr><td><strong>Cloud function-calling APIs</strong></td><td>Maximum reasoning over complex multi-step plans</td><td>Zero local footprint</td><td>Needs connectivity, per-call cost and latency, data leaves the device</td></tr><tr><td><strong>Hand-written intent parsers</strong></td><td>Fixed command sets on microcontrollers</td><td>Kilobytes</td><td>Brittle; every phrasing variation is manual work</td></tr></tbody></table></div>
+<p>Reach for Needle when the device is the constraint — wearables, smart-home hubs, robots, in-car systems, microcontrollers — and the job is <em>do the thing</em> rather than <em>talk about the thing</em>. Its advantages are all verified above: grammar-constrained outputs, calibrated confidence for act/confirm/refuse routing, and a grounding validator that suppresses invented arguments instead of executing them. Reach for something else when you need open-ended conversation (this model trades that away by design), when you need the deepest reasoning on tangled plans (cloud models still lead), or when your command set is truly fixed (a parser is smaller and fully deterministic).</p>
+<p>Two directions the project documents that I did not run hands-on: <strong>fine-tuning</strong> (<code>pip install "cactus-needle[train]"</code>, then <code>needle finetune data.jsonl --epochs 10 --out adapter.safetensors</code> and <code>needle build --lora adapter.safetensors --layers 8 --out tuned.cact</code> to export a shallower slice) and <strong>deployment</strong> (<code>needle build --platform linux-arm64 --layers 8 --out ./pi</code> fetches a sub-1&nbsp;MB engine plus weights for the target). Both are documented in the repo's guides; I left them out of the verified path because training needs a JAX stack I did not install for this tutorial.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The surprise of Needle 3 is not that a 121M-parameter model can call tools — it is <em>how seriously it takes not calling them</em>. Empty lists for off-topic requests, suppressed calls for invented arguments, calibrated confidence on every turn: the whole design reads like it was written by people who have watched a model confidently mis-set a thermostat. At ~35&nbsp;MB of weights and under 100&nbsp;MB of RAM on a CPU, it puts that discipline on hardware where the cloud never reaches. Install the pinned version, decorate your functions, reset between independent queries — and handle <code>room="all"</code> in your own code.</p>
+</div>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="cactus-needle-on-device-tool-calling"></div><div class="comments" data-comments="cactus-needle-on-device-tool-calling"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/prompt-compression-measured-guide/"><span class="chip">Tutorials</span><h3>Cut your prompt tokens in half: a measured guide to prompt compression</h3><div class="meta">September 27, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/bumblebee-supply-chain-scanner-tutorial/"><span class="chip">Tutorials</span><h3>Perplexity’s Bumblebee hit 5,000 stars in days: scan your machine for supply-chain compromises, hands-on</h3><div class="meta">September 27, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/zvec-grep-semantic-code-search/"><span class="chip">Tutorials</span><h3>Search your codebase by meaning: a hands-on tutorial for zvec-grep (zg)</h3><div class="meta">September 27, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/indirect-prompt-injection-agent-defense/"><span class="chip">Tutorials</span><h3>Your agent reads the internet: stop prompt injections from hijacking its tools</h3><div class="meta">September 27, 2026 · 12 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
