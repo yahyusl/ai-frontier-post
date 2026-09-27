@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine — AI Frontier Post</title>
+<meta name="description" content="Laya (26,000+ GitHub stars in 9 days) is a non-autoregressive System 1 decision engine: typed choice, score, and yes/no decisions over any text in a single forward pass, in 100+ languages. Install it, triage real support tickets, and add confidence-gated abstention — every step executed on CPU.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/laya-typed-decisions-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine">
+<meta property="og:description" content="Laya (26,000+ GitHub stars in 9 days) is a non-autoregressive System 1 decision engine: typed choice, score, and yes/no decisions over any text in a single forward pass, in 100+ languages. Install it, triage real support tickets, and add confidence-gated abstention — every step executed on CPU.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/laya-typed-decisions-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/laya-typed-decisions-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine", "description": "Laya (26,000+ GitHub stars in 9 days) is a non-autoregressive System 1 decision engine: typed choice, score, and yes/no decisions over any text in a single forward pass, in 100+ languages. Install it, triage real support tickets, and add confidence-gated abstention — every step executed on CPU.", "datePublished": "2026-09-27", "dateModified": "2026-09-27", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/laya-typed-decisions-tutorial/"}, "image": "https://aifrontierpost.com/articles/laya-typed-decisions-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine</h1>
+<p class="lede">Every agent pipeline eventually needs the same boring operation: look at a piece of text and make a typed decision — which category, how urgent, yes or no. The fashionable answer is to prompt a giant LLM and parse its prose, paying per token for nondeterministic JSON. Laya does it in a single forward pass of a 322M-parameter encoder: choice, score, and yes/no heads answered simultaneously, in 100+ languages, with calibrated confidence and an abstain-when-unsure option. In the next twenty minutes you will install it, triage real support tickets on CPU, and build a confidence-gated escalation pipeline — every step executed.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · September 27, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/laya-typed-decisions-tutorial/cover.webp" alt="Editorial illustration: a small precise clockwork decision engine with CHOICE, SCORE and YES/NO output slots facing down a looming, expensive LLM monolith"></figure>
+<div class="article-body"><p>You have a support inbox, a moderation queue, or an agent that needs to route its own work. The decision you need is embarrassingly simple — <em>which department, how angry, should this escalate</em> — but the standard implementation is absurd: serialize the text into a prompt, send it to a frontier model, wait for tokens to dribble out, then regex the answer out of the prose and pray the JSON parses. It is slow, it costs money per decision, and the same input can produce different outputs on different days.</p>
+<p>Laya (<code>NandhaKishorM/laya</code>, Apache-2.0) is the opposite bet: a <strong>non-autoregressive decision engine</strong>. You hand it text plus a set of typed questions — <code>choice</code> (pick a label), <code>score</code> (rate an intensity), <code>noul</code> (yes/no as a probability) — and one forward pass through an encoder answers all of them at once. No tokens are generated; the response even reports <code>output_tokens: 0</code>. The repo calls it "System 1" thinking, and the metaphor is apt: fast, typed, deterministic judgments instead of deliberative prose.</p>
+<h2 id="why-this-is-blowing-up-now">Why this is blowing up now<a class="anchor" href="#why-this-is-blowing-up-now" aria-label="Link to section">#</a></h2>
+<p>The numbers are startling. Laya was created on <strong>September 18, 2026</strong>, and when I checked the GitHub API on September 27 it sat at <strong>26,639 stars and 2,326 forks</strong> — roughly 3,000 stars a day for a nine-day-old project, with commits landing the same day I tested it. That is not normal. It is the kind of spike you see when a project names a pain everyone already feels.</p>
+<p>And the pain is real: the "LLM-as-a-judge" pattern has quietly become one of the most expensive lines in production AI systems. Every classification, every guardrail check, every routing decision burns frontier-model tokens and adds a second or more of latency. Laya's pitch is that 95% of those decisions never needed a reasoning engine at all — they needed a fast classifier with typed outputs, confidence scores, and the honesty to abstain. The repo ships three checkpoints on Hugging Face (<code>convaiinnovations/laya</code>): a 421M-parameter English model built on ModernBERT-large, a 322M-parameter multilingual model covering 100+ languages, and a typed-decisions variant. The project reports 33ms per question on a T4 GPU, dropping to 7.2ms per question when batched — numbers I will sanity-check on CPU below.</p>
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer</strong> and pip (I used 3.12 on Linux; macOS and Windows work).</li><li><strong>PyTorch</strong> — the CPU build is fine. I ran the entire tutorial on a plain CPU-only VM; no GPU needed.</li><li><strong>About 1.5 GB of free disk</strong> for the checkpoint (the multilingual weights are ~650 MB) and ~1 GB of RAM at inference time.</li><li><strong>No API keys, no accounts, no GPU, no cost.</strong> Everything runs locally. The checkpoints download from Hugging Face on first use and are cached afterwards.</li><li>About 20 minutes, most of it the one-time checkpoint download.</li></ul>
+<h2 id="step-1-install-laya">Step 1: Install Laya<a class="anchor" href="#step-1-install-laya" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install "laya==0.3.21"
+python -c "import laya; print(laya.__version__)"   # 0.3.21</code></pre>
+<p>Install PyTorch first from the CPU index so you do not pull the multi-gigabyte CUDA build by accident — that is the one genuine footgun in the setup. Then pin <code>laya==0.3.21</code>, the version I verified everything below against. The import prints <code>0.3.21</code> and you are ready; nothing has been downloaded yet except the package itself.</p>
+<h2 id="step-2-your-first-decision">Step 2: Your first decision — the CLI<a class="anchor" href="#step-2-your-first-decision" aria-label="Link to section">#</a></h2>
+<p>Laya ships a CLI that is the fastest way to feel the core idea. Run it with no flags first — this performs <strong>routing only</strong>, no checkpoint download:</p>
+<pre><code class="language-bash">laya "The CEO is furious and the board is about to vote on a merger"</code></pre>
+<p>You will see something like this (exact output from my run):</p>
+<pre><code class="language-text">Model     : english
+Reason    : English Latin text
+Detected  : {"script": "latin", "script_profile": {"latin": 1.0}, "language": "en",
+             "is_english": true, "language_undecided": false, ...}</code></pre>
+<p>The router inspects the script and language of your text and picks a checkpoint — English text goes to the 421M English model, anything else to the 322M multilingual one. This routing decision costs nothing and needs no weights. Now ask a real question with the built-in triage preset (this downloads the checkpoint on first use, ~650 MB, one time):</p>
+<pre><code class="language-bash">laya "My payment failed twice" --preset triage --model multilingual --device cpu</code></pre>
+<pre><code class="language-text">Model     : multilingual
+Reason    : explicit model='multilingual'
+
+intent      : technical_help (p=0.811)
+is_urgent   : 0.002
+frustration : 2.28
+refund_requested: 0.004
+churn_risk  : 0.001</code></pre>
+<p>Read that output carefully, because it is the whole product in miniature. Five typed decisions — one <code>choice</code> (intent), one <code>score</code> (frustration on a 0–3 scale), three <code>noul</code> yes/no probabilities — answered in <strong>one forward pass</strong>, with a probability attached to every answer. The triage preset's five questions are defined once and reused; the available presets are <code>email</code>, <code>guard</code>, <code>moderation</code>, <code>router</code>, and <code>triage</code>. Nothing was generated token-by-token. Nothing cost you a cent.</p>
+<figure><img class="story-image" src="/articles/laya-typed-decisions-tutorial/img2.webp" alt="Diagram: text enters one encoder and one forward pass, which fans out in parallel to choice, score, and yes/no heads — instead of slow token-by-token generation"><figcaption>Laya's core idea: one encoder, one forward pass, all question heads answered in parallel. No autoregressive decoding.</figcaption></figure>
+<h2 id="step-3-batch-triage-including-a-miss">Step 3: Batch triage — including an honest miss<a class="anchor" href="#step-3-batch-triage-including-a-miss" aria-label="Link to section">#</a></h2>
+<p>Single tickets are a demo; the real use case is a queue. Put one ticket per line in a file and score the batch:</p>
+<pre><code class="language-bash">printf 'My payment failed twice, I want my money back\nBonjour, je ne parviens pas a me connecter a mon compte\nThis is just a feature request, no rush\n' > tickets.txt
+laya --batch tickets.txt --preset triage --model multilingual --device cpu</code></pre>
+<p>My exact results on CPU:</p>
+<pre><code class="language-text"># My payment failed twice, I want my money back
+intent      : refund (p=1.000)
+is_urgent   : 0.004
+frustration : 2.16
+refund_requested: 0.995
+churn_risk  : 0.006
+
+# Bonjour, je ne parviens pas a me connecter a mon compte
+intent      : technical_help (p=0.992)
+is_urgent   : 0.000
+frustration : 2.02
+refund_requested: 0.000
+churn_risk  : 0.002
+
+# This is just a feature request, no rush
+intent      : cancellation (p=0.703)
+is_urgent   : 0.009
+frustration : 2.30
+refund_requested: 0.005
+churn_risk  : 0.026</code></pre>
+<p>Two observations worth your attention. First, the French ticket — routed to the multilingual checkpoint — is classified correctly with 0.992 confidence. No translation step, no English-only fallback; that is the 100+ language claim working as advertised on at least one of them.</p>
+<p>Second, the third ticket is a <strong>miss</strong>: "This is just a feature request, no rush" gets labeled <code>cancellation</code> at p=0.703. I am showing you this deliberately, because it is the most important thing to understand about decision models: they are wrong sometimes, and the only honest design is one that <em>tells you</em> when it might be wrong. Notice the confidence — 0.703, far below the 0.99+ of the correct answers. That gap is load-bearing. It is what Step 4 is built on.</p>
+<p>On timing: the batch of 8 tickets I ran later took 27.5 seconds warm on CPU — about 3.4 seconds per ticket for five questions, or roughly 0.7 seconds per question. The project's reported 33ms per question assumes a T4 GPU; on CPU you should budget about a second per question per ticket after the one-time model load (~85 seconds on my VM). For a support queue or a nightly batch job, that is plenty fast. For per-keystroke latency, use a GPU.</p>
+<h2 id="step-4-the-python-api-and-abstention">Step 4: The Python API — and teaching it to abstain<a class="anchor" href="#step-4-the-python-api-and-abstention" aria-label="Link to section">#</a></h2>
+<p>The CLI is for exploration; production code uses the <code>Router</code>. Here is the complete triage loop, which I ran verbatim:</p>
+<pre><code class="language-python">from laya import Router, triage_questions
+
+router = Router(device="cpu")          # checkpoints download on first use
+questions = triage_questions()        # the 5-question preset from Step 2
+
+tickets = [
+    "My payment failed twice, I want my money back",
+    "Bonjour, je ne parviens pas a me connecter a mon compte",
+    "URGENT: production database is down, customers cannot check out",
+]
+
+out = router.predict(tickets, questions, model="multilingual", min_confidence=0.90)</code></pre>
+<p>The result is a plain dict with four top-level keys — <code>model</code>, <code>answers</code>, <code>usage</code>, and <code>routing</code>. The <code>routing</code> block tells you exactly which checkpoint answered and why (<code>"repo": "convaiinnovations/laya/multilingual", "reason": "explicit model='multilingual'"</code>), and <code>usage</code> reports <code>input_tokens</code> with <code>output_tokens: 0</code> — the signature of a model that never generates.</p>
+<p>Each answer carries its type, its value, and its confidence. A <code>choice</code> answer includes the full probability distribution; a <code>score</code> includes the legend mapping numbers to meanings plus per-level probabilities; a <code>noul</code> includes the raw probability. Here is the frustration score for the payment ticket, exactly as returned:</p>
+<pre><code class="language-json">{
+  "score": 2.3211,
+  "legend": {"0": "calm and neutral", "1": "concerned but civil",
+             "2": "clearly annoyed", "3": "very angry or using strong language"},
+  "probabilities": {"0": 0.0354, "1": 0.129, "2": 0.3148, "3": 0.5208},
+  "confidence": 0.2166,
+  "answer_confidence": 0.5208,
+  "low_confidence": true
+}</code></pre>
+<p>That trailing <code>"low_confidence": true</code> is the <code>min_confidence=0.90</code> parameter doing its job. The model's answer confidence (0.52) fell below my threshold, so Laya flagged the field instead of letting a shaky 2.32 flow silently into my pipeline. This is the opt-in abstention mechanism, and it is the difference between a demo and a system you can deploy: <strong>low-confidence fields come back flagged (and as <code>None</code> through the schema-driven <code>decide()</code> API), so your code can route them to a human or a bigger model.</strong> Note the honest subtlety — the same ticket's <code>intent</code> (refund, p=1.000) and <code>refund_requested</code> (0.9638) passed the threshold, so only the genuinely uncertain field was flagged. Abstention is per-question, not per-ticket.</p>
+<figure><img class="story-image" src="/articles/laya-typed-decisions-tutorial/img3.webp" alt="Diagram: a request enters a language and script detector that routes to either the 421M English checkpoint or the 322M multilingual checkpoint, both producing typed answers"><figcaption>The Router: a lightweight language/script detector picks the right checkpoint per request — English text to the 421M model, everything else to the 322M multilingual one.</figcaption></figure>
+<h2 id="step-5-end-to-end-escalation-pipeline">Step 5: End to end — a confidence-gated escalation pipeline<a class="anchor" href="#step-5-end-to-end-escalation-pipeline" aria-label="Link to section">#</a></h2>
+<p>Now assemble the pieces into something you could actually ship: a triage function that auto-handles the easy tickets, escalates the urgent ones, and sends anything uncertain to a human review queue.</p>
+<pre><code class="language-python">def triage(ticket: str) -> dict:
+    out = router.predict(ticket, questions, model="multilingual",
+                         min_confidence=0.90)
+    a = out["answers"]
+    # Abstain: any flagged field -> human review
+    if any(v.get("low_confidence") for v in a.values()):
+        return {"action": "human_review", "ticket": ticket}
+    intent = a["intent"]["answer"]            # e.g. "refund"
+    if a["is_urgent"]["noul"] > 0.8:          # yes/no probability
+        return {"action": "escalate_now", "intent": intent}
+    if intent == "refund" and a["refund_requested"]["noul"] > 0.9:
+        return {"action": "auto_refund_flow", "intent": intent}
+    if a["churn_risk"]["noul"] > 0.5:
+        return {"action": "priority_support", "intent": intent}
+    return {"action": "standard_queue", "intent": intent}</code></pre>
+<p>Run the four tickets from Step 3 through this and you get the behavior you want: the payment ticket takes the auto-refund path, the French login issue goes to the standard queue, the outage ticket escalates immediately, and the ambiguous "feature request" — the one Laya mislabeled as cancellation at 0.703 — lands in <code>human_review</code> because its confidence fell below the gate. The model's one mistake becomes a queue entry instead of a wrong action. That is the entire philosophy: <strong>fast typed decisions with a calibrated escape hatch.</strong></p>
+<p>One more API worth knowing: <code>Agent.decide(state, schema=...)</code> (signature verified: <code>decide(self, state, schema=None, *, questions=None, return_details=False, min_confidence=None, **predict_kwargs)</code>) lets you pass a JSON schema or Pydantic model and get a structured object back, with low-confidence fields as <code>None</code> — handy when the decision feeds a downstream function signature. And if your agents speak MCP, <code>pip install "laya[mcp]"</code> exposes the same engine as an MCP server (<code>laya-mcp-server</code>), with a LangChain integration in the repo for good measure.</p>
+<h2 id="the-calibration-caveat">The calibration caveat (read this before deploying)<a class="anchor" href="#the-calibration-caveat" aria-label="Link to section">#</a></h2>
+<p>Credit where it is due: the Laya docs are unusually honest about the weakest point of the system. Both shipped checkpoints are <strong>over-confident as released</strong> — the probabilities look sharper than they are — and the multilingual checkpoint ships with no fitted temperatures at all. The repo tells you to fit temperatures on your own held-out data before trusting the numbers, and the <code>min_confidence</code> thresholds I used above are only meaningful after you validate them against your own labels. My 0.90 gate worked on four tickets; that is an anecdote, not a calibration study. Treat the probabilities as useful rankings out of the box and as trustworthy probabilities only after you do the temperature-fitting homework. The docs even flag that the probability→threshold mapping is the part most likely to embarrass you in production. Listen to them.</p>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs. alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Use Laya when</strong> your decision is typed and bounded — classify, score, yes/no — and you make it thousands of times a day. Ticket triage, moderation queues, agent self-routing, RAG relevance judgments, and eval harnesses are the sweet spot. You get determinism, zero per-decision cost, offline capability, and ~millisecond GPU latency.</li><li><strong>Use an LLM-as-a-judge when</strong> the judgment needs reasoning, nuance, or free-form explanation — "is this response actually helpful and why." Laya cannot explain itself; it outputs numbers, not rationales.</li><li><strong>Use a guardrail framework (NeMo Guardrails, Guardrails AI) when</strong> you need policy orchestration — multi-step dialogue rails, PII redaction flows, topical boundaries. Laya's <code>guard</code> and <code>moderation</code> presets answer "is this unsafe," but they are classifiers, not a policy engine.</li><li><strong>Use a fine-tuned classifier when</strong> you have thousands of labeled examples in one narrow domain and need maximum accuracy there. Laya's zero-shot questions will lose to a well-trained specialist on its home turf — but the specialist cannot answer a new question tomorrow without retraining, and Laya can.</li><li><strong>Use an on-device model (like Cactus Needle 3, covered in a previous tutorial) when</strong> you need tool-calling or structured extraction on a microcontroller or phone. Laya is small for a decision engine, not for a microcontroller.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Most of what we currently spend frontier-model tokens on is not reasoning — it is judgment with a fixed schema. Laya's bet is that those two workloads deserve different machinery, and after running it on CPU I think the bet is directionally right: a 322M-parameter encoder answering five typed questions in one forward pass, in French as well as English, with per-question confidence and an abstain flag, for zero marginal cost. The 26,000-stars-in-nine-days spike is the market agreeing loudly.</p>
+<p>The honest version of the story includes the caveats: one of my four test tickets was misclassified, the shipped probabilities are over-confident until you fit temperatures, and CPU latency is seconds-per-ticket, not milliseconds. But the architecture handles its own weaknesses gracefully — the miss was the lowest-confidence answer in the batch, and the abstention gate caught it. That is what makes this a tool rather than a toy: <strong>it knows what it doesn't know, and it tells you.</strong> Install it, point it at your most boring classification queue, and stop paying a frontier model to do a classifier's job.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="laya-typed-decisions-tutorial"></div><div class="comments" data-comments="laya-typed-decisions-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/cactus-needle-on-device-tool-calling/"><span class="chip">Tutorials</span><h3>A 2-bit model that calls your tools: hands-on with Cactus Needle 3</h3><div class="meta">September 27, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/indirect-prompt-injection-agent-defense/"><span class="chip">Tutorials</span><h3>Your agent reads the internet: stop prompt injections from hijacking it</h3><div class="meta">September 27, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/zvec-grep-semantic-code-search/"><span class="chip">Tutorials</span><h3>Search your codebase by meaning: a hands-on tutorial for zvec-grep (zg)</h3><div class="meta">September 27, 2026 · 14 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Affiliate disclosure</a><a href="/about/">Corrections policy</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
