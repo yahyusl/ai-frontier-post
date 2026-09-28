@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Transcribe anything on your own machine: a hands-on guide to faster-whisper — AI Frontier Post</title>
+<meta name="description" content="Ditch the transcription API. Install faster-whisper, pick the right Whisper model size, filter silence with VAD, and generate timestamped subtitles — all offline, all measured.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/faster-whisper-local-transcription-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Transcribe anything on your own machine: a hands-on guide to faster-whisper">
+<meta property="og:description" content="Ditch the transcription API. Install faster-whisper, pick the right Whisper model size, filter silence with VAD, and generate timestamped subtitles — all offline, all measured.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/faster-whisper-local-transcription-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/faster-whisper-local-transcription-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Transcribe anything on your own machine: a hands-on guide to faster-whisper", "description": "Ditch the transcription API. Install faster-whisper, pick the right Whisper model size, filter silence with VAD, and generate timestamped subtitles — all offline, all measured.", "datePublished": "2026-09-28", "dateModified": "2026-09-28", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/faster-whisper-local-transcription-tutorial/"}, "image": "https://aifrontierpost.com/articles/faster-whisper-local-transcription-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Transcribe anything on your own machine: a hands-on guide to faster-whisper</h1>
+<p class="lede">Ditch the transcription API. Install faster-whisper, pick the right Whisper model size, filter silence with VAD, and generate timestamped subtitles — all offline, all measured.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · September 28, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/faster-whisper-local-transcription-tutorial/cover.webp" alt="Editorial illustration: sound waves flow from a microphone into a laptop and emerge as lines of text, with a crossed-out cloud icon signaling fully offline transcription"></figure>
+<div class="article-body"><p>Every voice agent, meeting notetaker, and auto-captioning pipeline starts with the same unglamorous step: turning audio into text. The default way to do it is a cloud API — upload your audio, pay per minute, and trust that nobody interesting is listening on the other end. It works, but the meter never stops running, and your audio leaves your machine.</p>
+<p>There is a better default for most jobs: transcribe it yourself. OpenAI's Whisper brought near-human speech recognition to open weights, and <strong>faster-whisper</strong> — SYSTRAN's reimplementation of Whisper on the CTranslate2 inference engine — made it practical on ordinary hardware. The project claims up to 4x faster transcription than the reference implementation at the same accuracy while using less memory, and the community has noticed: 25,600+ GitHub stars under the MIT license.</p>
+<p>In this tutorial you will build a complete local transcription pipeline from scratch: install the library, run your first transcript, choose a model size using measured speed and accuracy numbers, strip silence with voice activity detection, extract word-level timestamps, export subtitles, and handle multiple languages. Every number below was measured on a 2-CPU virtual machine running faster-whisper 1.2.1 — no GPU, no API keys, no cloud.</p>
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.9 or newer.</strong> That is the documented floor; I ran everything below on Python 3.12.</li>
+<li><strong>A terminal and about 30 minutes.</strong> A virtual environment is strongly recommended — model downloads and native dependencies stay contained.</li>
+<li><strong>Disk space for models.</strong> Tens of megabytes for the small models, up to roughly 1.5 GB if you want the largest one in int8. Models download automatically from Hugging Face on first use.</li>
+<li><strong>Any audio file.</strong> MP3, WAV, M4A, whatever you have — faster-whisper decodes through PyAV, which bundles the FFmpeg libraries, so you do <em>not</em> need a system FFmpeg install.</li>
+<li><strong>No API keys, no accounts, no GPU.</strong> The whole tutorial runs on CPU.</li></ul>
+<h2 id="step-1-install-faster-whisper">Step 1: Install faster-whisper<a class="anchor" href="#step-1-install-faster-whisper" aria-label="Link to section">#</a></h2>
+<p>One package, one command:</p>
+<pre><code class="language-bash">python -m venv fw && source fw/bin/activate
+pip install faster-whisper
+python -c "import faster_whisper; print(faster_whisper.__version__)"
+# 1.2.1</code></pre>
+<p>That is the entire dependency story. There is no separate FFmpeg step, no PyTorch install, no CUDA toolkit — CTranslate2 ships as prebuilt wheels and PyAV handles decoding. The first time you load a model, its weights download from Hugging Face automatically, so your first transcription takes a little longer while ~75 MB of weights arrive for the tiny model.</p>
+<h2 id="step-2-your-first-transcription">Step 2: Your first transcription<a class="anchor" href="#step-2-your-first-transcription" aria-label="Link to section">#</a></h2>
+<p>The core API is three lines. Load a model, transcribe a file, iterate the segments:</p>
+<pre><code class="language-python">from faster_whisper import WhisperModel
+
+model = WhisperModel("tiny", device="cpu", compute_type="int8")
+segments, info = model.transcribe("audio.mp3", beam_size=5)
+
+print(f"Detected language: {info.language} (p={info.language_probability:.3f})")
+for s in segments:
+    print(f"[{s.start:.2f}s -> {s.end:.2f}s] {s.text}")</code></pre>
+<p>Expected output on a 32-second English clip:</p>
+<pre><code class="language-text">Detected language: en (p=0.999)
+[0.00s -> 1.64s] Welcome to this hands-on tutorial.
+[2.22s -> 5.56s] Today you will learn how to turn speech into text on your own computer,
+...</code></pre>
+<p>Two things to lock in now. First, <code>compute_type="int8"</code> is the README's recommended CPU setting — 8-bit quantized inference is what makes the small models fly on a laptop. (On an NVIDIA GPU you would use <code>device="cuda", compute_type="float16"</code> instead.) Second, and this trips up everyone once: <strong><code>segments</code> is a generator, not a list.</strong> Inference does not start when you call <code>transcribe()</code> — it starts when you iterate. If you call <code>transcribe()</code> and never touch <code>segments</code>, nothing runs at all: no error, no transcript, just silence. Loop over it, or materialize it with <code>list(segments)</code> if you need two passes over the results.</p>
+<h2 id="step-3-pick-the-right-model-size">Step 3: Pick the right model size<a class="anchor" href="#step-3-pick-the-right-model-size" aria-label="Link to section">#</a></h2>
+<p>Whisper comes in six sizes. Here is the official lineup from OpenAI's model table, with parameter counts, memory requirements, and relative speed:</p>
+<table><thead><tr><th>Model</th><th>Parameters</th><th>Required VRAM</th><th>Relative speed</th></tr></thead><tbody><tr><td><code>tiny</code></td><td>39 M</td><td>~1 GB</td><td>~10x</td></tr><tr><td><code>base</code></td><td>74 M</td><td>~1 GB</td><td>~7x</td></tr><tr><td><code>small</code></td><td>244 M</td><td>~2 GB</td><td>~4x</td></tr><tr><td><code>medium</code></td><td>769 M</td><td>~5 GB</td><td>~2x</td></tr><tr><td><code>large</code> / <code>large-v3</code></td><td>1550 M</td><td>~10 GB</td><td>1x</td></tr><tr><td><code>turbo</code></td><td>809 M</td><td>~6 GB</td><td>~8x</td></tr></tbody></table>
+<p>Two caveats on that table: the relative speeds were measured on an A100 GPU, so treat them as ordering rather than promises, and English-only <code>.en</code> variants exist for tiny through medium that tend to do slightly better on English audio. <code>turbo</code> is an optimized <code>large-v3</code> that trades a little accuracy for a lot of speed.</p>
+<p>Tables are nice; measurements are better. I transcribed the same 31.9-second English clip (94 words, known script, so I could score word error rate exactly) with <code>tiny</code> and <code>base</code> on 2 CPUs with int8 compute:</p>
+<table><thead><tr><th>Model</th><th>Time for 31.9 s of audio</th><th>Realtime factor</th><th>Word errors</th></tr></thead><tbody><tr><td><code>tiny</code></td><td>15.8 s</td><td>0.50x</td><td>0 / 94</td></tr><tr><td><code>base</code></td><td>20.5 s</td><td>0.64x</td><td>0 / 94</td></tr></tbody></table>
+<p>Both models transcribed the clip <em>perfectly</em> — zero word errors — and both ran at better than realtime on two modest CPU cores. On audio this clean, tiny is all you need, and it was ~30% faster here. Be honest with yourself about the caveat, though: this was clean, single-speaker, studio-quality speech. The gap between model sizes opens up on noisy, accented, or overlapping speech — that is where <code>base</code> and <code>small</code> earn their keep. My rule of thumb: start with <code>tiny</code> for drafts and scale up only when your transcripts tell you to.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/faster-whisper-local-transcription-tutorial/img2.webp" alt="Diagram of the local transcription pipeline: an audio file feeds into the faster-whisper CTranslate2 engine, which emits timestamped segments, which are written out as a subtitle file"><figcaption>Illustration: the local transcription pipeline — audio in, timestamped segments out, subtitles as the finished product. AI-generated.</figcaption></figure>
+<h2 id="step-4-strip-silence-with-vad">Step 4: Strip silence with VAD<a class="anchor" href="#step-4-strip-silence-with-vad" aria-label="Link to section">#</a></h2>
+<p>Real recordings are full of dead air — the pause before someone unmutes, the gap between questions, the tail after "bye". Transcribing silence wastes compute, and worse, it corrupts your timestamps. faster-whisper integrates the Silero voice activity detection model for exactly this: pass <code>vad_filter=True</code> and silent stretches are cut before transcription.</p>
+<pre><code class="language-python">segments, info = model.transcribe("meeting.mp3", vad_filter=True)
+
+# Tune how aggressive the silence cutting is:
+segments, info = model.transcribe(
+    "meeting.mp3",
+    vad_filter=True,
+    vad_parameters=dict(min_silence_duration_ms=500),
+)</code></pre>
+<p>The default is deliberately conservative — the README notes it removes silence longer than about 2 seconds — so short natural pauses survive. To see what it actually does, I built a 39.9-second test file: 4 seconds of silence, 31.9 seconds of speech, 4 more seconds of silence. The difference is stark:</p>
+<table><thead><tr><th>Setting</th><th>Segments</th><th>First segment starts</th><th>Last segment ends</th></tr></thead><tbody><tr><td>No VAD</td><td>9</td><td>0.00 s</td><td>35.44 s</td></tr><tr><td><code>vad_filter=True</code> (default)</td><td>6</td><td>3.79 s</td><td>35.79 s</td></tr><tr><td><code>vad_filter=True</code>, 500 ms</td><td>6</td><td>3.79 s</td><td>35.79 s</td></tr></tbody></table>
+<p>Without VAD, the model absorbed the 4 seconds of leading silence into its timing — the segments run 0.00 s to 35.44 s on a 39.9-second file, meaning every timestamp is shifted and no longer lines up with the real audio. With VAD, the silence is correctly excluded: the first segment starts at 3.79 s, right where the speech begins, and the timestamps stay anchored to the original file. One honest note: on this clip, the aggressive 500 ms setting produced <em>identical</em> output to the default — the default was already catching the long silences. Tune the threshold down for choppy audio with short pauses, but do not expect miracles on every file; measure it on yours.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/faster-whisper-local-transcription-tutorial/img3.webp" alt="Diagram of VAD silence filtering: a waveform with silent gaps marked in red and cut out, leaving continuous speech ready for transcription"><figcaption>Illustration: voice activity detection finds the silent gaps and cuts them before transcription, keeping timestamps honest. AI-generated.</figcaption></figure>
+<h2 id="step-5-word-timestamps-and-subtitles">Step 5: Word timestamps and subtitles<a class="anchor" href="#step-5-word-timestamps-and-subtitles" aria-label="Link to section">#</a></h2>
+<p>Segment timestamps get you paragraphs; word timestamps get you karaoke-style highlighting, precise subtitle sync, and searchable audio. Enable them with one flag, then walk <code>segment.words</code>:</p>
+<pre><code class="language-python">segments, _ = model.transcribe("audio.mp3", word_timestamps=True)
+
+for s in segments:
+    for w in s.words:
+        print(f"{w.word} ({w.start:.2f}s - {w.end:.2f}s)")</code></pre>
+<p>Measured output on the test clip — 95 words, each with start and end times:</p>
+<pre><code class="language-text"> Welcome (0.00s - 0.44s)
+ to (0.44s - 0.58s)
+ this (0.58s - 0.80s)
+ hands (0.80s - 1.04s)
+-on (1.04s - 1.24s)
+ tutorial. (1.24s - 1.64s)
+...</code></pre>
+<p>From there, subtitles are a twenty-line formatting exercise. faster-whisper gives you the data; the SRT container is just numbered blocks of <code>start --&gt; end</code> plus text:</p>
+<pre><code class="language-python">def to_srt(segments, path):
+    def fmt(t):
+        ms = int(round(t * 1000))
+        h, ms = divmod(ms, 3600000)
+        m, ms = divmod(ms, 60000)
+        s, ms = divmod(ms, 1000)
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+    with open(path, "w") as f:
+        for i, seg in enumerate(segments, 1):
+            f.write(f"{i}\n{fmt(seg.start)} --&gt; {fmt(seg.end)}\n{seg.text.strip()}\n\n")
+
+segments, _ = model.transcribe("audio.mp3", beam_size=5)
+to_srt(segments, "audio.srt")</code></pre>
+<p>The resulting <code>audio.srt</code> drops straight into any video editor or player:</p>
+<pre><code class="language-text">1
+00:00:00,000 --&gt; 00:00:01,640
+Welcome to this hands-on tutorial.
+
+2
+00:00:02,220 --&gt; 00:00:05,560
+Today you will learn how to turn speech into text on your own computer,</code></pre>
+<h2 id="step-6-other-languages">Step 6: Other languages<a class="anchor" href="#step-6-other-languages" aria-label="Link to section">#</a></h2>
+<p>Whisper is multilingual, and faster-whisper inherits that. Language is auto-detected on every transcription — the <code>info</code> object tells you what it found and how confident it was. I tested a 15-word French sentence: detected <code>fr</code> with probability 0.993, transcribed with zero word errors.</p>
+<pre><code class="language-python">segments, info = model.transcribe("audio_fr.mp3")
+print(info.language, info.language_probability)
+# fr 0.993</code></pre>
+<p>If you already know the language, say so — it skips detection and avoids misfires on very short clips:</p>
+<pre><code class="language-python">segments, info = model.transcribe("audio_fr.mp3", language="fr")</code></pre>
+<p>One exception to know about: the <code>distil-large-v3</code> distilled variants are English-only. The README's own example pins <code>language="en"</code> and <code>condition_on_previous_text=False</code> for them — use a full-size model if you need other languages.</p>
+<h2 id="gotchas-worth-knowing">Gotchas worth knowing<a class="anchor" href="#gotchas-worth-knowing" aria-label="Link to section">#</a></h2>
+<p>Three things I learned the hard way while measuring this tutorial:</p>
+<p><strong>1. <code>initial_prompt</code> can backfire.</strong> The prompt parameter biases the decoder toward expected vocabulary — useful for jargon and proper nouns. But it is a bias, not a hint. With <code>initial_prompt="faster-whisper is a fast speech-to-text library by SYSTRAN."</code>, the model transcribed the product name as <strong>"FasterWisper"</strong> — one garbled word. Without the prompt, it correctly wrote "Faster Whisper". Use initial prompts for domain vocabulary, then verify the effect on your audio instead of assuming it helped.</p>
+<p><strong>2. Clean audio flatters every model.</strong> My 0.000 word error rates were measured on clean, single-speaker, studio-quality speech. Real-world audio — accents, background noise, crosstalk, bad microphones — is harder, and that is exactly where the larger models justify their cost. Treat my tiny-vs-base numbers as a best case, not a promise.</p>
+<p><strong>3. There is no CLI in the package.</strong> The README documents the Python API only — do not go looking for a <code>faster-whisper</code> command; it does not ship one. The twenty-line script above <em>is</em> the interface, which is honestly fine: transcription is three lines, and everything interesting (VAD, timestamps, subtitles) is a parameter away.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<table><thead><tr><th>Situation</th><th>Pick</th></tr></thead><tbody><tr><td>Laptop, quick drafts, private by default</td><td>faster-whisper, <code>tiny</code> or <code>base</code>, <code>device="cpu", compute_type="int8"</code></td></tr><tr><td>Best accuracy on CPU, long files</td><td>faster-whisper, <code>small</code> or <code>medium</code>, int8</td></tr><tr><td>NVIDIA GPU available</td><td>faster-whisper, <code>device="cuda", compute_type="float16"</code>, <code>large-v3</code> or <code>turbo</code> (needs cuBLAS for CUDA 12 and cuDNN 9 per the README)</td></tr><tr><td>Already deep in PyTorch, want the reference</td><td><code>openai-whisper</code> — simpler API, but slower and hungrier than faster-whisper</td></tr><tr><td>Need speaker diarization, streaming, or have no local machine</td><td>A managed API — you pay per minute and your audio leaves your machine</td></tr></tbody></table>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>One <code>pip install</code> buys you the whole pipeline: language detection, segmentation, silence filtering, word-level timestamps, and subtitle export — free, offline, and private. Start with <code>tiny</code> on CPU, turn on <code>vad_filter</code> for anything with pauses, and only reach for bigger models when your transcripts tell you the small one is struggling. Your audio never leaves the machine, the meter never runs, and the next time someone proposes a transcription API, you will know exactly what you are paying for: convenience, not capability.</p>
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="faster-whisper-local-transcription-tutorial"></div><div class="comments" data-comments="faster-whisper-local-transcription-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/build-voice-agent-weekend/"><span class="chip">Tutorials</span><h3>Build a voice agent in a weekend: STT, LLM, TTS</h3><div class="meta">August 24, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/ai-meeting-notetakers-compared/"><span class="chip">Reviews</span><h3>AI meeting notetakers, tested: Otter vs Fireflies vs Granola</h3><div class="meta">September 13, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/gemini-3-8-flash-tts-launch/"><span class="chip">AI News</span><h3>Google launches Gemini 3.8 Flash TTS and Flash-Lite TTS: voice generation becomes a design studio</h3><div class="meta">September 24, 2026 · 6 min read</div></a><a class="rel-card" href="/articles/prompt-compression-measured-guide/"><span class="chip">Tutorials</span><h3>Cut your prompt tokens in half: a measured guide to prompt compression</h3><div class="meta">September 27, 2026 · 10 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
