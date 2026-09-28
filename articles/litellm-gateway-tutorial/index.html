@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>One API for every LLM: run LiteLLM as your AI gateway — AI Frontier Post</title>
+<meta name="description" content="Stop hardcoding model providers into your app. Stand up LiteLLM&#x27;s OpenAI-compatible proxy, wire in multiple models, and prove failover, retries, load balancing, and caching against live traffic — no API keys required.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/litellm-gateway-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="One API for every LLM: run LiteLLM as your AI gateway">
+<meta property="og:description" content="Stop hardcoding model providers into your app. Stand up LiteLLM&#x27;s OpenAI-compatible proxy, wire in multiple models, and prove failover, retries, load balancing, and caching against live traffic — no API keys required.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/litellm-gateway-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/litellm-gateway-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "One API for every LLM: run LiteLLM as your AI gateway", "description": "Stop hardcoding model providers into your app. Stand up LiteLLM's OpenAI-compatible proxy, wire in multiple models, and prove failover, retries, load balancing, and caching against live traffic — no API keys required.", "datePublished": "2026-09-28", "dateModified": "2026-09-28", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/litellm-gateway-tutorial/"}, "image": "https://aifrontierpost.com/articles/litellm-gateway-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>One API for every LLM: run LiteLLM as your AI gateway</h1>
+<p class="lede">Stop hardcoding model providers into your app. Stand up LiteLLM&#x27;s OpenAI-compatible proxy, wire in multiple models, and prove failover, retries, load balancing, and caching against live traffic — no API keys required.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · September 28, 2026 · 9 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/litellm-gateway-tutorial/cover.webp" alt="Editorial illustration: a glowing API gateway hub in the center routes one incoming request line out to three model provider nodes"></figure>
+<div class="article-body"><p>Every production LLM app eventually hits the same wall: your code is married to one provider's API. The moment that provider has an outage, rate-limits you at the worst possible hour, or changes its pricing, you are editing call sites at 2 a.m. Meanwhile your traffic keeps growing, your team keeps adding features, and every new model release forces the same question — <em>how do we even try the new thing without rewriting the integration?</em></p>
+<p>The fix is a gateway: one stable API surface between your app and every model provider. LiteLLM's proxy is the open-source standard for exactly this — a single OpenAI-compatible endpoint that routes to 100+ backends (OpenAI, Anthropic, Bedrock, Azure, Ollama, vLLM, Together, and the rest), with retries, failover, load balancing, caching, and spend tracking built in. Your app stops caring which provider serves a request. The gateway decides, and it decides per request.</p>
+<p>In this tutorial you will stand up that gateway from scratch, register your first model alias, prove failover and caching work against live traffic, and learn when each feature earns its place. Every command below was run and verified against LiteLLM 1.103.0 — no API keys required, because the whole thing works on mock responses until you are ready for real traffic.</p>
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> LiteLLM 1.84+ requires it — the docs call this out explicitly, and <code>pip</code> on an older interpreter will silently install a stale 1.83.x release.</li>
+<li><strong>A terminal and about 20 minutes.</strong> Everything runs on <code>localhost</code>; nothing is deployed anywhere.</li>
+<li><strong>No API keys, no accounts, no cloud.</strong> Steps 1–6 use <code>mock_response</code> configs so every behavior is testable for free. I will show exactly where real keys go when you graduate to production.</li></ul>
+<h2 id="step-1-install-and-launch-the-gateway">Step 1: Install and launch the gateway<a class="anchor" href="#step-1-install-and-launch-the-gateway" aria-label="Link to section">#</a></h2>
+<p>Install the proxy bundle. The official docs recommend <code>uv</code>:</p>
+<pre><code class="language-bash">uv tool install 'litellm[proxy]'</code></pre>
+<p>Plain <code>pip</code> works too — that is what I used for testing:</p>
+<pre><code class="language-bash">pip install 'litellm[proxy]'
+litellm --version</code></pre>
+<p>The gateway is driven by a single YAML config. Create <code>config.yaml</code> with one model alias:</p>
+<pre><code class="language-yaml">model_list:
+  - model_name: smart-chat          # the alias your app will use
+    litellm_params:
+      model: openai/gpt-4o-mini     # provider/model in LiteLLM's format
+      api_key: os.environ/OPENAI_API_KEY</code></pre>
+<p>Two concepts to lock in now, because everything else builds on them. <code>model_name</code> is the <strong>user-facing alias</strong> — it is the only name your application ever sees. <code>litellm_params</code> holds everything LiteLLM's <code>completion()</code> accepts: the real provider model, keys, base URLs, timeouts. Secrets go in environment variables (<code>os.environ/...</code>), never in the file you commit.</p>
+<p>For this tutorial, swap the real key for a mock so nothing leaves your machine:</p>
+<pre><code class="language-yaml">      api_key: sk-test-key
+      mock_response: "Mock reply from the gateway — no provider was called."</code></pre>
+<p>Start the proxy and confirm it is healthy:</p>
+<pre><code class="language-bash">litellm --config config.yaml
+# new terminal:
+curl -s http://localhost:4000/health/liveliness -o /dev/null -w "%{http_code}\n"
+# 200</code></pre>
+<p>The gateway serves on port 4000 by default. Now send your first chat request:</p>
+<pre><code class="language-bash">curl http://localhost:4000/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"smart-chat",
+       "messages":[{"role":"user","content":"What is 17 * 23?"}]}'</code></pre>
+<p>You get back a standard OpenAI-shaped response whose content is your mock string — the gateway, the alias, and the endpoint all work. Check what the gateway knows about:</p>
+<pre><code class="language-bash">curl -s http://localhost:4000/models | python3 -c \
+  "import json,sys; print([m['id'] for m in json.load(sys.stdin)['data']])"
+# ['smart-chat']</code></pre>
+<h2 id="step-2-point-your-app-at-the-gateway">Step 2: Point your app at the gateway — the one-line change<a class="anchor" href="#step-2-point-your-app-at-the-gateway" aria-label="Link to section">#</a></h2>
+<p>This is the entire migration for existing OpenAI SDK code. Change the base URL; keep everything else:</p>
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:4000",  # was: default OpenAI endpoint
+    api_key="sk-anything",              # placeholder until you set a master key
+)
+resp = client.chat.completions.create(
+    model="smart-chat",                 # your gateway alias, not a provider model
+    messages=[{"role": "user", "content": "Summarize this changelog in one line."}],
+)
+print(resp.choices[0].message.content)</code></pre>
+<p>That is the whole contract: any OpenAI-compatible client — the OpenAI SDK, LangChain, LlamaIndex, the Anthropic and Mistral SDKs — talks to the gateway, and the gateway translates to whatever the backend needs. Swap the alias in <code>config.yaml</code> from <code>openai/gpt-4o-mini</code> to <code>anthropic/claude-sonnet-4-5</code> and your app code does not change at all. This is the single highest-leverage property of the architecture: <strong>provider changes become config changes.</strong></p>
+<p>A note on auth: with no master key configured, the gateway accepts requests without a token — fine for local development. In production, set a master key and mint per-team virtual keys with <code>POST /key/generate</code>; that also unlocks per-key spend tracking and budgets.</p>
+<h2 id="step-3-spread-load-across-deployments">Step 3: Spread load across deployments<a class="anchor" href="#step-3-spread-load-across-deployments" aria-label="Link to section">#</a></h2>
+<p>Give the same alias <strong>two deployments</strong> — two list entries, one <code>model_name</code>. The gateway load-balances between them automatically:</p>
+<pre><code class="language-yaml">model_list:
+  - model_name: balanced-chat
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: sk-test-key
+      mock_response: "Reply from deployment A"
+    model_info:
+      id: dep-a
+  - model_name: balanced-chat
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: sk-test-key
+      mock_response: "Reply from deployment B"
+    model_info:
+      id: dep-b</code></pre>
+<p>Every response carries an <code>x-litellm-model-id</code> header naming the deployment that served it. Eight requests against this config split across both deployments — proof the router is distributing, not pinning:</p>
+<pre><code class="language-bash">for n in 1 2 3 4 5 6 7 8; do
+  curl -s -D - http://localhost:4000/chat/completions \
+    -H "Content-Type: application/json" \
+    -d "{\"model\":\"balanced-chat\",
+         \"messages\":[{\"role\":\"user\",\"content\":\"probe number $n\"}]}" \
+    -o /dev/null | grep -i "x-litellm-model-id"
+done
+# x-litellm-model-id: dep-b
+# x-litellm-model-id: dep-a
+# ... split across both</code></pre>
+<p>Use this pattern whenever you have two of anything: two API keys against the same provider (doubles your effective rate limit), a primary region plus a backup region, or a big model and a small model you are A/B testing. The alias stays constant; the fleet behind it changes.</p>
+<h2 id="step-4-survive-a-provider-outage-with-failover">Step 4: Survive a provider outage with failover<a class="anchor" href="#step-4-survive-a-provider-outage-with-failover" aria-label="Link to section">#</a></h2>
+<p>Outages are a matter of when. Simulate one honestly: point the primary deployment at an endpoint where nothing listens, and give the group a healthy backup.</p>
+<pre><code class="language-yaml">model_list:
+  - model_name: resilient-chat
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_base: http://127.0.0.1:9/v1   # dead: simulates a provider outage
+      api_key: sk-test-key
+      timeout: 3
+    model_info:
+      id: primary-dead
+  - model_name: resilient-chat
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: sk-test-key
+      mock_response: "Served by the backup deployment — the primary was down."
+    model_info:
+      id: backup-alive
+
+litellm_settings:
+  num_retries: 1</code></pre>
+<p>Send a request. The gateway tries the primary, watches it fail, and serves from the backup — your app sees one clean 200:</p>
+<pre><code class="language-bash">curl -s -D - http://localhost:4000/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"resilient-chat",
+       "messages":[{"role":"user","content":"hello failover test"}]}' \
+  | grep -iE "x-litellm-model-id|x-litellm-attempted"
+# x-litellm-model-id: backup-alive
+# x-litellm-attempted-retries: 1</code></pre>
+<p>The headers are your audit trail: which deployment served, how many retries were attempted. That is intra-group failover — it happens automatically whenever a group has more than one deployment.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/litellm-gateway-tutorial/img2.webp" alt="Diagram: a request enters a router; the top model deployment is marked failed and the request is rerouted to a healthy backup deployment"><figcaption>Illustration: automatic failover — when the primary deployment fails, the gateway reroutes to a healthy backup. AI-generated.</figcaption></figure>
+<p>For the harder case — <strong>every</strong> deployment in the group is down — add a cross-group fallback in <code>litellm_settings</code>:</p>
+<pre><code class="language-yaml">litellm_settings:
+  num_retries: 1
+  fallbacks: [{"resilient-chat": ["cheap-chat"]}]</code></pre>
+<p>With both <code>resilient-chat</code> deployments pointed at the dead endpoint, the same request now lands on the fallback group:</p>
+<pre><code class="language-bash"># x-litellm-model-group: cheap-chat
+# x-litellm-attempted-fallbacks: 1</code></pre>
+<p>The response content comes from <code>cheap-chat</code>, but the headers record that the client asked for <code>resilient-chat</code> and one fallback was attempted. LiteLLM distinguishes three fallback flavors: <code>fallbacks</code> for general errors (429s, 500s, connection failures), <code>content_policy_fallbacks</code> for provider content-filter rejections, and <code>context_window_fallbacks</code> for over-long prompts (pair the last with <code>enable_pre_call_checks: true</code> in <code>router_settings</code> so the gateway checks length before calling the provider). A practical tip from the docs: trigger each fallback type deliberately in a non-production environment before you trust it in production.</p>
+<h2 id="step-5-stop-paying-for-the-same-answer-twice">Step 5: Stop paying for the same answer twice<a class="anchor" href="#step-5-stop-paying-for-the-same-answer-twice" aria-label="Link to section">#</a></h2>
+<p>Enable exact-match caching — two lines in <code>litellm_settings</code>:</p>
+<pre><code class="language-yaml">litellm_settings:
+  cache: True
+  cache_params:
+    type: local</code></pre>
+<p>Send the identical request twice and watch the headers:</p>
+<pre><code class="language-bash">PAYLOAD='{"model":"balanced-chat",
+  "messages":[{"role":"user","content":"what is the cache key behavior"}]}'
+curl -s -D - http://localhost:4000/chat/completions \
+  -H "Content-Type: application/json" -d "$PAYLOAD" -o /dev/null \
+  | grep -ci "x-litellm-cache-key"   # 0 — first request, cache miss
+curl -s -D - http://localhost:4000/chat/completions \
+  -H "Content-Type: application/json" -d "$PAYLOAD" -o /dev/null \
+  | grep -i "x-litellm-cache-key"    # present — served from cache</code></pre>
+<p>The second response carries <code>x-litellm-cache-key</code>: no provider was called, no tokens were billed, latency was near zero. Exact-match caches key on a hash of the whole request, so any change to the conversation is a miss — perfect for repeated system prompts, classification calls, and eval harnesses.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/litellm-gateway-tutorial/img3.webp" alt="Diagram: identical requests hit a cache layer first; cache hits get an instant response while misses are forwarded to providers"><figcaption>Illustration: the cache layer — repeated requests are served instantly without calling a provider. AI-generated.</figcaption></figure>
+<p>Two things to know before production. First, <code>type: local</code> is an in-memory cache — one per worker process — so use it for development only; the right default past a single worker is <code>type: redis</code> with <code>REDIS_URL</code> set, and <code>curl http://localhost:4000/cache/ping</code> tells you whether the cache is healthy. Second, LiteLLM also offers <em>semantic</em> caching, which serves the nearest previous answer above a similarity threshold. The docs themselves warn this suits single-shot prompts and goes badly wrong on agentic traffic — do not turn it on for multi-turn conversations.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Reach for</th></tr></thead><tbody><tr><td>One stable endpoint for many providers</td><td><code>model_list</code> aliases (Steps 1–2). App code never names a provider again.</td></tr><tr><td>Survive an outage or rate limit</td><td><code>num_retries</code> plus <code>fallbacks</code> to a cheaper group (Step 4). Test each fallback type deliberately.</td></tr><tr><td>Spread load or A/B two deployments</td><td>Multiple deployments under one <code>model_name</code> (Step 3); watch <code>x-litellm-model-id</code>.</td></tr><tr><td>Cut spend on repeated prompts</td><td>Exact-match <code>cache</code> (Step 5). Redis in production; semantic cache only for single-shot prompts.</td></tr><tr><td>Teams, budgets, per-key limits</td><td>Master key + <code>POST /key/generate</code> virtual keys; spend logs record every request.</td></tr><tr><td>Block PII or prompt injections</td><td><code>guardrails</code> section (e.g. Presidio <code>pre_call</code> PII masking) — config-driven, runs before the provider is called.</td></tr></tbody></table></div>
+<p>A word on testing: keep a mock-backed config like the one in this tutorial in your repo. It lets CI exercise your whole gateway path — aliases, fallbacks, caching — without spending a cent or depending on provider uptime. Promote the same config shape to staging with real keys when you are ready.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>A gateway turns provider integration from code into configuration. One OpenAI-compatible endpoint, aliases instead of provider names, failover that your app never notices, and caching that cuts your bill on repeated work. The setup above runs on your laptop in minutes, and the config file you tested with mocks is the same shape you will ship with real keys — plus a master key, Redis, and virtual keys when teams arrive. Stop hardcoding providers; let the gateway absorb the chaos.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="litellm-gateway-tutorial"></div><div class="comments" data-comments="litellm-gateway-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/indirect-prompt-injection-agent-defense/"><span class="chip">Tutorials</span><h3>Your agent reads the internet: stop prompt injections from hijacking its tools</h3><div class="meta">September 27, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/semantic-cache-llm-tutorial/"><span class="chip">Tutorials</span><h3>Stop paying twice for the same question: build a semantic cache for your LLM app</h3><div class="meta">September 26, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/prompt-caching-tutorial/"><span class="chip">Tutorials</span><h3>Cut your API bill 75%: a prompt-caching tutorial</h3><div class="meta">July 17, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/serve-model-vllm-tutorial/"><span class="chip">Tutorials</span><h3>Serve an open model with vLLM: a deployment tutorial</h3><div class="meta">July 14, 2026 · 9 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
