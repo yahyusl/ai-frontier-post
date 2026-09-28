@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Claude Code hooks: the complete hands-on guide to deterministic agent control — AI Frontier Post</title>
+<meta name="description" content="CLAUDE.md is advice; hooks are enforcement. A hands-on guide to Claude Code's lifecycle hooks — PreToolUse guards, PostToolUse automation, Stop gates, and prompt enrichment — with scripts tested end to end.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/claude-code-hooks-complete-guide/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Claude Code hooks: the complete hands-on guide to deterministic agent control">
+<meta property="og:description" content="CLAUDE.md is advice; hooks are enforcement. A hands-on guide to Claude Code's lifecycle hooks — PreToolUse guards, PostToolUse automation, Stop gates, and prompt enrichment — with scripts tested end to end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/claude-code-hooks-complete-guide/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Claude Code hooks: the complete hands-on guide to deterministic agent control", "description": "CLAUDE.md is advice; hooks are enforcement. A hands-on guide to Claude Code's lifecycle hooks — PreToolUse guards, PostToolUse automation, Stop gates, and prompt enrichment — with scripts tested end to end.", "datePublished": "2026-09-28", "dateModified": "2026-09-28", "author": {"@type": "Person", "name": "Elena Vasquez", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/claude-code-hooks-complete-guide/"}, "image": "https://aifrontierpost.com/assets/og-card.png"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Claude Code hooks: the complete hands-on guide to deterministic agent control</h1>
+<p class="lede">CLAUDE.md is advice. Hooks are enforcement. This guide walks you through Claude Code's lifecycle hooks — PreToolUse guards, PostToolUse automation, Stop gates, and prompt enrichment — with every script tested end to end.</p>
+<div class="byline"><span class="avatar">EV</span><span class="who"><b>Elena Vasquez</b><span>AI Tools Editor · September 28, 2026 · 11 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/claude-code-hooks-complete-guide/cover.webp" alt="Illustration of an AI coding agent pausing at a glowing checkpoint gate of interlocking gears"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>You can write the most carefully worded <code>CLAUDE.md</code> in the world — "always run the tests before finishing," "never push to main," "never delete anything" — and Claude Code will still, occasionally, do the thing. Instructions in a prompt are probabilistic. They nudge. They don't gate.</p>
+<p>Hooks are the other half of the system. A hook is a script you write that Claude Code runs automatically at a specific moment in its lifecycle: before a tool call fires, after a tool call completes, when Claude tries to stop, when a prompt arrives. Your script gets the details as JSON on stdin, and it answers with an exit code or structured JSON: allow, deny, ask the user, rewrite the input, inject context, block the stop.</p>
+<p>This is deterministic control over a non-deterministic agent. In this tutorial you'll build four hooks that together supervise a coding session end to end: a command guard that blocks destructive shell calls, a git gate that forces confirmation on pushes, a stop gate that refuses to let Claude finish until tests pass, and a context injector that hands Claude live repo state with every prompt. Every script below was run through the exact invocation path Claude Code uses — JSON piped to stdin, exit codes checked — so what you copy will behave as described.</p>
+<h2 id="1-why-claude-md-is-not-enough">1. Why CLAUDE.md is not enough<a class="anchor" href="#1-why-claude-md-is-not-enough" aria-label="Link to section">#</a></h2>
+<p>Three mechanisms compete to steer Claude Code, and they sit at different layers of the stack. <code>CLAUDE.md</code> is long-term memory: soft guidance the model reads at startup. The <strong>permission system</strong> is the interactive gate: it asks you (or your rules) before risky tool calls, with prompt rules like "always ask before editing production files." <strong>Hooks</strong> are the deterministic layer: code that runs no matter what the model thinks, capable of blocking, rewriting, and annotating actions without a human in the loop.</p>
+<p>Most teams rely on the first two and hit the same wall. Guidance drifts as the conversation grows. Permission rules require a human watching the terminal. Hooks close the loop: the "never push without confirmation" rule becomes an <code>ask</code> decision emitted by a script, enforced every single time, whether or not you're at the keyboard. They're also where automation lives — formatting files after every edit, logging tool calls to an audit trail, injecting ticket context before the model reasons.</p>
+<p>One caution before we start, and it's important enough to put here rather than in a footnote: a hook that inspects tool input is a <em>deterrent</em>, not a security boundary. A mistyped path, a timed-out script, or a clever command chain can slip past a regex. Anthropic's own documentation warns that <code>if</code>-condition hooks are best-effort and that hard enforcement belongs to the permission system. Throughout this guide I'll mark exactly where each hook is strong and where it's porous, because a guardrail you misunderstand is worse than none at all.</p>
+<h2 id="2-your-first-hook-in-five-minutes">2. Your first hook in five minutes<a class="anchor" href="#2-your-first-hook-in-five-minutes" aria-label="Link to section">#</a></h2>
+<p>You'll need Claude Code installed and a project directory to work in. No accounts, no API keys — hooks execute as local scripts on your machine, so this tutorial costs nothing beyond your normal Claude Code usage.</p>
+<p>Create a hooks directory and a logger script in your project:</p>
+<pre><code>mkdir -p .claude/hooks
+cat &gt; .claude/hooks/log.sh &lt;&lt;'EOF'
+#!/bin/bash
+# PostToolUse logger: append every Bash command to an audit trail.
+set -euo pipefail
+INPUT=$(cat)
+CMD=$(echo "$INPUT" | jq -r '.tool_input.command // "?"')
+echo "$(date -u +%FT%TZ) $CMD" &gt;&gt; .claude/tool-audit.log
+exit 0
+EOF
+chmod +x .claude/hooks/log.sh</code></pre>
+<p>Now register it in your project's <code>.claude/settings.json</code>:</p>
+<pre><code>{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log.sh" }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+<p>That nesting is the whole configuration model, so learn it now: <strong>event</strong> (here <code>PostToolUse</code>, which fires after a successful tool call) → <strong>matcher group</strong> (here filtered to the <code>Bash</code> tool) → <strong>handler list</strong> (the scripts to run). The <code>${CLAUDE_PROJECT_DIR}</code> placeholder expands to your project's root, which keeps the config portable between machines.</p>
+<p>Verify it's wired up before doing anything clever. Run <code>/hooks</code> inside Claude Code — it's a read-only inspector that lists every configured hook. Then ask Claude to run any shell command, and check <code>.claude/tool-audit.log</code>. You should see a timestamped line. If nothing appears, the debugging section near the end of this guide will show you how to trace exactly where the signal died.</p>
+<h2 id="3-how-hooks-actually-work">3. How hooks actually work: events, matchers, handlers<a class="anchor" href="#3-how-hooks-actually-work" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-code-hooks-complete-guide/img2.webp" alt="Abstract diagram of hook events flowing through matchers to handler scripts"><figcaption>Every hook call flows the same way: an event fires, matchers filter it, handlers run. Illustration generated by AI Frontier Post.</figcaption></figure>
+<p>Claude Code fires hooks at roughly thirty lifecycle points. The ones you'll use constantly are <code>PreToolUse</code> (before a tool runs — the only place you can block it), <code>PostToolUse</code> (after a successful tool call), <code>PostToolUseFailure</code> (when a tool call fails), <code>UserPromptSubmit</code> (when your message arrives), <code>Stop</code> (when Claude tries to end its turn), <code>SessionStart</code>, and <code>Notification</code>. The full list also covers subagent start/stop, compacting, model switches, file changes, and more — but start with the big five above and add the rest when you need them.</p>
+<p><strong>Matchers</strong> decide which tool calls a hook sees. <code>"Bash"</code> matches the Bash tool exactly; <code>"Edit|Write"</code> is a JavaScript-style regular expression matching either tool; omit the matcher entirely to fire on every tool. An optional <code>if</code> field adds permission-rule-style conditions, like <code>"if": "Bash(npm test *)"</code>, evaluated best-effort against the tool call.</p>
+<p><strong>Handlers</strong> are what runs. The workhorse is the <code>command</code> handler: Claude Code executes your command and pipes a JSON payload to its stdin. That payload always includes <code>hook_event_name</code>, <code>session_id</code>, <code>transcript_path</code>, <code>cwd</code>, and <code>permission_mode</code>; tool events add <code>tool_name</code> and the full <code>tool_input</code>. Other handler types exist — <code>http</code> posts the JSON to a URL, <code>mcp_tool</code> routes it through an MCP server, <code>prompt</code> delegates the decision to an LLM call, and <code>agent</code> launches a subagent — but command handlers are the ones you'll debug and test yourself, so this guide builds everything on them.</p>
+<p>The contract between your script and Claude Code is exit codes and stdout. <strong>Exit 0</strong> means success. <strong>Exit 2</strong> means a blocking error on events that can be blocked — on <code>PreToolUse</code> it stops the tool call and hands your stderr text to Claude as feedback; on <code>Stop</code> it keeps the conversation going. Any other nonzero exit is a non-blocking error: Claude sees it, the action continues. If your stdout begins with <code>{</code> and ends with <code>}</code>, Claude Code parses it as structured JSON — that's how you return allow/deny/ask decisions, inject context, or rewrite tool inputs. Anything else printed to stdout becomes context for Claude on events that support it.</p>
+<p>Where hooks live matters. Project hooks go in <code>.claude/settings.json</code> (checked into git, shared with the team), machine-local ones in <code>.claude/settings.local.json</code> (gitignored — the right place for your personal audit logger), and user-wide ones in <code>~/.claude/settings.json</code>. Note the trust nuance: in an interactive session, Claude Code holds back settings-file hooks until you've accepted workspace trust for the folder; in non-interactive (<code>-p</code>) or SDK sessions the folder is treated as trusted. Always review a repo's <code>.claude/</code> directory before running it unattended — hooks are arbitrary code execution by design.</p>
+<h2 id="4-blocking-dangerous-commands-pretooluse">4. Blocking dangerous commands: PreToolUse<a class="anchor" href="#4-blocking-dangerous-commands-pretooluse" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-code-hooks-complete-guide/img3.webp" alt="Illustration of code blocks passing a scanner checkpoint where a hazardous block is stopped by a red shield"><figcaption>A PreToolUse hook is a checkpoint before every tool call: safe actions pass, dangerous ones are stopped. Illustration generated by AI Frontier Post.</figcaption></figure>
+<p><code>PreToolUse</code> is the enforcement point. It fires before the tool executes and hands your script <code>tool_name</code>, <code>tool_input</code>, and <code>tool_use_id</code>. Here's a guard that blocks the classic disasters — recursive deletes against root-level targets and fork bombs:</p>
+<pre><code>#!/bin/bash
+# .claude/hooks/guard.sh — PreToolUse guard: block destructive shell commands.
+set -euo pipefail
+
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+NORMALIZED=$(echo "$COMMAND" | tr -s '[:space:]' ' ')
+
+if echo "$NORMALIZED" | grep -Eq '(^|[;&amp;|] *)rm +-+r[f]* +(/|~|\.|\*|\$HOME)( |$|;)'; then
+  echo "Blocked: 'rm -rf' against a root-level or home-level target is not allowed." &gt;&amp;2
+  echo "Use 'mv &lt;target&gt; /tmp/trash/' instead, or ask the user to confirm." &gt;&amp;2
+  exit 2
+fi
+
+if echo "$NORMALIZED" | grep -Eq ': *\(\) *\{ *: *\| *: *&amp; *\} *; *:'; then
+  echo "Blocked: fork bomb pattern detected." &gt;&amp;2
+  exit 2
+fi
+
+if echo "$NORMALIZED" | grep -Eq 'mkfs|dd +.*of=/dev/|: *&gt;/dev/sd'; then
+  echo "Blocked: raw disk operations are not allowed." &gt;&amp;2
+  exit 2
+fi
+
+exit 0</code></pre>
+<p>Register it alongside your logger, scoped to the <code>Bash</code> matcher with a short timeout:</p>
+<pre><code>"PreToolUse": [
+  {
+    "matcher": "Bash",
+    "hooks": [
+      { "type": "command",
+        "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard.sh",
+        "timeout": 10 }
+    ]
+  }
+]</code></pre>
+<p>I tested this script by feeding it exactly what Claude Code sends — a JSON payload on stdin — and checking exit codes. <code>rm -rf ~</code> exits 2 with the denial message on stderr; a fork bomb exits 2; <code>npm test &amp;&amp; rm -rf /</code> exits 2 because the pattern catches commands chained after <code>&amp;&amp;</code>. Meanwhile <code>npm test</code> exits 0, and — deliberately — <code>rm -rf /tmp/build</code> also exits 0: the guard blocks catastrophic targets and leaves scoped deletes to the permission system, which is the right division of labor.</p>
+<p>Two gotchas belong here. First, a hook that <strong>times out</strong> on <code>PreToolUse</code> does not block — it fails open into the normal permission flow. Keep guard scripts fast (hence <code>"timeout": 10</code>) and never build a security story on a slow hook. Second, when several <code>PreToolUse</code> hooks return decisions, precedence is <code>deny &gt; defer &gt; ask &gt; allow</code>: one deny anywhere wins. That makes layered hooks composable — your team's strict guard and your personal lenient one can coexist, with the strict one always winning.</p>
+<h2 id="5-structured-decisions-allow-deny-ask">5. Structured decisions: allow, deny, ask<a class="anchor" href="#5-structured-decisions-allow-deny-ask" aria-label="Link to section">#</a></h2>
+<p>Exit 2 is a blunt instrument: block with feedback. For finer control, print structured JSON and exit 0. The <code>permissionDecision</code> field accepts <code>allow</code>, <code>deny</code>, <code>ask</code> (surface a confirmation in the UI), and <code>defer</code> (hand the call to the next hook or the permission flow). You can also supply <code>permissionDecisionReason</code> and — powerfully — <code>updatedInput</code>, which <em>replaces the tool call's input entirely</em> before it executes.</p>
+<p>This Python hook forces a confirmation on every <code>git push</code> while auto-allowing read-only git commands so they never interrupt flow:</p>
+<pre><code>#!/usr/bin/env python3
+"""PreToolUse hook in structured-output mode."""
+import json, sys
+
+payload = json.load(sys.stdin)
+command = (payload.get("tool_input") or {}).get("command", "")
+
+def decide(decision, reason):
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        }
+    }))
+    sys.exit(0)
+
+if command.strip().startswith("git push"):
+    decide("ask", "Pushing to a remote is irreversible. Confirm in the UI.")
+if command.strip().startswith(("git status", "git log", "git diff")):
+    decide("allow", "Read-only git command; skipping the permission prompt.")
+
+print(json.dumps({}))  # no opinion: the normal permission flow decides</code></pre>
+<p>Run through the same stdin harness, it behaves exactly as written: <code>git push origin main</code> returns an <code>ask</code> decision with the reason attached, <code>git status</code> returns <code>allow</code>, and anything else returns an empty JSON object — "no opinion" — so the normal permission flow proceeds untouched. Note the honest limitation I flagged earlier: this matches commands that <em>start with</em> <code>git push</code>, so <code>git status &amp;&amp; git push</code> would slip through. If pushes are genuinely load-bearing for your team, pair this hook with a permission-system rule; hooks are the convenient layer, permissions are the hard one.</p>
+<h2 id="6-reacting-to-results-posttooluse">6. Reacting to results: PostToolUse<a class="anchor" href="#6-reacting-to-results-posttooluse" aria-label="Link to section">#</a></h2>
+<p><code>PostToolUse</code> can't block — the tool already ran — but it's where automation lives. It receives <code>tool_name</code>, <code>tool_input</code>, and <code>tool_response</code>. Classic uses: run the formatter on every file the agent edits, append to an audit log, or feed the result into another check.</p>
+<p>Auto-formatting after every edit is a three-liner on the <code>Edit|Write</code> matcher. The file path comes from the JSON input, not from an environment variable — always extract it from stdin:</p>
+<pre><code>"PostToolUse": [
+  {
+    "matcher": "Edit|Write",
+    "hooks": [
+      { "type": "command",
+        "command": "jq -r '.tool_input.file_path' | xargs -r npx --yes prettier --write" }
+    ]
+  }
+]</code></pre>
+<p>Two output mechanisms make this event more than a dumb trigger. <code>additionalContext</code> in your JSON output injects a system reminder alongside the tool result — useful for whispering "also update the changelog" after every edit. <code>updatedToolOutput</code> goes further and <em>rewrites what the tool returned</em>, so you can compact verbose output before it eats the context window (the same idea behind output-condensing tools, but under your own rules).</p>
+<p>Slow follow-ups belong in <code>async</code> handlers. Set <code>"async": true</code> on a command handler and Claude Code fires it without waiting; with <code>asyncRewake</code> it can even wake the session back up when the background job finishes — handy for a test suite that takes minutes while the agent moves on. And don't forget <code>PostToolUseFailure</code>: it fires when a tool call errors, and its feedback goes straight back to Claude, making it the natural place for corrective hints ("the migration failed — did you mean to run it against the test database?").</p>
+<h2 id="7-guarding-the-finish-line-the-stop-hook">7. Guarding the finish line: the Stop hook<a class="anchor" href="#7-guarding-the-finish-line-the-stop-hook" aria-label="Link to section">#</a></h2>
+<p>The most common agent failure mode isn't a wrong command — it's premature completion. "Done!" with the tests red. The <code>Stop</code> hook exists for exactly this: it fires when Claude tries to end its turn, receives <code>last_assistant_message</code> and <code>stop_hook_active</code>, and can refuse with a <code>decision: "block"</code> plus a <code>reason</code> telling Claude what to do instead.</p>
+<p>This hook keeps Claude working until the test suite passes:</p>
+<pre><code>#!/usr/bin/env python3
+"""Stop hook: refuse to finish until the test suite is green."""
+import json, subprocess, sys
+
+payload = json.load(sys.stdin)
+last = (payload.get("last_assistant_message") or "").lower()
+
+if payload.get("stop_hook_active"):
+    sys.exit(0)  # already continued once; never loop forever
+
+if "all tests pass" in last:
+    sys.exit(0)
+
+result = subprocess.run(["go", "test", "./..."],
+                        capture_output=True, text=True, timeout=120)
+if result.returncode == 0:
+    sys.exit(0)
+
+print(json.dumps({
+    "decision": "block",
+    "reason": "Tests are failing. Fix them before stopping:\n"
+              + result.stdout[-1500:],
+}))</code></pre>
+<p>Two safety details are load-bearing. First, the <code>stop_hook_active</code> check: when your hook blocks a stop, the field comes back <code>true</code> on the next attempt, and your script must respect it — otherwise a permanently red suite traps Claude in an infinite continue loop. (There's also a backstop: stops are capped at eight consecutive continuations by default.) Second, check <code>last_assistant_message</code> rather than parsing the transcript file — it's the current turn's text, already in the payload, and far cheaper than reading the whole session history.</p>
+<p>Tested through the harness, the behavior is clean: a message containing "all tests pass" exits 0, a repeat continuation with <code>stop_hook_active: true</code> exits 0, and anything else with a failing suite returns the block decision with the test output attached. Swap <code>go test ./...</code> for your own gate — <code>npm test</code>, <code>pytest</code>, a linter — and premature "done" stops happening.</p>
+<h2 id="8-enriching-every-prompt-userpromptsubmit">8. Enriching every prompt: UserPromptSubmit<a class="anchor" href="#8-enriching-every-prompt-userpromptsubmit" aria-label="Link to section">#</a></h2>
+<p><code>UserPromptSubmit</code> fires when your message arrives and before Claude processes it. Anything your script prints to stdout is added to the context as a system reminder — the cheapest way to give Claude live state it would otherwise have to fetch (or guess). This hook injects the current git branch and staged-change status with every prompt:</p>
+<pre><code>#!/bin/bash
+# .claude/hooks/ctx.sh — remind Claude which branch it's on, every prompt.
+set -euo pipefail
+cat &gt; /dev/null  # consume stdin; we only need the repo state
+
+BRANCH=$(git branch --show-current 2&gt;/dev/null || echo "not-a-git-repo")
+if [ "$BRANCH" != "not-a-git-repo" ]; then
+  STAGED=$(git diff --cached --stat 2&gt;/dev/null | tail -1)
+  echo "[repo] branch=$BRANCH staged='${STAGED:-clean}'"
+else
+  echo "[repo] not inside a git repository"
+fi
+exit 0</code></pre>
+<p>Run inside a git repo it prints <code>[repo] branch=main staged='clean'</code>; outside one, <code>[repo] not inside a git repository</code> — so it degrades gracefully on non-repo projects. Register it with a generous-ish timeout (the default here is 30 seconds, noticeably longer than tool hooks, because it runs on the critical path of every message) and keep the script itself fast anyway: a hook that shells out to a slow API on every prompt will make the whole product feel broken.</p>
+<p>The JSON output options are worth knowing. <code>additionalContext</code> does what plain stdout does but structured; <code>sessionTitle</code> renames the session; <code>suppressOriginalPrompt</code> can hide the user's message from the transcript (useful for prompt-rewriting pipelines); and a <code>decision: "block"</code> with a reason can reject the prompt outright and erase it — the nuclear option for, say, prompts that match a data-exfiltration pattern.</p>
+<h2 id="9-testing-and-debugging-hooks">9. Testing and debugging hooks<a class="anchor" href="#9-testing-and-debugging-hooks" aria-label="Link to section">#</a></h2>
+<p>Every script in this guide was verified the same way, and it's the workflow I'd recommend for any hook you write: invoke the script exactly as Claude Code does — JSON on stdin — and assert on the exit code and stdout. It's a two-line harness:</p>
+<pre><code>echo '{"hook_event_name":"PreToolUse","tool_name":"Bash",
+  "tool_input":{"command":"rm -rf ~"}}' | ./.claude/hooks/guard.sh
+echo "exit=$?"   # expect: 2, with the denial on stderr</code></pre>
+<p>Build a small library of these payloads — one per decision branch — and you have a regression suite for your guardrails that runs in milliseconds, no agent session required. That suite is also your documentation: it shows the next person exactly what the hook promises.</p>
+<p>When a hook misbehaves in a live session, start with <code>/hooks</code> to confirm the configuration loaded at all (a JSON syntax error in <code>settings.json</code> silently disables everything — validate with <code>python3 -m json.tool</code> after every edit). Then run Claude Code with <code>claude --debug-file /tmp/hooks.log</code>: it records the full JSON payload going in and whatever your script printed coming out. For the firehose, <code>CLAUDE_CODE_DEBUG_LOG_LEVEL=verbose</code> shows hook stderr live. Nine times out of ten the bug is one of three things: a wrong path in the config (use <code>${CLAUDE_PROJECT_DIR}</code>, never a relative path), unreadable stdin because the script reads arguments instead of the pipe, or stdout that almost-but-doesn't-quite parse as JSON.</p>
+<h2 id="10-security-hooks-are-code">10. Security: hooks are code, treat them that way<a class="anchor" href="#10-security-hooks-are-code" aria-label="Link to section">#</a></h2>
+<p>A hook is arbitrary code that runs automatically on your machine, fed by an AI agent's actions. That deserves the same respect as any other privileged script. The official guidance distills to five rules, and they're all worth following:</p>
+<ul>
+<li><strong>Quote your shell variables.</strong> <code>"$COMMAND"</code>, never <code>$COMMAND</code> unquoted — tool input can contain spaces, globs, and worse, and an unquoted expansion is a command-injection hole.</li>
+<li><strong>Use absolute paths</strong> to your scripts and validate them at startup. A hook that runs <code>./guard.sh</code> runs whatever happens to be in the working directory.</li>
+<li><strong>Block path traversal</strong> in anything your hook reads or writes: reject <code>..</code> segments rather than trying to sanitize them.</li>
+<li><strong>Skip sensitive files.</strong> A logging hook that copies tool output into a shared audit log can leak secrets the agent handled; filter or redact before persisting.</li>
+<li><strong>Prefer the exec form.</strong> When a hook needs no shell features, pass <code>command</code> plus an <code>args</code> array instead of a shell string — it removes a whole class of quoting bugs.</li>
+</ul>
+<p>And the workspace-trust rule from earlier bears repeating: hooks configured in a project's <code>.claude/settings.json</code> execute when you work in that project, so <strong>review <code>.claude/</code> before opening an untrusted repository</strong> — especially before running it with <code>-p</code>, where the folder is trusted automatically. If you ever need to run with hooks fully off, <code>--settings '{"disableAllHooks": true}'</code> is the escape hatch.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Hooks are one instrument in a five-piece band. Here's how to pick:</p>
+<ul>
+<li><strong>CLAUDE.md</strong> — soft guidance, conventions, preferences. Use it for "how we do things here." It shapes behavior but enforces nothing.</li>
+<li><strong>Permission rules</strong> — hard interactive gates on specific tools and paths. Use them for "always ask before touching production" when a human is watching. This is your security boundary.</li>
+<li><strong>Hooks</strong> — deterministic automation: block/allow/ask decisions, input rewriting, output compaction, context injection, stop gates. Use them when the rule must hold with no human in the loop, or when the work is mechanical (formatting, logging).</li>
+<li><strong>Skills</strong> — packaged knowledge and procedures the agent loads on demand. Use them for "how to deploy the staging environment," not for "never deploy on Fridays."</li>
+<li><strong>MCP servers</strong> — new tools and data sources. Use them to give the agent capabilities; use hooks to supervise how it exercises them.</li>
+</ul>
+<p>The pattern that wins in practice is layered: <code>CLAUDE.md</code> explains the convention, the permission system provides the hard interactive boundary, and hooks automate the parts that don't need a human — confirming pushes, formatting edits, refusing premature stops, keeping an audit trail. Each layer covers the others' weaknesses: guidance drifts, humans get tired, and regexes are porous.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Start with one hook this week. The <code>Stop</code> gate from section 7 has the highest value per line of code: it converts "I'll run the tests" from a promise into a property of the system. Add the <code>PreToolUse</code> guard next, then the prompt context injector. Test each one with the stdin harness before trusting it, keep the scripts fast, quote everything, and remember the hierarchy: hooks automate, the permission system secures, <code>CLAUDE.md</code> explains.</p>
+<p>An unsupervised agent is a very fast intern with the keys to production. Hooks are how you give it a supervisor that never blinks, never gets tired, and never forgets the checklist — because the checklist is code.</p>
+<p><em>Sources: the official <a href="https://code.claude.com/docs/en/hooks">Claude Code hooks documentation</a> (events, configuration, exit codes, structured output schemas, and security guidance, verified September 28, 2026), the <a href="https://code.claude.com/docs/en/hooks-guide">hooks quickstart</a>, and the <a href="https://code.claude.com/docs/en/settings">settings reference</a>. All scripts in this guide were executed through the same stdin-JSON invocation path Claude Code uses, and their exit codes and outputs verified.</em></p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="claude-code-hooks-complete-guide"></div><div class="comments" data-comments="claude-code-hooks-complete-guide"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/build-agent-skill-claude-skill-md-tutorial/"><span class="chip">Tutorials</span><h3>Build your own agent skill: the SKILL.md format, demystified</h3><div class="meta">September 25, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/indirect-prompt-injection-agent-defense/"><span class="chip">Tutorials</span><h3>Indirect prompt injection: defending your AI agent</h3><div class="meta">September 22, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/cloudflare-security-audit-skill-tutorial/"><span class="chip">Tutorials</span><h3>Audit your Cloudflare setup with the security skill</h3><div class="meta">September 24, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/spec-driven-development-spec-kit/"><span class="chip">Tutorials</span><h3>Spec-driven development with Spec-Kit: from idea to implementation</h3><div class="meta">September 25, 2026 · 8 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
