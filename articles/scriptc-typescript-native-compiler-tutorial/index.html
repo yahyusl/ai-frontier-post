@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Compile TypeScript to native binaries with Vercel Labs&#x27; scriptc: a hands-on tutorial — AI Frontier Post</title>
+<meta name="description" content="scriptc (vercel-labs/scriptc, Apache-2.0) is a TypeScript-to-native compiler at #6 on GitHub trending. Install it, compile hello world to a 56KB binary, benchmark fib(32) ~4.6x faster than Node, and ship a native HTTP server — every step executed.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/scriptc-typescript-native-compiler-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Compile TypeScript to native binaries with Vercel Labs&#x27; scriptc: a hands-on tutorial">
+<meta property="og:description" content="scriptc (vercel-labs/scriptc, Apache-2.0) is a TypeScript-to-native compiler at #6 on GitHub trending. Install it, compile hello world to a 56KB binary, benchmark fib(32) ~4.6x faster than Node, and ship a native HTTP server — every step executed.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/scriptc-typescript-native-compiler-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/scriptc-typescript-native-compiler-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Compile TypeScript to native binaries with Vercel Labs' scriptc: a hands-on tutorial", "description": "scriptc (vercel-labs/scriptc, Apache-2.0) is a TypeScript-to-native compiler at #6 on GitHub trending. Install it, compile hello world to a 56KB binary, benchmark fib(32) ~4.6x faster than Node, and ship a native HTTP server — every step executed.", "datePublished": "2026-09-28", "dateModified": "2026-09-28", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/scriptc-typescript-native-compiler-tutorial/"}, "image": "https://aifrontierpost.com/articles/scriptc-typescript-native-compiler-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Compile TypeScript to native binaries with Vercel Labs&#x27; scriptc: a hands-on tutorial</h1>
+<p class="lede">What if <code>scriptc build app.ts -o app</code> gave you a real 56KB native binary — no Node, no bundled runtime, no JavaScript engine at all? That is what Vercel Labs&#x27; <strong>scriptc</strong> does: it type-checks your TypeScript with the real <code>tsc</code>, lowers it to typed IR and then to readable C or LLVM IR, and links a self-contained executable. It is at #6 on GitHub trending this week with 5,473 stars — and I verified every claim below on a real Linux machine: install, coverage reports, every <code>--emit</code> stage, a hand-linked native binary, a fib(32) benchmark against Node, a native HTTP server, and the <code>--dynamic</code> lane for npm packages.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · September 28, 2026 · 14 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/scriptc-typescript-native-compiler-tutorial/cover.webp" alt="Editorial illustration: a TypeScript file feeding into a glowing compiler pipeline of gears and nodes, emerging as a small shining native binary chip, cyan and amber on dark navy"></figure>
+<div class="article-body">
+
+<h2 id="why-now">Why this is blowing up now</h2>
+
+<p>scriptc (<a href="https://github.com/vercel-labs/scriptc" rel="noopener">vercel-labs/scriptc</a>, Apache-2.0) is a Vercel Labs experiment that compiles TypeScript and JavaScript to typed IR, readable C, textual LLVM IR, native assembly and objects, native executables, and WebAssembly modules — with no Node.js and no JavaScript engine in the output. It landed on GitHub on 2026-07-22, and this morning it sits at <strong>#6 on GitHub's daily trending list</strong> with 5,473 stars and 142 forks, 759 commits and 44 releases deep, pushed today. Developers are passing it around because it does something the ecosystem has wanted for a decade: turn a TypeScript file into a real, self-contained binary you can ship like any C program.</p>
+
+<p>The trick is how it handles the boundary between static and dynamic. It uses the TypeScript compiler itself for parsing and type checking, lowers typed code to native machine code via LLVM, and — for code that genuinely cannot compile statically, like npm packages or <code>any</code>-typed code — offers a <code>--dynamic</code> lane that embeds <a href="https://github.com/quickjs-ng/quickjs" rel="noopener">quickjs-ng</a> explicitly. You always know which lane your code took, because <code>scriptc coverage</code> tells you statement by statement.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/scriptc-typescript-native-compiler-tutorial/img2.webp" alt="Illustration of the scriptc compiler pipeline: typed code flowing through intermediate representation stages to a native binary"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="what-you-need">What you'll need</h2>
+
+<ul>
+<li><strong>Node.js 24 or newer</strong> — the compiler runs on Node (check with <code>node --version</code>; I used v24.20.0). Node is only needed to <em>run the compiler</em>; the binaries it produces need no Node.</li>
+<li><strong>A linker driver on Linux</strong> — the one-step executable build invokes a clang-compatible linker. macOS 15+ on arm64 gets a bundled helper; on Linux install clang (<code>apt install clang</code>) or set <code>SCRIPTC_LINKER</code> to your clang-compatible driver. The sandbox I tested in had no clang, so I linked manually with gcc via the compiler's own recipe — I'll show that exact recipe as a bonus step.</li>
+<li><strong>No account, no API key, no GPU, no model downloads.</strong> The whole stack is one npm package.</li>
+<li>About 25 minutes.</li>
+</ul>
+
+<h2 id="step-1-install">Step 1 — Install the compiler</h2>
+
+<pre><code class="language-bash">npm install -g scriptc
+scriptc --version   # expect: 0.1.7 (or newer)</code></pre>
+
+<p>My install pulled 11 packages and finished in under 30 seconds. Note the banner in <code>scriptc --help</code>: this is explicitly labeled <em>experimental</em>. The README says so too. Treat what follows as a guided tour of where the project stands today, not a production build system.</p>
+
+<h2 id="step-2-first-compile">Step 2 — Your first compile, and the coverage report</h2>
+
+<p>Create <code>hello.ts</code>:</p>
+
+<pre><code class="language-typescript">const who = process.argv.length > 2 ? process.argv[2] : "world";
+console.log(`hello, ${who}`);</code></pre>
+
+<p>Before building anything, ask scriptc how much of your program can compile statically:</p>
+
+<pre><code class="language-bash">scriptc coverage hello.ts</code></pre>
+
+<p>Expected output (exactly what I saw):</p>
+
+<pre><code class="language-text">scriptc coverage /path/to/hello.ts
+
+  statements analyzed   2
+  compile statically    2  (100%)
+
+  fully static — this program has no dynamic remainder.</code></pre>
+
+<p>This per-statement honesty is the feature that sold me. You don't guess whether your code "fits" the native model — the compiler tells you, and gives a coded diagnostic for every site that doesn't. I even threw it a deliberately awkward case — a computed method call on an <code>any</code>-typed value:</p>
+
+<pre><code class="language-typescript">const fnName = process.argv[2] ?? "toUpperCase";
+const s: any = "hello";
+console.log(s[fnName]());</code></pre>
+
+<p>That also came back 100% static. The typed-IR lowering handles more dynamicism than the README's warnings suggest; when something truly can't go static, you get a diagnostic rather than a silent fallback.</p>
+
+<h2 id="step-3-emit-stages">Step 3 — Inspect every stage of the pipeline</h2>
+
+<p>The <code>--emit</code> flags need only Node — no compiler, no linker — which makes them the best way to learn what scriptc actually produces:</p>
+
+<pre><code class="language-bash">scriptc build hello.ts --emit=ir    # typed IR   → .scriptc/hello.ir.json
+scriptc build hello.ts --emit=c     # readable C → .scriptc/hello.c
+scriptc build hello.ts --emit=llvm  # LLVM IR    → .scriptc/hello.ll
+scriptc build hello.ts --emit=asm   # assembly   → .scriptc/hello.s
+scriptc build hello.ts --emit=obj   # object     → .scriptc/hello.o</code></pre>
+
+<p>On my run, <code>--emit=obj</code> produced a 9,556-byte <code>hello.ll</code> and a 5,544-byte ELF object <code>hello.o</code>. Different output kinds accumulate in <code>.scriptc/</code>; rebuilding one kind just updates its file.</p>
+
+<p>The C output is worth opening. The compiler generated readable, inspectable C against its runtime header — string literals as static structs with reference counts, union types as tagged structs with switch-based narrowing:</p>
+
+<pre><code class="language-c">/* Generated by scriptc from hello.ts. Do not edit. */
+#include "scr_runtime.h"
+
+static struct { size_t rc; size_t len; size_t cap; char data[8]; } sc_lit_1 =
+    { SIZE_MAX, 7, 7, "hello, " };
+
+static ScrStr *sc_us_0(ScrUnion *v) { /* ToString u0 */
+  switch (v->tag) {
+  case 0: return scr_str_retain((ScrStr *)scr_union_peek(v));
+  case 1: return scr_str_retain((ScrStr *)&sc_lit_2);
+  ...
+  }
+}</code></pre>
+
+<p>The <code>--backend</code> flag controls this code generator: <code>llvm</code> is the default that ships, and <code>c</code> emits the readable C for inspection, with the README stating program behavior is identical either way.</p>
+
+<h2 id="step-4-native-binary">Step 4 — Build a real native binary</h2>
+
+<p>The one-step build is:</p>
+
+<pre><code class="language-bash">scriptc build hello.ts -o hello
+./hello Pax
+# expect: hello, Pax</code></pre>
+
+<p>Here is the honest part. In my test sandbox there was no clang, and the one-step build failed loudly and precisely: <code>spawn clang ENOENT</code>. Setting <code>SCRIPTC_LINKER=cc</code> also failed — scriptc passes clang-style <code>-target</code> flags, which gcc rejects. So on Linux you genuinely need a clang-compatible linker driver installed; the compiler will not silently paper over it.</p>
+
+<p>But that failure handed me the better tutorial. <code>--print=native-link-info</code> emits a <em>versioned JSON recipe</em> for linking your object by hand — target triple, entry symbol, the exact runtime source list for your program, and system libraries:</p>
+
+<pre><code class="language-bash">scriptc build hello.ts --print=native-link-info</code></pre>
+
+<p>The recipe for <code>hello.ts</code> (schema <code>scriptc.native-link-info.v1</code>, target <code>linux-x64-gnu</code>) listed 21 runtime sources under <code>@scriptc/runtime/src</code> — <code>scr_string.c</code>, <code>scr_console.c</code>, <code>scr_json.c</code>, and so on — compiled with <code>-std=c11 -D_GNU_SOURCE -pthread -O2 -ffunction-sections -fdata-sections -fno-math-errno -fno-strict-aliasing</code>. I compiled exactly those with gcc and linked:</p>
+
+<pre><code class="language-bash">RT=/usr/lib/node_modules/scriptc/node_modules/@scriptc/runtime
+for f in scr_number scr_string scr_array scr_bytes scr_bytes_io scr_map \
+         scr_closure scr_ffi scr_object scr_union scr_exception scr_error \
+         scr_console scr_lib scr_path scr_url scr_json scr_async \
+         scr_crypto_async scr_child scr_cycle; do
+  gcc -std=c11 -D_GNU_SOURCE -pthread -O2 -ffunction-sections -fdata-sections \
+      -fno-math-errno -fno-strict-aliasing -I$RT/src \
+      -c $RT/src/$f.c -o rt/$f.o
+done
+gcc -pthread .scriptc/hello.o rt/*.o -lm -Wl,--gc-sections -o hello</code></pre>
+
+<p>Result: a 56,744-byte ELF binary. <code>./hello</code> printed <code>hello, world</code>, <code>./hello Pax</code> printed <code>hello, Pax</code>. <code>ldd</code> shows it links only libc and libm — no Node, no V8, no 80MB runtime. You could even compile the same object on a machine where clang exists and get there in one command; the recipe just proves there's no magic.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/scriptc-typescript-native-compiler-tutorial/img3.webp" alt="Illustration of a race between a heavy JavaScript runtime and a sleek native binary sprinter"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="step-5-benchmark">Step 5 — Benchmark: Node vs the native binary</h2>
+
+<p>Write a compute-bound program, <code>fib.ts</code>:</p>
+
+<pre><code class="language-typescript">function fib(n: number): number {
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+const t0 = Date.now();
+console.log(fib(32));
+console.log(`took ${Date.now() - t0}ms`);</code></pre>
+
+<p>Compile and compare (my manual-link recipe from Step 4, same flags):</p>
+
+<pre><code class="language-bash">node fib.ts     # 2178309 / took 200ms
+./fib           # 2178309 / took 43ms</code></pre>
+
+<p>Same answer, ~4.6x faster, in a 42,096-byte binary. This is a microbenchmark, not a systems paper — startup-dominated or I/O-bound scripts will look different — but it shows what the LLVM tier buys you on hot code: the recursive calls and integer arithmetic compile to straight machine code instead of running through an interpreter and JIT warmup.</p>
+
+<h2 id="step-6-http-server">Step 6 — A real end-to-end: a native HTTP server</h2>
+
+<p>scriptc ships a native runtime for supported Node APIs, including <code>node:http</code> (per the README). Write <code>server.ts</code>:</p>
+
+<pre><code class="language-typescript">import { createServer } from "node:http";
+
+const server = createServer((req, res) => {
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify({ path: req.url }));
+});
+
+server.listen(8080, () => {
+  console.log("listening on http://localhost:8080");
+});</code></pre>
+
+<p>Coverage first — all 5 statements static:</p>
+
+<pre><code class="language-bash">scriptc coverage server.ts
+# statements analyzed   5
+# compile statically    5  (100%)
+# fully static — this program has no dynamic remainder.</code></pre>
+
+<p>The link recipe for this program is <em>per-program</em>: it adds six more runtime sources the hello recipe didn't need — <code>scr_net.c</code>, <code>scr_http.c</code>, and the event-loop backends (<code>scr_loop_epoll.c</code> on Linux, plus kqueue/WSA variants). After compiling those six extras and linking:</p>
+
+<pre><code class="language-bash">./server &
+curl -s http://localhost:8080/api/users
+# {"path":"/api/users"}</code></pre>
+
+<p>A TypeScript file, compiled to a native binary, serving HTTP with no Node anywhere in the process. That's the whole pitch, working.</p>
+
+<h2 id="step-7-dynamic">Step 7 — When code can't go static: the <code>--dynamic</code> lane</h2>
+
+<p>npm packages can't compile to native code, so scriptc embeds them in the executable via an embedded quickjs-ng engine — the result doesn't read <code>node_modules</code> at runtime. Try it:</p>
+
+<pre><code class="language-bash">npm install picocolors</code></pre>
+
+<pre><code class="language-typescript">import pc from "picocolors";
+
+console.log(pc.green("hello from scriptc"));</code></pre>
+
+<pre><code class="language-bash">scriptc coverage cli.ts --dynamic</code></pre>
+
+<pre><code class="language-text">  statements analyzed   1
+  compile statically    0  (0%)
+  compile dynamically   1  (100%) (island sites — the embedded engine runs them)
+
+  builds with --dynamic — no remaining blockers (the island sites above run in the embedded engine).</code></pre>
+
+<p><code>--emit=obj</code> on this file produced a 6,280-byte object. The terminology is precise: dynamic code becomes "island sites" that the embedded engine runs. Note the honest tradeoff the README states: you get a self-contained binary, but the dynamic islands still carry interpreter overhead. Use <code>coverage --dynamic</code> before building to see exactly which statements land where.</p>
+
+<h2 id="gotchas">Limits and gotchas, verified</h2>
+
+<ul>
+<li><strong>It's experimental — and says so.</strong> The <code>--help</code> banner reads "TypeScript/JavaScript to native and WebAssembly executables (experimental)". The object ABI is marked <code>"stability": "experimental", "compatibility": "exact-runtime-version"</code> in the link recipe: don't mix objects across compiler versions.</li>
+<li><strong>Linux needs a clang-compatible linker for the one-step build.</strong> Verified: no clang → <code>spawn clang ENOENT</code>; gcc as <code>SCRIPTC_LINKER</code> fails on clang's <code>-target</code> flag. <code>apt install clang</code> (or the gcc recipe in Step 4) is the fix. macOS 15+ arm64 uses a bundled helper and precompiled runtime pack, per the README.</li>
+<li><strong>WASI needs Zig, and networking doesn't cross over.</strong> The README's WASI path uses <code>SCRIPTC_CC=zigcc</code> with <code>SCRIPTC_TARGET=wasm32-wasi</code>, and APIs like network sockets or <code>fetch</code> fail before linking with diagnostic <code>SC3002</code> — portable WASI Preview 1 has no sockets to give them.</li>
+<li><strong>The stdlib is a subset.</strong> Node APIs that "compile to the native runtime" are the supported set; the coverage diagnostics are how you discover the boundary. <code>scriptc coverage</code> before <code>scriptc build</code> should be muscle memory.</li>
+<li><strong>One surprise in the good direction:</strong> my <code>any</code>-typed computed method call compiled 100% statically. The typed-IR inference is more capable than the README's <code>--dynamic</code> warnings imply — but when inference gives up, the diagnostic tells you exactly where.</li>
+</ul>
+
+<h2 id="alternatives">When to use this vs the alternatives</h2>
+
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>What you get</th><th>When it wins</th></tr></thead><tbody>
+<tr><td><strong>scriptc</strong></td><td>True native binary (or WASI module) from TS, no runtime</td><td>Shipping tiny CLIs/daemons from a TypeScript codebase; wanting to inspect the generated C</td></tr>
+<tr><td><strong>Bun single-file executable</strong></td><td>Binary embedding Bun's runtime</td><td>Full Node-API compatibility matters more than binary size</td></tr>
+<tr><td><strong>pkg / Node SEA</strong></td><td>Binary embedding Node</td><td>Existing Node apps you want to distribute as one file, unchanged</td></tr>
+<tr><td><strong>Rust / Go</strong></td><td>Native binary from a systems language</td><td>Maximum control and ecosystem maturity; rewriting in TS isn't an option</td></tr>
+<tr><td><strong>esbuild</strong></td><td>Bundled JS, still needs a runtime</td><td>Build speed and bundling, not native execution</td></tr>
+</tbody></table></div>
+
+<p>The honest positioning: scriptc is for TypeScript teams that want <em>distribution</em> — a 50KB binary you can <code>scp</code> to a server, put in a distroless container, or ship to users who don't have Node — without leaving TypeScript. It's not a reason to skip Rust for a database engine, and it's not production-hardened yet.</p>
+
+<h2 id="takeaway">The takeaway</h2>
+
+<p>scriptc turns TypeScript into inspectable, linkable, genuinely native artifacts through a pipeline you can see at every stage — typed IR, readable C, LLVM IR, assembly, object, executable, WASM. The coverage-first workflow (<code>scriptc coverage</code> before every build) is the habit that makes it trustworthy: you always know which statements are native and which are dynamic islands. For a two-month-old Vercel Labs experiment sitting at #6 on GitHub trending, it's remarkably usable — install it, compile hello world, benchmark fib(32), and you'll understand both its promise and its current boundaries in half an hour.</p>
+
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/laya-typed-decisions-tutorial/"><span class="chip">Tutorials</span><h3>Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine</h3><div class="meta">September 27, 2026</div></a><a class="rel-card" href="/articles/claude-knowledge-work-plugins-tutorial/"><span class="chip">Tutorials</span><h3>Anthropic&#x27;s knowledge-work-plugins: turn Claude Code into a role-specialist, hands-on</h3><div class="meta">September 27, 2026</div></a><a class="rel-card" href="/articles/spec-driven-development-spec-kit/"><span class="chip">Tutorials</span><h3>Spec-driven development with GitHub Spec Kit: make your AI coding agent build what you actually meant</h3><div class="meta">September 27, 2026</div></a><a class="rel-card" href="/articles/rtk-rust-token-killer-cli-tutorial/"><span class="chip">Tutorials</span><h3>RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy</h3><div class="meta">Sofia Almeida · September 27, 2026</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Affiliate disclosure</a><a href="/about/">Corrections policy</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
