@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy — AI Frontier Post</title>
+<meta name="description" content="RTK (81,000+ GitHub stars) is a single Rust binary that compresses shell output before your coding agent reads it. Install it, measure real 41–74% output reductions on your own repo, and wire it into Claude Code with one hook.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/rtk-rust-token-killer-cli-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy">
+<meta property="og:description" content="RTK (81,000+ GitHub stars) is a single Rust binary that compresses shell output before your coding agent reads it. Install it, measure real 41–74% output reductions on your own repo, and wire it into Claude Code with one hook.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/rtk-rust-token-killer-cli-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/rtk-rust-token-killer-cli-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "RTK: cut your AI agent's token burn with a Rust CLI output proxy", "description": "RTK (81,000+ GitHub stars) is a single Rust binary that compresses shell output before your coding agent reads it. Install it, measure real 41–74% output reductions on your own repo, and wire it into Claude Code with one hook.", "datePublished": "2026-09-27", "dateModified": "2026-09-27", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/rtk-rust-token-killer-cli-tutorial/"}, "image": "https://aifrontierpost.com/articles/rtk-rust-token-killer-cli-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy</h1>
+<p class="lede">Every time your coding agent runs a shell command, the full output lands in its context window: the 40-line git status, the 3,000-line test log, the directory listing with every timestamp and permission flag. None of it was designed for a model to read, and all of it costs you input tokens. RTK — the Rust Token Killer — sits between your agent and the shell and compresses that output before the model ever sees it. It is a single binary with zero dependencies, it covers 100+ dev commands, and on this week's runs I measured 41–74% smaller outputs at ~10ms of overhead. Here is how to install it, measure it honestly, and wire it into your agent so every shell call gets cheaper.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · September 27, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/rtk-rust-token-killer-cli-tutorial/cover.webp" alt="Editorial illustration: a metallic compression filter squeezing wide streams of terminal output into a single dense data stream, cyan and amber on dark navy"></figure>
+<div class="article-body">
+
+
+<h2 id="why-now">Why this is blowing up now</h2>
+
+<p>RTK (<a href="https://github.com/rtk-ai/rtk" rel="noopener">rtk-ai/rtk</a>, Apache-2.0) started 2026-01-22 and now sits at <strong>81,838 stars and 5,190 forks</strong>, with commits landing daily and releases shipping at a relentless pace — v0.50.0 went out on 2026-09-24, and the version string in the README already lags behind it. It ranks on GitHub's trending AI lists this week alongside agent harnesses and memory layers, because it attacks the most boring line item on every agent bill: the noise in shell output.</p>
+
+<p>The insight is simple. Tools like <code>git diff</code>, <code>ls</code>, <code>pytest</code>, and <code>npm test</code> were designed for human terminal readability: progress spinners, ASCII headers, repeated success lines, decorative separators. Fed straight into an LLM, that decoration becomes thousands of input tokens that carry zero signal. RTK applies four deterministic strategies per command — smart filtering, grouping, truncation, and deduplication — and hands the agent only what it can act on.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/rtk-rust-token-killer-cli-tutorial/img2.webp" alt="Illustration of the RTK pipeline: an agent's wide noisy output stream squeezed through a filter into a narrow clean stream delivered to a terminal"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="what-you-need">What you'll need</h2>
+
+<ul>
+<li>A Linux, macOS, or Windows machine — RTK ships pre-built binaries for all three.</li>
+<li>A terminal and a git repo to experiment on. No account, no API key, no GPU, no model downloads. The binary is a few megabytes; nothing phones home by default (telemetry is opt-in — verified below).</li>
+<li>About 20 minutes. If you use Claude Code, Cursor, or a similar agentic coding tool, you will also wire in a hook in the final step — but every measurement in this tutorial works without any agent at all.</li>
+</ul>
+
+<h2 id="step-1-install">Step 1 — Install the binary</h2>
+
+<p>Pick your platform. These are the project's own documented paths; I used the Linux quick-install for this tutorial and it dropped a working <code>rtk 0.50.0</code> into <code>~/.local/bin</code> in seconds.</p>
+
+<p><strong>macOS (Homebrew, recommended by the project):</strong></p>
+<pre><code class="language-bash">brew install rtk</code></pre>
+
+<p><strong>Windows (winget):</strong></p>
+<pre><code class="language-bash">winget install rtk-ai.rtk</code></pre>
+
+<p><strong>Linux / macOS (quick install):</strong></p>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+# installs to ~/.local/bin; add it to PATH if needed:
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc</code></pre>
+
+<p>Prefer not to pipe a script to your shell? Grab the tarball for your platform from the <a href="https://github.com/rtk-ai/rtk/releases" rel="noopener">releases page</a> (<code>rtk-x86_64-unknown-linux-musl.tar.gz</code> on Linux, <code>.zip</code> on Windows) and drop the single binary on your PATH. Rust developers can <code>cargo install --git https://github.com/rtk-ai/rtk</code>.</p>
+
+<p>Verify the install — and watch out for one gotcha:</p>
+<pre><code class="language-bash">rtk --version   # expect: rtk 0.50.0 (or newer; the README's 0.28.2 lags reality)
+rtk gain        # expect: the savings dashboard, or "No tracking data yet."</code></pre>
+
+<p>The gotcha: a different project also named <code>rtk</code> (Rust Type Kit) exists on crates.io. If <code>rtk gain</code> fails or prints something unrelated, you have the wrong binary — install from the GitHub releases instead. <code>rtk gain</code> working is the reliable identity check.</p>
+
+<h2 id="step-2-measure">Step 2 — Measure the savings yourself, honestly</h2>
+
+<p>Before trusting any percentage, measure it. Build a scratch repo with enough files to make the noise visible, then compare raw output against RTK's output byte-for-byte:</p>
+<pre><code class="language-bash">mkdir -p rtk-demo/src && cd rtk-demo
+git init -q
+for i in $(seq 1 25); do echo "# module $i" > src/mod_$i.py; done
+git add -A && git -c user.email=you@example.com -c user.name=you commit -qm init
+# make some edits so status/diff have something to chew on
+for i in 2 3 4 5 6 7; do echo "# edit $i" >> src/mod_$i.py; done</code></pre>
+
+<p>Now the comparison. I ran this on a Linux VM; your absolute numbers will differ, but the pattern holds:</p>
+<pre><code class="language-bash">git status | wc -c        # raw
+rtk git status | wc -c    # compact</code></pre>
+
+<p>Here is what I measured:</p>
+
+<table>
+<thead><tr><th>Command pair</th><th>Raw output</th><th>Via RTK</th><th>Reduction</th></tr></thead>
+<tbody>
+<tr><td><code>git status</code></td><td>529 B</td><td>153 B</td><td><strong>71%</strong></td></tr>
+<tr><td><code>ls -la src</code> → <code>rtk ls src</code></td><td>1,417 B</td><td>366 B</td><td><strong>74%</strong></td></tr>
+<tr><td><code>git log</code></td><td>116 B</td><td>34 B</td><td><strong>71%</strong></td></tr>
+<tr><td><code>git diff</code></td><td>870 B</td><td>511 B</td><td><strong>41%</strong></td></tr>
+</tbody>
+</table>
+
+<p>Two things worth understanding before you quote those numbers. First, RTK measures reductions <em>in bash output</em>, not in your total bill — the README is explicit about this, and it is right: command output is one contributor to input tokens alongside the system prompt, the conversation, and everything else the agent reads. A 70% smaller <code>git status</code> is real savings; it is not a 70% smaller invoice.</p>
+
+<p>Second, RTK estimates tokens as <code>bytes ÷ 4</code> — it ships no tokenizer. Treat the percentages as reliable and the absolute token counts as approximate. The project's own docs say exactly this, and the dashboard you will see in Step 5 labels them as estimates.</p>
+
+<h2 id="step-3-daily-verbs">Step 3 — Learn the daily verbs</h2>
+
+<p>RTK is a proxy: you prefix the command you would have run, and it runs it, filters the output, and prints the compact version. The coverage is broad — the built-in command list spans files, git, GitHub/GitLab CLIs, test runners, linters, package managers, Docker, kubectl, AWS, and databases. The verbs you will reach for most:</p>
+
+<pre><code class="language-bash">rtk ls src                 # compact tree: name + size, no permission/timestamp noise
+rtk tree .                 # project structure, token-optimized
+rtk read src/mod_2.py      # smart file reading: structure over full bodies
+rtk read src/mod_2.py -l aggressive   # signatures only, bodies stripped
+rtk grep -r "edit" src     # matches grouped by file, long lines truncated
+rtk diff a.py b.py         # condensed diff (exit codes: 0 identical, 1 different, 2 read error)</code></pre>
+
+<p>Git gets the most polish:</p>
+<pre><code class="language-bash">rtk git status             # compact stat format, grouped by state
+rtk git log                # hash, author, subject only
+rtk git diff               # condensed diff, context trimmed, headers stripped
+rtk git add .              # -> "ok"
+rtk git commit -m "msg"    # -> "ok abc1234"
+rtk git push               # -> "ok main"</code></pre>
+
+<p>One honest behavioral note: RTK is a <em>faithful</em> proxy, which means it inherits native quirks. <code>rtk grep "edit" .</code> fails with "Is a directory" exactly like <code>grep "edit" .</code> does — pass <code>-r</code>, or use <code>rtk rg</code> if you have ripgrep. It does not try to outsmart the tool; it shrinks what the tool prints.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/rtk-rust-token-killer-cli-tutorial/img3.webp" alt="Illustration of an efficiency gauge with document icons shrinking into small token chips"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="step-4-test-runners">Step 4 — Collapse your test output</h2>
+
+<p>Test logs are the worst offender in agent workflows: a green suite prints hundreds of identical <code>PASSED</code> lines, and the one failure drowns in them. RTK's answer is failures-only output. Set up a tiny suite with one failure:</p>
+<pre><code class="language-bash">mkdir -p tests
+printf 'def test_a(): assert 1 + 1 == 2\n' > tests/test_a.py
+printf 'def test_b(): assert 1 + 1 == 3\n' > tests/test_b.py
+python -m pytest -q          # raw: full traceback + summary
+rtk test python -m pytest -q # failures only</code></pre>
+
+<p>Raw output: 528 bytes of dots, tracebacks, and summary. RTK's version:</p>
+<pre><code class="language-text">[FAIL] FAILURES:
+  FAILED tests/test_b.py::test_b - assert (1 + 1) == 3
+
+SUMMARY:
+  1 failed, 1 passed in 0.05s
+
+[full output: rtk recall 00f80e519e92]</code></pre>
+
+<p>152 bytes — a 71% reduction — and nothing lost that matters: the failing test, the assertion, and the summary are all there. And that last line is the escape hatch: RTK stores the full output locally, so when you need the complete traceback you recover it by content hash:</p>
+<pre><code class="language-bash">rtk recall 00f80e519e92   # prints the full original output</code></pre>
+
+<p>I verified <code>rtk recall</code> restores the complete unfiltered log. This is the design decision that makes aggressive filtering safe: the compact output is the default, the full output is one command away. <code>rtk test</code> works with any command, not just pytest — the same pattern covers <code>rtk pytest</code>, <code>rtk jest</code>, <code>rtk vitest</code>, <code>rtk cargo test</code>, and <code>rtk go test</code> when those runners are on your PATH.</p>
+
+<h2 id="step-5-dashboard">Step 5 — Read the savings dashboard</h2>
+
+<p>RTK tracks every proxied command in a local SQLite database and reports cumulative savings. This is where the "up to 90%" marketing claim becomes something you can audit on your own machine:</p>
+<pre><code class="language-bash">rtk gain</code></pre>
+<pre><code class="language-text">RTK Token Savings (Global Scope)
+════════════════════════════════════════════════════════════
+Total commands:    15
+Input tokens:      1.8K
+Output tokens:     1.0K
+Tokens saved:      763 (43.1%)
+Total exec time:   157ms (avg 10ms)
+Efficiency meter: ██████████░░░░░░░░░░░░░░ 43.1%
+
+By Command
+───────────────────────────────────────────────────────────────────────
+  #  Command                   Count  Saved  Total%    Time  Impact
+───────────────────────────────────────────────────────────────────────
+ 1.  rtk ls src                    2    430   70.0%    18ms  ██████████
+ 2.  rtk git status                2    150   74.3%    18ms  ███░░░░░░░
+ 3.  rtk git diff                  1    129   50.2%    13ms  ███░░░░░░░
+ ...</code></pre>
+
+<p>That is my real dashboard after this tutorial's measurements: 763 estimated tokens saved across 15 commands, at an average of 10ms overhead per call — the project's "&lt;10ms overhead" claim held up. <code>rtk gain --history</code> shows the same table; <code>rtk discover</code> goes further and scans your Claude Code history for commands you ran raw that RTK could have compressed.</p>
+
+<p>Privacy, since this tool watches your shell: tracking is local-only, and telemetry is opt-in. <code>rtk telemetry status</code> on a fresh install reports <code>consent: never asked / enabled: no</code>. Configuration lives in a plain TOML file (<code>~/.config/rtk/config.toml</code>) where you can tune ignored directories (<code>.git</code>, <code>node_modules</code>, <code>__pycache__</code> are excluded by default) and display options via <code>rtk config</code>.</p>
+
+<h2 id="step-6-hook">Step 6 — Wire it into your agent</h2>
+
+<p>Prefixing commands manually is fine for measurement; the real payoff is the hook. <code>rtk init</code> registers RTK with your coding agent so Bash calls get rewritten automatically — <code>git status</code> becomes <code>rtk git status</code> before it executes, and the agent receives compact output without ever typing <code>rtk</code> itself:</p>
+<pre><code class="language-bash">rtk init -g                    # Claude Code (global)
+rtk init -g --gemini           # Gemini CLI
+rtk init -g --codex            # Codex
+rtk init --agent cursor        # Cursor
+# also: windsurf, cline, kilocode, antigravity, kimi, pi, hermes,
+#       droid, vibe, omp, trae, opencode</code></pre>
+
+<p>I ran <code>rtk init -g</code> against a sandboxed home directory to see exactly what it does. It writes three things and then asks you to finish the wiring:</p>
+
+<ol>
+<li><strong><code>~/.claude/RTK.md</code></strong> — an awareness doc telling the agent its command output is condensed, to treat it as complete, and to re-run via <code>rtk proxy &lt;cmd&gt;</code> only when a result is unusable (empty when output was expected, contradicting its exit code, or garbled).</li>
+<li><strong>A <code>@RTK.md</code> reference</strong> appended to <code>~/.claude/CLAUDE.md</code>.</li>
+<li><strong>A PreToolUse hook</strong> — it prints the JSON to paste into <code>~/.claude/settings.json</code> (in interactive mode it offers to patch the file for you):
+<pre><code class="language-json">{
+  "hooks": { "PreToolUse": [{
+    "matcher": "Bash",
+    "hooks": [{ "type": "command",
+      "command": "rtk hook claude"
+    }]
+  }]}
+}</code></pre></li>
+</ol>
+
+<p>Then restart the agent and run <code>git status</code> — the hook rewrites it transparently. Two practical notes from testing: create <code>~/.claude</code> first if it does not exist (<code>rtk init</code> errors out otherwise), and know the hook's boundary — it only fires on Bash tool calls. Claude Code's built-in <code>Read</code>, <code>Grep</code>, and <code>Glob</code> tools do not pass through the Bash hook, so they are not auto-rewritten; for those workflows, call <code>rtk read</code>, <code>rtk grep</code>, or <code>rtk find</code> explicitly, or just use shell commands instead of the built-ins.</p>
+
+<h2 id="vs-alternatives">When to use RTK vs the alternatives</h2>
+
+<p><strong>vs ccusage / ccburn:</strong> those tools <em>monitor</em> your spend; RTK <em>reduces</em> the input side of it. They answer different questions ("where did my money go" vs "how do I spend less on shell output"), and they compose well — several Claude Code config guides recommend running both.</p>
+
+<p><strong>vs Headroom and context compressors:</strong> same problem space, different layer. Compressors summarize everything the agent reads — tool output, logs, conversation history, RAG chunks — often with a local model. RTK is deterministic, rule-based, and scoped to the shell boundary: no model, no latency beyond ~10ms, no subscription. Use RTK when the bloat is command output; reach for a compressor when the bloat is prose, history, or files the agent read directly.</p>
+
+<p><strong>vs prompt caching:</strong> orthogonal and complementary. Smaller tool outputs mean cheaper cache writes and reads, and the project's docs note RTK does not break prompt caching — filtered output is stored in history and cached normally.</p>
+
+<p><strong>vs doing nothing:</strong> if your agent sessions are short and your commands are small, the absolute savings are small too — RTK's own <code>rtk read</code> on a two-line file saved exactly zero bytes in my tests, correctly. The value compounds in long agentic sessions where the same noisy commands run dozens of times.</p>
+
+<h2 id="caveats">Caveats, stated plainly</h2>
+
+<ul>
+<li>The headline percentages are reductions in <strong>bash output</strong>, not in your total API bill. Command output is one input-token contributor among several; the README says this explicitly, and any tutorial that implies otherwise is misreading the tool.</li>
+<li>Absolute token numbers are <code>bytes ÷ 4</code> estimates. The percentages are the reliable part.</li>
+<li>Leave interactive commands alone — SSH sessions, REPLs, editors, and anything that needs a TTY. The filters are built for batch output.</li>
+<li>Make sure you have <em>this</em> rtk: the crates.io <code>rtk</code> (Rust Type Kit) is an unrelated project. <code>rtk gain</code> printing the savings dashboard is the identity check.</li>
+<li>The project moves fast — 371 releases at last count, and the README's version string already lagged the binary I installed (0.28.2 documented vs 0.50.0 installed). Pin or check <code>rtk --version</code> if a flag in this tutorial ever misbehaves; <code>rtk --help</code> is authoritative.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway</h2>
+
+<p>RTK does one thing — shrink the shell output your agent reads — and does it with a single dependency-free binary, per-command filters tuned for the dev tools you actually run, a recall hatch for the full output, and an honest dashboard that shows your own numbers instead of a marketing claim. Install it in minutes, measure it against your own repos the way this tutorial did, and if the percentages hold, wire in the hook and stop paying to transmit ASCII art to a model. That is the entire pitch, and it survives contact with a real terminal.</p>
+
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="rtk-rust-token-killer-cli-tutorial"></div><div class="comments" data-comments="rtk-rust-token-killer-cli-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/zvec-grep-semantic-code-search/"><span class="chip">Tutorials</span><h3>Search your codebase by meaning: a hands-on tutorial for zvec-grep (zg)</h3><div class="meta">September 27, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/prompt-compression-measured-guide/"><span class="chip">Tutorials</span><h3>Cut your prompt tokens in half: a measured guide to prompt compression</h3><div class="meta">September 27, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/claude-knowledge-work-plugins-tutorial/"><span class="chip">Tutorials</span><h3>Anthropic&#x27;s knowledge-work-plugins: turn Claude Code into a role-specialist, hands-on</h3><div class="meta">September 27, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/build-agent-skill-claude-skill-md-tutorial/"><span class="chip">Tutorials</span><h3>Teach Claude your workflow: build an Agent Skill with SKILL.md</h3><div class="meta">September 25, 2026 · 13 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Affiliate disclosure</a><a href="/about/">Corrections policy</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
