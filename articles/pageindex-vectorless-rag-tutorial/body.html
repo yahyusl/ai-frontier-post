@@ -1,0 +1,146 @@
+<p class="lede">PageIndex hit 37,000 GitHub stars this week by attacking the most boring part of RAG: it throws away the vector database. Instead of chunking your PDFs and embedding them, it builds a hierarchical tree of the document's actual structure — sections, subsections, pages — has an LLM write a summary for every node, and then sends an agent with tools to walk that tree when you ask a question. I ran the whole loop locally with my own model: indexed a five-page report, got a real section tree with summaries, and asked questions that came back with correct, section-cited answers. Here is the whole thing, hands-on.</p>
+
+<h2 id="why-now">Why this is trending now</h2>
+
+<p>The numbers when I read the repository on September 29, 2026: <strong>37,158 stars, 3,250 forks, 480 commits, 18 releases</strong>, MIT-licensed, from VectifyAI. It was sitting at #3 on GitHub's Python trending page the day I checked. The star count alone does not explain the excitement — the <em>idea</em> does.</p>
+
+<p>Every production RAG system today is a vector pipeline: parse, chunk, embed, store in a vector DB, retrieve top-k chunks, stuff them into a prompt. It works, but it has well-known failure modes — chunk boundaries that split a thought in half, embeddings that match on vibe rather than meaning, and retrieval that cannot see document structure at all. PageIndex's bet is that the structure of the document <em>is</em> the index. A financial report already has sections, headings, and pages; an agent that can navigate that hierarchy like a human reader does not need cosine similarity to find the revenue table.</p>
+
+<p>This is part of a broader 2026 swing away from "embed everything" retrieval. But PageIndex is the most complete open-source implementation of the alternative I have tested: deterministic layout-based tree extraction, LLM-written node summaries, and an agentic chat loop with real document tools. The August 2026 release added the piece that makes it tutorial-worthy: <strong>SDK local mode</strong>, which runs indexing, retrieval, and chat against your own LLM provider — including a model server on your own machine — with no PageIndex cloud account at all.</p>
+
+<h2 id="what-it-is">What PageIndex actually is</h2>
+
+<p>PageIndex is a Python library (<code>pip install pageindex</code>), not a platform. It has two halves:</p>
+
+<ol>
+<li><strong>Indexing</strong> — <code>client.submit_document("report.pdf")</code> parses the PDF, extracts a structural tree, and (optionally) has an LLM summarize every node. The default engine is called <strong>flash</strong>: tree extraction from layout statistics is fully deterministic and uses no LLM at all; the LLM only writes node summaries and runs a merge/expand optimization pass. A <code>standard</code> mode exists as the alternative engine. Only PDFs are accepted — PDF/A and PDF/X are explicitly not supported.</li>
+<li><strong>Chat</strong> — <code>client.chat("question", doc_id=doc_id)</code> runs an agent loop. The agent gets tools (<code>browse_documents</code>, <code>get_document_structure</code>, <code>get_page_content</code>) and walks the tree to answer, instead of receiving a pile of retrieved chunks. You can run it over OpenAI's Responses API, Anthropic's Messages API, or plain Chat Completions — the protocol is declared explicitly, never inferred.</li>
+</ol>
+
+<figure class="inline-art"><img class="story-image" src="/articles/pageindex-vectorless-rag-tutorial/img2.webp" alt="Illustration: a document page unfolding into a branching tree of summary nodes, with a crossed-out vector database icon suggesting retrieval without embeddings" loading="lazy"><figcaption>Illustration: PageIndex's core idea — the document's own hierarchy becomes the index, no vector database required. Generated for this article.</figcaption></figure>
+
+<p>The model routing is the part I want to highlight, because I verified it from the source. A bare model name like <code>"gpt-4o"</code> is routed to <code>openai/gpt-4o</code>; a provider prefix like <code>"anthropic/claude-..."</code> selects the vendor. But the escape hatch is what matters for self-hosting: <strong>any OpenAI-compatible endpoint works</strong>. Name your model <code>"openai/&lt;model-id&gt;"</code> and pass <code>{"base_url": "http://your-server:port/v1", "api_key": "x"}</code> as the backend, and both indexing and chat run against your server. I read this in <code>pageindex/local_api.py</code> and <code>pageindex/local_chat.py</code> before trusting it — and then proved it with a real server.</p>
+
+<div class="keypoint"><strong>The mental model:</strong> chunk-and-embed RAG asks "which chunks are similar to the question?" PageIndex asks "which <em>section</em> would a human open to answer this, and what does its summary say?" The tree is the retrieval index; the agent is the retriever.</div>
+
+<h2 id="setup">Setup: the library and a local model</h2>
+
+<p>This tutorial runs everything locally — no PageIndex account, no API keys to a hosted provider. You need Python 3.9+ and any OpenAI-compatible model server. I used <code>llama-server</code> from llama.cpp serving <strong>Qwen2.5-1.5B-Instruct (Q4_K_M)</strong> on <code>http://127.0.0.1:8080</code>. A 1.5B model is the floor, not the recommendation: it is slow (more on timings below) and you should use the biggest model your hardware allows. The point I am proving is that the architecture works with a small local model, not that a 1.5B model is ideal.</p>
+
+<pre><code class="language-bash">pip install pageindex
+# verify
+python -c "import pageindex; print(pageindex.__version__)"  # 0.2.20</code></pre>
+
+<p>Start your model server with an OpenAI-compatible endpoint. With llama.cpp:</p>
+
+<pre><code class="language-bash">llama-server -m Qwen2.5-1.5B-Q4_K_M.gguf \
+  --host 127.0.0.1 --port 8080 -c 4096 --jinja -t 2</code></pre>
+
+<p>Check it answers before going further:</p>
+
+<pre><code class="language-bash">curl http://127.0.0.1:8080/health
+# {"status":"ok"}</code></pre>
+
+<div class="keypoint"><strong>Networking gotcha I hit:</strong> if your shell has a proxy configured, the PageIndex client talks to your model server through it and fails. LiteLLM/httpx honor <code>NO_PROXY</code>, but the stock value in many sandboxes (<code>[::1]</code>) does not cover IPv4 localhost the way httpx expects. Export <code>NO_PROXY="localhost,127.0.0.1"</code> (and lowercase <code>no_proxy</code>) before running anything below. This cost me twenty minutes.</div>
+
+<h2 id="indexing">Step 1: index a document, get a tree back</h2>
+
+<p>Indexing needs two configurations: which model writes the summaries, and where that model lives. Here is the exact code I ran:</p>
+
+<pre><code class="language-python">from pageindex import PageIndexClient
+
+BACKEND = {"api_base": "http://127.0.0.1:8080/v1", "api_key": "x"}
+
+client = PageIndexClient(
+    index={"model": "openai/qwen", "backend": BACKEND},
+)
+
+res = client.submit_document("meridian_solar_2025.pdf")
+doc_id = res["doc_id"]   # e.g. "pi-a6ef5619e01a41d0874b2add66d1de2f"</code></pre>
+
+<p>A note on the model string: <code>"openai/qwen"</code> does <em>not</em> mean OpenAI hosts it. The <code>openai/</code> prefix selects the OpenAI-protocol driver, and <code>api_base</code> in the backend redirects that driver to your local server. The <code>api_key</code> can be any non-empty string for a local server that does not authenticate.</p>
+
+<p>My test document was a five-page operations report I generated for this tutorial (text-based PDF with real headings and PDF bookmarks). Flash indexing took just under five minutes on a 2-vCPU machine with the 1.5B model — the layout analysis is instant; the time is all LLM summary calls, one per node. Then:</p>
+
+<pre><code class="language-python">tree = client.get_tree(doc_id, node_summary=True)
+
+def walk(nodes, depth=0):
+    for n in nodes:
+        print("  " * depth + f"{n['node_id']} | {n['title']}")
+        walk(n.get("nodes", []), depth + 1)
+
+walk(tree["result"])</code></pre>
+
+<p>And the output — a genuine document tree, each node carrying a summary written by the local model:</p>
+
+<pre><code class="language-text">0000 | Preface
+0001 | Generation Performance
+0002 | Maintenance and Reliability
+0003 | Financial Summary
+0004 | Risk Factors</code></pre>
+
+<p>For example, node <code>0001</code>'s summary read: <em>"In 2025, the generation fleet achieved a total net generation of 842 gigawatt-hours, exceeding the 792 gigawatt-hour target by 6.2 percent. Plant-level results…"</em> — accurate against the source PDF. Two details worth knowing: <code>get_tree</code> hides summaries unless you pass <code>node_summary=True</code> (I stared at summary-less output for a while before reading the signature), and the <code>Preface</code> node is PageIndex's own convention — when the detected hierarchy starts after page 1, the leading pages get a Preface node, exactly as documented in the flash API.</p>
+
+<p>One more honest observation: flash consumed my PDF's embedded bookmarks as the section frame (its <code>use_embedded_toc</code> behavior), which is why the tree is this clean. On a PDF without bookmarks it falls back to pure layout detection, and on a document with no detectable hierarchy at all it degrades to one node per page. The tree quality follows the document's own structure — garbage in, flat tree out.</p>
+
+<h2 id="chat">Step 2: ask questions — the agent walks the tree</h2>
+
+<p>Chat is configured the same way, with one extra decision: the protocol. <code>protocol="chat_completions"</code> is the plain answer lane (it is also the default); <code>"responses"</code> and <code>"messages"</code> drive the agent natively over OpenAI's Responses API or Anthropic's Messages API, which matters if you want tool-call history to round-trip. For a local server, Chat Completions is the lane:</p>
+
+<pre><code class="language-python">client = PageIndexClient(
+    chat={"model": "openai/qwen",
+          "backend": {"base_url": "http://127.0.0.1:8080/v1",
+                      "api_key": "x"}},
+)
+
+answer = client.chat(
+    "Which plant produced the most electricity in 2025 and how much?",
+    doc_id=doc_id,
+    protocol="chat_completions",
+)</code></pre>
+
+<p>Two things I learned here. First, <code>protocol</code> is a parameter of the <code>chat()</code> <em>call</em>, not of the client configuration — putting it in the <code>chat={...}</code> dict raises <code>PageIndexAPIError: Unknown chat keys</code>. Second, with <code>protocol="chat_completions"</code> the return value is the full Chat Completions envelope (<code>choices</code>/<code>usage</code>), not a bare string — pull the text out of <code>resp["choices"][0]["message"]["content"]</code>. Omit <code>protocol</code> entirely and you get the bare answer string; the docs describe the no-protocol lane as "thin sugar over the same engine."</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/pageindex-vectorless-rag-tutorial/img3.webp" alt="Illustration: a laptop on a desk at night showing a document tree and chat answers, wrapped in a privacy shield glow beside a small local server" loading="lazy"><figcaption>Illustration: the full loop running locally — your documents, your model server, your machine. Generated for this article.</figcaption></figure>
+
+<p>The answers, from the 1.5B local model, after the agent walked the tree with its tools:</p>
+
+<p><strong>Q: Which plant produced the most electricity in 2025 and how much?</strong><br>
+A: <em>"The 'Generation Performance' section of the document shows that the Copper Flats facility in Arizona generated 391 gigawatt-hours, which surpassed its target by 9.1 percent due to an inverter retrofit completion in March…"</em> — correct, and it cited the section it read.</p>
+
+<p><strong>Q: What happened at Del Sol in June and how many hours did it account for?</strong><br>
+A: <em>"…hail damage in June, which caused two strings to be offline for eleven days. Therefore, the total downtime accounted for 96 hours in June."</em> — correct on both facts.</p>
+
+<p>Both answers are grounded in the document text, both name their source section, and both survived my fact-check against the PDF. The agent did not receive any chunks — it navigated the tree with <code>get_document_structure</code> and <code>get_page_content</code> and composed from what it read.</p>
+
+<h2 id="timings">Timings and the small-model caveat</h2>
+
+<p>Full honesty on cost, measured on a 2-vCPU cloud VM with Qwen2.5-1.5B-Q4_K_M on CPU:</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Step</th><th>Time</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Flash indexing (5 pages, 5 nodes)</td><td>~5 min</td><td>Layout analysis is instant; all time is LLM summary calls</td></tr>
+<tr><td>Question 1 (multi-section answer)</td><td>~7 min</td><td>Several agent turns, each a full local inference</td></tr>
+<tr><td>Question 2 (single-section answer)</td><td>~2.5 min</td><td>Fewer turns needed</td></tr>
+</tbody>
+</table></div>
+
+<p>A GPU, a larger model, or a hosted API would collapse these numbers — the architecture parallelizes summary calls (<code>summary_concurrency</code> is a real parameter) and I was running everything on two CPU cores. But the small-model caveat is real and you should hear it: during an earlier run, the same 1.5B model wrote a node summary that said "2024" where the document said "2025". The <em>tree and the retrieved text are deterministic and exact</em>; the <em>summaries and answers are model-generated</em> and inherit whatever model you plug in. Size your model to your accuracy bar. Nothing about PageIndex fixes a weak model — it just gives a good model better scaffolding to climb.</p>
+
+<h2 id="limits">Limitations worth knowing before you commit</h2>
+
+<ul>
+<li><strong>PDF-only.</strong> The local pipeline accepts PDF files and nothing else. Scanned/image PDFs need OCR upstream — flash will tell you the tree is unreadable.</li>
+<li><strong>Structure-dependent.</strong> The tree is only as good as the document's own hierarchy. Well-structured reports shine; a 200-page dump of unstructured text degrades toward one-node-per-page.</li>
+<li><strong>Agentic chat needs tool-calling.</strong> The chat loop is a real agent — your model must reliably emit tool calls. A 1.5B model managed it here, but barely; this is the strongest argument for using a capable model for chat even if you index with a small one (the library supports different models per slot).</li>
+<li><strong>The cloud path exists too.</strong> If local operation is not your goal, the managed API (<code>PageIndexClient(api_key=...)</code>) has a free tier with trial credits and is the documented quick start. I verified the local path because "runs on your own models" is the interesting claim.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway</h2>
+
+<p>PageIndex earned its trending spot with a genuinely different answer to document QA: no embeddings, no vector store, no chunking heuristics. Parse the document into the tree it already is, summarize every node, and let an agent walk it. I ran that entire loop on my own hardware with a 1.5B local model — indexing produced a clean five-node tree with accurate summaries, and both test questions came back correct with section citations.</p>
+
+<p>It is not magic and it is not model-independent: the summaries and answers are only as good as the LLM you attach, and the tree is only as good as your document's structure. But as scaffolding, it is the most convincing alternative to chunk-and-embed RAG I have run hands-on. If you have a folder of structured documents people keep asking questions about — reports, manuals, filings — this is worth an afternoon. Start local, prove the tree quality on your own PDFs, and only then decide whether you need the managed cloud.</p>
+
+<p><em>Links: <a href="https://github.com/VectifyAI/PageIndex">VectifyAI/PageIndex on GitHub</a> · <a href="https://docs.pageindex.ai/">docs.pageindex.ai</a> · I verified this tutorial against pageindex 0.2.20 (PyPI) and the repository state of September 29, 2026, running SDK local mode against a local llama.cpp server (Qwen2.5-1.5B-Q4_K_M).</em></p>
