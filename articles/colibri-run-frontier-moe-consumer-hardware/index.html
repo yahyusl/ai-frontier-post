@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri — AI Frontier Post</title>
+<meta name="description" content="Colibri streams frontier MoE models — 744B to 2.8T parameters — from your own disk in pure C with zero dependencies. Build the engine, verify the launcher, fetch a model container, and chat — plus the Brio mode trick that scores answers without generating them.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/colibri-run-frontier-moe-consumer-hardware/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri">
+<meta property="og:description" content="Colibri streams frontier MoE models — 744B to 2.8T parameters — from your own disk in pure C with zero dependencies. Build the engine, verify the launcher, fetch a model container, and chat — plus the Brio mode trick that scores answers without generating them.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/colibri-run-frontier-moe-consumer-hardware/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/colibri-run-frontier-moe-consumer-hardware/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri", "description": "Colibri streams frontier MoE models — 744B to 2.8T parameters — from your own disk in pure C with zero dependencies. Build the engine, verify the launcher, fetch a model container, and chat — plus the Brio mode trick that scores answers without generating them.", "datePublished": "2026-09-28", "dateModified": "2026-09-28", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/colibri-run-frontier-moe-consumer-hardware/"}, "image": "https://aifrontierpost.com/articles/colibri-run-frontier-moe-consumer-hardware/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri</h1>
+<p class="lede">What if a 744-billion-parameter model ran on hardware you already own? <strong>Colibri</strong>'s tiny engine keeps the dense weights in RAM and streams the routed experts from disk — frontier MoE inference in pure C, no GPU required, no API, no hyperscaler.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · September 28, 2026 · 10 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/colibri-run-frontier-moe-consumer-hardware/cover.webp" alt="Editorial illustration: a tiny hummingbird hovering in front of a giant glowing neural-network brain made of layered circuit patterns, dark navy background with teal and amber glow"></figure>
+<div class="article-body">
+<p>A 744-billion-parameter model does not fit on your machine. That sentence is true and useless — because a Mixture-of-Experts model never <em>uses</em> all its parameters at once. <strong>Colibri</strong> (<a href="https://github.com/JustVugg/colibri">JustVugg/colibri</a>, Apache-2.0, <strong>38,100+ GitHub stars</strong>) exploits exactly that: GLM-5.2's 744B parameters activate only ~40B per token, and of those, only about 11 GB change from token to token. So Colibri keeps the dense part — attention, shared experts, embeddings, ~17B params — resident in RAM at int4 (~9.9 GB), and streams the 19,456 routed experts from disk (~370 GB) on demand. A JIT, but for weights: measured routing heat drives a per-layer LRU cache, a learned pinned hot-store, and a router lookahead that predicts the next layer's experts with 71.6% accuracy.</p>
+
+<p>Nine model families run today — GLM-5.2/5.3 (744B), GLM-5.3-Flash (321B, vision), Inkling (975B), Kimi K3 (2.8T), DeepSeek V4 Flash (284B), DeepSeek V4.1 Flash (552B, vision), Qwen3.8-Flash-Next (125B), Qwen3.6 (35B-A3B), and OLMoE (7B) — through the same <code>coli chat</code> / <code>coli serve</code> / <code>coli web</code> front end. This tutorial builds the engine from source (I did it in 6 seconds), verifies the launcher, picks a model that fits your disk, and runs it — including Brio mode, the feature that scores closed questions without generating a single token.</p>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><code>gcc</code> (or clang) with OpenMP — or skip compiling and grab a prebuilt release below</li>
+<li>Python 3 — only for the <code>coli</code> launcher and the one-time model converter; the engine itself is pure C with zero dependencies</li>
+<li>Disk and RAM for the model you choose: the accessible path is <strong>OLMoE</strong> (~7 GB disk, 8 GB RAM); the full experience is <strong>GLM-5.2</strong> (~372 GB disk, 16 GB RAM minimum)</li>
+<li>No GPU. None of the models require one — a GPU only ever makes it faster</li>
+</ul>
+
+<h2 id="step-1">Step 1 — Get the engine: build it yourself<a class="anchor" href="#step-1" aria-label="Link to section">#</a></h2>
+<p>Colibri's engine is one C file per model family (<code>c/colibri.c</code>, <code>c/olmoe.c</code>, …) plus small headers. No BLAS, no Python at runtime, no GPU required. Clone and build the OLMoE engine — the smallest one, and the one I built myself:</p>
+<pre><code class="language-bash">git clone https://github.com/JustVugg/colibri && cd colibri
+make -C c olmoe</code></pre>
+<p>On a 2-core VM with gcc 13.3 that finished in about six seconds with a single compile line:</p>
+<pre><code class="language-text">gcc -O3 -march=native -fopenmp -pthread -Wall -Wextra olmoe.c -o olmoe -lm -fopenmp -pthread</code></pre>
+<p>The result is a <strong>197 KB</strong> binary. Run it bare and it tells you it is not the program you run directly — the launcher is:</p>
+<pre><code class="language-text">colibri: this is the OLMoE engine, and it was started without a model.
+The engine is not the program you run directly -- the launcher is:
+
+    ./coli chat  --model &lt;model directory&gt;    interactive chat
+    ./coli serve --model &lt;model directory&gt;    OpenAI-compatible API
+    ./coli web   --model &lt;model directory&gt;    API plus the dashboard
+    ./coli doctor --model &lt;model directory&gt;   check a model is usable</code></pre>
+<p>Prefer not to compile? Download a prebuilt release (Linux, macOS, Windows — no compiler needed) and unpack it:</p>
+<pre><code class="language-bash">mkdir colibri && tar xzf colibri-v1.8.0-linux-x86_64.tar.gz -C colibri && cd colibri
+python3 coli info                         # engine ready ✓</code></pre>
+<p>From a source checkout, <code>./setup.sh</code> checks gcc/OpenMP, builds, and self-tests, and <code>pip install -e .</code> puts <code>coli</code> on your PATH.</p>
+
+<h2 id="step-2">Step 2 — Verify the launcher<a class="anchor" href="#step-2" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">cd colibri/c && python3 coli info</code></pre>
+<p>Output on my build:</p>
+<pre><code class="language-text">    (\      colibri v1.12.1
+     )·>     tiny engine, immense model
+    / \      9 model families · MoE experts streamed from disk · CPU
+             info
+
+  ──────────────────────────────────────────────────────────
+no model directory given.
+  pass --model &lt;dir&gt;, or set COLI_MODEL=&lt;dir&gt;</code></pre>
+<p>The launcher reads the model's <code>config.json</code> and picks the matching engine binary itself — the command line never changes between models.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/colibri-run-frontier-moe-consumer-hardware/img2.webp" alt="A three-tier memory pyramid: VRAM at top, RAM in middle, NVMe SSD at bottom, data streams feeding a central AI chip"><figcaption>AI-generated illustration for AI Frontier Post: Colibri's one memory hierarchy — VRAM, RAM, and storage as placement tiers for the same weights.</figcaption></figure>
+
+<h2 id="step-3">Step 3 — Get a model (the honest part)<a class="anchor" href="#step-3" aria-label="Link to section">#</a></h2>
+<p>This is the step where you choose how deep to go. Two paths:</p>
+<ul>
+<li><strong>The starter path — OLMoE (7B).</strong> Convert with the bundled tool into an ~7 GB int8 container, then run it with 8 GB of RAM:
+<pre><code class="language-bash">python3 c/tools/convert_olmoe_merged.py   # OLMoE → ~7 GB int8 container</code></pre></li>
+<li><strong>The full path — GLM-5.2 (744B).</strong> A pre-converted int4 <strong>group-scaled (gs64)</strong> container is on Hugging Face — about <strong>372 GB</strong>, so it wants a big fast disk:
+<pre><code class="language-text">https://huggingface.co/mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp</code></pre>
+Or convert from the FP8 source yourself, shard by shard, without ever needing the full 756 GB at once:
+<pre><code class="language-bash">./coli convert --model /nvme/glm52_i4</code></pre></li>
+</ul>
+<p>Two gotchas the README documents honestly, so you don't learn them the hard way. Use the <strong>gs64</strong> container, not the older per-row int4 mirrors — those measure ~9 points worse on quality and caused the original think-mode loops. And the MTP speculation head must be <strong>int8, not int4</strong>: an int4 head collapses to 0–4% draft acceptance. Check with <code>ls -l &lt;model&gt;/out-mtp-*</code>.</p>
+<p>The full requirements table (all from the README): GLM-5.3 419 GB / 16 GB+ RAM; GLM-5.3-Flash 195 GB; Inkling 469 GB; Kimi K3 ~1.6 TB (no conversion needed — its MXFP4 experts stream straight from the original checkpoint); DeepSeek V4 Flash 167 GB; Qwen3.6 ~20 GB. GPU optional everywhere.</p>
+
+<h2 id="step-4">Step 4 — Run it<a class="anchor" href="#step-4" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">COLI_MODEL=/nvme/glm52_i4 ./coli chat     # RAM budget, cache and MTP auto-detected
+COLI_MODEL=/nvme/glm52_i4 ./coli plan     # inspect the planned VRAM/RAM/disk placement
+COLI_MODEL=/nvme/glm52_i4 ./coli doctor   # read-only readiness check
+COLI_MODEL=/nvme/glm52_i4 ./coli tune     # measure and save this machine's fastest safe profile
+./coli web  --model /nvme/glm52_i4        # API + dashboard, opens a browser
+./coli serve --model /nvme/glm52_i4       # API + dashboard, headless</code></pre>
+<p><code>coli plan</code> is the one to run first: it shows exactly where each part of the model will live — dense in RAM, hot experts pinned, the rest streamed — for <em>your</em> machine. <code>coli doctor</code> preflights the tensors, shards, index, and any disk mirror before you spend an hour on a bad download.</p>
+<p>The engine keeps a learning cache as you use it: <code>.coli_usage</code> records which experts your workload actually routes to and pins the hottest ones automatically — Colibri literally gets faster the more you run it — and <code>.coli_kv</code> persists compressed conversation state across restarts, so conversations reopen warm with zero re-prefill.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/colibri-run-frontier-moe-consumer-hardware/img3.webp" alt="A person at a desk with a laptop and external drive, chatting with a giant AI brain hologram"><figcaption>AI-generated illustration for AI Frontier Post: a frontier model running where you already are — no hyperscaler required.</figcaption></figure>
+
+<h2 id="step-5">Step 5 — Try Brio mode: answers without generating<a class="anchor" href="#step-5" aria-label="Link to section">#</a></h2>
+<p>Most real questions are choices, not paragraphs: which queue, which verdict, which of four values a field may take. <strong>Brio mode</strong> hands the engine the options and reads the probability of each one instead of generating — <code>completion_tokens</code> is 0, no answer can fall outside your list, and every answer carries an entropy, so "the model is not sure" becomes a number you can put a threshold on:</p>
+<pre><code class="language-bash">./coli chat --model /nvme/qwen36_i4_gs64
+> /brio merge | request changes | close
+> 340 lines, 8 files, no tests. CI is green but nothing covers that path.</code></pre>
+<p>Or one JSON request against the running server:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8000/v1/brio -H 'Content-Type: application/json' -d '{
+  "model": "qwen36",
+  "state": "340 lines, 8 files, no tests. CI is green but nothing covers that path.",
+  "question": "What should the reviewer do?",
+  "options": ["merge", "request changes", "close"]}'</code></pre>
+<p>Measured on Qwen3.6 against generating the same answer on the same CPU box: 2.4× faster on a four-field schema, 5.7× on four questions about one document read once. It runs on all nine families and is opt-in per request — chat stays byte-identical for everyone who doesn't ask.</p>
+
+<h2 id="what-you-built">What you built<a class="anchor" href="#what-you-built" aria-label="Link to section">#</a></h2>
+<p>A self-hosted inference stack that treats VRAM, RAM, and NVMe as one placement hierarchy and streams routed experts from disk through a learned cache: a 197 KB engine binary, the <code>coli</code> launcher, a chat TUI, an OpenAI-compatible API, a live dashboard (chat dock, Brio page, Brain page with the measured expert atlas, profiling), and Brio mode for closed-question scoring. The same engine spans a 25 GB laptop (everything streams from disk — slow but correct) to a 6× RTX 5090 host (full expert residency, disk drops out of the decode path).</p>
+
+<h2 id="honest-limitations">Honest limitations<a class="anchor" href="#honest-limitations" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Speed is set by your disk.</strong> Measured decode: 5.8–6.8 tok/s on 6× RTX 5090 with full residency; ~1.8 tok/s on a 128 GB CPU-only desktop; ~1 tok/s on a single laptop GPU; 0.05–0.1 tok/s cold on a 25 GB box. The project states it plainly: no SLA on speed.</li>
+<li><strong>The hard guarantee is on semantics, not speed.</strong> Placement only ever decides speed — the router's decisions and weight precision are identical whether an expert answered from VRAM or disk, with the forward pass validated against a transformers oracle.</li>
+<li><strong>The downloads are enormous.</strong> 372 GB for GLM-5.2, 1.6 TB for Kimi K3. Start with OLMoE (~7 GB) to learn the workflow.</li>
+<li><strong>It's a research platform, not a product.</strong> Backends range from experimental (Metal, Vulkan) to battle-tested; speculation and caching are measurable policies, not promises — measure on your hardware with <code>./coli tune</code>.</li>
+</ul>
+
+<div class="sources"><h2 id="sources">Sources</h2><ul><li><a href="https://github.com/JustVugg/colibri" rel="nofollow">JustVugg/colibri — GitHub repository (Apache-2.0), README, and docs; 38,144 stars as of September 28, 2026; engine built from source and launcher verified by the author</a></li><li><a href="https://huggingface.co/mastouri/GLM-5.2-colibri-int4-g64-with-int8-mtp" rel="nofollow">GLM-5.2 Colibri int4 gs64 container — Hugging Face</a></li><li><a href="https://justvugg.github.io/colibri" rel="nofollow">Colibri website — justvugg.github.io/colibri</a></li></ul></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/faster-whisper-local-transcription-tutorial/"><span class="chip">Tutorials</span><h3>Transcribe anything on your own machine: a hands-on guide to faster-whisper</h3><div class="meta">September 28, 2026</div></a><a class="rel-card" href="/articles/gguf-quantization-imatrix-measured/"><span class="chip">Tutorials</span><h3>Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</h3><div class="meta">September 28, 2026</div></a><a class="rel-card" href="/articles/okf-agent-memory-git-native-project-memory/"><span class="chip">Tutorials</span><h3>OKF Agent Memory: give your coding agents a git-native memory that survives every session</h3><div class="meta">September 28, 2026</div></a><a class="rel-card" href="/articles/claude-code-hooks-complete-guide/"><span class="chip">Tutorials</span><h3>Claude Code hooks: the complete hands-on guide to deterministic agent control</h3><div class="meta">September 28, 2026</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Affiliate disclosure</a><a href="/about/">Corrections policy</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
