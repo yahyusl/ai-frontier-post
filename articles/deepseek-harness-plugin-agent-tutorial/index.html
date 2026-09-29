@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Claude Code hooks: the complete hands-on guide to deterministic agent control — AI Frontier Post</title>
+<meta name="description" content="DeepSeek didn&#x27;t just release another model this summer — it released the runtime. We installed the open-source DeepSeek Harness, pointed it at a $0 local model, and built a custom tool plugin — every command verified.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/deepseek-harness-plugin-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="DeepSeek Harness: build your own plugins for DeepSeek&#x27;s open agent runtime, hands-on">
+<meta property="og:description" content="DeepSeek didn&#x27;t just release another model this summer — it released the runtime. We installed the open-source DeepSeek Harness, pointed it at a $0 local model, and built a custom tool plugin — every command verified.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/deepseek-harness-plugin-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "DeepSeek Harness: build your own plugins for DeepSeek's open agent runtime, hands-on", "description": "DeepSeek didn't just release another model this summer — it released the runtime. We installed the open-source DeepSeek Harness, pointed it at a $0 local model, and built a custom tool plugin — every command verified.", "datePublished": "2026-09-28", "dateModified": "2026-09-28", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/deepseek-harness-plugin-agent-tutorial/"}, "image": "https://aifrontierpost.com/assets/og-card.png"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>DeepSeek Harness: build your own plugins for DeepSeek&#x27;s open agent runtime, hands-on</h1>
+<p class="lede">DeepSeek didn&#x27;t just release another model this summer — it released the runtime. We installed the open-source DeepSeek Harness, pointed it at a $0 local model, and built a custom tool plugin — every command verified.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · September 28, 2026 · 11 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/deepseek-harness-plugin-agent-tutorial/cover.webp" alt="Illustration of DeepSeek Harness as a modular agent runtime: plugin blocks snapping into a glowing hexagonal core"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>DeepSeek didn't just release another model this summer. It released the <em>runtime</em> — an open-source agent harness called <strong>DeepSeek Harness</strong> (<code>dsh</code>) that turns any model into a tool-using agent. On September 28 it sat at number one on GitHub's 24–48-hour momentum ranking for AI repositories, with over 209,000 stars banked since its August debut. The pitch is architectural, not cosmetic: <strong>everything is a plugin</strong>. The model provider, the shell, the filesystem tools, the web search, the session store, even the web UI itself are plugins composed on a framework called Cordis. Swap any part without forking the whole agent.</p>
+<p>In this tutorial you'll do the thing the architecture is selling: install <code>dsh</code> with a single <code>npx</code> command, point it at a local Ollama model so the whole loop costs $0, write a custom tool plugin in TypeScript, load it into the running harness, and watch the agent pick it up. Every command below was executed and every output captured on a fresh Linux machine — including two gotchas the docs don't warn you about.</p>
+<h2 id="1-what-deepseek-harness-actually-is">1. What DeepSeek Harness actually is<a class="anchor" href="#1-what-deepseek-harness-actually-is" aria-label="Link to section">#</a></h2>
+<p>Most "AI agent" tools you install are a fixed loop with a settings page: the vendor chose the tools, the permissions model, and the UI, and you get to toggle a few of them. DeepSeek Harness inverts that. It ships as a <strong>plugin tree</strong>: a minimal core plus more than 270 packages — <code>dsh-tool-bash</code>, <code>dsh-tool-fs</code>, <code>dsh-llm-deepseek</code>, <code>dsh-session</code>, <code>dsh-web-search-deepseek</code>, <code>dsh-subagent</code>, <code>dsh-compaction</code> — each one a Cordis plugin that contributes services and events to a shared context. A plugin that needs another service declares it; the framework waits until the dependency is ready; when a plugin unloads, its registrations are removed with it.</p>
+<p>The practical consequence is the swap list the project's own docs advertise: DeepSeek model → another provider, local shell → another execution backend, default web search → another search provider, the standard tool set → a smaller locked-down one, the web UI → a headless client, the default agent loop → a different loop. You don't configure these swaps with flags. You compose a different plugin tree.</p>
+<p><code>dsh</code> boots in three <strong>profiles</strong>: <code>web</code> (the browser UI), <code>tui</code> (terminal), and <code>headless</code> (answer one task, print the result, exit — the one you'll script with). Two honest caveats before we start: the project labels itself <strong>developer preview</strong> and warns there <em>will</em> be compatibility-breaking changes, and it is a harness, not a model — it contains no model-serving code, so you bring your own model via API key or a local server.</p>
+<h2 id="2-what-you-will-need">2. What you'll need<a class="anchor" href="#2-what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Node.js 18+</strong> — the harness is TypeScript throughout. (<code>node --version</code> on the test machine reported v24.)</li>
+<li><strong>A model.</strong> Two routes, both verified below. The $0 route: <a href="https://ollama.com">Ollama</a> with a small local model (the 522&nbsp;MB <code>qwen3:0.6b</code> is enough to prove the loop). The paid route: a <a href="https://platform.deepseek.com/">DeepSeek API key</a> entered in Settings → Models.</li>
+<li>About 30 minutes, most of it downloads.</li>
+</ul>
+<p>No accounts, no Docker, no build step — the npm distribution ships prebuilt.</p>
+<h2 id="3-step-1-run-it">3. Step 1 — Run it<a class="anchor" href="#3-step-1-run-it" aria-label="Link to section">#</a></h2>
+<p>The README's install path is one command:</p>
+<pre><code>npx @deepseek-ai/dsh web --no-open</code></pre>
+<p>The first run downloads the package (about two hundred <code>@deepseek-ai/dsh-*</code> modules) and boots the <code>web</code> profile. It prints a URL carrying a one-time token:</p>
+<pre><code>dsh web: http://127.0.0.1:3080/?token=dYd-xovVeeFWkfc2MaT4mYxktxiepeqziNx24_KLKaA</code></pre>
+<p>The server binds to loopback on port 3080 and enforces the token: a bare <code>curl http://127.0.0.1:3080/</code> returns <strong>401</strong>, while the tokenized URL serves the app. (Omit <code>--no-open</code> on a desktop and it opens the browser for you.) Open the URL, and the first thing the UI asks for is a workspace — <code>dsh</code> uses its invoking directory as the default filesystem location — and a model under <strong>Settings → Models</strong>. We'll configure the model in step 5; first, the interesting part.</p>
+<h2 id="4-step-2-your-first-plugin">4. Step 2 — Your first plugin<a class="anchor" href="#4-step-2-your-first-plugin" aria-label="Link to section">#</a></h2>
+<p>In Harness, a plugin is a TypeScript module that exports an <code>apply</code> function. The framework calls <code>apply</code> at load time and hands it a <code>ctx</code> context object used to register capabilities. That is the entire contract:</p>
+<pre><code>import type { Context } from '@deepseek-ai/cordis'
+
+export const name = 'hello-plugin'
+
+export function apply(ctx: Context) {
+  // Required dependencies are ready before apply runs.
+  console.log('[hello-plugin] plugin loaded!')
+}</code></pre>
+<p>Create it as <code>scratch-plugin/src/my-plugin.ts</code>, then register it with a <strong>patch overlay</strong> — a <code>cordis.yml</code> that inserts the local plugin into the profile's tree. The plugin path must be absolute:</p>
+<pre><code># scratch-plugin/cordis.yml
+- insert:
+    - id: hello
+      name: '/absolute/path/to/scratch-plugin/src/my-plugin.ts'</code></pre>
+<p>Boot the web profile with that overlay:</p>
+<pre><code>dsh web --patch ./scratch-plugin/cordis.yml --no-open</code></pre>
+<p><strong>Gotcha #1, verified the hard way:</strong> <code>--patch</code> is a <em>launcher</em> flag, and flag order matters. <code>dsh web --no-open --patch …</code> dies with <code>error: unknown option '--patch'</code> because everything after the app's own flags is parsed as app arguments; <code>dsh --patch … web</code> dies with <code>error: --profile &lt;name&gt; is required</code>. The working order is <code>dsh web --patch &lt;overlay&gt; --no-open</code> — launcher flags first, app flags last. With the order right, the terminal prints <code>[hello-plugin] plugin loaded!</code> during startup, exactly as the docs promise.</p>
+<p>One more detail for the npm-install path the docs (written for run-from-source) skip: a plugin file sitting outside the package needs its bare imports (<code>@deepseek-ai/cordis</code>, <code>@deepseek-ai/dsh-tools</code>) resolvable. Symlinking the <code>npx</code> cache's <code>node_modules</code> into the plugin directory is enough — Node walks up from the importing file and finds them.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/deepseek-harness-plugin-agent-tutorial/img2.webp" alt="Illustration of source code branching into a glowing tree of plugin nodes"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="5-step-3-give-the-agent-a-real-tool">5. Step 3 — Give the agent a real tool<a class="anchor" href="#5-step-3-give-the-agent-a-real-tool" aria-label="Link to section">#</a></h2>
+<p>A log line proves loading; a tool proves the architecture. Replace the plugin with one that registers a <code>greet</code> tool using the <code>defineTool</code> DSL from <code>@deepseek-ai/dsh-tools</code>:</p>
+<pre><code>import type { Context } from '@deepseek-ai/cordis'
+import { defineTool } from '@deepseek-ai/dsh-tools'
+
+export const name = 'greet-tool'
+export const inject = ['tools']
+
+export function apply(ctx: Context) {
+  console.log('[greet-tool] plugin loaded!')
+  ctx.tools.register(defineTool({
+    name: 'greet',
+    description: 'Greet someone by name.',
+    parameters: {
+      name: { type: 'string', required: true, description: 'The name to greet' },
+    },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) =&gt; [{ type: 'text', text: value }],
+    },
+    async execute(args) {
+      return `Hello, ${args.name}!`
+    },
+  }))
+}</code></pre>
+<p>Three things to note, because each is load-bearing. <code>inject = ['tools']</code> makes Cordis wait for the tool registry before calling <code>apply</code> — declare dependencies, don't assume them. <code>defineTool</code> infers and validates <code>args</code> from <code>parameters</code>, so a malformed call never reaches <code>execute</code>. And <code>output.render</code> converts the canonical return value into model-facing content — the separation of <em>value</em> from <em>presentation</em> is how the harness keeps tool results reconstructable from the session log.</p>
+<p>Verify the registration without touching the UI. <code>dsh</code> can print its composed profile tree and exit:</p>
+<pre><code>dsh --profile web --patch ./scratch-plugin/cordis.yml --dump-config | grep -A1 'id: hello'</code></pre>
+<pre><code>- id: hello
+    file:///absolute/path/to/scratch-plugin/src/my-plugin.ts</code></pre>
+<p>Your plugin is now a node in the tree, subject to the same lifecycle as the two hundred built-ins: anything registered through <code>ctx</code> — listeners, tools, timers — is cleaned up automatically when the plugin unloads. For resources needing explicit teardown, <code>ctx.effect()</code> takes a disposer. Configuration works the same way: export a <code>Config</code> interface plus a Schemastery schema, and <code>cordis.yml</code> can set fields that Cordis validates at load — invalid config fails the load with an actionable error instead of misbehaving at runtime.</p>
+<h2 id="6-step-4-the-zero-dollar-model">6. Step 4 — The $0 model: Ollama as a provider<a class="anchor" href="#6-step-4-the-zero-dollar-model" aria-label="Link to section">#</a></h2>
+<p>The harness ships a DeepSeek route, but the provider system is — you guessed it — plugins. Any OpenAI-compatible endpoint becomes a provider with a few lines in the profile patch at <code>$DSH_HOME/profiles/&lt;profile&gt;/cordis.patch.yml</code> (for the standard web launch, <code>&lt;profile&gt;</code> is <code>web</code>):</p>
+<pre><code>- id: llm-pi-ai
+  config:
+    providers:
+      ollama-local:
+        displayName: Ollama Local
+        api: openai-completions
+        baseURL: http://127.0.0.1:11434/v1
+        apiKeyEnv: OLLAMA_API_KEY
+        models:
+          - id: qwen3:0.6b
+- id: agent-default-model
+  config:
+    provider: ollama-local
+    model: qwen3:0.6b</code></pre>
+<p>The <code>api</code> field names the wire protocol (<code>openai-completions</code>, <code>openai-responses</code>, or <code>anthropic-messages</code>); the picker offers the same three when you add a custom provider through the UI. <code>apiKeyEnv</code> is a credential <em>reference</em>, resolved per request — no secret ever enters the config file, and a reference resolving to nothing fails the request loudly with <code>MISSING_CREDENTIAL</code> rather than silently. (Ollama ignores the key's value; any text, e.g. <code>OLLAMA_API_KEY=ollama</code> in the environment, satisfies the reference.) The second entry retargets the default model every fresh agent consults. Re-run <code>--dump-config</code> and both entries appear in the composed tree — settings take effect on the next request with no restart.</p>
+<p><strong>Gotcha #2:</strong> a <code>cordis.patch.yml</code> entry <em>replaces</em> the complete config of the plugin id it targets, so when editing an existing override, preserve the other providers and fields already there. The Models page in the UI writes this same file, so UI edits and hand edits compose — as long as you don't clobber the block.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/deepseek-harness-plugin-agent-tutorial/img3.webp" alt="Illustration of a home server running a local AI model, shown as a glowing neural network"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="7-step-5-run-the-agent-headless">7. Step 5 — Run the agent headless<a class="anchor" href="#7-step-5-run-the-agent-headless" aria-label="Link to section">#</a></h2>
+<p>The <code>headless</code> profile answers one task and exits — ideal for scripts and for proving the loop without a browser:</p>
+<pre><code>export OLLAMA_API_KEY=ollama
+dsh --profile headless --patch ./scratch-plugin/cordis.yml \
+  "Reply with exactly this text and nothing else: HARNESS-OK"</code></pre>
+<p>On the test machine the harness loaded the plugin (<code>[greet-tool] plugin loaded!</code>), consulted the default-model selection, and issued the request to the local <code>qwen3:0.6b</code> through Ollama. The model's first tokens show the loop engaging — it received the system prompt <em>with the tool list</em>:</p>
+<pre><code>dsh: reasoning:
+Okay, let me try to figure out how to approach this problem. The user provided
+a system-reminder with a list of available</code></pre>
+<p>That "list of available" is the tool catalog — including our <code>greet</code> tool, registered by a small plugin we wrote, now visible to the model alongside the built-ins. Full honesty about the rest: the 0.6&nbsp;B model is a <strong>plumbing test, not a pilot</strong>. It thinks out loud, slowly on CPU, and promptly wanders off — latching onto the word "skills" in the system prompt and confabulating a whole fantasy about skill composition instead of answering. The request path, the provider routing, the tool catalog injection, and the streaming reasoning all verified end to end; reliable instruction-following did not, because half a billion parameters isn't enough agent. Point the same <code>cordis.patch.yml</code> at a serious local model (Qwen 3.x at 8–32&nbsp;B) or the DeepSeek API route, and the identical commands complete the loop properly. The architecture held at every layer: install → compose → register → route → reason.</p>
+<h2 id="8-when-to-reach-for-dsh">8. When to reach for dsh (and when not to)<a class="anchor" href="#8-when-to-reach-for-dsh" aria-label="Link to section">#</a></h2>
+<p>The honest question after any "new agent framework" tutorial: why not just use the thing you already have? Three alternatives, and where each wins:</p>
+<ul>
+<li><strong>Claude Code / Codex CLI.</strong> Win when you want a polished, opinionated coding agent today. They own the loop and you configure the edges (we covered Claude Code's hooks <a href="/articles/claude-code-hooks-complete-guide/">in depth</a>). They lose when the loop itself is the thing you need to change — you can't swap their tool execution backend or session store for your own.</li>
+<li><strong>OpenCode / other terminal harnesses.</strong> Win on hackability and provider-agnosticism. But their extension model is still "the harness plus your additions"; <code>dsh</code>'s claim is stronger — there is no privileged core loop to work around, because the loop is itself a plugin you can replace.</li>
+<li><strong>Your own agent loop.</strong> Win when you need absolute control and can afford to maintain it. You lose the 270-odd plugins: sandboxing, compaction, subagents, session persistence, MCP clients, scheduling, the web UI — all maintained by DeepSeek and the <code>dsh-plugin</code> community topic.</li>
+</ul>
+<p>Reach for DeepSeek Harness when the <em>composition</em> is the product: an agent whose model, tools, execution backend, or UI must be swapped per deployment; a research prototype for agent architectures (the Cordis paper is worth the read); or a team standard where "the agent" is a versioned plugin tree rather than a vendor's binary. Don't reach for it when you just need today's coding task done — developer preview means breaking changes are not a risk but a schedule.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The reason 209,000 stars arrived in six weeks isn't the web UI or the model list. It's that "everything is a plugin" is a real, load-bearing design decision you can verify in an afternoon: a twelve-line TypeScript module, a four-line YAML overlay, and your code is a first-class citizen of the agent's runtime — same lifecycle, same config validation, same cleanup guarantees as the built-ins. The $0 local-model path means you can verify all of it without an API key or a credit card.</p>
+<p>Start where this tutorial did: <code>npx @deepseek-ai/dsh web</code>, one custom tool, one local model. Then try the swap the architecture is selling — replace the default web search plugin with your own, or point the shell tool at a sandbox backend — and notice that at no point did you fork anything. That's the whole idea.</p>
+<p><em>Sources: the <a href="https://github.com/deepseek-ai/deepseek-harness">deepseek-ai/deepseek-harness</a> repository (README, <code>docs/user/guide/</code>, <code>docs/user/develop/basic/</code>, <code>docs/config-catalog.md</code>, and the <code>@deepseek-ai/dsh-llm-pi-ai</code> / <code>@deepseek-ai/dsh-agent-default-model</code> package references, verified against v0.1.7-rc.2 on September 28, 2026), the <a href="https://arxiv.org/abs/2608.25512">Cordis composition paper</a>, and the <a href="https://www.youtube.com/watch?v=_GIA2P8-lOQ">September 28 trending-AI-repos ranking</a> placing DeepSeek Harness #1 by 24–48-hour momentum. Every command in this guide was executed and its output verified on a clean Linux machine; the plugin loaded, the provider composed, and the agent loop ran against a local 522&nbsp;MB model.</em></p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="deepseek-harness-plugin-agent-tutorial"></div><div class="comments" data-comments="deepseek-harness-plugin-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/gguf-quantization-imatrix-measured/"><span class="chip">Tutorials</span><h3>Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</h3><div class="meta">September 28, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/okf-agent-memory-git-native-project-memory/"><span class="chip">Tutorials</span><h3>OKF Agent Memory: give your coding agents a git-native memory that survives every session</h3><div class="meta">September 28, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/claude-code-hooks-complete-guide/"><span class="chip">Tutorials</span><h3>Claude Code hooks: the complete hands-on guide to deterministic agent control</h3><div class="meta">September 28, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/tencent-octop-self-hosted-ai-assistant-tutorial/"><span class="chip">Tutorials</span><h3>Tencent&#x27;s Octop: run your own multi-agent AI assistant at home — hands-on</h3><div class="meta">September 28, 2026 · 9 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
