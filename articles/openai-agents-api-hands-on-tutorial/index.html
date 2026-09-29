@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop writing your own agent loop: a hands-on tutorial for OpenAI's Agents API — AI Frontier Post</title>
+<meta name="description" content="OpenAI&#x27;s DevDay put a managed agent harness behind a single API call. Here&#x27;s how to build a long-running, tool-using agent on the Agents API — sessions, sandboxes, tools, subagents, and cleanup — with every line verified against the official docs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/openai-agents-api-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop writing your own agent loop: a hands-on tutorial for OpenAI's Agents API">
+<meta property="og:description" content="OpenAI&#x27;s DevDay put a managed agent harness behind a single API call. Here&#x27;s how to build a long-running, tool-using agent on the Agents API — sessions, sandboxes, tools, subagents, and cleanup — with every line verified against the official docs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/openai-agents-api-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/openai-agents-api-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="720">
+<meta property="article:published_time" content="2026-09-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop writing your own agent loop: a hands-on tutorial for OpenAI's Agents API", "description": "OpenAI's DevDay put a managed agent harness behind a single API call. Here's how to build a long-running, tool-using agent on the Agents API — sessions, sandboxes, tools, subagents, and cleanup — with every line verified against the official docs.", "datePublished": "2026-09-29", "dateModified": "2026-09-29", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/openai-agents-api-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/openai-agents-api-hands-on-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop writing your own agent loop: a hands-on tutorial for OpenAI's Agents API</h1>
+<p class="lede">OpenAI's DevDay put a managed agent harness behind a single API call. Build a long-running, tool-using agent on the Agents API — sessions, sandboxes, MCP tools, subagents, and cleanup — with every line verified against the official docs.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · September 29, 2026 · 11 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/openai-agents-api-hands-on-tutorial/cover.webp" alt="Architecture diagram of the OpenAI Agents API: your app calls the Agents API, the managed Codex harness fans out to session state, a sandbox environment, and tools, with context compaction running underneath"><figcaption>Diagram generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>For the past year, shipping an AI agent meant writing the same loop as everyone else: call the model, parse its tool calls, run them, append the results, repeat — then bolt on context management, retries, and recovery when the demo had to become a product. At DevDay 2026, OpenAI productized the loop itself. The <strong>Agents API</strong>, now in public beta, exposes the managed Codex harness behind the company's own agents as an API: OpenAI runs sessions, orchestration, context compaction, and recovery, while your application supplies the tools and picks the execution environment.</p>
+<p>This is the same engine that powers Dots, the always-on agents OpenAI announced on the DevDay stage. And with the Assistants API wound down in August, the Agents API is the stateful path forward on OpenAI's platform. In this tutorial you will build a working agent on it end to end: your first session, the three environment options, tools including MCP, multi-turn sessions, subagents, and cleanup. Every call below is verified against OpenAI's official documentation and the Python SDK itself.</p>
+<h2 id="what-you-ll-need">What you'll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>An OpenAI platform account and an application API key</strong> with three scopes: <code>api.agents.read</code> and <code>api.agents.write</code> for session operations, plus <code>api.responses.write</code> for model inference. Create the key in your OpenAI platform project and export it as <code>OPENAI_API_KEY</code>.</li>
+<li><strong>Python 3.10 or newer</strong> with the OpenAI Python SDK at version 3.13.0 or later. Install or upgrade with <code>pip install --upgrade openai</code>. The snippets below were verified against SDK 3.22.0, including the <code>beta.agents</code> namespace.</li>
+<li><strong>A budget.</strong> There is no separate Agents API fee during the beta: you pay the selected model's API rates, standard rates for OpenAI tools, and standard container rates for OpenAI-hosted sandboxes.</li>
+<li><strong>Eyes open on the caveats.</strong> Public beta means the surface can still change — pin your SDK version and watch the changelog. Data residency is US-only, and Zero Data Retention is not supported, even if you bring your own sandbox.</li></ul>
+<h2 id="step-1-create-a-scoped-api-key">Step 1 — Create a scoped API key<a class="anchor" href="#step-1-create-a-scoped-api-key" aria-label="Link to section">#</a></h2>
+<p>In your OpenAI platform project, create an application API key and grant it exactly three scopes: <code>api.agents.read</code>, <code>api.agents.write</code>, and <code>api.responses.write</code>. Then export it:</p>
+<pre><code class="language-bash">export OPENAI_API_KEY="your-api-key-here"</code></pre>
+<p>Two things the docs stress that are easy to get wrong. First, <strong>keep this key outside the agent's sandbox</strong> — the agent runs code, so treat anything inside its environment as reachable by it. Second, every Agents API request needs the <code>OpenAI-Beta: agents=v1</code> header. The official SDKs add it automatically; if you ever call the API with cURL or another HTTP client, include it explicitly or your requests will fail.</p>
+<h2 id="step-2-run-your-first-session">Step 2 — Run your first session<a class="anchor" href="#step-2-run-your-first-session" aria-label="Link to section">#</a></h2>
+<p>The API is organized around four concepts: the <strong>agent</strong> (model, instructions, tools, MCP servers), the <strong>environment</strong> (the sandbox or computer where it works), the <strong>session</strong> (a durable instance of the agent), and <strong>events and items</strong> (the live and saved records of what happened). The fastest way to feel this shape is the official quickstart: an agent that writes a <code>tree.py</code> script, runs it, and reports a directory tree.</p>
+<pre><code class="language-python">from openai import OpenAI
+
+with OpenAI() as client:
+    with client.beta.agents.sessions.create(
+        agent={
+            "model": "gpt-6-astra",
+            "instructions": "Write clean code, run it, and report the actual output.",
+        },
+        environment={"type": "openai_hosted"},
+        input="Create tree.py, a Python script that prints a readable tree "
+              "of the files in the current directory. Run it and show me the output.",
+        stream=True,
+    ) as events:
+        for event in events:
+            print(event.to_json(indent=None), flush=True)</code></pre>
+<p>Save it as <code>quickstart.py</code> and run it with <code>python quickstart.py</code>. That single call creates a session, provisions an OpenAI-hosted sandbox, starts a turn of work, and streams progress as JSON events. On a successful run, the agent creates <code>tree.py</code> inside the sandbox, executes it, and reports a directory tree containing that file.</p>
+<p>Learn to read the stream — it is your primary debugging surface:</p>
+<ul><li><code>agent.session.turn.completed</code> means the turn finished. Heed the docs' warning: <strong>a completed turn does not guarantee every tool call succeeded</strong> — always check the agent's reported result.</li>
+<li>Events ending in <code>turn.failed</code>, <code>turn.cancelled</code>, or <code>session.failed</code> mean failure or cancellation.</li>
+<li><code>agent.session.idle</code> alone does <strong>not</strong> mean success.</li>
+<li>If the stream disconnects early, retrieve the session and its saved items before retrying — the work is durable server-side.</li></ul>
+<p>One habit to build now: save the <code>session_id</code> from the events. You will need it for everything in Step 5.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/openai-agents-api-hands-on-tutorial/img2.webp" alt="Session lifecycle flowchart: create session, send input, stream events, follow up in the same session, then delete the session after saving files"><figcaption>Diagram generated for AI Frontier Post.</figcaption></figure>
+<h2 id="step-3-pick-the-right-environment">Step 3 — Pick the right environment<a class="anchor" href="#step-3-pick-the-right-environment" aria-label="Link to section">#</a></h2>
+<p>The environment decides where the agent's commands run and where its files live. There are three options, and this is the biggest architectural decision in the tutorial:</p>
+<ul><li><strong><code>openai_hosted</code></strong> — OpenAI provisions and manages a Linux sandbox for the session. This is the default for anything that runs code or touches files. You can configure it with packages, input files, and network policy, and download artifacts the agent produces.</li>
+<li><strong><code>none</code></strong> — no sandbox at all. Use it for agents that answer questions or call external tools without running commands or working with local files: <code>environment={"type": "none"}</code>.</li>
+<li><strong><code>self_hosted</code></strong> — the agent runs on your infrastructure. Your application runs <code>codex exec-server</code> inside its own compute, passing it the returned <code>session.environment.id</code> and <code>session.environment.remote_url</code>. The executor authenticates with a separate, restricted <code>OPENAI_EXECUTOR_API_KEY</code> carrying the <code>api.agents.environments.connect</code> scope, and its IP restrictions must allow requests from your sandbox's outbound network.</li></ul>
+<pre><code class="language-python">session = client.beta.agents.sessions.create(
+    agent={"model": "gpt-6-astra"},
+    environment={"type": "self_hosted", "workspace_directory": "/workspace"},
+)</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/openai-agents-api-hands-on-tutorial/img3.webp" alt="Comparison of the three Agents API environment options: openai_hosted where OpenAI runs the sandbox, none with no code execution, and self_hosted on your own infrastructure"><figcaption>Diagram generated for AI Frontier Post.</figcaption></figure>
+<p>Treat the environment as a security, cost, network, artifact, and data-governance decision — not just a config flag. The hosted sandbox is the fastest way to start; self-hosted is the answer when the agent must touch your VPC, your data, or your toolchain.</p>
+<h2 id="step-4-give-the-agent-tools">Step 4 — Give the agent tools<a class="anchor" href="#step-4-give-the-agent-tools" aria-label="Link to section">#</a></h2>
+<p>Tools are declared on the agent, alongside the model and instructions. The API supports custom functions, built-in tools like <code>web_search</code> and <code>programmatic_tool_calling</code>, and MCP servers. This example, adapted from the official docs, builds a research assistant wired to OpenAI's own documentation MCP server plus web search:</p>
+<pre><code class="language-python">session = client.beta.agents.sessions.create(
+    agent={
+        "model": "gpt-6-astra",
+        "instructions": (
+            "Use the OpenAI documentation MCP and web search to answer "
+            "technical questions accurately. Delegate independent research "
+            "tasks to subagents when useful."
+        ),
+        "tools": [
+            {"type": "programmatic_tool_calling"},
+            {
+                "type": "mcp",
+                "server_label": "openai_docs",
+                "transport": {
+                    "type": "http",
+                    "server_url": "https://developers.openai.com/mcp",
+                },
+            },
+            {"type": "web_search"},
+        ],
+        "multi_agent": {"enabled": True, "max_concurrent_subagents": 4},
+    },
+    environment={"type": "none"},
+    input="Research how to connect an MCP server to an OpenAI agent, "
+          "check for recent updates, and summarize the recommended setup.",
+)</code></pre>
+<p>A few things worth noticing. The MCP tool needs a <code>server_label</code> and an HTTP transport with the server URL — that is the entire wiring. <code>environment={"type": "none"}</code> is deliberate here: this agent reads the web; it does not need a sandbox. And <code>multi_agent</code> opts into subagents, which Step 6 covers.</p>
+<h2 id="step-5-think-in-sessions-not-requests">Step 5 — Think in sessions, not requests<a class="anchor" href="#step-5-think-in-sessions-not-requests" aria-label="Link to section">#</a></h2>
+<p>The session is the durable unit: agent configuration, conversation, and saved work persist across turns, so you never rebuild conversation context by hand. To keep working, stream new input into the existing session with its ID:</p>
+<pre><code class="language-python">with client.beta.agents.sessions.stream(
+    session_id,  # saved from Step 2
+    input="Add a maximum-depth option to tree.py, run it, and show me the output.",
+) as events:
+    for event in events:
+        print(event.to_json(indent=None), flush=True)</code></pre>
+<p>Open the event stream <em>before</em> sending follow-up input so you don't miss early events. Because the harness manages context compaction — summarizing previous work as sessions approach context limits — long sessions keep working instead of dying at the context edge, and a session can be resumed where it left off.</p>
+<p>Everything the session did is inspectable after the fact:</p>
+<pre><code class="language-python">turns = client.beta.agents.sessions.turns.list(session_id)
+items = client.beta.agents.sessions.items.list(session_id)
+subs  = client.beta.agents.sessions.subagents.list(session_id)
+files = client.beta.agents.sessions.artifacts.list(session_id)</code></pre>
+<p>Turns carry per-turn status and usage; items are the saved outputs (messages, reasoning, function calls, tool outputs); artifacts are the files the agent produced. When the work is done, download anything you need first — then delete the session, since it persists until you do:</p>
+<pre><code class="language-python">client.beta.agents.sessions.delete(session_id)</code></pre>
+<h2 id="step-6-fan-out-with-subagents">Step 6 — Fan out with subagents<a class="anchor" href="#step-6-fan-out-with-subagents" aria-label="Link to section">#</a></h2>
+<p>When work splits into independent chunks — researching three APIs, triaging three alerts — one agent doing them in sequence wastes the parallelism the harness offers. Setting <code>multi_agent.enabled</code> lets the main agent break work into subtasks and delegate to subagents, each with its own context:</p>
+<pre><code class="language-python">session = client.beta.agents.sessions.create(
+    agent={
+        "model": "gpt-6-astra",
+        "instructions": "Research the topic and delegate independent subtasks.",
+        "multi_agent": {"enabled": True, "max_concurrent_subagents": 4},
+    },
+    environment={"type": "none"},
+    input="Compare the release notes of the last three OpenAI model launches.",
+)</code></pre>
+<p>The official "compare release notes with subagents" example is the canonical pattern: each subagent investigates independently, then the main agent combines the findings into one answer. Two rules of thumb: only delegate work that is truly independent, and coordinate around shared state carefully — give each subagent its own working directory or output file so their writes don't collide. Four concurrent subagents is a sensible ceiling, and it happens to be the value in the docs' own example. Inspect subagent activity anytime with <code>sessions.subagents.list(session_id)</code> from Step 5.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Four ways to ship an agent on OpenAI's platform, and when each wins:</p>
+<table><thead><tr><th>Approach</th><th>Best when</th><th>What you give up</th></tr></thead>
+<tbody><tr><td><strong>Agents API</strong> (this tutorial)</td><td>You want long-running, tool-using agents without building the loop, the session store, compaction, or recovery yourself.</td><td>Some control over orchestration internals; beta stability; US-only data residency.</td></tr>
+<tr><td><strong>Responses API + your own loop</strong></td><td>You already have orchestration, or you need full control over every retry, compaction, and tool-execution decision.</td><td>Development speed — you own every edge case the managed harness handles.</td></tr>
+<tr><td><strong>Agents SDK</strong> (<code>openai-agents</code> package)</td><td>You want a lightweight, in-process agent with handoffs and guardrails inside your own application.</td><td>Managed sessions, hosted sandboxes, and server-side recovery.</td></tr>
+<tr><td><strong>Dots</strong> (the product)</td><td>You are the end user and want an always-on assistant rather than a developer surface.</td><td>Everything programmatic — it is a product, not an API.</td></tr></tbody></table>
+<p>Default to the Agents API when the task is long-running and tool-heavy: incident response, research, data analysis, repo work. Drop to the Responses API when the harness's opinions chafe. The SDK sits between the two for single-process agents.</p>
+<h2 id="costs-limits-and-guardrails">Costs, limits, and guardrails<a class="anchor" href="#costs-limits-and-guardrails" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Model choice is your biggest cost lever.</strong> The quickstart uses <code>gpt-6-astra</code>; for price-sensitive workloads, GPT-6.1 Sol — announced at DevDay at $2 per million input tokens, $0.10 per million cached input tokens, and $10 per million output tokens — is positioned as near-Astra intelligence at roughly a fifth of the price. Swap the <code>model</code> field and re-run; nothing else changes.</li>
+<li><strong>Watch the metered extras.</strong> Model tokens are only part of the bill: OpenAI tools bill at their standard rates and hosted sandboxes at standard container rates. Heavy tool use in long sessions adds up — the per-turn <code>usage</code> on the session is where you audit it.</li>
+<li><strong>Design for the beta.</strong> Pin <code>openai</code> in your requirements and re-read the changelog before upgrading. Keep secrets out of the sandbox, scope keys to the three permissions from Step 1, and remember the US-only residency and no-ZDR constraints if you handle regulated data.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The Agents API collapses months of agent-infrastructure work — the loop, the session store, compaction, recovery, sandbox provisioning — into <code>sessions.create</code>. What remains yours, and what was always the hard part: the task contract, the tools, the environment choice, and the judgment about when the agent is done. Start with the hosted sandbox and the quickstart above, graduate to <code>none</code> or <code>self_hosted</code> when your security posture demands it, and let sessions — not requests — be the unit you build around.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://developers.openai.com/api/docs/guides/agents-api/quickstart">OpenAI — Agents API quickstart</a> (official API docs)</li>
+<li><a href="https://developers.openai.com/api/docs/guides/agents-api/overview">OpenAI — Agents API overview</a> (official API docs)</li>
+<li><a href="https://github.com/openai/openai-cookbook/blob/HEAD/examples/agents_api/README.md">openai/openai-cookbook — Agents API examples</a> (official examples)</li></ul>
+</div>
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="openai-agents-api-hands-on-tutorial"></div><div class="comments" data-comments="openai-agents-api-hands-on-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/openai-devday-2026-dots-always-on-agents/"><span class="chip ai-news">AI News</span><h3>OpenAI launches Dots — always-on AI agents with their own cloud computer — at DevDay 2026</h3><div class="meta">September 29, 2026 · 6 min read</div></a><a class="rel-card" href="/articles/build-mcp-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build your first MCP-powered agent: tools, servers, and safety rails</h3><div class="meta">August 24, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/llm-cascade-router-tutorial/"><span class="chip">Tutorials</span><h3>Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters</h3><div class="meta">September 29, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/indirect-prompt-injection-agent-defense/"><span class="chip">Tutorials</span><h3>Your agent reads the internet: stop prompt injections from hijacking its tools</h3><div class="meta">September 27, 2026 · 12 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
