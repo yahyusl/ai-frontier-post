@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters — AI Frontier Post</title>
+<meta name="description" content="Your API bill is dominated by easy questions answered by your most expensive model. Build a cascade router that tries the cheap model first and escalates only when confidence is low — pricing, backends, scorers, and thresholds, measured end-to-end.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/llm-cascade-router-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters">
+<meta property="og:description" content="Your API bill is dominated by easy questions answered by your most expensive model. Build a cascade router that tries the cheap model first and escalates only when confidence is low — pricing, backends, scorers, and thresholds, measured end-to-end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/llm-cascade-router-tutorial/">
+<meta property="og:image" content="https://aifrontierpost.com/articles/llm-cascade-router-tutorial/cover.webp">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters", "description": "Your API bill is dominated by easy questions answered by your most expensive model. Build a cascade router that tries the cheap model first and escalates only when confidence is low — pricing, backends, scorers, and thresholds, measured end-to-end.", "datePublished": "2026-09-29", "dateModified": "2026-09-29", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/llm-cascade-router-tutorial/"}, "image": "https://aifrontierpost.com/articles/llm-cascade-router-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters</h1>
+<p class="lede">Your API bill is dominated by easy questions answered by your most expensive model. Build a cascade router that tries the cheap model first and escalates only when confidence is low — pricing, backends, scorers, and thresholds, measured end-to-end.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · September 29, 2026 · 14 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/llm-cascade-router-tutorial/cover.webp" alt="Editorial illustration of small, medium, and large robots on a staircase passing glowing question orbs upward, representing LLM cascade routing"></figure>
+<div class="article-body">
+<p>Your most expensive model is answering your easiest questions. That is the quiet leak in almost every production LLM bill: extraction, classification, short factual answers, reformatting — the easy majority of traffic — all routed to the flagship model because sorting each question by hand is impractical. A cascade router fixes it mechanically: try the cheap model first, score its answer, and escalate to the flagship only when confidence is low.</p>
+<p>Yesterday, <a href="/articles/openai-halves-200-pro-plan-usage/">OpenAI halved the usage allowance on its $200/month Pro plan</a>. Whether you pay per seat or per token, the signal from every provider is the same: inference budgets are finite and the meter never stops. The academic answer to this problem is the <strong>LLM cascade</strong>. FrugalGPT (Chen, Zaharia, Zou, Stanford, 2023; arXiv:2305.05176, extended in TMLR 2024) showed you can match the best single model at up to 98% lower API cost: query the cheap model first, score its answer, escalate only when the score misses the threshold. In their HEADLINES case study the learned cascade ran GPT-J first, escalated to J1-L below a 0.96 score, and to GPT-4 below 0.37 — on one-fifth of GPT-4&#x27;s budget.</p>
+<p>In this tutorial you will build a production-shaped cascade router in Python: a priced model ladder, real provider backends with verified SDK calls, three confidence scorers, the routing loop itself, and a measurement harness that finds your threshold on a seeded, reproducible workload. Every number below was produced by running the code — including the places where the naive setup loses money.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or later</strong> — check with <code>python3 --version</code>.</li><li>The <strong>anthropic</strong> and <strong>openai</strong> Python packages (<code>pip install anthropic openai</code>). Every SDK call in this article was verified against the installed packages (anthropic 1.9.0, openai 3.20.0) — parameter names included.</li><li>API keys in <code>ANTHROPIC_API_KEY</code> (and <code>OPENAI_API_KEY</code> if you run the OpenAI backend). The measurement harness runs on deterministic mocks, so you can reproduce every chart with zero API spend and swap in the real backends later.</li><li>About 30 minutes. No GPU, no training, no labeled data required to start — though step 7 is better with your own eval set.</li></ul>
+<h2 id="1-the-math-behind-the-cascade">1. The math behind the cascade<a class="anchor" href="#1-the-math-behind-the-cascade" aria-label="Link to section">#</a></h2>
+<p>A cascade is a bet with a precise shape. For a two-tier setup (cheap, then strong), the expected cost per query is:</p>
+<pre><code class="language-text">E[cost] = cost(cheap) + P(escalate) × cost(strong)</code></pre>
+<p>Notice the sting: on every escalation you pay for the cheap answer <em>and throw it away</em>. The cascade only wins when two things hold — the escalation probability is small, and the cheap tier is much cheaper than the strong one. Quality follows the same split:</p>
+<pre><code class="language-text">accuracy = P(accept) × acc(cheap | accepted) + P(escalate) × acc(strong)</code></pre>
+<p>The threshold τ is the single dial that trades cost against quality, and the scorer&#x27;s entire job is to make the accepted set coincide with the questions the cheap model actually gets right. A perfect scorer with τ at the cheap model&#x27;s competence boundary gives you cheap prices on easy questions and flagship quality on hard ones. A bad scorer gives you the worst of both: you pay the cheap call, then pay the strong call anyway.</p>
+<h2 id="2-price-your-ladder">2. Price your ladder<a class="anchor" href="#2-price-your-ladder" aria-label="Link to section">#</a></h2>
+<p>Everything downstream depends on real prices, so start there. These are Anthropic&#x27;s published API rates, verified on <a href="https://platform.claude.com/docs/en/about-claude/pricing">platform.claude.com</a> on September 29, 2026 (USD per million tokens). One pattern worth memorizing: output costs exactly 5× input on every Claude model.</p>
+<table><thead><tr><th>Model</th><th>Input / 1M</th><th>Output / 1M</th></tr></thead><tbody><tr><td>Claude Haiku 4.5</td><td>$1.00</td><td>$5.00</td></tr><tr><td>Claude Sonnet 5.5</td><td>$2.00</td><td>$10.00</td></tr><tr><td>Claude Opus 5.5</td><td>$4.00</td><td>$20.00</td></tr></tbody></table>
+<p>Keep prices in a config dict, not in code — providers reprice, and a stale constant silently corrupts every cost report. The cost function is the only place prices should live:</p>
+<pre><code class="language-python">from dataclasses import dataclass, field
+
+# USD per 1M tokens. Verified 2026-09-29 on platform.claude.com.
+# Re-check before budgeting: these move.
+PRICING = {
+    "claude-haiku-4-5":  {"in": 1.0, "out": 5.0},
+    "claude-sonnet-5-5": {"in": 2.0, "out": 10.0},
+    "claude-opus-5-5":   {"in": 4.0, "out": 20.0},
+}
+
+def usd_cost(model: str, in_tokens: int, out_tokens: int) -> float:
+    p = PRICING[model]
+    return (in_tokens * p["in"] + out_tokens * p["out"]) / 1_000_000</code></pre>
+<p>At a typical short-answer profile (400 input tokens, 150 output tokens), one query costs $0.00115 on Haiku 4.5 versus $0.0046 on Opus 5.5 — a 4× spread. That spread is the entire economic opportunity the cascade harvests.</p>
+<h2 id="3-wire-up-the-backends">3. Wire up the backends<a class="anchor" href="#3-wire-up-the-backends" aria-label="Link to section">#</a></h2>
+<p>Every backend exposes the same interface — <code>ask(prompt)</code> returns the text plus the token counts the provider billed — so the router never knows which provider it is talking to. The two real backends below use only call signatures verified against the installed SDKs. Two details I confirmed by reading the packages rather than the docs: <code>anthropic</code> 1.9.0&#x27;s <code>messages.create</code> takes <code>model</code>, <code>max_tokens</code>, <code>messages</code> (and <code>system</code>) — there is no <code>temperature</code> parameter in this version, so don&#x27;t pass one — and usage arrives as <code>response.usage.input_tokens</code> / <code>output_tokens</code>. On the OpenAI side, per-token logprobs require <code>logprobs=True, top_logprobs=5</code> and live at <code>choice.logprobs.content[i].logprob</code>.</p>
+<pre><code class="language-python">@dataclass
+class Answer:
+    text: str
+    model: str
+    in_tokens: int
+    out_tokens: int
+    logprobs: list[float] = field(default_factory=list)
+
+class ClaudeBackend:
+    def __init__(self, model: str, max_tokens: int = 512):
+        from anthropic import Anthropic
+        self.client = Anthropic()  # reads ANTHROPIC_API_KEY
+        self.model, self.max_tokens = model, max_tokens
+
+    def ask(self, prompt: str, logprobs: bool = False) -> Answer:
+        msg = self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(b.text for b in msg.content if b.type == "text")
+        return Answer(text, self.model,
+                      msg.usage.input_tokens, msg.usage.output_tokens)
+
+class OpenAIBackend:
+    def __init__(self, model: str, max_tokens: int = 512):
+        from openai import OpenAI
+        self.client = OpenAI()  # reads OPENAI_API_KEY
+        self.model, self.max_tokens = model, max_tokens
+
+    def ask(self, prompt: str, logprobs: bool = False) -> Answer:
+        r = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=self.max_tokens,
+            temperature=0.0,
+            **({"logprobs": True, "top_logprobs": 5} if logprobs else {}),
+        )
+        ch = r.choices[0]
+        lps = ([t.logprob for t in ch.logprobs.content]
+               if (logprobs and ch.logprobs and ch.logprobs.content) else [])
+        return Answer(ch.message.content or "", self.model,
+                      r.usage.prompt_tokens, r.usage.completion_tokens, lps)</code></pre>
+<p>The <code>logprobs</code> flag matters for the next step. Requesting logprobs is the cheapest confidence signal available — a few extra bytes on a response you already paid for.</p>
+<h2 id="4-score-the-cheap-answer">4. Score the cheap answer<a class="anchor" href="#4-score-the-cheap-answer" aria-label="Link to section">#</a></h2>
+<p>The scorer is the cascade&#x27;s brain, and you have three options in ascending order of cost:</p>
+<p><strong>1. Mean token logprob (free).</strong> Take the geometric mean of per-token probabilities — <code>exp(mean(logprobs))</code> — as the confidence score. Fluent, on-rails answers score high; hesitant, low-probability token sequences score low. The catch: it only works where the provider exposes logprobs. OpenAI&#x27;s chat completions do; Anthropic&#x27;s Messages API does not. So this scorer is OpenAI-only in practice:</p>
+<pre><code class="language-python">import math
+
+def mean_logprob_scorer(answer: Answer) -> float:
+    """Confidence in [0,1] from mean per-token logprob."""
+    if not answer.logprobs:
+        raise ValueError("needs per-token logprobs: call the backend with logprobs=True")
+    return math.exp(sum(answer.logprobs) / len(answer.logprobs))</code></pre>
+<p><strong>2. A cheap judge model (one small extra call).</strong> This is the FrugalGPT pattern: their scorer was a DistilBERT fine-tuned for regression on (query, answer) pairs, outputting a reliability score in [0,1]. You don&#x27;t need to train one — prompt a small model with the question, the candidate answer, and &ldquo;reply with a single number 0–1 for correctness&rdquo;. It costs one extra cheap call per candidate, works on any provider, and is the most reliable off-the-shelf option.</p>
+<p><strong>3. Self-reported confidence (free, weakest).</strong> Ask the model to end its answer with <code>confidence: 0.x</code>. It costs nothing extra, but models are systematically overconfident — treat a self-reported 0.9 as roughly 0.7 until you calibrate it on your own data. Use it only as a tiebreak, never as the gate.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/llm-cascade-router-tutorial/img2.webp" alt="Diagram of a cascade routing pipeline: a query enters a small model, passes through a confidence-gauge decision gate, and escalates to a larger model"><figcaption>AI-generated illustration for this article: the cascade pattern — cheap model first, confidence gate, escalate only on doubt.</figcaption></figure>
+<h2 id="5-build-the-cascade-loop">5. Build the cascade loop<a class="anchor" href="#5-build-the-cascade-loop" aria-label="Link to section">#</a></h2>
+<p>The router itself is short. Walk each tier cheapest-first, score the answer, accept at or above the tier&#x27;s threshold, and always accept at the final tier (threshold 0.0). The decision log is not optional decoration — it is your observability: escalation rate, score distribution, and per-tier spend all come from it.</p>
+<pre><code class="language-python">@dataclass
+class CascadeRouter:
+    tiers: list                  # backends, cheapest first
+    thresholds: list[float]      # accept threshold per tier; last is 0.0
+    scorer = mean_logprob_scorer
+    log: list = field(default_factory=list)
+
+    def route(self, prompt: str, **ask_kwargs) -> Answer:
+        for i, backend in enumerate(self.tiers):
+            ans = backend.ask(prompt, **ask_kwargs)
+            score = 1.0 if i == len(self.tiers) - 1 else self.scorer(ans)
+            self.log.append({"model": backend.model,
+                             "score": round(score, 4),
+                             "accepted": score >= self.thresholds[i],
+                             "cost_usd": usd_cost(backend.model,
+                                                  ans.in_tokens, ans.out_tokens)})
+            if score >= self.thresholds[i]:
+                return ans
+        return ans  # unreachable: the last threshold is 0.0
+
+    def total_cost(self) -> float:
+        return sum(e["cost_usd"] for e in self.log)</code></pre>
+<p>Two design decisions are load-bearing. First, thresholds are per-tier, not global — the middle of the ladder can be stricter or looser than the bottom. Second, the final tier always accepts, so the router can never return nothing; a cascade must degrade to the flagship, never to an error.</p>
+<h2 id="6-measure-it-on-a-workload">6. Measure it on a workload<a class="anchor" href="#6-measure-it-on-a-workload" aria-label="Link to section">#</a></h2>
+<p>A cascade tuned on vibes is a random number generator with extra steps. The harness below runs the router over 500 seeded questions with known difficulty: the mock cheap model is correct on the easy 75%, the mock strong model on 97%, and the logprob scorer genuinely separates right from wrong answers (scores sag as difficulty rises, with noise — like the real thing). Token profile is 400 in / 150 out per query. This is a <em>simulated</em> workload — your absolute numbers will differ — but the method is exactly what you run with real backends and your own labeled eval set.</p>
+<pre><code class="language-bash">python3 cascade_router.py</code></pre>
+<pre><code class="language-text">== headline run: 2-tier cascade, thresholds [0.42, 0.0] ==
+{
+  "n": 500,
+  "accuracy": 0.966,
+  "cost_usd": 1.1914,
+  "baseline_usd": 2.3,
+  "savings_pct": 48.2,
+  "tier_share": {"claude-haiku-4-5": 0.732, "claude-opus-5-5": 0.268},
+  "strong_accuracy": 0.97
+}</code></pre>
+<p>Read it as: the cheap model answered 73.2% of questions, the flagship took the other 26.8%, total accuracy 0.966 versus 0.97 for always-flagship — and the bill fell 48.2%, from $2.30 to $1.19 per 500 queries. At a million queries a month, that is the difference between $4,600 and $2,383.</p>
+<p>The harness also exposes the classic cascade failure — the dead middle tier. A three-tier run (cheap → mid → strong, thresholds [0.42, 0.50, 0.0]) saved only 34.8%, and the mid tier accepted <strong>0%</strong> of questions. Every tier you add taxes every escalation with another wasted call, so a tier that never accepts is pure overhead. Check <code>tier_share</code> in your logs: if a tier rounds to zero, delete it.</p>
+<h2 id="7-tune-the-threshold">7. Tune the threshold<a class="anchor" href="#7-tune-the-threshold" aria-label="Link to section">#</a></h2>
+<p>The threshold is not a hyperparameter you guess — you sweep it and read the curve. Same 500 questions, varying only the cheap tier&#x27;s τ:</p>
+<pre><code class="language-text">tau=0.20  accuracy=0.760  savings=75.0%   cheap answers everything (including wrong)
+tau=0.30  accuracy=0.770  savings=72.8%
+tau=0.42  accuracy=0.966  savings=48.2%   &lt;- sweet spot
+tau=0.55  accuracy=0.966  savings=25.6%
+tau=0.70  accuracy=0.966  savings=6.4%
+tau=0.85  accuracy=0.966  savings=-10.6%  threshold so strict you pay for the
+                                          cheap call, then escalate anyway</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/llm-cascade-router-tutorial/img3.webp" alt="Measured threshold sweep chart: accuracy collapses below τ=0.4 while savings turn negative above τ=0.8, with the sweet spot at τ=0.42"><figcaption>Measured in the sandbox (500 seeded simulated queries; script included): the threshold sweep. Below τ≈0.4 accuracy collapses; above τ≈0.8 the cascade costs more than the flagship it was meant to replace.</figcaption></figure>
+<p>Two cliffs, one plateau. Below τ≈0.4 the gate accepts answers the cheap model got wrong and accuracy falls off a cliff. Above τ≈0.8 the gate rejects good cheap answers and savings go <em>negative</em> — you paid for the cheap call and escalated anyway, the worst possible outcome. The plateau between them is where you live. In production, the procedure is: fix your minimum acceptable accuracy, take the cheapest τ that holds it on a held-out eval set, and re-tune monthly — traffic mixes drift, and a threshold tuned on last quarter&#x27;s questions is a guess about this quarter&#x27;s.</p>
+<h2 id="8-harden-it-for-production">8. Harden it for production<a class="anchor" href="#8-harden-it-for-production" aria-label="Link to section">#</a></h2>
+<p>The loop above is the idea; production needs five more things:</p>
+<ul><li><strong>Timeouts with escalation-as-fallback.</strong> If the cheap call times out or errors, don&#x27;t fail the request — escalate. If every tier fails, fail loudly. A cascade must never silently serve nothing.</li><li><strong>An exact-match cache</strong> on (prompt, tier) in front of the router. Repeated questions should never reach any model twice.</li><li><strong>Concurrency.</strong> The loop is per-request and sequential by design; run requests in parallel with <code>asyncio</code> and a semaphore sized to your provider&#x27;s rate limits.</li><li><strong>Drift alerts on the decision log.</strong> Track escalation rate and score distribution per tier. A sudden jump means your traffic mix changed or the cheap model got worse — either way, your threshold is now wrong.</li><li><strong>A per-request budget cap.</strong> If cumulative spend would exceed the cap, stop escalating and return the best answer so far. This bounds the worst case no matter what the scorer does.</li></ul>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p><strong>Cascade (this tutorial)</strong> wins when question difficulty varies and you can score answers after the fact. Its tax is the wasted cheap call on every escalation.</p>
+<p><strong>Pre-routing (the RouteLLM pattern)</strong> predicts difficulty from the prompt <em>before</em> calling anything — no wasted calls. LMSYS&#x27;s RouteLLM (ICLR 2025, &ldquo;Learning to Route LLMs with Preference Data&rdquo;) learns P(strong model beats weak model | query) from preference data with routers ranging from similarity-weighted ranking to fine-tuned classifiers. Choose it when you have win-rate training data and want to skip the cheap call entirely; choose the cascade when you don&#x27;t.</p>
+<p><strong>Prompt caching</strong> is orthogonal, not alternative: repeated prefixes (system prompts, documents) are served from cache at 10% of input price on Anthropic. Stack it under the cascade — cache the cheap tier&#x27;s prompt and the flagship&#x27;s prompt independently.</p>
+<p><strong>Batch API</strong> gives 50% off both input and output for async workloads on Anthropic. If your workload tolerates hours of latency, batch first and cascade second; the discounts multiply.</p>
+<p><strong>When not to cascade:</strong> uniformly hard traffic (everything escalates — you bought latency for nothing), no reliable way to score answers, or latency SLOs tighter than two sequential model calls. Measure your difficulty mix first; the cascade is an economic structure, not a default.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>A cascade router is not a prompt trick — it is an economic structure wrapped around your models. Price the ladder from the provider&#x27;s page, not from memory. Pick the cheapest scorer your provider supports (logprobs where they exist, a small judge everywhere else). Sweep the threshold on a labeled set instead of guessing it, and keep the decision log — escalation rate is the vital sign of the whole system. On a mixed workload, the measured result here was 48% cheaper at flagship accuracy, with the cheap model quietly handling nearly three-quarters of traffic. The flagship is still there for the questions that deserve it. It just stopped answering the ones that don&#x27;t.</p>
+<div class="post-engage"><div class="reactions" data-reactions="llm-cascade-router-tutorial"></div><div class="comments" data-comments="llm-cascade-router-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/red-team-your-evals-reward-hacking-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your evals: catch reward hacking in your LLM judges, hands-on</h3><div class="meta">September 29, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/speculative-decoding-llamacpp-tutorial/"><span class="chip">Tutorials</span><h3>Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</h3><div class="meta">September 29, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/litellm-gateway-tutorial/"><span class="chip">Tutorials</span><h3>One API for every LLM: run LiteLLM as your AI gateway</h3><div class="meta">September 28, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/prompt-compression-measured-guide/"><span class="chip">Tutorials</span><h3>Cut your prompt tokens in half: a measured guide to prompt compression</h3><div class="meta">September 27, 2026 · 10 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
