@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Compose a full song on your own GPU: hands-on with YuE2, the open model taking on Suno — AI Frontier Post</title>
+<meta name="description" content="YuE2 is an open-weight music model that writes an editable melody-and-chord plan before rendering a full song with vocals — and it beat Suno v5 and v6 on WildSongBench. This tutorial installs it, generates a song from lyrics and a style prompt, reads the score it planned, and re-renders an edited version.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/yue2-song-generation-hands-on/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Compose a full song on your own GPU: hands-on with YuE2, the open model taking on Suno">
+<meta property="og:description" content="An open-weight music model that writes an editable melody-and-chord plan before rendering a full song — and beats Suno v5 and v6 on WildSongBench. Installed, generated, and re-edited end-to-end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/yue2-song-generation-hands-on/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/yue2-song-generation-hands-on/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-09-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Compose a full song on your own GPU: hands-on with YuE2, the open model taking on Suno", "description": "YuE2 is an open-weight music model that writes an editable melody-and-chord plan before rendering a full song with vocals \u2014 and it beat Suno v5 and v6 on WildSongBench. This tutorial installs it, generates a song from lyrics and a style prompt, reads the score it planned, and re-renders an edited version.", "datePublished": "2026-09-29", "dateModified": "2026-09-29", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/yue2-song-generation-hands-on/"}, "image": "https://aifrontierpost.com/articles/yue2-song-generation-hands-on/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Compose a full song on your own GPU: hands-on with YuE2, the open model taking on Suno</h1>
+<p class="lede">Suno makes music from text and keeps the machinery hidden. YuE2, the open-weight model that topped GitHub's trending list this month, does something stranger: it writes an editable melody-and-chord plan first, and only then renders it as a full song with vocals and accompaniment. You get to read the score before you hear the music — and change it. This tutorial installs it, generates a song, reads the plan it wrote, and re-renders an edited version.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · September 29, 2026 · 9 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/yue2-song-generation-hands-on/cover.webp" alt="YuE2's generation pipeline: style and lyrics become an editable score, then semantic music tokens, acoustic latents, and finally stereo audio"><figcaption>YuE2's pipeline: style and lyrics become an editable score, then semantic music tokens, acoustic latents, and stereo audio. Diagram: multimodal-art-projection/YuE (Apache 2.0).</figcaption></figure>
+<div class="article-body">
+<p>This month a repository called <strong>YuE2</strong> (<a href="https://github.com/multimodal-art-projection/YuE">multimodal-art-projection/YuE</a>) hit #1 on GitHub trending across all languages, topped Hugging Face's text-to-audio trending, and collected over 10,500 stars — then the authors put their paper on arXiv today (arXiv:2609.33757). The pitch is worth the attention: <strong>frontier-quality song generation with a white-box middle step</strong>. Give it lyrics and a style prompt and it doesn't go straight to audio. It writes a plan — an explicit melody-and-chord score in ABC notation — and then renders that plan as a complete 48 kHz stereo song with vocals and accompaniment. On the WildSongBench evaluation the best-of-8 setting scored 6.9632 SongBench average, ahead of Suno v5, v5.5, v6, and every other system tested.</p>
+
+<p>The plan is the whole point. Because the composition exists as a readable score <em>before</em> rendering, you can inspect it, play it, change the harmony or the melody, and re-render — or transcribe an existing recording and restyle it as a cover. Closed music generators sell you the audio; YuE2 sells you the composition process. Here is the full path from zero to your own generated song, with every command verified against the project's own quick start and examples.</p>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Linux, Python 3.12, and an NVIDIA GPU with BF16 support and 24 GB of VRAM</strong> — those are the project's stated requirements, and they are the honest gate for this tutorial. There is no 8 GB path; music diffusion-style flow matching at 48 kHz stereo is heavy.</li>
+<li><strong>No API keys, no accounts, no cost for personal use.</strong> Model files download from Hugging Face on first use. Code, docs, and the agent skill are Apache 2.0; the weights carry a CC BY-NC 4.0 license with an additional creator permission — free for personal users, content creators, and musicians to use and monetize (attribution encouraged, #YuE2), with commercial companies expected to contact the authors for a license. Read the license terms before shipping anything commercial.</li>
+<li><strong>No GPU?</strong> The project runs a <a href="https://yue.noizai.net/">free browser demo hosted by NOIZ</a> — no installation — and a public blind listening arena comparing YuE2 with proprietary systems. The commands below assume your own machine.</li>
+</ul>
+
+<h2 id="step-1-install">Step 1: Install YuE2<a class="anchor" href="#step-1-install" aria-label="Link to section">#</a></h2>
+<p>The quick start is genuinely short — clone, venv, install the package itself:</p>
+<pre><code>git clone https://github.com/multimodal-art-projection/YuE.git
+cd YuE
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install .</code></pre>
+<p>The weights — the 3B generation model <code>m-a-p/YuE2-3B</code> and the VAE decoder <code>m-a-p/YuE2-Vae</code> — download from Hugging Face the first time you generate. There is also a pinned v0.1.6 wheel on the releases page if you prefer installing from a fixed artifact instead of the source tree.</p>
+
+<h2 id="step-2-song-request">Step 2: Write your song request<a class="anchor" href="#step-2-song-request" aria-label="Link to section">#</a></h2>
+<p>YuE2 takes a JSON request. Save this as <code>my_song.json</code> — it follows the project's own <code>examples/song.json</code> format, with your own lyrics and style:</p>
+<pre><code>{
+  "id": "harbor_lights",
+  "style": "English, warm indie folk, earnest male vocal, fingerpicked acoustic guitar, brushed drums, memorable chorus melody, steady build, 96 BPM",
+  "lyrics": "[Verse]\nSalt air on the harbor wire\nGulls are writing in the blue\nEvery boat returns by fire\nEvery wave returns to you\n\n[Chorus]\nTurn the harbor lights back on\nGuide the tired ships home\nWe were never really gone\nWe were never quite alone",
+  "cot": "full",
+  "seed": 831001
+}</code></pre>
+<p>The fields that matter: <code>style</code> is a free-form production prompt — language, genre, vocal character, instrumentation, tempo. The <code>lyrics</code> use <code>[Verse]</code>/<code>[Chorus]</code> section tags. <code>cot</code> picks the planning mode: <code>"full"</code> generates an editable melody-and-chord plan (the default and the interesting one), <code>"melody"</code> plans only the melody with free accompaniment (recommended for covers), and <code>"off"</code> skips planning and goes straight from lyrics and style to audio. <code>seed</code> fixes the run.</p>
+
+<h2 id="step-3-generate">Step 3: Generate your first song<a class="anchor" href="#step-3-generate" aria-label="Link to section">#</a></h2>
+<pre><code>python examples/generate.py --request my_song.json --output outputs/harbor-lights</code></pre>
+<p>The flags, exactly as the project's CLI defines them: <code>--request</code> (defaults to the bundled <code>examples/song.json</code>), <code>--abc-file</code> to supply your own score (more in Step 5), <code>--cot</code> overriding the request's planning mode, <code>--output</code> (required), <code>--model</code> (default <code>m-a-p/YuE2-3B</code>), <code>--vae</code> (default <code>m-a-p/YuE2-Vae</code>), plus <code>--revision</code> / <code>--vae-revision</code> to pin exact model commits. Open <code>outputs/harbor-lights/audio.flac</code> and you have your song.</p>
+<p>The output directory is more interesting than the audio. Alongside the recording it keeps the <strong>score</strong> (the plan), the <strong>semantic music tokens</strong>, the <strong>acoustic latents</strong>, the <strong>generation settings</strong>, and the <strong>model identities</strong>. A YuE2 song is a reproducible artifact, not a black-box lottery ticket — same request, same seed, same pipeline.</p>
+
+<h2 id="step-4-read-score">Step 4: Read the plan before you listen<a class="anchor" href="#step-4-read-score" aria-label="Link to section">#</a></h2>
+<p>This is the step no closed generator offers. Open <code>outputs/harbor-lights/score.abc</code> — it's ABC notation, a plain-text music format you can read and play back with any ABC-capable tool. You are looking at the actual composition YuE2 intended: the vocal melody line, the chord symbols per bar, the tempo, the form. If the chorus harmony is blander than you wanted, you know exactly where it happened — in the plan, not somewhere inside an inscrutable latent.</p>
+<p>Internally the pipeline is staged, and the README exposes it as an explicit Python API — <code>plan()</code> → <code>generate_semantic()</code> → <code>synthesize()</code> → <code>decode()</code> — with one mixture-of-transformers backbone predicting the score and semantic tokens autoregressively, then flow-matching the acoustic latents and decoding them through a VAE into stereo audio. Creation, covers, and editing differ only in where the score comes from: generated by YuE2, transcribed from a recording, or edited by you.</p>
+
+<h2 id="step-5-edit">Step 5: Edit the score, render it again<a class="anchor" href="#step-5-edit" aria-label="Link to section">#</a></h2>
+<p>The editable score is the white-box interface. Export a plan, revise the musical details, render the edited score. The project documents the loop with a short Python API:</p>
+<pre><code>import json
+from pathlib import Path
+from yue2 import YuE2Pipeline
+
+request = json.loads(Path("my_song.json").read_text(encoding="utf-8"))
+with YuE2Pipeline.from_pretrained("m-a-p/YuE2-3B", device="cuda") as pipe:
+    plan = pipe.plan(**request)
+    plan.save("outputs/plan")</code></pre>
+<p>Now copy <code>outputs/plan/score.abc</code> to <code>edited.abc</code>, change what you want — reharmonize the chorus, raise the bridge melody, slow the tempo — and feed it back:</p>
+<pre><code>python examples/generate.py --request my_song.json \
+  --abc-file edited.abc --cot full --output outputs/harbor-lights-v2</code></pre>
+<p>Two things to understand about this step. First, it works: the project ships a reproducible harmony-edit example and a full editing guide. Second, the honest caveat from the docs: <strong>editing produces a new complete recording; it does not preserve the original waveform.</strong> You're re-composing and re-rendering, not surgically splicing stems. For the demo site the agentic editing flow shows what this looks like in practice: one song taken through nine steps and fourteen versions, from Mandarin pop to English jazz with new harmony and a saxophone solo, each version re-rendered from an edited score.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/yue2-song-generation-hands-on/img2.webp" alt="WildSongBench comparison chart: YuE2 and YuE2 best-of-8 rank top in song quality among public and proprietary music generators"><figcaption>The project's WildSongBench comparison: YuE2 best-of-8 sits top-right, ahead of Suno v5/v5.5/v6, Mureka 9, and ACE-Step 1.5. Chart: multimodal-art-projection/YuE (Apache 2.0).</figcaption></figure>
+
+<h2 id="step-6-cover">Step 6: Cover a song in a new style<a class="anchor" href="#step-6-cover" aria-label="Link to section">#</a></h2>
+<p>Covers work because the score is decoupled from the audio. The flow: transcribe a source recording with the companion <strong>SheetSage2</strong> model (<code>m-a-p/SheetSage2</code>), review its melody ABC, then generate with new lyrics or a new target style. The recipe from the project's cover guide:</p>
+<pre><code>from pathlib import Path
+from yue2 import YuE2Pipeline
+
+with YuE2Pipeline.from_pretrained("m-a-p/YuE2-3B", device="cuda") as pipe:
+    cover = pipe(
+        style="English, jazz-funk, warm lead vocal, Rhodes, bass and drums",
+        lyrics=Path("cover-lyrics.txt").read_text(encoding="utf-8"),
+        abc=Path("cover-score/score.abc").read_text(encoding="utf-8"),
+        cot="melody",
+        seed=42,
+    )
+    cover.save_artifacts("outputs/cover")</code></pre>
+<p>The key choice is <code>cot="melody"</code> with a score that carries <strong>no chord symbols</strong>, so the accompaniment can adapt to the new style while the transcribed melody holds. On the project's cover evaluation (948 works), full-score YuE2 reached 0.647 CLEWS mAP for source-identity preservation versus 0.006 without a score — the score is doing the preservation work. SheetSage2 itself is a strong transcriber in its own right: 82.51% vocal-melody pitch-class F1 on RWC-Pop, 67.08% on Rock Corpus. The repo includes an <code>examples/melody.abc</code> if you want to try score-conditioned generation immediately.</p>
+
+<h2 id="benchmarks">What the benchmarks actually say<a class="anchor" href="#benchmarks" aria-label="Link to section">#</a></h2>
+<p>The numbers come from the project's own WildSongBench evaluation — 192 prompts, automatic metrics, September 12, 2026:</p>
+<ul>
+<li><strong>YuE2 best-of-8: 6.9632 SongBench average</strong> — the top score among all 17 evaluated settings, ahead of Mureka 9 (6.9377), Suno v5 (6.8721), Suno v5.5 (6.7150), and Suno v6 (6.5562). Standard YuE2 (two candidates) scores 6.7316 — still ahead of all three Suno versions.</li>
+<li><strong>Audio quality</strong> (AudioBox production quality): YuE2 leads at 8.2598, 8.2714 for best-of-8, versus 8.1698 for Suno v5. <strong>Text alignment</strong> (MuLan) is where Suno v5 still leads at 0.5428 against YuE2's 0.5068 — rankings vary by metric, and the authors note the small gap between the highest means does not establish statistical significance.</li>
+<li><strong>Open competition:</strong> the strongest open rival on the board is ACE-Step 1.5 at 6.0118 — a real gap, and a reminder of how fast this category moved in a month.</li>
+<li>The two sibling models matter for the tutorial above: <strong>MERT2</strong> leads 14 of 15 MARBLE music-understanding metrics (91.72% genre accuracy on GTZAN), and <strong>SheetSage2</strong> leads 12 of 15 transcription metrics — the infrastructure the covers and editing stand on.</li>
+</ul>
+
+<h2 id="when-to-use">When to use this vs. the alternatives<a class="anchor" href="#when-to-use" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Use YuE2 when</strong> you want local, inspectable, editable song generation: the score is the deliverable, the audio is a rendering of it. Songwriters who want to argue with the harmony, producers who want stems-as-scores, agents composing and revising music.</li>
+<li><strong>Use Suno or Udio when</strong> you want the fastest path from idea to listenable song with no hardware of your own — see our <a href="/articles/ai-music-generators-compared/">Suno vs. Udio comparison</a>. YuE2's answer is control; theirs is convenience.</li>
+<li><strong>Use ACE-Step 1.5 when</strong> your hardware is modest and you want a diffusers-native music model that runs lighter — it trails on the benchmark but asks far less of your machine.</li>
+<li><strong>Use the yue2-music agent skill</strong> (ships in the repo; the authors recommend GPT-6 Astra as the driving agent) when you want an agent to do the loop for you — it teaches an agent to generate songs and instrumentals, transcribe and cover recordings, edit ABC scores, and check musical invariants.</li>
+</ul>
+
+<h2 id="honest-limitations">Honest limitations<a class="anchor" href="#honest-limitations" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>The 24 GB VRAM gate is real.</strong> The project's stated requirement is Linux, Python 3.12, and an NVIDIA GPU with BF16 support and 24 GB of VRAM. This is not a "runs on your laptop" tutorial — it is a "runs on your workstation GPU" tutorial. The free browser demo exists precisely for everyone else.</li>
+<li><strong>Editing re-renders everything.</strong> There is no stem-level surgery: an edited score becomes a brand-new full recording. Keep the settings artifacts so you can reproduce any version, and version-control your ABC files.</li>
+<li><strong>License boundaries.</strong> Code is Apache 2.0, but the weights are CC BY-NC 4.0 with an additional creator permission. Personal creators and musicians can use and monetize outputs freely; if a company wants to ship a product on YuE2 weights, that conversation goes to the authors. The usual "open weights ≠ do anything you want" split — read it before you build on it.</li>
+<li><strong>Best-of-8 costs 8×.</strong> The benchmark-topping score comes from generating eight candidates and picking the best. Budget that compute (or serve it with the community's YuE2-Turbo toolkit) if you need peak quality every time.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/yue2-song-generation-hands-on/img3.webp" alt="The YuE2 project logo, presented on a dark studio backdrop"><figcaption>YuE2: compose in symbols, create in sound. Logo: multimodal-art-projection/YuE (Apache 2.0).</figcaption></figure>
+<p>YuE2's real argument isn't "better than Suno" — though on WildSongBench the numbers currently say that. It's that <strong>music generation gets better when the model shows its work</strong>. The ABC score between your prompt and the audio is a seam you can open: read the melody, argue with the chords, transcribe a recording and reimagine it, hand the whole loop to an agent. Every closed generator gives you a take; YuE2 gives you the take, the score, the tokens, and the settings, and invites you to change any of them.</p>
+<p>The habit to carry out of this tutorial: <strong>treat the plan as the first draft.</strong> Generate with <code>cot="full"</code>, read <code>score.abc</code> before you judge the audio, and make your changes where the composition lives. The audio is just the render.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="yue2-song-generation-hands-on"></div><div class="comments" data-comments="yue2-song-generation-hands-on"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/ai-music-generators-compared/"><span class="chip">Reviews</span><h3>AI music generators compared: Suno vs Udio</h3><div class="meta">September 12, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/local-llm-apps-compared/"><span class="chip">Tutorials</span><h3>Running open models locally: LM Studio vs Ollama vs Jan</h3><div class="meta">July 30, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/quantization-explained-4bit/"><span class="chip">Tutorials</span><h3>Quantization, demystified: how 4-bit models keep their smarts</h3><div class="meta">July 17, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/serve-model-vllm-tutorial/"><span class="chip">Tutorials</span><h3>Serve an open model with vLLM: a deployment tutorial</h3><div class="meta">July 14, 2026 · 9 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
