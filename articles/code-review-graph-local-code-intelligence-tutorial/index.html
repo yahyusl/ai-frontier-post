@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop feeding your agent the whole repo: a hands-on tutorial for code-review-graph — AI Frontier Post</title>
+<meta name="description" content="code-review-graph (26,500+ stars, 6,400 added in a single week) builds a persistent local map of your codebase — functions, callers, tests, blast radius — and serves it to any AI coding agent over MCP. Install, build, wire it up, and run a real change-impact review — every command verified.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/code-review-graph-local-code-intelligence-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop feeding your agent the whole repo: a hands-on tutorial for code-review-graph">
+<meta property="og:description" content="code-review-graph (26,500+ stars, 6,400 added in a single week) builds a persistent local map of your codebase — functions, callers, tests, blast radius — and serves it to any AI coding agent over MCP. Install, build, wire it up, and run a real change-impact review — every command verified.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/code-review-graph-local-code-intelligence-tutorial/">
+<meta property="og:image" content="https://aifrontierpost.com/articles/code-review-graph-local-code-intelligence-tutorial/cover.webp">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop feeding your agent the whole repo: a hands-on tutorial for code-review-graph", "description": "code-review-graph (26,500+ stars, 6,400 added in a single week) builds a persistent local map of your codebase \u2014 functions, callers, tests, blast radius \u2014 and serves it to any AI coding agent over MCP. Install, build, wire it up, and run a real change-impact review \u2014 every command verified.", "datePublished": "2026-09-29", "dateModified": "2026-09-29", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/code-review-graph-local-code-intelligence-tutorial/"}, "image": "https://aifrontierpost.com/articles/code-review-graph-local-code-intelligence-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop feeding your agent the whole repo: a hands-on tutorial for code-review-graph</h1>
+<p class="lede">Your AI coding agent burns most of its context budget doing one thing: reading code. code-review-graph flips that cost — one local build of a structural map, then your agent asks questions instead of scanning files. Here is the complete loop, verified command by command.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · September 29, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/code-review-graph-local-code-intelligence-tutorial/cover.webp" alt="Editorial illustration of a glowing knowledge graph of a codebase over a dark developer workspace"></figure>
+<div class="article-body">
+<p>The most expensive thing your AI coding agent does is read code. Not generate it — read it. Every review, every refactor, every &ldquo;who calls this function?&rdquo; starts with the agent scanning files into context, and on a real codebase that scan costs thousands of tokens before a single line is written. You pay for those tokens twice: once in money, once in accuracy, because the more irrelevant code in context, the worse the output gets.</p>
+<p>That is the problem <a href="https://github.com/tirth8205/code-review-graph">code-review-graph</a> attacks, and it is why the project is blowing up right now: <strong>26,588 stars</strong> on GitHub, with <strong>6,423 added in a single week</strong> per this week&rsquo;s GitHub trending digest — one of the fastest-moving developer tools in open source this month. The idea is disarmingly simple. Instead of letting your agent grep its way through the repo on every question, you build a <strong>persistent local knowledge graph</strong> of the codebase once — every function, class, import, call edge, and test linkage — and serve it to any AI coding tool over MCP. The agent asks structural questions (&ldquo;who calls this?&rdquo;, &ldquo;what breaks if I change this?&rdquo;) and gets back hundreds of tokens of answers instead of whole files.</p>
+<p>In this tutorial you will install code-review-graph (version 2.3.9, the current release), build a graph for a real project, query it from the command line, wire it into Claude Code as an MCP server, and run a full change-impact review. Every command below was run and checked on a Linux sandbox before publication — including the places where the tool pushed back.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or later</strong> — check with <code>python3 --version</code>. pip, pipx, or uv; pick whichever you already use.</li><li>A <strong>git repo</strong> to experiment on. Small is fine to start; the tool is built for large ones, but the commands are identical.</li><li>Any <strong>AI coding tool</strong> for step 4 (Claude Code, Cursor, Codex, Copilot, Windsurf, Zed, Continue, OpenCode, Antigravity, Gemini CLI, Qwen, Kiro — the installer auto-detects all of them). If you have none installed, steps 1–3 and 5 still work from the terminal.</li><li>About 20 minutes. No GPU, no API keys, no accounts. Everything runs on your machine: the project is MIT-licensed, ships with no telemetry, and stores the graph in <code>.code-review-graph/graph.db</code> inside your repo.</li></ul>
+<h2 id="1-install">1. Install it<a class="anchor" href="#1-install" aria-label="Link to section">#</a></h2>
+<p>The package is a normal PyPI release, so there is nothing to compile and no model weights to download:</p>
+<pre><code class="language-bash">pip install code-review-graph==2.3.9      # or: pipx install code-review-graph
+                                          # or: uv tool install code-review-graph</code></pre>
+<p>Confirm the install and survey the command surface:</p>
+<pre><code class="language-bash">code-review-graph --help</code></pre>
+<p>You should see the full vocabulary — <code>install</code>, <code>build</code>, <code>update</code>, <code>watch</code>, <code>status</code>, <code>visualize</code>, <code>wiki</code>, <code>detect-changes</code>, <code>query</code>, <code>impact</code>, <code>search</code>, <code>architecture</code>, <code>dead-code</code>, <code>communities</code>, <code>refactor</code>, <code>register</code>, <code>serve</code>, <code>daemon</code> — all local, all offline. That one help screen is already the honest scope of the project: it builds a graph, queries it, and serves it.</p>
+<h2 id="2-build-your-first-graph">2. Build your first graph<a class="anchor" href="#2-build-your-first-graph" aria-label="Link to section">#</a></h2>
+<p>Move into any project directory and run:</p>
+<pre><code class="language-bash">cd your-project
+code-review-graph build</code></pre>
+<p>On a three-file Python demo I ran for this article (a tiny billing module with a test file), the output was:</p>
+<pre><code class="language-text">INFO: FTS index rebuilt: 10 rows indexed
+INFO: Loaded 7 unique nodes, 18 edges
+Full build: 3 files, 10 nodes, 18 edges (postprocess=full)</code></pre>
+<p>Under four seconds. The README states the initial build takes about 10 seconds for a 500-file project — plausible given what I measured, since parsing is tree-sitter AST work, not embedding. After the first build, <code>code-review-graph update</code> re-parses only changed files (my first update after editing fell back to a full rebuild with a &ldquo;no usable incremental base&rdquo; notice — expect one rebuild, then increments), and <code>code-review-graph watch</code> keeps the graph live as you save.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/code-review-graph-local-code-intelligence-tutorial/img2.webp" alt="Split illustration: on the left an overflowing stack of code files, on the right the same code as a compact glowing graph with highlighted call paths"><figcaption>AI-generated illustration for this article: dumping whole files into context versus asking a graph for the answer.</figcaption></figure>
+<h2 id="3-ask-the-graph-questions">3. Ask the graph questions<a class="anchor" href="#3-ask-the-graph-questions" aria-label="Link to section">#</a></h2>
+<p>This is where the tool earns its name. <code>status</code> gives you the headline numbers:</p>
+<pre><code class="language-bash">code-review-graph status</code></pre>
+<pre><code class="language-text">Nodes: 10
+Edges: 18
+Files: 3
+Languages: python
+Last updated: 2026-09-29T15:15:31</code></pre>
+<p><code>search</code> finds entities by name or meaning, with a built-in full-text index — no embeddings required:</p>
+<pre><code class="language-bash">code-review-graph search invoice</code></pre>
+<pre><code class="language-text">{
+  "status": "ok",
+  "query": "invoice",
+  "search_mode": "fts",
+  "summary": "Found 2 node(s) matching 'invoice'",
+  "results": [
+    {
+      "name": "create_invoice",
+      "qualified_name": "api.py::create_invoice",
+      "kind": "Function",
+      "file_path": "api.py",
+      "line_start": 3,
+      ...</code></pre>
+<p>Note <code>search_mode: fts</code> — out of the box, search is full-text. True semantic search needs the optional embeddings extra (<code>pip install code-review-graph[embeddings]</code>, then <code>code-review-graph embed</code>); the local provider is a small MiniLM model, and cloud providers are opt-in per call. For step-by-step navigation you do not need embeddings at all.</p>
+<p>The <code>query</code> command is the precision instrument. It takes one of eight patterns — <code>callers_of</code>, <code>callees_of</code>, <code>imports_of</code>, <code>importers_of</code>, <code>children_of</code>, <code>tests_for</code>, <code>inheritors_of</code>, <code>file_summary</code> — and a target in <code>file.py::function_name</code> form. I learned the target syntax the hard way: <code>billing.Billing.invoice_total</code> returned <code>not_found</code>, while the file-scoped form worked:</p>
+<pre><code class="language-bash">code-review-graph query callers_of api.py::create_invoice</code></pre>
+<pre><code class="language-text">{
+  "status": "ok",
+  "pattern": "callers_of",
+  "target": "api.py::create_invoice",
+  "description": "Find all functions that call a given function",
+  "summary": "Found 0 call site(s) across 0 node(s) for callers_of('api.py::create_invoice')",
+  "confidence": "python getattr dispatch and decorator-based registration are not
+                 statically traced, so callers can be missing here"
+}</code></pre>
+<p>Two things worth noticing in that output. First, the answer is structured JSON your agent can consume directly — this is the &ldquo;instead of files&rdquo; payoff. Second, the tool is honest about its limits: static analysis cannot trace dynamic dispatch, and it says so on every result rather than silently omitting callers. A tool that tells you when it might be wrong is a tool you can trust in a review loop.</p>
+<p>Two more commands worth running now. <code>architecture</code> shows the project as communities of related code — my demo split into a billing community and an invoice community with cohesion scores, the kind of map that answers &ldquo;what is this repo actually made of?&rdquo; in one screen. And <code>dead-code</code> listed every function with no callers or test references — three hits on the demo, all correct.</p>
+<h2 id="4-wire-it-into-your-ai-coding-tool">4. Wire it into your AI coding tool<a class="anchor" href="#4-wire-it-into-your-ai-coding-tool" aria-label="Link to section">#</a></h2>
+<p>The graph becomes powerful when your agent can query it mid-task. One command does the wiring:</p>
+<pre><code class="language-bash">code-review-graph install --platform claude-code</code></pre>
+<p>Drop the <code>--platform</code> flag and it auto-detects every supported tool on your machine. Running it inside my demo repo produced a full, verifiable setup — and this is the part of the tutorial most worth reading closely, because it shows what &ldquo;MCP integration&rdquo; concretely means here:</p>
+<ul><li><strong><code>.mcp.json</code></strong> — a stdio MCP server entry pointing at the installed package:</li></ul>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/path/to/venv/bin/python3",
+      "args": ["-m", "code_review_graph", "serve"],
+      "cwd": "/path/to/your-project",
+      "type": "stdio"
+    }
+  }
+}</code></pre>
+<ul><li><strong><code>CLAUDE.md</code> instructions</strong> — a graph-usage section injected into the project rules, telling the agent to query the graph before scanning files, and to verify conclusions against source (the injected text explicitly says: do not change code from graph output alone).</li><li><strong>Four generated skills</strong> under <code>.claude/skills/</code> — <code>debug-issue</code>, <code>explore-codebase</code>, <code>refactor-safely</code>, <code>review-changes</code>.</li><li><strong>PostToolUse hooks</strong> in <code>.claude/settings.json</code> plus a <strong>git pre-commit hook</strong>, so the graph updates as you work.</li><li><strong><code>.gitignore</code></strong> entry for <code>.code-review-graph/</code> — the graph database stays local to your machine.</li></ul>
+<p>Restart your coding tool after installing so it picks up the new MCP server. From then on, the agent has roughly two dozen graph tools — <code>get_minimal_context_tool</code> (the docs say to call it first: an ultra-compact ~100-token summary), <code>query_graph_tool</code>, <code>get_impact_radius_tool</code>, <code>detect_changes_tool</code>, <code>get_review_context_tool</code>, <code>semantic_search_nodes_tool</code>, <code>get_architecture_overview_tool</code>, <code>refactor_tool</code>, <code>generate_wiki_tool</code> among them — and the injected instructions route it through the graph before it reaches for the file system.</p>
+<h2 id="5-run-a-real-change-impact-review">5. Run a real change-impact review<a class="anchor" href="#5-run-a-real-change-impact-review" aria-label="Link to section">#</a></h2>
+<p>Here is the end-to-end workflow the project is designed for. Make an edit — I appended a <code>refund</code> method to the demo billing class — then ask for the impact before you commit:</p>
+<pre><code class="language-bash">code-review-graph detect-changes --brief</code></pre>
+<pre><code class="language-text">Analyzed 3 changed file(s):
+  - 7 changed function(s)/class(es)
+  - 1 affected flow(s)
+  - 3 test gap(s)
+  - Overall risk score: 0.57
+  - Untested: create_invoice, refund, invoice_total
+┌─────────────────────── Token Savings ────────────────────────┐
+│ Full context would be:        158 tokens                     │
+│ Graph context used:           158 tokens                     │
+│ Saved:                          0 tokens (~0%)               │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+<p>Read that output like a reviewer. It tells you what changed, what it touches, where the test gaps are, and an overall risk score — the skeleton of a code review, generated from structure rather than prose. The <strong>Token Savings panel</strong> is the project&rsquo;s core economic argument rendered as a number: what the agent would have spent dumping files versus what the graph query cost.</p>
+<p>One honest caveat, from my own run: on a three-file demo the panel showed zero savings, because there is nothing to save when the whole repo fits in a tweet. These are the project&rsquo;s estimates, and the tool only wins once the codebase is large enough that dumping files costs more than a graph query — which is exactly the regime it was built for. The project&rsquo;s own benchmark diagrams make the same point at scale: reading one corpus whole cost 143,594 tokens versus a 2,196-token graph answer. Treat both numbers as the vendor&rsquo;s claim, not gospel; the mechanism is sound, and you can measure it yourself with <code>eval</code>, which runs the project&rsquo;s own benchmark suite against your setup.</p>
+<p>For targeted blast-radius analysis, <code>impact</code> takes changed files explicitly:</p>
+<pre><code class="language-bash">code-review-graph impact --files billing.py --depth 2</code></pre>
+<p>Pair it with the agent: &ldquo;review my uncommitted changes&rdquo; now routes through <code>detect_changes_tool</code> and <code>get_review_context_tool</code>, and the MCP responses carry the savings metadata so you can see the cost of every answer.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/code-review-graph-local-code-intelligence-tutorial/img3.webp" alt="A robotic hand tracing expanding blast-radius rings across a code dependency map"><figcaption>AI-generated illustration for this article: change-impact analysis as concentric blast-radius rings over the dependency graph.</figcaption></figure>
+<h2 id="6-going-further">6. Going further<a class="anchor" href="#6-going-further" aria-label="Link to section">#</a></h2>
+<p>Three commands I verified that are worth knowing beyond the core loop. <code>visualize</code> writes an interactive D3.js graph to <code>.code-review-graph/graph.html</code> — open it in a browser to explore the codebase as a literal map. <code>wiki</code> generates a Markdown wiki from the community structure (<code>.code-review-graph/wiki</code>, three pages for my demo). And <code>register</code> / <code>repos</code> enroll multiple repositories in one registry, with <code>daemon</code> running a multi-repo watch process — the answer to &ldquo;what about my monorepo?&rdquo;</p>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p><strong>vs semantic code search (<a href="/articles/zvec-grep-semantic-code-search/">zvec-grep, covered here</a>):</strong> complementary, not competing. zvec-grep finds code by meaning — &ldquo;where do we handle retries?&rdquo; — while code-review-graph maps structure — &ldquo;what calls the retry handler?&rdquo; Run both: search with zvec, impact-analyze with the graph.</p>
+<p><strong>vs RTK (<a href="/articles/rtk-rust-token-killer-cli-tutorial/">the Rust CLI output proxy, covered here</a>):</strong> different ends of the token pipe. RTK cuts what the agent <em>outputs</em> and streams; code-review-graph cuts what it <em>reads</em>. They stack — use both if token spend is your metric.</p>
+<p><strong>vs built-in repo indexing (Copilot workspace, Cursor&rsquo;s index):</strong> this is free, local, and tool-agnostic — no subscription, no cloud upload of your code, and it works with seventeen platforms from one install. The trade: you own the <code>build</code>/<code>update</code> step, and the index lives in your repo.</p>
+<p><strong>When not to use it:</strong> tiny repos (my demo proved the overhead exceeds the savings below a few dozen files), heavily dynamic code (the tool warns you that <code>getattr</code> dispatch and decorator registration are not traced — believe it), and codebases where you cannot commit to keeping the graph fresh.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>code-review-graph is not another agent framework or another prompt trick. It is infrastructure: a cheap, local, structural index of your code that every AI coding tool you own can share. The 6,400-stars-in-a-week surge makes sense once you see the economics — agents that ask the graph read less, cost less, and, because they see callers and tests instead of raw files, review better. Install it on your largest repo, run <code>detect-changes --brief</code> on your next PR, and look at the savings panel. If the number convinces you, wire in the MCP server and stop feeding your agent the whole repo.</p>
+
+<div class="post-engage"><div class="reactions" data-reactions="code-review-graph-local-code-intelligence-tutorial"></div><div class="comments" data-comments="code-review-graph-local-code-intelligence-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/zvec-grep-semantic-code-search/"><span class="chip">Tutorials</span><h3>Search your codebase by meaning: a hands-on tutorial for zvec-grep (zg)</h3><div class="meta">September 27, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/rtk-rust-token-killer-cli-tutorial/"><span class="chip">Tutorials</span><h3>RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy</h3><div class="meta">September 27, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/ponytail-lazy-senior-dev-skill-tutorial/"><span class="chip">Tutorials</span><h3>Ponytail: teach your AI coding agent to write less code — a hands-on tutorial</h3><div class="meta">September 28, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/claude-code-hooks-complete-guide/"><span class="chip">Tutorials</span><h3>Claude Code hooks: the complete hands-on guide to deterministic agent control</h3><div class="meta">September 28, 2026 · 11 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
