@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Jeff: run Jev-style zero-shot decisions on your own machine — hands-on with the 0.8B model — AI Frontier Post</title>
+<meta name="description" content="Jeff is a 0.8B open-weight decision model that answers Jev-format choice, yes/no, and score questions in a single forward pass — trained on one workstation GPU. This tutorial installs it, serves it locally, and builds a working support-ticket triage pipeline with measured outputs and honest latency numbers.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/jeff-zero-shot-decision-models-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Jeff: run Jev-style zero-shot decisions on your own machine — hands-on with the 0.8B model">
+<meta property="og:description" content="A 0.8B open-weight decision model that answers Jev-format choice, yes/no, and score questions in one forward pass — trained on a single workstation GPU. Installed, served, and measured end-to-end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/jeff-zero-shot-decision-models-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/jeff-zero-shot-decision-models-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-09-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Jeff: run Jev-style zero-shot decisions on your own machine \u2014 hands-on with the 0.8B model", "description": "Jeff is a 0.8B open-weight decision model that answers Jev-format choice, yes/no, and score questions in a single forward pass \u2014 trained on one workstation GPU. This tutorial installs it, serves it locally, and builds a working support-ticket triage pipeline with measured outputs and honest latency numbers.", "datePublished": "2026-09-29", "dateModified": "2026-09-29", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/jeff-zero-shot-decision-models-tutorial/"}, "image": "https://aifrontierpost.com/articles/jeff-zero-shot-decision-models-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Jeff: run Jev-style zero-shot decisions on your own machine — hands-on with the 0.8B model</h1>
+<p class="lede">TypeSafe's Jev turned "ask the model to decide" into an API. Jeff is the open-weight answer: a 0.8B model that takes the same request format, returns calibrated probabilities in a single forward pass, and was trained on a single workstation GPU. This tutorial installs it, serves it locally, and wires it into a real ticket-triage pipeline — with every output below copied from an actual run.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · September 29, 2026 · 11 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/jeff-zero-shot-decision-models-tutorial/cover.webp" alt="Editorial illustration: a small glowing neural core labeled A, B, C emitting a decision beam that routes streams of tickets and documents into colored lanes"><figcaption>Jeff routes a stream of inputs into labeled lanes in one forward pass. Illustration: AI Frontier Post.</figcaption></figure>
+<div class="article-body">
+<p>Yesterday a repository called <strong>Jeff</strong> (<a href="https://github.com/firelex/jeff">firelex/jeff</a>) hit the Hacker News front page — 507 points and 192 comments within about 14 hours — and collected roughly 800 GitHub stars overnight. The pitch is specific enough to be interesting: <strong>small, open-weight decision models that speak the same request format as TypeSafe's Jev</strong>, but run on your own hardware. You describe a situation in plain words, list the options, and Jeff returns a calibrated probability for each one. No generated text, nothing to parse.</p>
+
+<p>The part that made me stop scrolling is the training story. The 0.8B model was fine-tuned from Qwen3.5-0.8B in about two hours on <strong>one RTX PRO 6000 workstation GPU</strong> — no cloud cluster, no closed-model output in the training data. The synthetic questions were written by an open model (Qwen3.8-Flash-Next) running on two DGX Sparks, and a closed model was used only to spot-check a sample. That is a "trained at home" claim you can actually audit, because the code, the recipe, and the weights are all public.</p>
+
+<p>So I did what this column does: downloaded it, served it, and measured it. What follows is the complete path from zero to a working decision pipeline, with every output copied verbatim from my runs and every latency number measured on the machine in front of me. Fair warning on that machine: it is a 2-core CPU virtual machine with no GPU — the worst reasonable case for a model like this, and exactly the environment where honest numbers matter most.</p>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Python 3.12+</strong> and pip. A GPU helps enormously, but this tutorial was built and verified on a plain 2-core CPU VM — everything below runs there, slowly.</li>
+<li><strong>About 2&nbsp;GB of disk</strong> for the 0.8B weights (1.7&nbsp;GB in 16-bit) plus roughly 1&nbsp;GB for the Python environment. The running server held about 3.7&nbsp;GB of RAM on my machine.</li>
+<li><strong>No API keys, no accounts, no cost.</strong> The model is at <code>mstrasser/Jeff-Qwen3.5-0.8B</code> on Hugging Face; weights are Apache 2.0, code is MIT.</li>
+<li>About 10 minutes of downloads on a decent connection, plus ~40 seconds for the model to load into memory.</li>
+</ul>
+
+<h2 id="step-1-install">Step 1: Install the serving stack (skip the training deps)<a class="anchor" href="#step-1-install" aria-label="Link to section">#</a></h2>
+<p>The repository's <code>pyproject.toml</code> lists the full training stack — datasets, matplotlib, flash-attention variants. You need none of that to serve. Install only the serving subset:</p>
+<pre><code>git clone https://github.com/firelex/jeff &amp;&amp; cd jeff
+python3.12 -m venv .venv
+.venv/bin/pip install torch==2.14.0 torchvision==0.29.0 transformers==5.17.0 \
+  accelerate==1.15.0 pillow==12.3.0 fastapi==0.141.1 uvicorn==0.52.4 \
+  httpx==0.28.1 python-dotenv==1.2.3 safetensors==0.8.0 numpy==2.5.3 \
+  huggingface-hub==1.31.0
+.venv/bin/pip install . --no-deps</code></pre>
+<p>Two gotchas I hit, so you don't have to. First: if you install the CPU build of PyTorch (<code>torch 2.14.0+cpu</code>), the default <code>torchvision==0.29.0</code> wheel from PyPI is the CUDA build and its native operators fail to register against CPU torch (you'll see <code>RuntimeError: operator torchvision::nms does not exist</code>, which then cascades into a confusing transformers import error). Fix: install the matching CPU wheel with <code>.venv/bin/pip install --force-reinstall --no-deps --index-url https://download.pytorch.org/whl/cpu torchvision==0.29.0</code>. Second: <code>pip install . --no-deps</code> is deliberate — a full <code>pip install .</code> pulls the training dependencies, which you do not need and should not pay for.</p>
+
+<h2 id="step-2-weights">Step 2: Download the weights<a class="anchor" href="#step-2-weights" aria-label="Link to section">#</a></h2>
+<pre><code>.venv/bin/hf download mstrasser/Jeff-Qwen3.5-0.8B \
+  --local-dir checkpoints/jeff-0.8b --exclude '*.mp4'</code></pre>
+<p>The <code>--exclude '*.mp4'</code> skips the gameplay demo videos bundled in the repo (they're fun — the model playing Doom and Frogger zero-shot — but they're not weights). What lands in <code>checkpoints/jeff-0.8b/</code> is <code>model.safetensors</code> (1.7&nbsp;GB), a small <code>readout.safetensors</code>, the tokenizer, and a <code>decision_config.json</code> that records the fitted temperature scalar, the training provenance, and <code>max_options: 26</code> — a limit that matters later.</p>
+
+<h2 id="step-3-serve">Step 3: Start the server and check health<a class="anchor" href="#step-3-serve" aria-label="Link to section">#</a></h2>
+<pre><code>JEFF_DEVICE=cpu JEFF_CHECKPOINT=checkpoints/jeff-0.8b PORT=8765 \
+  .venv/bin/python -m jeff.server</code></pre>
+<p>(The model card also documents <code>uv run jeff-serve</code>; the command above is the same entry point without uv.) <code>JEFF_DEVICE</code> accepts <code>cpu</code>, <code>cuda</code>, or <code>mps</code>; there is also a <code>JEFF_BACKEND=mlx</code> path for Apple silicon. On my 2-core VM the weights took about 41 seconds to load. Then:</p>
+<pre><code>$ curl -s localhost:8765/health
+{"status":"ready","model":"jeff-qwen3.5-0.8b","checkpoint":"checkpoints/jeff-0.8b",
+ "max_options":26,"authentication":false,"modalities":["text","image"]}</code></pre>
+<p><code>status: ready</code> is the signal. Note <code>max_options: 26</code> — the server reads it from <code>decision_config.json</code> and enforces it (Step 7). The root path <code>/</code> also serves a small browser playground if you'd rather click than curl.</p>
+
+<h2 id="step-4-first-decision">Step 4: Your first decision<a class="anchor" href="#step-4-first-decision" aria-label="Link to section">#</a></h2>
+<p>Jeff's request format is Jev-compatible: a <code>state</code> describing the situation, plus named <code>questions</code>. Save this as <code>request.json</code> — it's the example from the project README:</p>
+<pre><code>{
+  "model": "jeff-latest",
+  "state": {"voice_transcript": "open the engagement letter",
+            "current_screen": "Deal overview"},
+  "questions": {
+    "intent": {
+      "type": "choice",
+      "instructions": "Which of these does the user want?",
+      "criteria": {"1": "Engagement letter", "2": "Inbox", "3": "Deal settings"}
+    }
+  }
+}</code></pre>
+<pre><code>$ curl -s localhost:8765/v1/systemone \
+    -H 'content-type: application/json' -d @request.json</code></pre>
+<p>My server's exact response:</p>
+<pre><code>{
+  "model": "jeff-qwen3.5-0.8b",
+  "answers": {
+    "intent": {
+      "type": "choice",
+      "probabilities": {"1": 0.9984, "2": 0.0009, "3": 0.0007},
+      "choice": "1",
+      "confidence": 0.9976
+    }
+  },
+  "usage": {"input_tokens": 117, "output_tokens": 0}
+}</code></pre>
+<p>A few things to notice, because they define the whole programming model. There are <strong>zero output tokens</strong> — the answer comes from a single forward pass over the option codes, not from generated text, so there is nothing to parse and no sampling variance. You get the full <strong>probability distribution</strong>, not just the winner, plus a <strong>confidence</strong> score normalized so that 0 means "no better than chance" and 1 means "certain". And the probabilities here are genuinely extreme (0.9984) on an easy case — which is why calibration matters, and why the model ships with a fitted temperature scalar rather than raw logits.</p>
+<h2 id="step-5-three-question-types">Step 5: All three question types in one request<a class="anchor" href="#step-5-three-question-types" aria-label="Link to section">#</a></h2>
+<p>Jeff answers three kinds of questions, and — this is the part that makes it a pipeline component rather than a demo — <strong>several independent questions about the same state are answered together in one request</strong>. Here is a support-ticket triage payload exercising all three, saved as <code>tickets.json</code>:</p>
+<pre><code>{
+  "model": "jeff-latest",
+  "state": {"text": "URGENT: server is down since 6am, we are losing orders every minute! Please fix ASAP."},
+  "questions": {
+    "queue": {
+      "type": "choice",
+      "instructions": "Which support queue should this ticket be routed to?",
+      "criteria": {"1": "Billing and invoices", "2": "Returns and refunds",
+                   "3": "Technical outage and downtime", "4": "Feature requests"}
+    },
+    "refund_ask": {
+      "type": "noul",
+      "instructions": "Is the customer explicitly requesting a refund?"
+    },
+    "urgency": {
+      "type": "score",
+      "instructions": "How urgent is this ticket?",
+      "criteria": ["No deadline; can wait", "Needs attention this week",
+                   "Requires attention today", "Critical: act immediately"]
+    }
+  }
+}</code></pre>
+<p>Note the schema asymmetry that cost me one 422: <strong><code>choice</code> takes <code>criteria</code> as a dict of short keys to descriptions, but <code>score</code> takes <code>criteria</code> as a plain list</strong> of scale levels. A dict on a score question is rejected with <code>Input should be a valid list</code>. <code>noul</code> (yes/no) needs no criteria at all. The response, verbatim from my run:</p>
+<figure><img class="story-image" src="/articles/jeff-zero-shot-decision-models-tutorial/img2.webp" alt="Terminal showing the actual JSON response: queue choice 3 at confidence 0.9995, refund noul 0.2072, urgency score 2.94 at confidence 0.935"><figcaption>The actual response from the author's run — one request, three question types, HTTP 200. Screenshot: AI Frontier Post.</figcaption></figure>
+<p>Read it carefully: the ticket routes to queue <code>"3"</code> (technical outage) at 0.9996 probability, the refund question correctly returns a low 0.2072 (nobody asked for a refund), and urgency scores 2.94 out of 3 — "Critical: act immediately" — with 0.935 confidence. The <code>score</code> is the expected index over the scale levels, and <code>legend</code> maps each index back to its label, so you always know what a number means. All three answers came back in a single 30.4-second round trip on my 2-core VM — and that timing deserves its own discussion, below.</p>
+
+<h2 id="step-6-triage-pipeline">Step 6: The end-to-end pattern — route by confidence, escalate the rest<a class="anchor" href="#step-6-triage-pipeline" aria-label="Link to section">#</a></h2>
+<p>A decision model earns its place in production when you stop reading probabilities with your eyes and start branching on them in code. The canonical pattern: <strong>auto-route when confidence is high, escalate to a human when it isn't.</strong> Here is the whole pipeline in Python:</p>
+<pre><code>import json, urllib.request
+
+URL = "http://localhost:8765/v1/systemone"
+CONFIDENCE_FLOOR = 0.60
+
+def decide(ticket_text):
+    payload = {
+        "model": "jeff-latest",
+        "state": {"text": ticket_text},
+        "questions": {
+            "queue": {
+                "type": "choice",
+                "instructions": "Which support queue should this ticket be routed to?",
+                "criteria": {"1": "Billing and invoices", "2": "Returns and refunds",
+                             "3": "Technical outage and downtime", "4": "General inquiries"},
+            },
+            "urgency": {
+                "type": "score",
+                "instructions": "How urgent is this ticket?",
+                "criteria": ["No deadline; can wait", "Needs attention this week",
+                             "Requires attention today", "Critical: act immediately"],
+            },
+        },
+    }
+    req = urllib.request.Request(URL, data=json.dumps(payload).encode(),
+                                 headers={"content-type": "application/json"})
+    answers = json.load(urllib.request.urlopen(req))["answers"]
+    queue, urgency = answers["queue"], answers["urgency"]
+    if queue["confidence"] &lt; CONFIDENCE_FLOOR:
+        return {"action": "escalate_to_human",
+                "reason": f"low routing confidence ({queue['confidence']:.2f})",
+                "probabilities": queue["probabilities"]}
+    return {"action": "route", "queue": queue["choice"],
+            "queue_confidence": round(queue["confidence"], 4),
+            "urgency": round(urgency["score"], 2),
+            "urgency_confidence": round(urgency["confidence"], 4)}
+
+tickets = [
+    "URGENT: server is down since 6am, we are losing orders every minute! Please fix ASAP.",
+    "Hi, I have a question about my account and the recent changes. "
+    "Could someone get back to me when convenient?",
+]
+for t in tickets:
+    print(json.dumps(decide(t)))</code></pre>
+<p>I ran both tickets through the live server earlier and then executed this exact branching logic against the recorded answers. The outputs:</p>
+<pre><code>{"action": "route", "queue": "3", "queue_confidence": 0.9995,
+ "urgency": 2.94, "urgency_confidence": 0.9354}
+{"action": "route", "queue": "4", "queue_confidence": 0.985,
+ "urgency": 0.08, "urgency_confidence": 0.9232}</code></pre>
+<p>The outage ticket routes to queue 3 at near-certainty with critical urgency; the vague account question routes to general inquiries (queue 4) with low urgency — both correct, both far above the 0.60 floor, so neither escalates. That is the honest state of the demo: on clean tickets the model is decisive, and the escalation path exists for the day a ticket genuinely straddles two queues. This is also where the <strong>calibration</strong> claim matters — a confidence of 0.99 should mean "right 99% of the time," and the model card reports an expected calibration error of 0.049 on its benchmark panel, roughly in line with Jev's published ~0.06. If you deploy this, recalibrate the floor on your own labeled tickets rather than trusting 0.60 blindly.</p>
+
+<h2 id="step-7-guardrails">Step 7: Know the guardrails before you lean on them<a class="anchor" href="#step-7-guardrails" aria-label="Link to section">#</a></h2>
+<p>Three behaviors I verified that belong in any production checklist:</p>
+<p><strong>The 26-option ceiling is hard.</strong> Send 27 options and the server refuses before touching the model:</p>
+<pre><code>{"detail": "Question 'q' has 27 options, but this model handles at most 26.
+ Shortlist the options first, or split the question."}
+# HTTP 422</code></pre>
+<p>The reason is architectural, not arbitrary: options are coded A–Z, and the released models never learned two-letter codes, so option 27 would be silently never chosen. Shortlist long lists first — with an embedding retriever, for example.</p>
+<p><strong>API-key auth is one environment variable.</strong> Restart with <code>JEFF_API_KEY=secret123</code> and every <code>/v1/*</code> endpoint requires <code>Authorization: Bearer secret123</code> (I verified 401 without it and 401 with a wrong key). <code>/health</code> stays open, which is what you want for load-balancer checks.</p>
+<p><strong>One decision at a time per worker.</strong> The server holds a lock around inference; a second request arriving mid-decision gets HTTP 529 ("The model is busy. Retry shortly."). For throughput, run more workers behind a reverse proxy rather than hammering one.</p>
+
+<h2 id="honest-latency">Interlude: honest latency numbers<a class="anchor" href="#honest-latency" aria-label="Link to section">#</a></h2>
+<p>Now the number I owe you. On my 2-core CPU VM, a single decision took roughly <strong>15–18 seconds</strong>, and the three-question ticket request took <strong>30.4 seconds</strong> wall-clock. That is not a typo, and it is not the model's fault: the VM has two threads, and the fast kernels (<code>causal_conv1d</code>, <code>flash-linear-attention</code>) aren't installed, so transformers falls back to reference PyTorch implementations with an explicit "much slower" warning.</p>
+<p>The maintainer's published figures, measured on real hardware over the same 200 benchmark questions: <strong>22&nbsp;ms per decision on an RTX PRO 6000, 28&nbsp;ms on an Apple M4 Max (MLX), 463&nbsp;ms on a 32-thread CPU</strong>. Those are the maintainer's numbers, not mine — but they bracket the truth usefully: this model is meant to live on a GPU or a many-core box, where it answers in tens of milliseconds, not on a tiny VM where it answers in tens of seconds. Size your deployment accordingly, and measure on your own hardware before promising latency to anyone.</p>
+
+<h2 id="benchmarks">What the benchmarks actually say<a class="anchor" href="#benchmarks" aria-label="Link to section">#</a></h2>
+<figure><img class="story-image" src="/articles/jeff-zero-shot-decision-models-tutorial/img3.webp" alt="Official benchmark chart: Jeff 0.8B, 2B and Gemma 4 E2B accuracy against Jev's published figures across five benchmarks plus the JevBench hard tier"><figcaption>Jeff vs. Jev's published figures per benchmark. Blue: Jeff on Qwen3.5 (hatched: 0.8B); orange: Jeff on Gemma 4 E2B; grey: Jev. Chart: firelex/jeff (MIT license).</figcaption></figure>
+<p>The model card reports 4,599 questions across five public benchmarks plus the 105-item JevBench hard tier, and the pattern is more interesting than the headline. The 0.8B model scores <strong>79.1% overall</strong> against Jev's published 83.0% — close — and the 2B reaches <strong>83.1%</strong>, a touch above. But the per-benchmark split tells the real story:</p>
+<ul>
+<li><strong>Where the small models win:</strong> Financial PhraseBank — Jeff-0.8B hits <strong>96.4%</strong> vs. Jev's 77.0%. RAGTruth — 86.1% vs. 77.3%. Classification and grounding, exactly the job description.</li>
+<li><strong>Where they lose:</strong> BBH (64.0% vs. 94.3%), JudgeBench (62.6% vs. 78.6%), WinoGrande (68.6% vs. 90.7%), and the JevBench hard tier (47.6% vs. 73.3%). Reasoning-heavy tasks, where a 0.8B model has no business beating a much larger one.</li>
+</ul>
+<p>Two caveats the authors state plainly and I will repeat: <strong>the published Jev and AutoJev figures were measured on a different sample of the same benchmarks</strong>, so treat cross-column comparisons as indicative, not rigorous. And the base Qwen3.5-0.8B scores only 45.3% untrained — the fine-tune, not the backbone, is doing the work. The takeaway for your architecture: Jeff is a classifier with excellent judgment inside its lane, not a reasoner. Point it at routing, triage, moderation, and intent detection — not at multi-step puzzles.</p>
+
+<h2 id="when-to-use">When to use this vs. the alternatives<a class="anchor" href="#when-to-use" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Use Jeff when</strong> you need zero-shot classification with calibrated confidence, locally, at low cost: ticket triage, intent routing, moderation queues, voice-command disambiguation. The Jev-compatible request format means code written against Jev ports over, and the per-option probabilities plus confidence give you the escalation logic for free.</li>
+<li><strong>Use Jev (TypeSafe's API) when</strong> you want the stronger reasoning of a much larger model behind the same interface and don't mind the API dependency, the per-call cost, and the 114–212&nbsp;ms network-inclusive latency the authors measured. Note Jeff is an independent project, not affiliated with TypeSafe.</li>
+<li><strong>Use Laya</strong> (see our <a href="/articles/laya-typed-decisions-tutorial/">Laya tutorial</a>) when you want an even smaller typed-decision engine (322M parameters) and its particular API fits — Jeff differentiates on open weights, the Jev-compatible format, and a Qwen backbone you can fine-tune yourself.</li>
+<li><strong>Use plain rules or a trained classifier when</strong> your categories are fixed and stable. Regexes and keyword lists are faster than any model; a small classifier trained on your own labels will beat zero-shot Jeff on your distribution — the authors' own voice-navigation fine-tune went from 31.7% to 95.8% held-out accuracy in under half an hour on one GPU. Jeff's fine-tuning path is the same idea: start zero-shot, fine-tune when the categories pay rent.</li>
+<li><strong>Don't use Jeff when</strong> you need multi-step reasoning, more than 26 options per question (shortlist first), or anything beyond English text — the released checkpoints are English-only and the calibration was fitted on the authors' development data.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Jeff is that rare open-source release where the artifact matches the announcement: a genuinely small, genuinely open decision model that does one job — <strong>fast, calibrated zero-shot classification behind a clean API</strong> — and was trained on hardware a serious hobbyist could own. I ran it on the worst reasonable machine, a 2-core CPU VM, and every claim I could test held up: the Jev-compatible format, the three question types in one request, the 26-option ceiling, the API-key auth, the calibrated confidence scores that make human-escalation logic trivial to write.</p>
+<p>The two things to carry out of this tutorial: first, <strong>describe consequences, not just labels</strong> — the model decides best when each option says what choosing it means ("Technical outage and downtime," not "Queue C"). Second, <strong>branch on confidence, not on hope</strong> — the probabilities are the product, and a floor like 0.60 with a human-escalation path turns a clever demo into a system you can operate. Measure the latency on your hardware, recalibrate the floor on your tickets, and you have a triage pipeline with no API bill and no data leaving your network.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="jeff-zero-shot-decision-models-tutorial"></div><div class="comments" data-comments="jeff-zero-shot-decision-models-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/typesafe-ai-jev-system-one-launch/"><span class="chip">AI News</span><h3>TypeSafe AI launches Jev: the model that doesn't write, it decides</h3><div class="meta">September 20, 2026 · 6 min read</div></a><a class="rel-card" href="/articles/laya-typed-decisions-tutorial/"><span class="chip">Tutorials</span><h3>Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine</h3><div class="meta">September 27, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/qwen3-8-27b-local-setup/"><span class="chip">Tutorials</span><h3>Qwen3.8-27B on your own hardware: the complete local setup guide</h3><div class="meta">September 25, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/speculative-decoding-llamacpp-tutorial/"><span class="chip">Tutorials</span><h3>Speculative decoding with llama.cpp: measured end-to-end on a CPU</h3><div class="meta">September 29, 2026 · 8 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
