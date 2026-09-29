@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Give your AI agent a real memory: hands-on with Hindsight, the local-first memory layer — AI Frontier Post</title>
+<meta name="description" content="Hindsight (42k GitHub stars) gives AI agents persistent memory: retain facts, recall them with hybrid search, and reflect over them agentically — all running locally on Ollama. We verified every step end-to-end on a 2-core CPU box.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/hindsight-local-agent-memory-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Give your AI agent a real memory: hands-on with Hindsight, the local-first memory layer">
+<meta property="og:description" content="Hindsight (42k GitHub stars) gives AI agents persistent memory: retain facts, recall them with hybrid search, and reflect over them agentically — all running locally on Ollama. We verified every step end-to-end on a 2-core CPU box.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/hindsight-local-agent-memory-tutorial/">
+<meta property="og:image" content="https://aifrontierpost.com/articles/hindsight-local-agent-memory-tutorial/cover.webp">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Give your AI agent a real memory: hands-on with Hindsight, the local-first memory layer", "description": "Hindsight (42k GitHub stars) gives AI agents persistent memory: retain facts, recall them with hybrid search, and reflect over them agentically — all running locally on Ollama. We verified every step end-to-end on a 2-core CPU box.", "datePublished": "2026-09-29", "dateModified": "2026-09-29", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/hindsight-local-agent-memory-tutorial/"}, "image": "https://aifrontierpost.com/articles/hindsight-local-agent-memory-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Give your AI agent a real memory: hands-on with Hindsight, the local-first memory layer</h1>
+<p class="lede">Every agent demo remembers everything until you restart it. Hindsight — 42,000+ stars on GitHub, MIT licensed — is a persistent memory layer with three verbs: retain, recall, reflect. We ran the whole thing locally on Ollama with a 0.6B model on a 2-core CPU box, and measured every step.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · September 29, 2026 · 13 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/hindsight-local-agent-memory-tutorial/cover.webp" alt="Editorial illustration of a robot head with a glowing layered memory core, surrounded by orbiting fact cards labeled retain, recall, and reflect"></figure>
+<div class="article-body">
+<p>Agents without memory are goldfish with tools. Every serious agent deployment eventually hits the same wall: the context window is not a memory. It forgets between sessions, it cannot distinguish a durable fact from a passing mention, and stuffing history into the prompt is how you burn money and still miss the thing the user told you three weeks ago.</p>
+<p><a href="https://github.com/vectorize-io/hindsight">Hindsight</a> (vectorize-io/hindsight, MIT license, ~42,500 stars as of late September 2026) attacks this directly. It is a local-first memory service for agents with a deliberately small API surface — three verbs: <strong>retain</strong> (extract and store facts from text), <strong>recall</strong> (hybrid retrieval over those facts), and <strong>reflect</strong> (an agentic loop that reasons over memories to answer questions). Under the hood: PostgreSQL with pgvector-style ANN search, a cross-encoder reranker, entity resolution, and background consolidation that merges and deduplicates memories over time. It speaks MCP, so Claude Code, Cursor, and friends can plug straight in.</p>
+<p>In this tutorial you will run Hindsight end to end on your own machine: install, point it at local Ollama models, boot the server, create a memory bank, retain facts, recall them with scored hybrid search, and run the reflect loop. Every command and output below was executed and verified on a 2-core CPU VM — including the two places where the setup fought back.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10+</strong> and <strong>Ollama</strong> installed locally.</li><li>About <strong>1 GB of disk</strong> for two small models: <code>qwen3:0.6b</code> (~522 MB) for the LLM calls and <code>nomic-embed-text</code> (~274 MB) for embeddings. No GPU required; everything below ran on CPU.</li><li>About 30 minutes the first time (mostly model downloads). No API keys — the entire stack is local.</li></ul>
+<h2 id="1-install">1. Install the server<a class="anchor" href="#1-install" aria-label="Link to section">#</a></h2>
+<p>Hindsight ships as the <code>hindsight-api-slim</code> package; the <code>[local-ml]</code> extra pulls in the local reranker and ML dependencies (sentence-transformers and friends). On a CPU-only box, install a CPU torch first so pip does not reach for CUDA wheels:</p>
+<pre><code class="language-bash">pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install "hindsight-api-slim[local-ml]"
+ollama pull qwen3:0.6b
+ollama pull nomic-embed-text</code></pre>
+<p>We verified version <strong>0.10.1</strong> of the package. The install is the heavy step — torch plus the ML extras took the bulk of our setup time. After that, everything is configuration.</p>
+<h2 id="2-boot">2. Boot the server against local Ollama<a class="anchor" href="#2-boot" aria-label="Link to section">#</a></h2>
+<p>The server binary is <code>hindsight-local-mcp</code>. It reads its configuration from environment variables, spins up an <strong>embedded PostgreSQL</strong> (via pg0 — no separate database to install), loads the cross-encoder reranker (<code>cross-encoder/ms-marco-MiniLM-L-6-v2</code>, downloaded from HuggingFace on first boot), and verifies the Ollama connection:</p>
+<pre><code class="language-bash">export HINDSIGHT_API_LLM_PROVIDER=ollama
+export HINDSIGHT_API_LLM_MODEL=qwen3:0.6b
+export HINDSIGHT_API_LLM_BASE_URL=http://127.0.0.1:11434
+export HINDSIGHT_API_EMBEDDINGS_PROVIDER=openai
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=nomic-embed-text
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY=x
+export HINDSIGHT_API_EMBEDDINGS_OPENAI_DIMENSIONS=768
+hindsight-local-mcp</code></pre>
+<p>Two notes from our run. First, the embeddings provider is set to <code>openai</code> with a base URL pointing at Ollama&#x27;s OpenAI-compatible <code>/v1</code> endpoint — that is the supported way to get local embeddings; the API key can be any placeholder. Second, <strong>embedded PostgreSQL refuses to run as root</strong> (<code>initdb</code> will not initialize a cluster for the superuser). If you are root in a container, create an unprivileged user and launch from there.</p>
+<p>Once it is up, the version endpoint confirms the build and its feature flags:</p>
+<pre><code class="language-bash">curl -s http://localhost:8888/version</code></pre>
+<pre><code class="language-text">{"api_version":"0.10.1","features":{"observations":true,"mcp":true,
+"worker":true,"bank_config_api":true,...}}</code></pre>
+<h2 id="3-create-a-bank">3. Create a memory bank<a class="anchor" href="#3-create-a-bank" aria-label="Link to section">#</a></h2>
+<p>Memories live in <strong>banks</strong> — isolated namespaces, one per agent or project. The Python client is <code>hindsight_client</code>:</p>
+<pre><code class="language-python">from hindsight_client import Hindsight
+
+hs = Hindsight(base_url="http://localhost:8888")
+hs.create_bank("agent-memories")</code></pre>
+<h2 id="4-retain">4. Retain: teach it facts<a class="anchor" href="#4-retain" aria-label="Link to section">#</a></h2>
+<p><code>retain</code> is the write path. You hand it raw text; the server extracts structured facts (what/when/where/who/why), resolves entities, embeds the facts, and stores them. It runs asynchronously through a worker queue, so the call returns immediately with an operation id:</p>
+<pre><code class="language-python">r = hs.retain("agent-memories",
+    "Priya Nair prefers TypeScript over JavaScript for all new projects.",
+    retain_async=True)
+print(r.operation_id)  # d5aea680-...</code></pre>
+<p>We retained three memories. All three completed, and the stored facts show the extraction quality — including entity resolution turning a bare mention into a named entity:</p>
+<pre><code class="language-text">Priya Nair prefers TypeScript over JavaScript for all new projects.
+  | When: 2026-09-29 | Involving: Priya Nair | for all new projects
+Marcus recommended Postgres 16's JSONB features for the new analytics API.
+  | When: Tuesday, September 29, 2026 | Involving: Marcus
+The office wifi password is on a sticky note under the router.
+  | When: 2026-09-29 | Involving: none</code></pre>
+<p>Behind the scenes each retain runs fact extraction (LLM, ~40s per memory on our 2-core box with the 0.6B model), entity resolution against Postgres trigram indexes, embedding via Ollama, and then <strong>consolidation</strong> — a background job that merges and deduplicates. Both consolidation jobs for our bank completed cleanly.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/hindsight-local-agent-memory-tutorial/img2.webp" alt="Diagram of the Hindsight retain pipeline: raw text flows through fact extraction, entity resolution, embedding, and storage into a memory bank"><figcaption>AI-generated illustration for this article.</figcaption></figure>
+<h2 id="5-recall">5. Recall: hybrid search with scored results<a class="anchor" href="#5-recall" aria-label="Link to section">#</a></h2>
+<p><code>recall</code> is the read path: semantic vector search plus keyword search, fused and reranked by the local cross-encoder. Our query returned in <strong>1.3 seconds</strong> with per-signal scores exposed on every hit:</p>
+<pre><code class="language-python">r = hs.recall("agent-memories", "What does Priya prefer for new projects?")
+for hit in r.results:
+    print(hit.scores["final"], hit.text[:60])</code></pre>
+<pre><code class="language-text">1.0997  Priya Nair prefers TypeScript over JavaScript for all new projects.
+0.0000  Marcus recommended Postgres 16's JSONB features for the new ana...
+...     The office wifi password is on a sticky note under the router.</code></pre>
+<p>The correct memory ranked first with a reranker score of 0.9997 (semantic 0.77, keyword 0.70) while the unrelated memories scored near zero. That score breakdown is genuinely useful in production: when recall misbehaves you can see <em>which</em> signal misled it instead of guessing.</p>
+<h2 id="6-reflect">6. Reflect: let the agent reason over its memories<a class="anchor" href="#6-reflect" aria-label="Link to section">#</a></h2>
+<p><code>reflect</code> is the interesting verb — an agentic loop (up to 3 iterations by default) that retrieves memories and reasons over them to answer a question, rather than just returning hits:</p>
+<pre><code class="language-python">r = hs.reflect("agent-memories",
+    "What do I know about the team's technology preferences?")
+print(r.text)</code></pre>
+<p>Ours completed in <strong>49.8 seconds</strong>. The honest caveat: with a 0.6B local model the reasoning is shallow — it retrieved the right context but hedged instead of synthesizing. The mechanism (retrieval → multi-step reasoning → answer) is verified working; the <em>quality</em> of reflection scales with the model you point it at. For a serious deployment you would run reflect against a 7–30B model and keep the 0.6B model for the cheap extraction path. That split — small model for retain, big model for reflect — is the cost-efficient shape this architecture invites.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/hindsight-local-agent-memory-tutorial/img3.webp" alt="Diagram of the Hindsight reflect loop: a question triggers memory retrieval, the agent reasons over results across iterations, then produces an answer"><figcaption>AI-generated illustration for this article.</figcaption></figure>
+<h2 id="troubleshooting">Troubleshooting: the proxy gotcha<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<p>The one real fight in our setup is worth documenting because it fails <em>silently</em>. In a sandboxed or corporate environment with <code>HTTP_PROXY</code>/<code>ALL_PROXY</code> set, the embeddings client (the OpenAI SDK pointed at Ollama) honors the proxy for <code>127.0.0.1</code> — and the proxy cannot reach your loopback interface. Symptom: retains hang forever <em>after</em> fact extraction succeeds, with the OpenAI client retrying <code>/embeddings</code> indefinitely and zero memories stored. The LLM calls work fine (that code path ignores proxy env), which makes it deeply confusing.</p>
+<p>Fix: export a clean <code>NO_PROXY</code> that covers loopback <em>before</em> launching the server — and keep it simple. The stock sandbox value containing IPv6 <code>[::1]</code> breaks httpx&#x27;s URL parsing, so overwrite it:</p>
+<pre><code class="language-bash">export NO_PROXY="localhost,127.0.0.1"
+export no_proxy="localhost,127.0.0.1"</code></pre>
+<p>Keep the proxy itself enabled, though — the cross-encoder model downloads from HuggingFace at first boot, and direct TLS fails in the same sandboxes. Proxy for the outside world, bypass for loopback.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Hindsight earns its star count on architecture, not hype: three verbs, local-first, Postgres-backed, MCP-native, with the score transparency and background consolidation that separate a toy from infrastructure. Our full loop — install, boot, 3 retains, hybrid recall at 1.3s, agentic reflect at ~50s — ran on a 2-core CPU box with sub-GB local models and no API keys. The two things to know going in: run it as a non-root user (embedded Postgres insists), and mind the proxy bypass for loopback. Start with the 0.6B model to learn the API for free, then scale the reflect model when the reasoning quality matters.</p>
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="hindsight-local-agent-memory-tutorial"></div><div class="comments" data-comments="hindsight-local-agent-memory-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/chatbot-memory-tutorial/"><span class="chip">Tutorials</span><h3>Give your chatbot a memory: session state that actually works</h3></a><a class="rel-card" href="/articles/build-mcp-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build your first MCP-powered agent: tools, servers, and safety rails</h3></a><a class="rel-card" href="/articles/cli-anything-agent-native-cli-tutorial/"><span class="chip">Tutorials</span><h3>CLI-Anything: turn any desktop app into a tool your AI agent can actually use</h3></a></div></section>
+</article>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n);}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
