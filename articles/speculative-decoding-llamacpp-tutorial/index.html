@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts — AI Frontier Post</title>
+<meta name="description" content="Speculative decoding promises free speed for local LLMs: a tiny draft model guesses tokens, the big model verifies them in bulk. We set it up in llama.cpp b11243, measured it end-to-end on two CPU threads — and it made generation 2x slower. Here is the honest breakdown: the setup, the numbers, the acceptance rates, and the break-even math that tells you when it actually pays off.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/speculative-decoding-llamacpp-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts">
+<meta property="og:description" content="Speculative decoding promises free speed for local LLMs: a tiny draft model guesses tokens, the big model verifies them in bulk. We set it up in llama.cpp b11243, measured it end-to-end on two CPU threads — and it made generation 2x slower. Here is the honest breakdown: the setup, the numbers, the acceptance rates, and the break-even math that tells you when it actually pays off.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/speculative-decoding-llamacpp-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/speculative-decoding-llamacpp-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts", "description": "Speculative decoding promises free speed for local LLMs: a tiny draft model guesses tokens, the big model verifies them in bulk. We set it up in llama.cpp b11243, measured it end-to-end on two CPU threads — and it made generation 2x slower. Here is the honest breakdown: the setup, the numbers, the acceptance rates, and the break-even math that tells you when it actually pays off.", "datePublished": "2026-09-29", "dateModified": "2026-09-29", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/speculative-decoding-llamacpp-tutorial/"}, "image": "https://aifrontierpost.com/articles/speculative-decoding-llamacpp-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</h1>
+<p class="lede">Speculative decoding promises free speed for local LLMs: a tiny draft model guesses tokens, the big model verifies them in bulk. We set it up in llama.cpp b11243, measured it end-to-end on two CPU threads — and it made generation 2x slower. Here is the honest breakdown: the setup, the numbers, the acceptance rates, and the break-even math that tells you when it actually pays off.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · September 29, 2026 · 14 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/speculative-decoding-llamacpp-tutorial/cover.webp" alt="A small scout robot handing drafted token cards to a giant verifier robot beside a large language model core"><figcaption>AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<div class="article-body">
+<p>Every speculative-decoding explainer shows the same diagram and quotes someone else's speedup chart. This tutorial is different: we ran it. Target model: Qwen2.5-1.5B-Instruct Q4_K_M. Draft model: Qwen2.5-0.5B-Instruct Q4_K_M. Hardware: two CPU threads, no GPU, llama.cpp release <strong>b11243</strong>. Result: speculative decoding made generation <strong>1.5&ndash;2.5&times; slower</strong> than the baseline.</p>
+<p>That is not a failed experiment &mdash; it is the most useful possible outcome. A speedup chart tells you that it <em>can</em> work. A measured slowdown with the acceptance rates and the arithmetic attached tells you exactly <em>where the break-even point is</em> &mdash; which is what you need before spending an afternoon setting this up on your own machine.</p>
+<h2 id="the-idea">The idea in 60 seconds <a href="#the-idea">#</a></h2>
+<p>Normal decoding is stubbornly serial: one token costs one full forward pass of the big model, and on a CPU each pass is memory-bandwidth-bound &mdash; you drag gigabytes of weights through RAM to produce a single token. Speculative decoding (Leviathan et al., <em>Fast Inference from Transformers via Speculative Decoding</em>, ICML 2023; Chen et al., <em>Accelerating Large Language Model Decoding with Speculative Sampling</em>, 2023) breaks the serial chain without changing what the model says:</p>
+<ol>
+<li>A small, fast <strong>draft model</strong> guesses the next K tokens (K cheap forward passes).</li>
+<li>The big <strong>target model</strong> verifies all K guesses in a single forward pass &mdash; verification parallelizes, so it costs roughly one to two normal passes.</li>
+<li>Tokens the target agrees with are kept; the first disagreement is corrected with the target's own token; everything after it is discarded.</li>
+</ol>
+<figure class="inline-art"><img class="story-image" src="/articles/speculative-decoding-llamacpp-tutorial/img2.webp" alt="Diagram of speculative decoding: a draft model proposes tokens, the target model verifies them in one pass, accepted tokens are kept and the first rejection is corrected"><figcaption>How speculative decoding works: draft, verify in bulk, keep what the target accepts. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<p>The critical property: speculative <em>sampling</em> preserves the target's output distribution <strong>exactly</strong>. This is not an approximation or a distillation &mdash; the text you get is statistically identical to running the target alone. When the draft guesses well, the speedup approaches K+1. When it guesses badly, you pay the draft's compute for nothing and can end up slower than baseline. Both outcomes are on the table, which is why you measure.</p>
+<h2 id="prerequisites">What you&rsquo;ll need <a href="#prerequisites">#</a></h2>
+<ul>
+<li><strong>llama.cpp b11243</strong> (released September 29, 2026) &mdash; the prebuilt <code>llama-b11243-ubuntu-x64.zip</code>. This tutorial uses <code>llama-server</code> throughout, because its <code>/completion</code> endpoint returns per-request <code>timings</code> as JSON &mdash; exactly the instrument you need. (One environment note: in b11243, the <code>llama-cli</code> wrapper's embedded server failed to load the CPU backend on our machine &mdash; <code>no backends are loaded</code> &mdash; while <code>llama-server</code> run directly worked fine. If you hit that, use the server.)</li>
+<li><strong>Two GGUF models from the same family, sharing a tokenizer:</strong> target <code>Qwen/Qwen2.5-1.5B-Instruct-GGUF</code> (<code>qwen2.5-1.5b-instruct-q4_k_m.gguf</code>, 1,117,320,736 bytes) and draft <code>Qwen/Qwen2.5-0.5B-Instruct-GGUF</code> (<code>qwen2.5-0.5b-instruct-q4_k_m.gguf</code>, 491,400,032 bytes).</li>
+<li><strong>A CPU.</strong> Ours: 2 threads on an AMD EPYC VM. No GPU needed &mdash; and CPU inference is where this technique is most interesting, because per-token generation is memory-bound.</li>
+<li><strong>~1.6 GB of disk.</strong> Total cost: $0 &mdash; open weights, open source.</li>
+</ul>
+<p>Same family and same tokenizer is non-negotiable. The draft must &ldquo;think&rdquo; in the target's token space; a draft from another family is guessing in a different dialect and gets rejected constantly.</p>
+<h2 id="step-1-flags">Step 1 &mdash; Get llama.cpp and verify the flags <a href="#step-1-flags">#</a></h2>
+<pre><code class="language-bash">$ curl -sL -o llama-b11243.zip \
+    https://github.com/ggml-org/llama.cpp/releases/download/b11243/llama-b11243-ubuntu-x64.zip
+$ unzip -q llama-b11243.zip -d llama-b11243 &amp;&amp; cd llama-b11243
+$ ./llama-server --version
+version: 0.5.0-dev (build 11243, commit fc07d781e)</code></pre>
+<p>Keep the whole extracted directory: <code>llama-server</code> loads its CPU backend (<code>libggml-cpu-*.so</code> &mdash; it picked <code>libggml-cpu-zen4.so</code> on our EPYC) from its own folder at startup. Speculative-decoding flags move between releases, so verify them against <em>your</em> binary rather than trusting any tutorial:</p>
+<pre><code class="language-bash">$ ./llama-server --help | grep -E "spec-type|spec-draft-model|spec-draft-n-max"
+--spec-type ...
+--spec-draft-model, -md FNAME ...
+--spec-draft-n-max, --draft-n-max N ...</code></pre>
+<p>Verified in b11243: <code>--spec-type</code> accepts <code>draft-simple</code>, <code>draft-eagle3</code>, <code>draft-mtp</code>, n-gram variants, and more. <code>--spec-draft-n-max</code> defaults to 3. Related knobs: <code>--spec-draft-n-min</code> (default 0), <code>--spec-draft-p-min</code> (default 0.00), <code>--spec-draft-device</code> (run the draft on a different device than the target), and <code>--spec-draft-threads</code> (defaults to <code>--threads</code>).</p>
+<h2 id="step-2-models">Step 2 &mdash; Download and verify the model pair <a href="#step-2-models">#</a></h2>
+<pre><code class="language-bash">$ mkdir models
+$ curl -sL -o models/target-qwen2.5-1.5b-q4_k_m.gguf \
+    https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
+$ curl -sL -o models/draft-qwen2.5-0.5b-q4_k_m.gguf \
+    https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf
+$ ls -la models/
+1117320736 target-qwen2.5-1.5b-q4_k_m.gguf
+ 491400032 draft-qwen2.5-0.5b-q4_k_m.gguf</code></pre>
+<p>Match the byte sizes &mdash; truncated downloads are the number-one cause of cryptic load failures &mdash; and confirm both files begin with the <code>GGUF</code> magic bytes before you go further.</p>
+<h2 id="step-3-baseline">Step 3 &mdash; Baseline: measure the target alone <a href="#step-3-baseline">#</a></h2>
+<pre><code class="language-bash">$ ./llama-server -m models/target-qwen2.5-1.5b-q4_k_m.gguf \
+    --port 8080 -t 2 -c 4096 --no-webui</code></pre>
+<p>Send a fixed, reproducible request &mdash; fixed seed and temperature, prompt cache enabled. The <code>timings</code> object in the response is the whole game: <code>prompt_ms</code> covers the parallel part (speculation cannot help there), <code>predicted_ms</code> covers the serial generation (the part we are trying to accelerate):</p>
+<pre><code class="language-bash">$ curl -s http://127.0.0.1:8080/completion -H 'Content-Type: application/json' \
+  -d '{"prompt":"Write a Python function that computes the nth Fibonacci number with memoization, then explain its time complexity in one sentence.",
+       "n_predict":150,"seed":42,"temperature":0.7,"cache_prompt":true}' \
+  | python3 -c "import json,sys; t=json.load(sys.stdin)['timings'];
+print(round(t['predicted_per_second'],2), 'tok/s')"</code></pre>
+<p>Our baseline on 2 threads, warm KV cache, 150 generated tokens:</p>
+<ul>
+<li><strong>Code prompt: 1.13 tok/s.</strong></li>
+<li><strong>Prose prompt</strong> (&ldquo;Explain why the sky is blue in exactly three sentences, suitable for a curious ten-year-old.&rdquo;): <strong>1.08 tok/s.</strong></li>
+</ul>
+<p>Slow in absolute terms &mdash; this is a small, busy VM &mdash; but it is our reference line. Everything below is measured against it, on the same machine, minutes apart.</p>
+<h2 id="step-4-speculative">Step 4 &mdash; Turn on speculative decoding <a href="#step-4-speculative">#</a></h2>
+<p>Stop the server and restart it with three added flags:</p>
+<pre><code class="language-bash">$ ./llama-server -m models/target-qwen2.5-1.5b-q4_k_m.gguf \
+    --port 8080 -t 2 -c 4096 --no-webui \
+    --spec-type draft-simple \
+    --spec-draft-model models/draft-qwen2.5-0.5b-q4_k_m.gguf \
+    --spec-draft-n-max 3</code></pre>
+<p><code>draft-simple</code> is the classic draft-model strategy (as opposed to EAGLE-style learned heads or n-gram guessing). <code>--spec-draft-n-max 3</code> drafts up to three tokens per verification pass &mdash; the default, and the conservative starting point.</p>
+<p>Send the <em>identical</em> requests &mdash; same prompts, same seed, same temperature. The output text is statistically equivalent (speculation preserves the target distribution), but the server log now prints the single most informative line in this whole tutorial after every request:</p>
+<pre><code class="language-bash">draft acceptance = 0.69930 ( 100 accepted /  143 generated), mean len =  3.08</code></pre>
+<p>Our measured results, same machine, same prompts:</p>
+<table>
+<thead><tr><th></th><th>Baseline (1.5B only)</th><th>Speculative (0.5B draft, n-max 3)</th><th>Acceptance</th></tr></thead>
+<tbody>
+<tr><td>Code prompt</td><td>1.13 tok/s</td><td><strong>0.45 tok/s</strong></td><td>69.9%, mean len 3.08</td></tr>
+<tr><td>Prose prompt</td><td>1.08 tok/s</td><td><strong>0.73 tok/s</strong></td><td>39.2%, mean len 2.18</td></tr>
+</tbody>
+</table>
+<figure class="inline-art"><img class="story-image" src="/articles/speculative-decoding-llamacpp-tutorial/img3.webp" alt="Side-by-side comparison of serial decoding versus speculative draft-and-verify decoding, showing where the time goes in each approach"><figcaption>Serial decoding versus draft-and-verify: the idea is to replace several expensive target passes with one verification pass. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<p>Read that table twice: speculation made generation <strong>1.5&ndash;2.5&times; slower</strong>. And now read the acceptance column: the draft guesses <em>well</em> &mdash; 70% of its code tokens accepted, about three tokens kept per verification step. The mechanism works exactly as advertised. The economics do not. That distinction is the entire lesson.</p>
+<h2 id="step-5-break-even">Step 5 &mdash; Why it slowed down: the break-even math <a href="#step-5-break-even">#</a></h2>
+<p>We measured the draft model running alone: <strong>2.07 tok/s</strong> &mdash; only 1.9&times; faster than the target's 1.1 tok/s. Now do the per-step arithmetic with a draft length of 3:</p>
+<ul>
+<li>Draft cost: 3 tokens &times; ~0.48s &approx; <strong>1.45s</strong></li>
+<li>Verification cost: one target pass &approx; <strong>0.91s</strong></li>
+<li>Total per step: ~2.36s for ~3.08 accepted tokens &rarr; ~1.3 tok/s <em>in theory</em></li>
+</ul>
+<p>We measured 0.45&ndash;0.73 tok/s &mdash; worse than theory, because on two threads both models' weights stream through the same starved memory bus, and the draft must also process the prompt (prompt evaluation ran ~2&times; slower with speculation enabled: 389ms/token vs 197ms/token).</p>
+<p>The general rule this falls out of: <strong>speculation wins when draft_time &#8810; target_time</strong>. As a rule of thumb you want the draft to be roughly 4&ndash;5&times; faster per token than the target before the overhead pays off. A 0.5B draft for a 1.5B target &mdash; 3&times; smaller &mdash; does not clear the bar on a CPU. A 7B draft for a 70B target does, which is the classic deployment and a large part of why datacenter GPUs love this technique: there, the target is brutally memory-bound and the draft looks nearly free by comparison.</p>
+<p>Three conditions must <em>all</em> hold:</p>
+<ol>
+<li><strong>The draft is dramatically faster than the target</strong> &mdash; think 5&ndash;10&times; size ratio, not 3&times;.</li>
+<li><strong>Acceptance is high</strong> &mdash; same family, same tokenizer, and tasks where the target is predictable (our 40&ndash;70% was decent, just not enough to overcome condition 1).</li>
+<li><strong>Serial decoding is actually your bottleneck</strong> &mdash; not prompt processing, not batch saturation.</li>
+</ol>
+<h2 id="when-to-use">Step 6 &mdash; When to use it, and when to skip it <a href="#when-to-use">#</a></h2>
+<p><strong>Use speculative decoding when</strong> your target is large (7B+) and memory-bandwidth-bound, you have a same-family small model (Qwen2.5-0.5B for a Qwen2.5-7B/14B/32B target, Llama-3.2-1B for Llama-3.1-8B, and so on), and you care about single-stream latency &mdash; interactive chat, not batch throughput.</p>
+<p><strong>Skip it when</strong> your target is already small (1&ndash;3B) &mdash; the draft cannot be enough faster to matter, and this tutorial is the receipt. Skip it when prompt processing dominates (long context, short answers): speculation only accelerates generation. Skip it when batch-serving: saturated hardware gains nothing and you inherit scheduling complexity. And skip it if the draft needs a different tokenizer &mdash; acceptance collapses and you are paying for rejected guesses.</p>
+<h2 id="which-approach">Which approach should you use? <a href="#which-approach">#</a></h2>
+<ul>
+<li><strong><code>draft-simple</code> + a same-family small model</strong> (this tutorial): the reliable default. Works everywhere, no extra training, and the failure mode is honest &mdash; you will see it in the acceptance line.</li>
+<li><strong>EAGLE-style heads (<code>--spec-type draft-eagle3</code>):</strong> a tiny learned draft head trained specifically for your target. Higher acceptance than a generic small model, but you need a published head for your exact target.</li>
+<li><strong>N-gram speculation:</strong> no draft model at all &mdash; guesses come from recently seen n-grams. Zero extra memory, helps with repetitive text, weaker in general.</li>
+<li><strong>None of the above:</strong> sometimes the right answer is quantization, a smaller target, or more threads. Optimization starts with measurement, and the <code>timings</code> object is free.</li>
+</ul>
+<h2 id="takeaway">The takeaway <a href="#takeaway">#</a></h2>
+<p>Speculative decoding is not magic; it is an exchange rate. You trade cheap draft tokens for expensive target passes, and the trade is only profitable when the draft is <em>dramatically</em> cheaper. On our 2-thread CPU with a 1.5B target and a 0.5B draft, the exchange lost money &mdash; 0.45 tok/s against a 1.13 baseline &mdash; despite 70% acceptance on code. The setup itself is three flags and a second GGUF file; the judgment is the break-even math. Run the baseline, flip the three flags, compare <code>predicted_per_second</code>. If it goes up, keep it. Ours did not &mdash; and now you know exactly why, and exactly when yours will.</p>
+<h2 id="commands">Exact commands reference <a href="#commands">#</a></h2>
+<pre><code class="language-bash"># baseline server
+./llama-server -m models/target-qwen2.5-1.5b-q4_k_m.gguf --port 8080 -t 2 -c 4096 --no-webui
+# speculative server: add these three flags
+--spec-type draft-simple \
+--spec-draft-model models/draft-qwen2.5-0.5b-q4_k_m.gguf \
+--spec-draft-n-max 3
+# benchmark request (timings -&gt; predicted_per_second)
+curl -s http://127.0.0.1:8080/completion -H 'Content-Type: application/json' \
+  -d '{"prompt":"&lt;your prompt&gt;","n_predict":150,"seed":42,"temperature":0.7,"cache_prompt":true}'</code></pre>
+</div>
+
+<div class="post-engage"><div class="reactions" data-reactions="speculative-decoding-llamacpp-tutorial"></div><div class="comments" data-comments="speculative-decoding-llamacpp-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/colibri-run-frontier-moe-consumer-hardware/"><span class="chip">Tutorials</span><h3>Run a 744B-parameter model on your own machine: a hands-on tutorial for the Colibri MoE</h3><div class="meta">September 28, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/ponytail-lazy-senior-dev-skill-tutorial/"><span class="chip">Tutorials</span><h3>Ponytail: teach your AI coding agent to write less code — a hands-on tutorial</h3><div class="meta">September 28, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/tencent-octop-self-hosted-ai-assistant-tutorial/"><span class="chip">Tutorials</span><h3>Tencent’s Octop: run your own multi-agent AI assistant at home — hands-on</h3><div class="meta">September 28, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/ecc-agent-harness-os-tutorial/"><span class="chip">Tutorials</span><h3>ECC: the 269K-star agent harness OS — install, skills, and AgentShield scans, hands-on</h3><div class="meta">September 29, 2026 · 11 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
