@@ -1,0 +1,209 @@
+<p>Ask any frontier model to build you a landing page and you can spot the result from across the room: Inter for everything, a purple-to-blue gradient hero, the rounded-square icon tile floating above every heading, cards nested inside cards, gray text washed out on colored backgrounds. Every model trained on the same SaaS templates, converging on the same handful of tells. <strong>Impeccable</strong> — Paul Bakaus's open-source design skill for AI coding agents — exists to kill that look at the source.</p>
+
+<p>When I checked on September 29, 2026, <a href="https://github.com/pbakaus/impeccable">pbakaus/impeccable</a> sat at <strong>72,542 stars</strong> with 4,380 forks, 1,921 commits, and 72 releases, holding a spot on GitHub's weekly trending chart. It is not another prompt pack. It is one installable skill with 24 named commands, a Rust-powered engine that runs <strong>61 deterministic design-detector rules with no LLM and no API key</strong>, and hooks that scan your agent's UI edits as they land. I ran the whole thing hands-on: installed the CLI, built a deliberately awful AI-slop page, scanned it, fixed what it flagged, and re-scanned to a clean bill — 12 findings down to zero, every step reproducible below.</p>
+
+<h2 id="why-now">Why this is trending now</h2>
+
+<p>The skill started from Anthropic's <code>frontend-design</code> — the README says it plainly: that skill was the first widely-used design skill for Claude, and Impeccable grew out of it. What turned it into a 72K-star project is the second half of the package: deterministic rules. LLM design critiques are vibes; a rule that measures your contrast ratio at 4.48:1 against the WCAG AA 4.5:1 floor is a fact. Developers are installing it because it catches the exact failure modes they keep shipping — and because the standalone CLI works with no AI harness at all, so you get value in thirty seconds without changing your workflow.</p>
+
+<p>The timing also tracks the agent-coding wave: with Claude Code, Codex, Cursor, Copilot, and a dozen other harnesses generating UI daily, "make it not look generated" became a real engineering requirement. Impeccable ships provider builds for 17 of those harnesses, a VS Code extension, a browser extension, and an npm CLI — wide surface, one engine.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/impeccable-design-skill-tutorial/img2.webp" alt="Workflow diagram: install the skill into a coding agent, build with named design commands, scan with the deterministic detector, and feed findings back through the hook loop"><figcaption>The Impeccable loop: install once, build with named commands, scan deterministically, feed findings back into the agent. Diagram: AI Frontier Post.</figcaption></figure>
+
+<h2 id="what-you-need">What you'll need</h2>
+
+<ul>
+<li><strong>Node.js 18+</strong> — only for the <code>npx</code> shim. The engine itself is a self-contained binary; no Node runtime is needed after install. (I ran everything below with Node v24.)</li>
+<li><strong>Any AI coding agent</strong> (optional) — Claude Code, Codex CLI, Cursor, GitHub Copilot, Gemini CLI, OpenCode, and twelve more are supported. The CLI half of this tutorial needs none of them.</li>
+<li><strong>Cost:</strong> zero. Apache-2.0 licensed, no accounts, no API keys, no telemetry that costs you anything. The detector runs fully locally.</li>
+<li><strong>GPU:</strong> none. This is static analysis plus skill markdown, not a model.</li>
+</ul>
+
+<h2 id="step-1">Step 1 — Get the CLI and confirm the version</h2>
+
+<p>The fastest way to touch the engine is the npm package. It is a small shim around the same binary the skill uses:</p>
+
+<pre><code class="language-bash">npx impeccable --version
+# 4.1.0
+
+npx impeccable --help
+</code></pre>
+
+<p>The help output lists the real surface: <code>detect</code>, <code>ignores</code>, <code>help</code>, <code>install</code>, <code>link</code>, <code>update</code>, <code>check</code>. Everything hands-on in this tutorial runs through <code>detect</code> and <code>ignores</code> — both fully local.</p>
+
+<h2 id="step-2">Step 2 — Build a page full of deliberate AI slop</h2>
+
+<p>To see what the detector actually catches, I wrote a page containing every tell the README names — Inter everywhere, purple gradient hero, icon tile above the h1, nested cards, buzzword copy, gray-on-color text, skipped heading levels. Save this as <code>slop.html</code>:</p>
+
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Nimbus — demo&lt;/title&gt;
+&lt;style&gt;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&amp;display=swap');
+body { font-family: 'Inter', sans-serif; margin: 0; color: #333; }
+.hero { background: linear-gradient(135deg, #7c3aed, #2563eb);
+        padding: 60px 40px; color: white; }
+.hero .icon-tile { width: 64px; height: 64px; border-radius: 16px;
+        background: rgba(255,255,255,0.2); font-size: 32px; }
+.hero p { color: #e0e0e0; font-size: 18px; }
+.card { background: #fff; border: 1px solid #eee; border-radius: 12px;
+        padding: 24px; }
+.card .card { background: #f9f9f9; margin-top: 12px; }
+.card p { color: #777; font-size: 14px; line-height: 1.8; }
+&lt;/style&gt;&lt;/head&gt;
+&lt;body&gt;
+&lt;section class="hero"&gt;
+  &lt;div class="icon-tile"&gt;🚀&lt;/div&gt;
+  &lt;h1&gt;Welcome to Nimbus&lt;/h1&gt;
+  &lt;p&gt;The revolutionary platform that leverages cutting-edge AI
+     to synergize your workflow&lt;/p&gt;
+&lt;/section&gt;
+&lt;section&gt;
+  &lt;div class="card"&gt;
+    &lt;h3&gt;Feature One&lt;/h3&gt;
+    &lt;p&gt;Amazing feature description goes here.&lt;/p&gt;
+    &lt;div class="card"&gt;
+      &lt;h3&gt;Nested card&lt;/h3&gt;
+      &lt;p&gt;A card inside a card, a classic tell.&lt;/p&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/section&gt;
+&lt;/body&gt;&lt;/html&gt;
+</code></pre>
+
+<h2 id="step-3">Step 3 — Run your first scan</h2>
+
+<pre><code class="language-bash">npx impeccable detect slop.html
+echo $?
+# 2
+</code></pre>
+
+<p>Exit code <code>2</code> means the scan completed <em>with</em> primary findings (per the docs: <code>0</code> = clean, <code>2</code> = findings, <code>1</code> = a target could not be scanned). Human-readable diagnostics go to stderr; add <code>--json</code> for machine-readable output on stdout. My run reported <strong>12 anti-patterns</strong>. Here is the real output, trimmed:</p>
+
+<pre><code class="language-text">slop.html
+  [gray-on-color] text #e0e0e0 on bg gradient(#7c3aed, #2563eb)
+    → Gray text looks washed out on colored backgrounds. Use a darker
+      shade of the background color instead, or white/near-white.
+  [low-contrast] 3.9:1 (need 4.5:1) — text #e0e0e0 on #2563eb
+  [low-contrast] 4.48:1 (need 4.5:1) — text #777777 on #ffffff
+  [icon-tile-stack] 64x64px icon tile above h1 "Welcome to Nimbus"
+    → A small rounded-square icon container above a heading is the
+      universal AI feature-card template — every generator outputs
+      this exact shape.
+  [overused-font] Primary font: inter
+    → Inter, Roboto, Fraunces, Geist, Plus Jakarta Sans, and Space
+      Grotesk are used on so many sites they no longer feel distinctive.
+  [nested-cards] Card inside card (div)
+  [skipped-heading] &lt;h1&gt; "Welcome to Nimbus" followed by &lt;h3&gt; "Feature One"
+  [ai-color-palette] Purple/violet accent colors detected
+    → Purple/violet gradients and cyan-on-dark are the most recognizable
+      tells of AI-generated UIs.
+  [marketing-buzzword] 1 buzzword phrase: "t leverages cutting-edge AI to syner"
+    → Generic SaaS phrases are instant AI tells. Pick a specific verb and
+      noun that says what the product literally does.
+
+12 anti-patterns found.
+</code></pre>
+
+<p>Note what makes this different from an LLM critique: every finding is computed, not opined. The contrast checker measured real ratios (<code>3.9:1</code>, <code>4.48:1</code>) against WCAG AA. The font rule names the exact overused faces. The buzzword rule quotes the offending phrase. There is nothing to argue with and nothing hallucinated.</p>
+
+<h2 id="step-4">Step 4 — Fix the page, re-scan, watch the count fall</h2>
+
+<p>I rewrote the page with a point of view instead of defaults: Spectral instead of Inter, a solid deep-teal hero instead of the purple gradient, the icon tile deleted, the nested card flattened into a divided section, heading order repaired, buzzword copy replaced with a literal product description ("Turns your meeting recordings into searchable notes"). The re-scan came back with 3 findings — and they were instructive:</p>
+
+<pre><code class="language-text">fixed.html
+  [side-tab] border-top: 3px
+    → Thick colored border on one side of a card — the most recognizable
+      tell of AI-generated UIs. Use a subtler accent or remove it entirely.
+  [low-contrast] 3.6:1 (need 4.5:1) — text #ffffff on #c96f2b
+
+3 anti-patterns found.
+</code></pre>
+
+<p>My "fix" had introduced two new tells I would have shipped without thinking: a thick accent border on the cards and a button whose white-on-amber text measured 3.6:1. That is the honest value proposition — the detector catches the things your eye forgives. I removed the border and darkened the button to <code>#8f4a12</code>:</p>
+
+<pre><code class="language-bash">npx impeccable detect fixed.html
+echo $?
+# 0
+</code></pre>
+
+<p>Exit <code>0</code>. Twelve findings to zero, with the middle step teaching more than the endpoints.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/impeccable-design-skill-tutorial/img3.webp" alt="Before-and-after illustration: a generic purple-gradient card-grid landing page on the left, a distinctive warm editorial layout on the right"><figcaption>The shift Impeccable pushes for: from the default AI-generated look (left) to a design with an actual point of view (right). Illustration: AI Frontier Post.</figcaption></figure>
+
+<h2 id="step-5">Step 5 — Waive what you actually mean</h2>
+
+<p>Not every finding is a bug. If Inter genuinely is your brand font, waive it at the repo level rather than ignoring the tool:</p>
+
+<pre><code class="language-bash">npx impeccable ignores add-value overused-font Inter --reason "Brand font"
+# Added overused-font=inter to shared detector ignoreValues (.impeccable/config.json).
+
+npx impeccable ignores add-file "src/legacy/**"
+npx impeccable ignores list
+</code></pre>
+
+<p>For a waiver that should travel with one file instead of the repo config, add an inline comment — I verified this suppresses the rule for that file:</p>
+
+<pre><code class="language-html">&lt;!-- impeccable-disable overused-font: brand font --&gt;
+</code></pre>
+
+<p>Pass <code>--no-config</code> to <code>detect</code> for a raw scan that ignores all waivers, and <code>--no-inline-ignores</code> to honor the config but skip inline markers. Waivers are explicit, scoped, and reviewable in git — the opposite of "the linter complained so I turned it off."</p>
+
+<h2 id="step-6">Step 6 — Install the skill into your coding agent</h2>
+
+<p>The CLI is the audit half. The other half is the skill itself: 24 named commands your agent can invoke as <code>/impeccable &lt;command&gt; &lt;target&gt;</code>. Install it from your project root:</p>
+
+<pre><code class="language-bash">npx impeccable install
+</code></pre>
+
+<p>The installer detects your harnesses (<code>~/.claude</code>, <code>~/.codex</code>, <code>~/.cursor</code>, and the rest), lets you keep or customize the set, and asks whether to install into the current project or globally. For scripts, skip the prompts:</p>
+
+<pre><code class="language-bash">npx impeccable install --providers=claude,codex --scope=project --no-hooks
+npx impeccable update   # refresh an existing install later
+</code></pre>
+
+<p>Start every new project with <code>/impeccable init</code>: it inspects the project, asks only about genuine gaps, and writes durable product truth — audience, purpose, constraints, voice — to <code>PRODUCT.md</code>, so later commands stop confusing product facts with visual direction. From there the vocabulary opens up:</p>
+
+<ul>
+<li><strong>Evaluate:</strong> <code>/impeccable audit</code> (technical: a11y, performance, responsive), <code>/impeccable critique</code> (UX review with heuristic scoring)</li>
+<li><strong>Refine:</strong> <code>/impeccable polish</code>, <code>bolder</code>, <code>quieter</code>, <code>distill</code>, <code>harden</code> (errors, i18n, edge cases), <code>onboard</code></li>
+<li><strong>Enhance:</strong> <code>animate</code>, <code>colorize</code>, <code>typeset</code>, <code>layout</code>, <code>delight</code>, <code>overdrive</code></li>
+<li><strong>Fix:</strong> <code>clarify</code> (UX copy), <code>adapt</code> (devices), <code>optimize</code> (performance)</li>
+<li><strong>Iterate:</strong> <code>/impeccable live</code> (pick elements in the browser, iterate on variants), <code>/impeccable generate</code></li>
+</ul>
+
+<p>Pin the ones you reach for — <code>/impeccable pin audit</code> creates a standalone <code>/audit</code> shortcut. The installer also drops in a provider-native <strong>design hook</strong>: on Claude Code, Copilot, and Codex it surfaces detector findings after UI edits (and a deeper pass on Stop); on Cursor it blocks bad writes <em>before</em> they land. Every hook invocation goes through the launcher in the skill's <code>scripts/</code> directory, which runs the engine binary — downloaded once into <code>~/.impeccable/bin/</code> — with no Node required. Pass <code>--no-hooks</code> at install if you want the skill without the automation, and keep the generated <code>.impeccable/</code> working directory out of git with the ignore block from the README (shared artifacts like <code>config.json</code> and <code>DESIGN.md</code> stay tracked).</p>
+
+<h2 id="alternatives">When to use Impeccable vs the alternatives</h2>
+
+<table>
+<thead><tr><th>Tool</th><th>Best for</th><th>Trade-off</th></tr></thead>
+<tbody>
+<tr><td><strong>Impeccable</strong></td><td>AI-generated UI: kills the recognizable "slop" tells deterministically, plus a full design-command vocabulary for your agent</td><td>Frontend only; the skill's taste is opinionated by design</td></tr>
+<tr><td><strong>Anthropic's frontend-design skill</strong></td><td>Lightweight design guidance inside Claude with no install</td><td>Guidance only — no deterministic checks, no hooks, no CLI; Impeccable explicitly started from it and added the machinery</td></tr>
+<tr><td><strong>Lighthouse / axe-core</strong></td><td>Performance budgets and WCAG auditing in CI</td><td>Says nothing about whether the design looks generated; no agent integration, no design vocabulary</td></tr>
+<tr><td><strong>Asking the LLM to critique</strong></td><td>Subjective, holistic feedback ("does this feel premium?")</td><td>Non-deterministic, slow, costs tokens every run, and invents issues; use it <em>after</em> the deterministic pass, not instead of it</td></tr>
+<tr><td><strong>Nothing (ship it)</strong></td><td>Internal tools nobody looks at</td><td>Your landing page looks like everyone else's landing page</td></tr>
+</tbody>
+</table>
+
+<p>The honest stack is layered: Impeccable's detector as the fast, free, always-on gate (it runs in milliseconds with no API key), the skill commands for the actual design work, and human or LLM judgment for the subjective remainder. The README is explicit that a clean detector run is evidence, not proof — it does not replace looking at the rendered page.</p>
+
+<h2 id="limits">Limitations worth knowing before you commit</h2>
+
+<ul>
+<li><strong>It is a taste, enforced.</strong> Rules like <code>overused-font</code> will flag Inter even when Inter is the right call — that is what the waiver system is for, but expect to configure it.</li>
+<li><strong>Static scans see code, not rendering.</strong> File and directory scans parse markup and CSS; URL scans (which need an installed Chrome, Chromium, or Edge) inspect the rendered DOM and computed layout. Some checks only make sense in the latter.</li>
+<li><strong>The skill needs a capable agent.</strong> The 24 commands are procedure documents for an AI harness — without one, you get the CLI detector only, which is still genuinely useful but is half the project.</li>
+<li><strong>Live mode is local-only.</strong> It edits a local checkout through a dev server; injecting its helper into a production site is not supported, and the docs warn against weakening production CSP to force it.</li>
+<li><strong>Version drift:</strong> I verified everything against CLI <code>4.1.0</code> and the repository at commit <code>36034d4</code> (September 2026). Command names and rule sets move — pin what you depend on.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway</h2>
+
+<p>Impeccable earned its trending spot by solving the exact problem the agent-coding era created: models that write competent code and interchangeable design. The detector is the rare dev tool that is both opinionated and checkable — it flagged 12 real issues in my test page, caught 2 more I introduced while fixing the first batch, and went silent at zero, all locally, all in milliseconds, all without an API key. The skill layer then gives your agent the vocabulary (<code>audit</code>, <code>distill</code>, <code>bolder</code>, <code>typeset</code>) to act on those findings like a design director instead of a template applier.</p>
+
+<p>Start where I did: <code>npx impeccable detect</code> on the last page your agent built. If the output reads like a description of your own site — purple gradients, icon tiles, nested cards — you have just found the cheapest design review you will ever run. Then install the skill, run <code>/impeccable init</code>, and stop shipping the default.</p>
+
+<p><em>Links: <a href="https://github.com/pbakaus/impeccable">pbakaus/impeccable on GitHub</a> · <a href="https://impeccable.style">impeccable.style</a> (docs) · <a href="https://www.npmjs.com/package/impeccable">impeccable on npm</a> · I verified this tutorial against CLI 4.1.0 and repository commit 36034d4 (September 29, 2026), running the detector on a CPU-only Linux VM with Node v24.</em></p>
