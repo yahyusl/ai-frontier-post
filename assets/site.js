@@ -182,12 +182,110 @@
     load();
   }
 
+  /* ---------- Share row (all articles) ----------
+     Injected at the top of every article page (after the byline).
+     Native Web Share on mobile when available; otherwise share-intent URLs. */
+  var SHARE_SVGS = {
+    x: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>',
+    facebook: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>',
+    reddit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="14.5" rx="7.5" ry="5"/><circle cx="4" cy="14.5" r="1.4"/><circle cx="20" cy="14.5" r="1.4"/><path d="M12 9.5 15 5"/><circle cx="15.9" cy="3.9" r="1.2"/><circle cx="9.2" cy="13.8" r="0.9" fill="currentColor" stroke="none"/><circle cx="14.8" cy="13.8" r="0.9" fill="currentColor" stroke="none"/><path d="M9.5 16.8c1.6 1 3.4 1 5 0"/></svg>',
+    linkedin: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
+    whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+    telegram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+    native: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>'
+  };
+
+  var SHARE_NETWORKS = [
+    { id: 'x', label: 'Share on X', url: function (u, t) { return 'https://x.com/intent/tweet?text=' + encodeURIComponent(t) + '&url=' + encodeURIComponent(u); } },
+    { id: 'facebook', label: 'Share on Facebook', url: function (u) { return 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(u); } },
+    { id: 'reddit', label: 'Share on Reddit', url: function (u, t) { return 'https://www.reddit.com/submit?url=' + encodeURIComponent(u) + '&title=' + encodeURIComponent(t); } },
+    { id: 'linkedin', label: 'Share on LinkedIn', url: function (u) { return 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(u); } },
+    { id: 'whatsapp', label: 'Share on WhatsApp', url: function (u, t) { return 'https://wa.me/?text=' + encodeURIComponent(t + ' ' + u); } },
+    { id: 'telegram', label: 'Share on Telegram', url: function (u, t) { return 'https://t.me/share/url?url=' + encodeURIComponent(u) + '&text=' + encodeURIComponent(t); } }
+  ];
+
+  function shareTitle() {
+    var og = document.querySelector('meta[property="og:title"]');
+    var t = og ? og.getAttribute('content') : document.title;
+    return String(t || '').replace(/\s*[|\-–—]\s*AI Frontier Post\s*$/i, '').trim() || document.title;
+  }
+
+  function shareUrl() {
+    var c = document.querySelector('link[rel="canonical"]');
+    return (c && c.getAttribute('href')) || location.href;
+  }
+
+  function setupShare() {
+    if (!document.querySelector || document.querySelector('.share-row')) return;
+    var header = document.querySelector('article.post .post-header');
+    if (!header) return;
+    var url = shareUrl(), title = shareTitle();
+
+    var html = '<span class="share-label">Share</span>';
+    if (navigator.share) {
+      html += '<button type="button" class="share-btn share-native" data-share-native aria-label="Share via…" title="Share via…">' + SHARE_SVGS.native + '</button>';
+    }
+    for (var i = 0; i < SHARE_NETWORKS.length; i++) {
+      var n = SHARE_NETWORKS[i];
+      html += '<a class="share-btn share-' + n.id + '" href="' + n.url(url, title) + '" target="_blank" rel="noopener" aria-label="' + n.label + '" title="' + n.label + '">' + SHARE_SVGS[n.id] + '</a>';
+    }
+    html += '<button type="button" class="share-btn share-copy" data-share-copy aria-label="Copy link" title="Copy link">' + SHARE_SVGS.link + '</button>';
+    html += '<span class="share-copied" hidden>Copied</span>';
+
+    var row = document.createElement('div');
+    row.className = 'share-row';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'Share this article');
+    row.innerHTML = html;
+
+    var anchor = header.querySelector('.byline');
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(row, anchor.nextSibling);
+    } else {
+      header.appendChild(row);
+    }
+
+    row.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('a.share-btn') : null;
+      if (a) {
+        e.preventDefault();
+        window.open(a.href, 'afp-share', 'width=640,height=560,menubar=no,toolbar=no');
+        return;
+      }
+      var b = e.target.closest ? e.target.closest('[data-share-native]') : null;
+      if (b && navigator.share) {
+        navigator.share({ title: title, text: title, url: url }).catch(function () {});
+        return;
+      }
+      var c = e.target.closest ? e.target.closest('[data-share-copy]') : null;
+      if (c) {
+        var done = function () {
+          var tip = row.querySelector('.share-copied');
+          if (tip) { tip.hidden = false; setTimeout(function () { tip.hidden = true; }, 1600); }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(done, done);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = url;
+          ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (err) {}
+          document.body.removeChild(ta);
+          done();
+        }
+      }
+    });
+  }
+
   function boot(scope) {
     scope = scope || document;
     var rxs = scope.querySelectorAll ? scope.querySelectorAll('[data-reactions]') : [];
     for (var i = 0; i < rxs.length; i++) setupReactions(rxs[i]);
     var cms = scope.querySelectorAll ? scope.querySelectorAll('[data-comments]') : [];
     for (var j = 0; j < cms.length; j++) setupComments(cms[j]);
+    if (scope === document) { try { setupShare(); } catch (e) {} }
   }
 
   window.AFP = window.AFP || {};
