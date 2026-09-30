@@ -169,6 +169,7 @@ FC_ORGS = {
     "Claude Sonnet 5.5": "Anthropic",
     "Claude Sonnet 5": "Anthropic",
     "GPT-6 Astra": "OpenAI",
+    "GPT-6.1 Sol": "OpenAI",
     "GPT-6 Sol": "OpenAI",
     "GPT-5.6 Sol": "OpenAI",
     "GPT-5.6 Terra": "OpenAI",
