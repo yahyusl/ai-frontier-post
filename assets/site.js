@@ -182,8 +182,9 @@
     load();
   }
 
-  /* ---------- Share row (all articles) ----------
-     Injected at the top of every article page (after the byline).
+  /* ---------- Share (all articles) ----------
+     Premium segmented share cluster, mounted twice: after the byline at the
+     top of the article, and in a "pass it on" block at the end.
      Native Web Share on mobile when available; otherwise share-intent URLs. */
   var SHARE_SVGS = {
     x: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>',
@@ -193,6 +194,7 @@
     whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
     telegram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>',
     link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
     native: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>'
   };
 
@@ -216,36 +218,21 @@
     return (c && c.getAttribute('href')) || location.href;
   }
 
-  function setupShare() {
-    if (!document.querySelector || document.querySelector('.share-row')) return;
-    var header = document.querySelector('article.post .post-header');
-    if (!header) return;
-    var url = shareUrl(), title = shareTitle();
-
+  function buildShareRow(url, title) {
     var html = '<span class="share-label">Share</span>';
     if (navigator.share) {
-      html += '<button type="button" class="share-btn share-native" data-share-native aria-label="Share via…" title="Share via…">' + SHARE_SVGS.native + '</button>';
+      html += '<button type="button" class="share-btn share-native" data-share-native aria-label="Share via\u2026" title="Share via\u2026">' + SHARE_SVGS.native + '</button>';
     }
     for (var i = 0; i < SHARE_NETWORKS.length; i++) {
       var n = SHARE_NETWORKS[i];
       html += '<a class="share-btn share-' + n.id + '" href="' + n.url(url, title) + '" target="_blank" rel="noopener" aria-label="' + n.label + '" title="' + n.label + '">' + SHARE_SVGS[n.id] + '</a>';
     }
     html += '<button type="button" class="share-btn share-copy" data-share-copy aria-label="Copy link" title="Copy link">' + SHARE_SVGS.link + '</button>';
-    html += '<span class="share-copied" hidden>Copied</span>';
-
     var row = document.createElement('div');
     row.className = 'share-row';
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', 'Share this article');
     row.innerHTML = html;
-
-    var anchor = header.querySelector('.byline');
-    if (anchor && anchor.parentNode) {
-      anchor.parentNode.insertBefore(row, anchor.nextSibling);
-    } else {
-      header.appendChild(row);
-    }
-
     row.addEventListener('click', function (e) {
       var a = e.target.closest ? e.target.closest('a.share-btn') : null;
       if (a) {
@@ -253,16 +240,24 @@
         window.open(a.href, 'afp-share', 'width=640,height=560,menubar=no,toolbar=no');
         return;
       }
-      var b = e.target.closest ? e.target.closest('[data-share-native]') : null;
-      if (b && navigator.share) {
+      var nb = e.target.closest ? e.target.closest('[data-share-native]') : null;
+      if (nb && navigator.share) {
         navigator.share({ title: title, text: title, url: url }).catch(function () {});
         return;
       }
-      var c = e.target.closest ? e.target.closest('[data-share-copy]') : null;
-      if (c) {
+      var cp = e.target.closest ? e.target.closest('[data-share-copy]') : null;
+      if (cp) {
         var done = function () {
-          var tip = row.querySelector('.share-copied');
-          if (tip) { tip.hidden = false; setTimeout(function () { tip.hidden = true; }, 1600); }
+          cp.classList.add('copied');
+          cp.innerHTML = SHARE_SVGS.check;
+          cp.setAttribute('aria-label', 'Link copied');
+          cp.setAttribute('title', 'Link copied');
+          setTimeout(function () {
+            cp.classList.remove('copied');
+            cp.innerHTML = SHARE_SVGS.link;
+            cp.setAttribute('aria-label', 'Copy link');
+            cp.setAttribute('title', 'Copy link');
+          }, 1800);
         };
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(url).then(done, done);
@@ -277,6 +272,32 @@
         }
       }
     });
+    return row;
+  }
+
+  function setupShare() {
+    if (!document.querySelector || document.querySelector('.share-top')) return;
+    var post = document.querySelector('article.post');
+    if (!post) return;
+    var url = shareUrl(), title = shareTitle();
+
+    var header = post.querySelector('.post-header');
+    if (header) {
+      var top = buildShareRow(url, title);
+      top.classList.add('share-top');
+      var anchor = header.querySelector('.byline');
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(top, anchor.nextSibling);
+      else header.appendChild(top);
+    }
+
+    var end = document.createElement('div');
+    end.className = 'share-end';
+    var h = document.createElement('p');
+    h.className = 'share-end-title';
+    h.textContent = 'Found this useful? Pass it on.';
+    end.appendChild(h);
+    end.appendChild(buildShareRow(url, title));
+    post.appendChild(end);
   }
 
   function boot(scope) {
