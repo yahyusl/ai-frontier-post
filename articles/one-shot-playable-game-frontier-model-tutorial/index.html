@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>One-shot a playable browser game with a frontier model: the workflow behind the Opus 5.5 demos — AI Frontier Post</title>
+<meta name="description" content="A Reddit poster claims Sonnet 5.5 one-shot a 3D zombie FPS in 49 minutes — but the demos skip the workflow that makes it repeatable. Here’s the complete process: spec-first prompting, the debug loop, playtesting, juice, and shipping, with every step verified on a real game we built and ran.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/one-shot-playable-game-frontier-model-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="One-shot a playable browser game with a frontier model: the workflow behind the Opus 5.5 demos">
+<meta property="og:description" content="A Reddit poster claims Sonnet 5.5 one-shot a 3D zombie FPS in 49 minutes — but the demos skip the workflow that makes it repeatable. Here’s the complete process: spec-first prompting, the debug loop, playtesting, juice, and shipping, with every step verified on a real game we built and ran.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/one-shot-playable-game-frontier-model-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/one-shot-playable-game-frontier-model-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-30">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "One-shot a playable browser game with a frontier model: the workflow behind the Opus 5.5 demos", "description": "A Reddit poster claims Sonnet 5.5 one-shot a 3D zombie FPS in 49 minutes — but the demos skip the workflow that makes it repeatable. Here’s the complete process: spec-first prompting, the debug loop, playtesting, juice, and shipping, with every step verified on a real game we built and ran.", "datePublished": "2026-09-30", "dateModified": "2026-09-30", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/one-shot-playable-game-frontier-model-tutorial/"}, "image": "https://aifrontierpost.com/articles/one-shot-playable-game-frontier-model-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>One-shot a playable browser game with a frontier model: the workflow behind the Opus 5.5 demos</h1>
+<p class="lede">A Reddit poster claims Sonnet 5.5 one-shot a 3D zombie FPS in 49 minutes; <em>Tidewater</em>, a full fishing game, was reportedly built with Opus 5.5 in eight hours. The clips never show the workflow. This tutorial is the missing middle: the complete process from blank prompt to published browser game — spec, one-shot prompt, debug loop, playtest, polish, ship — with every step verified on a real game we built, tested, and ran.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · September 30, 2026 · 17 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/one-shot-playable-game-frontier-model-tutorial/cover.webp" alt="Editorial illustration: a glowing browser window showing a neon arcade space shooter being assembled from code and pixels"></figure>
+<div class="article-body">
+<p>On Monday afternoon, Anthropic's Claude Sonnet 5.5 was barely a day old when a Reddit poster claimed it had one-shot an entire 3D zombie FPS in 49 minutes for $177 of API spend. Three days earlier, a different builder posted <em>Tidewater</em> — a fully playable fishing game with an upgrade economy, day-night cycles, and a fish market — built, according to its creator, in about eight hours with Claude Opus 5.5. We covered both stories this week, and both threads filled with the same question: <em>how?</em></p>
+<p>The demos never show the workflow. A 53-second gameplay clip doesn't tell you what the first prompt said, what broke, how it was fixed, or what the tenth iteration looked like. This tutorial is the missing middle: the complete, repeatable workflow for going from a blank prompt to a playable browser game — spec, one-shot prompt, debug loop, playtest, polish, and publish. Every step below was verified on a real game: a neon arcade shooter I specified, generated, debugged, and ran, with the test harness catching a genuine bug along the way.</p>
+
+<h2 id="what-you-need">What you'll need<a class="anchor" href="#what-you-need">#</a></h2>
+<ul>
+<li><strong>A frontier model with strong code generation.</strong> Any current top-tier model works — the workflow below is model-agnostic. An agentic coding tool (Claude Code, or the chat interface of your model of choice) makes the debug loop faster, but a plain chat window is enough.</li>
+<li><strong>A browser and a text editor.</strong> That's the whole toolchain. No game engine, no build step, no assets to download.</li>
+<li><strong>Budget: $0–$20.</strong> A single game like the one in this tutorial costs a few dollars in API tokens at most — or nothing extra on a flat subscription plan. The viral demos' four-figure token bills come from days of open-ended iteration, not from the technique itself.</li>
+<li><strong>An itch.io account (free)</strong> if you want to publish at the end. Optional but recommended — shipping is the step most tutorials skip.</li>
+<li><strong>No game-development experience required.</strong> You need to be able to read JavaScript well enough to spot when something looks wrong; the model writes it.</li>
+</ul>
+
+<h2 id="step-1-pick-the-stack">Step 1: Pick the one-shot stack<a class="anchor" href="#step-1-pick-the-stack">#</a></h2>
+<p>Every reliable one-shot game demo shares the same stack: <strong>a single HTML file, vanilla JavaScript, and the Canvas 2D API.</strong> This is not a coincidence — it is the format frontier models generate most reliably, for three reasons.</p>
+<p>First, a single file eliminates an entire class of failure: no module resolution, no build configuration, no asset paths to get wrong. The model emits one artifact and you double-click it. Second, Canvas 2D is a small, stable, extremely well-documented API surface — <code>fillRect</code>, <code>arc</code>, <code>drawImage</code> — that has barely changed in a decade, so the model's training data is dense and consistent. Third, everything runs from a <code>file://</code> URL with zero server, which means your test loop is "save, refresh" and takes two seconds.</p>
+<p>What to avoid on a first attempt: WebGL/Three.js (the demos that work are impressive; the failure modes are brutal — shader compile errors the model can't see), TypeScript (build step), and any engine with an asset pipeline. Once the workflow below is second nature, graduate to 3D. The zombie-FPS demo that went viral this week was built the same way most of these are: start simple, iterate.</p>
+<p>Fix the canvas size up front — <strong>960×540</strong> is the sweet spot: 16:9, large enough to feel like a real game, small enough that the model keeps coordinates sane. You'll reference it in the spec and the prompt.</p>
+
+<h2 id="step-2-write-the-spec">Step 2: Write the spec before you write the prompt<a class="anchor" href="#step-2-write-the-spec">#</a></h2>
+<p>This is the highest-leverage step in the entire workflow, and it's the one the "just prompt it" demos skip. Before touching the model, write a <code>GAME-SPEC.md</code>: a one-page design document that pins down the game so completely that generating the code becomes transcription, not invention.</p>
+<p>A good spec has seven sections: the one-line pitch, the 60-second core loop, the controls table, the entities (with numbers — speeds, sizes, counts), the rules and scoring, the tech constraints, and — most importantly — <strong>acceptance criteria</strong>: a checklist the finished game must satisfy. The acceptance criteria are what turn "make me a game" from a wish into a contract you can test against.</p>
+<p>Here is the real spec I wrote for the demo game built for this tutorial, a neon arcade shooter called <em>Neon Drift</em>:</p>
+<pre><code class="language-markdown"># GAME-SPEC.md — Neon Drift
+
+## One-line pitch
+A neon arcade space shooter: drift, shoot, survive the asteroid field.
+
+## Core loop (60 seconds)
+1. Fly the ship with WASD/arrows; hold SPACE to fire.
+2. Asteroids drift in from the edges; bullets destroy them for points.
+3. Smaller asteroids pay more (risk/reward for close shots).
+4. 3 lives; brief invulnerability after each hit; escalating spawn rate.
+
+## Controls
+| Input | Action |
+|---|---|
+| WASD / arrow keys | Thrust (with drift/inertia) |
+| SPACE | Fire (hold to autofire, 0.16s cooldown) |
+| R | Restart after game over |
+| Click | Start / restart |
+
+## Entities
+- **Ship**: triangle, 340 px/s max, drag 1.6/s, 2s invulnerability blink
+  after hit.
+- **Asteroid**: 8-vertex irregular polygon, radius 14–34px,
+  speed 40–120 px/s + time ramp, cap 26 alive.
+- **Bullet**: 520 px/s, 1.1s life, despawn off-screen.
+- **Particle**: explosion bursts, 0.3–0.8s life.
+- **Starfield**: 120 drifting stars for parallax feel.
+
+## Rules &amp; scoring
+- Hit: +100 − 2×radius points. 12% chance of +250 bonus burst.
+- Collision with ship: −1 life, screen shake, explosion.
+  0 lives → game over.
+- High score persists in localStorage (`neonDriftBest`).
+- Spawn interval: max(0.25s, 1.1s − 0.012s × elapsed seconds).
+
+## Tech constraints
+- Single HTML file, vanilla JS + Canvas 2D only.
+  No libraries, no external assets.
+- All SFX synthesized with the Web Audio API (no audio files).
+- Fixed 120Hz timestep, decoupled from render rate.
+- Must run from a double-clicked file (no server, no build step).
+
+## Acceptance criteria
+- [ ] Starts from menu on SPACE or click; no console errors.
+- [ ] Ship moves with inertia and stays inside the arena.
+- [ ] Bullets destroy asteroids; score increases; particles spawn.
+- [ ] 3 hits → game over screen with score + best; R restarts cleanly.
+- [ ] Survives 60 seconds of random-input play without errors.</code></pre>
+<p>Notice how much is decided here: every number the model would otherwise invent on the spot. "Smaller asteroids pay more" is a design decision; "+100 − 2×radius" is its implementation. When the model has to invent numbers, it invents them inconsistently — the spec removes that failure mode entirely. Thirty minutes with this document saves hours of "no, I meant…" iteration later. (If the spec-driven approach appeals to you, our <a href="/articles/spec-driven-development-spec-kit/">spec-driven development tutorial</a> covers the general method.)</p>
+
+<h2 id="step-3-the-one-shot-prompt">Step 3: The one-shot prompt<a class="anchor" href="#step-3-the-one-shot-prompt">#</a></h2>
+<p>With the spec written, the prompt itself is short. Its anatomy has four parts: the spec pasted verbatim, the output contract (one file, complete, runnable), the constraints restated as non-negotiables, and the acceptance criteria as the definition of done. Here is the pattern, ready to adapt:</p>
+<pre><code class="language-text">Build the complete game described in the spec below as ONE self-contained
+HTML file. Requirements:
+
+1. Everything in a single file: HTML, CSS, and JavaScript. No external
+   libraries, fonts, images, or audio files.
+2. Use only the HTML Canvas 2D API for rendering.
+3. The file must run by double-clicking it — no server, no build step,
+   no console errors on load.
+4. Implement every entity, rule, and number EXACTLY as specified.
+   Do not invent mechanics that aren't in the spec.
+5. Structure the code cleanly: input, update, draw, and a fixed-timestep
+   game loop as separate sections with comments.
+
+Verify your output against each acceptance criterion in the spec before
+responding. If any criterion can't be met, say which one and why
+instead of silently skipping it.
+
+--- SPEC ---
+[paste GAME-SPEC.md here]</code></pre>
+<p>Two details matter. First, <strong>"do not invent mechanics"</strong>: without it, models add features — a second weapon, a boss fight, a settings menu — each one a new surface for bugs. Scope discipline is a prompt-level concern. Second, <strong>"verify against each acceptance criterion"</strong>: asking the model to self-check against your checklist measurably reduces the most common one-shot failure, the game that loads but silently ignores half the spec.</p>
+<p>Expect 300–600 lines for a game of this scope. Save it as <code>game.html</code> and double-click it.</p>
+
+<h2 id="step-4-the-debug-loop">Step 4: The debug loop — where games are actually made<a class="anchor" href="#step-4-the-debug-loop">#</a></h2>
+<p>No one-shot output is perfect on the first try. The demos that claim otherwise are showing you the highlight reel. The professional workflow is a tight loop:</p>
+<ol>
+<li><strong>Open the browser console</strong> (F12 → Console) and play for 60 seconds. The console is your test suite.</li>
+<li><strong>Copy the full error text</strong> — not your paraphrase of it — back to the model with the relevant code section.</li>
+<li><strong>Ask for the smallest possible fix</strong>, not a rewrite: <em>"Fix this error with the minimal change. Don't restructure anything else."</em> Rewrites introduce new bugs; surgical fixes don't.</li>
+<li><strong>Re-test the acceptance criteria</strong>, not just the fixed bug. Fixes break neighbors.</li>
+</ol>
+<p>The most common first-run errors are worth knowing by name: <code>Cannot read properties of null</code> (the script ran before the DOM loaded — the fix is moving the <code>&lt;script&gt;</code> below the canvas or waiting for <code>DOMContentLoaded</code>), <code>X is not defined</code> (a typo'd variable the model introduced), and silent failures where the game loads but nothing moves (usually the game loop never starting, or the state machine stuck in <code>"menu"</code>).</p>
+<p>This loop caught a real bug while building this tutorial's demo. My headless test harness — a Node script that stubs the DOM and canvas and plays the game programmatically for simulated minutes — flagged that the ship's invulnerability timer could drift to <code>-0.0083</code> instead of stopping at zero:</p>
+<pre><code class="language-javascript">// before: timer drifts negative on the final frame
+if (ship.invuln &gt; 0) ship.invuln -= dt;
+
+// after: clamped, one-line fix
+if (ship.invuln &gt; 0) ship.invuln = Math.max(0, ship.invuln - dt);</code></pre>
+<p>Harmless in play — a negative timer behaves like zero — but exactly the kind of sloppiness that compounds across a 500-line file. The lesson generalizes: <strong>don't just playtest with your hands; simulate.</strong> A 40-line Node script that holds keys down and fast-forwards the game loop will exercise more code paths in ten seconds than you will in an hour of manual play. My harness verified menu → playing transitions, scoring, collisions, all three lives, game-over, high-score persistence, and clean restart — every acceptance criterion, automatically.</p>
+<p>And the reverse happened too. The harness passed with flying colors — but the first real browser run died instantly with <code>stars is not iterable</code>. The test stub recorded <code>requestAnimationFrame</code> callbacks without ever invoking them, so <code>frame()</code> had never executed in Node; the real browser ran the loop immediately, before <code>resetGame()</code> had initialized the starfield. The fix was two lines: call <code>resetGame()</code> before starting the loop, then park the state back on <code>"menu"</code>. The lesson cuts both ways: <strong>simulate what your hands can't, and run in the browser what your harness can't.</strong> Neither catches everything alone.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/one-shot-playable-game-frontier-model-tutorial/img2.webp" alt="Gameplay screenshot of Neon Drift, the neon arcade shooter built for this tutorial: a glowing cyan ship dodging purple asteroids with a score HUD"><figcaption>Screenshot: Neon Drift, the demo game built and verified for this tutorial — single HTML file, zero assets, synthesized sound.</figcaption></figure>
+
+<h2 id="step-5-playtest">Step 5: Playtest like a QA engineer<a class="anchor" href="#step-5-playtest">#</a></h2>
+<p>Once the console is clean, playtest against this 60-second checklist. Every item is a real failure mode I've seen in one-shot games:</p>
+<ul>
+<li><strong>Controls:</strong> does the ship respond within one frame? Is there input lag from doing too much work per frame?</li>
+<li><strong>Collision fairness:</strong> do hits feel earned or cheap? One-shot games often ship with collision radii that are far too generous — shrink the hitbox to the visual core.</li>
+<li><strong>Difficulty curve:</strong> is the first 30 seconds boring and minute three impossible? Check that your ramp (spawn interval, enemy speed) actually engages.</li>
+<li><strong>Edge cases:</strong> what happens when you hold two opposing directions? Mash restart during game-over? Resize the window mid-game?</li>
+<li><strong>Mobile:</strong> touch the game on your phone. If the answer is "nothing happens," add touch controls now — half your itch.io traffic is mobile.</li>
+</ul>
+<p>For each failure, return to the debug loop: describe the symptom precisely ("asteroids spawn inside the ship's starting position"), demand the minimal fix, re-run the acceptance criteria. Two or three laps of this loop is the difference between a demo and a game.</p>
+
+<h2 id="step-6-the-juice-pass">Step 6: The juice pass — game feel is a feature<a class="anchor" href="#step-6-the-juice-pass">#</a></h2>
+<p>Compare a viral demo with a game people replay and the difference is rarely mechanics — it's <em>juice</em>: particles, screen shake, sound, and feedback for every action. The good news is that juice is cheap for a model to generate and almost impossible to get wrong. Ask for it explicitly in a second pass, after the mechanics are solid:</p>
+<pre><code class="language-text">The game works. Now add game feel, changing as little existing code
+as possible:
+1. Particle burst on every asteroid destroyed (12–20 particles,
+   0.3–0.8s life, fade out).
+2. Screen shake (0.3s, small) when the ship is hit.
+3. Engine flame behind the ship proportional to thrust.
+4. Synthesized sound effects with the Web Audio API — shoot, explosion,
+   player hit, bonus. No audio files.</code></pre>
+<p>The Web Audio requirement deserves emphasis: generated games can't ship audio files they don't have, but every browser can synthesize sound. This ten-line pattern covers 90% of arcade SFX — an oscillator swept from one frequency to another with an exponential volume decay:</p>
+<pre><code class="language-javascript">// Verified in the Neon Drift demo: runs in any modern browser.
+function blip(freqStart, freqEnd, dur, type, vol) {
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type; // "square" for shots, "sawtooth" for explosions
+  osc.frequency.setValueAtTime(freqStart, t);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 1), t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(g).connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + dur + 0.02);
+}
+const sfx = {
+  shoot:   () =&gt; blip(880, 220, 0.12, "square", 0.05),
+  explode: () =&gt; blip(160, 30, 0.35, "sawtooth", 0.10),
+  hit:     () =&gt; blip(300, 60, 0.5, "triangle", 0.12),
+};</code></pre>
+<p>One browser rule to know: audio contexts start suspended until the user interacts with the page. Resume or create the context inside the first click/keypress handler — otherwise your game is silent and the console shows a warning, not an error, so it's easy to miss.</p>
+<p>Persistence is the other cheap win: a high score in <code>localStorage</code> takes five lines and doubles replay value:</p>
+<pre><code class="language-javascript">const best = +(localStorage.getItem("neonDriftBest") || 0);
+if (score &gt; best) localStorage.setItem("neonDriftBest", String(score));</code></pre>
+
+<h2 id="step-7-assets">Step 7: Assets without the legal risk<a class="anchor" href="#step-7-assets">#</a></h2>
+<p>Sooner or later you'll want the game to look like more than glowing polygons. You have three safe options, in order of preference:</p>
+<ol>
+<li><strong>Ask the model for inline SVG or data-URI sprites.</strong> Vector shapes embedded directly in the HTML keep the single-file property and can't break. Best for UI icons, simple characters, and backgrounds.</li>
+<li><strong>Kenney.nl.</strong> Thousands of sprites, tilesets, UI packs, and audio files, all released as <strong>CC0 public domain</strong> — free for commercial use with no attribution required. The art style is consistent across packs, which matters more than you'd think. Download a pack, drop the PNGs next to your HTML, and have the model wire them in.</li>
+<li><strong>AI image generation for hero art</strong> — cover images, title screens. Fine for decoration; don't build gameplay-critical sprites this way, since you can't control exact dimensions or transparency reliably.</li>
+</ol>
+<p>What not to do: rip sprites from games you like, or use "free" asset packs without checking the license. itch.io is full of packs with no stated license at all — treat those as unusable for anything you publish.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/one-shot-playable-game-frontier-model-tutorial/img3.webp" alt="The GAME-SPEC.md design document written for Neon Drift, showing the structured spec format: pitch, core loop, controls, entities, rules, constraints, and acceptance criteria"><figcaption>The spec is the highest-leverage artifact: every number the model would otherwise invent is decided here, up front.</figcaption></figure>
+
+<h2 id="step-8-ship-it">Step 8: Ship it — the step everyone skips<a class="anchor" href="#step-8-ship-it">#</a></h2>
+<p>An unplayed game is a demo. Publishing takes fifteen minutes:</p>
+<p><strong>itch.io (recommended for games).</strong> Zip your HTML file — with <code>index.html</code> at the <em>root</em> of the zip, not inside a folder — then Dashboard → Create new project → set <em>Kind of project</em> to <strong>HTML</strong> → upload the zip → tick <strong>"This file will be played in the browser"</strong> → set the embed size to your canvas (960×540) → Save &amp; view page → set the project public. Your game is now playable by anyone with the link, no install.</p>
+<p><strong>GitHub Pages (recommended for portfolios).</strong> Push the file to a repository, enable Pages in the repo settings, and the game lives at <code>yourname.github.io/repo/game.html</code> with a URL you control.</p>
+<p>Before you publish, do the final acceptance pass from your spec — on the <em>published</em> build, not your local file. itch.io serves games inside an iframe from a different origin, which occasionally surfaces issues (usually audio autoplay policies) that never appear locally.</p>
+
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach">#</a></h2>
+<p>There are four live workflows for AI game building right now, and the viral demos use different ones:</p>
+<ul>
+<li><strong>Pure one-shot</strong> (this tutorial's core): one detailed prompt → one file → debug loop. Cheapest and fastest — a few dollars of tokens, under an hour for a small game. Best when the scope is small and the spec is tight. Fails when the game is too big for one context window.</li>
+<li><strong>Iterative nudging</strong> ("add X", "make it better"): how <em>Tidewater</em> was reportedly built — about eight hours and, according to its creator, $1,874 in tokens. Maximum creative exploration, maximum cost. The bill surprises people because every "make it better" re-sends the entire growing file.</li>
+<li><strong>Spec-driven</strong>: the spec-first method from Step 2, extended across multiple sessions — spec the whole game, then generate it system by system (physics, then enemies, then UI). The best cost/quality ratio for anything beyond a toy.</li>
+<li><strong>Agent harness</strong>: point an agentic coding tool at the spec and let it run the debug loop itself — write code, run it headless, read errors, fix, repeat. Closest to a professional pipeline; needs the most setup.</li>
+</ul>
+<p>The honest answer for your first game: <strong>start with pure one-shot, graduate to spec-driven.</strong> One-shot teaches you what the model is good at; the spec teaches you to aim it. The builders posting eight-hour epics didn't start there — they started exactly where you are now.</p>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway">#</a></h2>
+<p>The viral game demos look like magic because they hide the workflow. There is no magic: a tight spec, a disciplined one-shot prompt, a debug loop that treats the browser console as a test suite, a QA checklist, a juice pass, and fifteen minutes to publish. The model writes the code; you supply the taste — the numbers in the spec, the fairness of the collisions, the decision that the game is <em>done</em>.</p>
+<p>Build one small game this week with the workflow above. Time yourself. Then build a second one, and watch how much of the first game's spec, prompt, and checklist you reuse. That compounding — not any single prompt — is the actual skill the demo builders have. The games are just the receipts.</p>
+
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="one-shot-playable-game-frontier-model-tutorial"></div><div class="comments" data-comments="one-shot-playable-game-frontier-model-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/opus-5-5-built-tidewater-island-game/"><span class="chip ai-news">AI News</span><h3>Opus 5.5 built a playable fishing-island game in 8 hours — and you can play it in your browser</h3><div class="meta">September 24, 2026 · 5 min read</div></a><a class="rel-card" href="/articles/sonnet-5-5-zombie-fps-one-shot-49-minutes/"><span class="chip ai-news">AI News</span><h3>Sonnet 5.5’s first viral build: a ‘one-shot’ 3D zombie FPS in 49 minutes for $177 — Reddit does the math</h3><div class="meta">September 29, 2026 · 5 min read</div></a><a class="rel-card" href="/articles/spec-driven-development-spec-kit/"><span class="chip">Tutorials</span><h3>Spec-driven development with GitHub Spec Kit: make your AI coding agent build what you actually meant</h3><div class="meta">September 27, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/stablyai-orca-parallel-agents-tutorial/"><span class="chip">Tutorials</span><h3>Orca: run Claude Code, Codex, and every other CLI agent in parallel git worktrees — hands-on</h3><div class="meta">September 29, 2026 · 17 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
