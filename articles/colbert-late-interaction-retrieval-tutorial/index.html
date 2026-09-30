@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Late-interaction retrieval with ColBERT: beat BM25 and retire your reranker — measured end-to-end — AI Frontier Post</title>
+<meta name="description" content="ColBERT&#x27;s late interaction beats BM25 on paraphrased queries and can retire your reranker. I measured both end-to-end on a CPU: recall, MRR, latency, and the exact setup that works.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/colbert-late-interaction-retrieval-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Late-interaction retrieval with ColBERT: beat BM25 and retire your reranker — measured end-to-end">
+<meta property="og:description" content="ColBERT&#x27;s late interaction beats BM25 on paraphrased queries and can retire your reranker. I measured both end-to-end on a CPU: recall, MRR, latency, and the exact setup that works.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/colbert-late-interaction-retrieval-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/colbert-late-interaction-retrieval-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-30">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Late-interaction retrieval with ColBERT: beat BM25 and retire your reranker — measured end-to-end", "description": "ColBERT's late interaction beats BM25 on paraphrased queries and can retire your reranker. I measured both end-to-end on a CPU: recall, MRR, latency, and the exact setup that works.", "datePublished": "2026-09-30", "dateModified": "2026-09-30", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/colbert-late-interaction-retrieval-tutorial/"}, "image": "https://aifrontierpost.com/articles/colbert-late-interaction-retrieval-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Late-interaction retrieval with ColBERT: beat BM25 and retire your reranker — measured end-to-end</h1>
+<p class="lede">Your RAG pipeline's retrieval problem is not your chunking strategy — it is the keyword matcher at the front of it. ColBERT's late interaction keeps every token's embedding and lets each query token find its best match at search time. I built a 48-passage test corpus with deliberately paraphrased queries and measured BM25 against ColBERT end to end on a CPU. Here is the full loop, reproducible.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · September 30, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/colbert-late-interaction-retrieval-tutorial/cover.webp" alt="Editorial illustration of late-interaction retrieval: query tokens on the left linked by glowing lines to their best-matching document tokens"></figure>
+<div class="article-body">
+
+<p class="lede">Your RAG pipeline has a retrieval problem, and it is not your chunking strategy. It is the thirty-year-old keyword matcher sitting at the front of it: BM25 cannot match a query to a document that says the same thing in different words. Dense bi-encoders fix the vocabulary mismatch but throw away token-level detail — one vector per passage, take it or leave it. ColBERT's late interaction is the third option: keep every token's embedding, and let each query token find its best match at search time. I built a 48-passage test corpus with deliberately paraphrased queries, ran BM25 against ColBERT end to end on a CPU, and measured exactly where each one wins. Here is the full loop, reproducible.</p>
+
+<h2 id="why-now">Why this matters now</h2>
+
+<p>Most production RAG stacks in 2026 look the same: BM25 for cheap first-pass retrieval, then a cross-encoder reranker (monoT5, a Cohere-style rerank API, or a fine-tuned MiniLM) rescoring the top 50, then the LLM. That reranker stage exists for one reason — BM25's vocabulary mismatch. A user asks "how do I shrink a model to four bits without wrecking it" and the passage that answers it talks about "GPTQ weight quantization with calibration data." Zero shared keywords, zero BM25 score, and the reranker never even sees the passage because it was cut at the first stage.</p>
+
+<p>Cross-encoders are accurate because they run full self-attention over the query and passage <em>together</em> — but that is also why they are expensive: you cannot run one over a million passages. So you use them as rerankers on a shortlist produced by something dumber. ColBERT (Khattab &amp; Zaharia, 2020; v2 by Santhanam et al., 2021) breaks the dilemma with <strong>late interaction</strong>: encode the query and the document <em>independently</em> into per-token embeddings, store the document token embeddings in the index, and only at search time compute fine-grained token-to-token matches. You get cross-encoder-grade matching quality with retriever-grade economics — the documents are encoded once, offline, and the expensive interaction happens over a handful of vectors per candidate, not over raw text.</p>
+
+<p>The practical consequence: a ColBERT index can <em>replace</em> the BM25-plus-reranker two-stage pipeline with a single stage. That is the claim I am testing below — measured, not asserted.</p>
+
+<h2 id="late-interaction">Late interaction in sixty seconds</h2>
+
+<p>Three retrieval architectures, one query, one passage:</p>
+
+<ul>
+<li><strong>BM25 (sparse):</strong> bag of words on both sides. Score = weighted keyword overlap. Fast, exact, and blind to paraphrase.</li>
+<li><strong>Bi-encoder (dense):</strong> one embedding vector per query, one per passage, cosine similarity. Handles paraphrase, but compresses a 200-token passage into a single vector — token-level evidence is lost.</li>
+<li><strong>ColBERT (late interaction):</strong> one embedding vector <em>per token</em> on both sides. Score = for each query token, take its maximum similarity over all document tokens, then sum. This is <strong>MaxSim</strong>:</li>
+</ul>
+
+<pre><code class="language-python">score(query, doc) = sum(
+    max(cosine_sim(q_i, d_j) for d_j in doc_tokens)
+    for q_i in query_tokens
+)</code></pre>
+
+<p>Each query token independently finds its best-matching document token — "shrink" can match "quantization," "four bits" can match "4-bit" — and the sum rewards passages that cover <em>all</em> of the query's aspects. Because documents are encoded offline and only the lightweight MaxSim runs at query time, you keep the per-token fidelity of a cross-encoder without paying cross-encoder prices at retrieval.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/colbert-late-interaction-retrieval-tutorial/img2.webp" alt="Diagram of MaxSim late interaction: each query token embedding connects to its highest-similarity document token embedding, and the maxima are summed into the final score" loading="lazy"><figcaption>MaxSim, the heart of late interaction: every query token picks its best document-token match; the score is the sum of those maxima. Diagram rendered for this article.</figcaption></figure>
+
+<p>Two details that make it work in practice. First, <strong>query augmentation</strong>: ColBERT pads short queries with <code>[MASK]</code> tokens up to a fixed length, which gives the model spare token slots to "expand" the query semantically during encoding. Second, <strong>ColBERTv2</strong> added residual compression of the token embeddings (roughly 6–10× smaller index) and denoised training supervision — the checkpoint you will use below, <code>colbert-ir/colbertv2.0</code>, is the v2 model. For large-scale search, the PLAID engine (2022) clusters the token embeddings so MaxSim only runs against candidate clusters instead of the full index.</p>
+
+<div class="keypoint"><strong>The mental model:</strong> BM25 asks "which passages contain these words?" Bi-encoders ask "which passage vector points the same way as the query vector?" ColBERT asks "for <em>each word</em> in the query, what is the best-matching word in the passage — and how well is the whole query covered?"</div>
+
+<h2 id="setup">What you will need</h2>
+
+<p>Python 3.10+, about 2 GB of disk for the model and dependencies, and no GPU — everything below ran on a plain CPU. I used <a href="https://github.com/AnswerDotAI/RAGatouille">RAGatouille</a> (Answer.AI's high-level ColBERT wrapper) because it reduces indexing and search to two method calls, with PLAID indexing under the hood.</p>
+
+<p>Install CPU-only PyTorch first — the default wheels bundle CUDA and download ~2.5 GB you will never use:</p>
+
+<pre><code class="language-bash">pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install "transformers<5" ragatouille rank-bm25 psutil ninja</code></pre>
+
+<p>Four notes on that install line, all earned the hard way:</p>
+
+<ul>
+<li><strong><code>transformers&lt;5</code>:</strong> RAGatouille 0.0.9 vendors ColBERT code written against the transformers 4.x model-loading API. With transformers 5.x, checkpoint loading crashes inside <code>_finalize_model_loading</code> (<code>AttributeError</code> on the renamed tied-weights attribute). Pinning 4.x — I used 4.56.2 — fixes it. RAGatouille has announced a 0.0.10 release migrating to a PyLate backend; if you are reading this later, try unpinned first.</li>
+<li><strong><code>ninja</code>:</strong> ColBERT JIT-compiles a small C++ MaxSim kernel with <code>torch.utils.cpp_extension</code> at import time, which requires Ninja and a C++ compiler. Without it you get <code>RuntimeError: Ninja is required to load C++ extensions</code>.</li>
+<li><strong><code>psutil</code>:</strong> a missing transitive dependency of <code>fast_pytorch_kmeans</code> (used by PLAID clustering). Without it, indexing dies on import.</li>
+<li><strong>langchain:</strong> RAGatouille 0.0.9 imports <code>langchain.retrievers.document_compressors.base</code> at module top level, but <code>langchain</code> is only an optional extra — and langchain 1.x removed that module path entirely. The snippet below shims it from <code>langchain_core</code> (RAGatouille only uses it as a base class). Twelve lines, then you never think about it again.</li>
+</ul>
+
+<h2 id="corpus">Step 1 — Build a test corpus that punishes keyword search</h2>
+
+<p>To measure anything honestly, you need queries where BM25 <em>should</em> fail. I wrote 48 passages — six per topic across eight ML topics (attention, optimization, RAG, quantization, diffusion, RLHF, vector databases, prompting) — and 20 queries with known gold passages. Eight queries share vocabulary with their gold passage; twelve are deliberately paraphrased to avoid the passage's key terms. That 12-query paraphrase set is the whole experiment: it simulates real users, who never word things the way your documents do.</p>
+
+<p>A paraphrase example from the set — query first, then the gold passage it must find:</p>
+
+<pre><code class="language-text">Query: "What optimizer adapts a separate step size for every weight
+        and fixes its own startup bias?"
+
+Gold passage (opt-2): "Adam keeps running averages of the gradient (first
+moment) and the squared gradient (second moment), then corrects both for
+initialization bias. It adapts the learning rate per parameter..."</code></pre>
+
+<p>Shared content words between query and passage: "adapts"/"adapts", "weight"/"parameter" if you are generous — and the passage never says the word "optimizer" at all. A keyword matcher has almost nothing to grip. Keep this example in mind; we will come back to it.</p>
+
+<h2 id="bm25">Step 2 — The BM25 baseline</h2>
+
+<p>Baseline first, always. Tokenize, score, rank — <code>rank-bm25</code> in a few lines:</p>
+
+<pre><code class="language-python">from rank_bm25 import BM25Okapi
+
+tokenized = [text.lower().split() for text in passages]
+bm25 = BM25Okapi(tokenized)
+
+def bm25_search(query, k=5):
+    scores = bm25.get_scores(query.lower().split())
+    ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
+    return [doc_ids[i] for i in ranked[:k]]</code></pre>
+
+<p>Nothing to tune, runs in microseconds. This is the bar ColBERT has to clear — and on the eight vocabulary-overlap queries, it is a high bar.</p>
+
+<h2 id="index">Step 3 — Index with ColBERT</h2>
+
+<p>Here is the complete indexing script. Note the langchain shim at the top (see the install notes), and that everything runs under <code>if __name__ == "__main__"</code> — RAGatouille's multiprocessing indexing requires it:</p>
+
+<pre><code class="language-python">import sys, types
+
+# Compatibility shim: RAGatouille 0.0.9 imports
+# langchain.retrievers.document_compressors.base at module level,
+# which no longer exists in langchain>=1. Re-point it at langchain_core.
+from langchain_core.documents.compressor import BaseDocumentCompressor
+base_mod = types.ModuleType("langchain.retrievers.document_compressors.base")
+base_mod.BaseDocumentCompressor = BaseDocumentCompressor
+dc_mod = types.ModuleType("langchain.retrievers.document_compressors")
+dc_mod.base = base_mod
+r_mod = types.ModuleType("langchain.retrievers")
+r_mod.document_compressors = dc_mod
+sys.modules["langchain.retrievers"] = r_mod
+sys.modules["langchain.retrievers.document_compressors"] = dc_mod
+sys.modules["langchain.retrievers.document_compressors.base"] = base_mod
+
+from ragatouille import RAGPretrainedModel
+
+
+def main():
+    passages = [...]       # your texts
+    doc_ids = [...]        # stable IDs, one per passage
+
+    RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
+    index_path = RAG.index(
+        collection=passages,
+        document_ids=doc_ids,
+        index_name="my_corpus",
+        max_document_length=180,
+        split_documents=False,
+    )
+    print("index at:", index_path)
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+<p>What those arguments do: <code>max_document_length=180</code> caps per-passage tokens (ColBERTv2's native limit is higher, but 180 covers these passages and keeps the index small); <code>split_documents=False</code> keeps each passage as one retrievable unit instead of auto-chunking. <code>from_pretrained</code> downloads the ~420 MB checkpoint on first run. Indexing my 48 passages took 136.5 seconds on CPU, and the index on disk is 376 KB.</p>
+
+<h2 id="search">Step 4 — Search and measure</h2>
+
+<p>Search is one call. It returns ranked hits with scores, and <code>document_id</code> maps back to your IDs:</p>
+
+<pre><code class="language-python">hits = RAG.search(
+    query="What optimizer adapts a separate step size for every weight "
+          "and fixes its own startup bias?",
+    k=5,
+)
+for h in hits:
+    print(h["rank"], h["document_id"], round(h["score"], 2))
+# 1 opt-2 13.82
+# 2 opt-5 13.54
+# 3 opt-6 13.07
+# ...</code></pre>
+
+<p>That is real output from the experiment index: the Adam passage (<code>opt-2</code>) at rank 1, ahead of the other optimization passages. Each hit also carries <code>content</code> and <code>passage_id</code> if you need them.</p>
+
+<p>To reload an existing index without re-encoding (the second run onward), use <code>RAGPretrainedModel.from_index(index_path)</code> instead of <code>from_pretrained</code> + <code>index</code>.</p>
+
+<p>I scored both systems with recall@1/3/5 and MRR@5 across all 20 queries, then split the results by query type. Mean per-query latency was timed with <code>time.perf_counter</code> around each search call.</p>
+
+<h2 id="results">The measured results</h2>
+
+<p>Overall, across all 20 queries:</p>
+
+<table>
+<thead><tr><th>System</th><th>Recall@1</th><th>Recall@3</th><th>Recall@5</th><th>MRR@5</th><th>Mean latency</th></tr></thead>
+<tbody>
+<tr><td>BM25</td><td>0.65</td><td>0.95</td><td>0.95</td><td>0.792</td><td>0.53 ms</td></tr>
+<tr><td>ColBERT v2 (RAGatouille)</td><td>0.85</td><td>0.95</td><td>1.00</td><td>0.896</td><td>~1 s*</td></tr>
+</tbody>
+</table>
+
+<p class="table-note">* ColBERT latency: ~1.1 s per query on CPU after warmup (measured probe of 6 searches); the 20-query experiment averaged 10 s per query with each search running cold. BM25 needs no warmup.</p>
+
+<p>The aggregate hides the real story. Split by query type:</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/colbert-late-interaction-retrieval-tutorial/img3.webp" alt="Bar chart comparing BM25 and ColBERT recall at 1, 3 and 5 on vocabulary-overlap queries versus paraphrased queries" loading="lazy"><figcaption>Recall@k on the two query types, measured on 20 queries over a 48-passage corpus. ColBERT's advantage concentrates exactly where keyword search is blind: paraphrased queries. Chart rendered from the experiment data.</figcaption></figure>
+
+<table>
+<thead><tr><th>Query type</th><th>System</th><th>Recall@1</th><th>Recall@5</th><th>MRR@5</th></tr></thead>
+<tbody>
+<tr><td rowspan="2">Vocabulary overlap (8 queries)</td><td>BM25</td><td>0.75</td><td>1.00</td><td>0.875</td></tr>
+<tr><td>ColBERT</td><td>1.00</td><td>1.00</td><td>1.00</td></tr>
+<tr><td rowspan="2">Paraphrased (12 queries)</td><td>BM25</td><td>0.583</td><td>0.917</td><td>0.736</td></tr>
+<tr><td>ColBERT</td><td>0.75</td><td>1.00</td><td>0.826</td></tr>
+</tbody>
+</table>
+
+<p>Read it as three findings:</p>
+
+<ol>
+<li><strong>On vocabulary-overlap queries, BM25 is genuinely competitive.</strong> BM25 reached 0.75 recall@1 with 0.875 MRR on the eight overlap queries; ColBERT was perfect (1.00 across the board), but the gap is small. If your users search with your documents' vocabulary — documentation search, log search — BM25 is not the problem and ColBERT is not the fix.</li>
+<li><strong>On paraphrased queries, BM25 collapses and ColBERT holds.</strong> On the twelve paraphrase queries, ColBERT scored 0.75 recall@1 and 0.826 MRR against BM25's 0.583 and 0.736 — and ColBERT's recall@5 was a perfect 1.00, meaning the gold passage was always in the shortlist a reranker or LLM would see. This is the vocabulary-mismatch problem, and it is the normal case for RAG: users describe problems, documents describe solutions, and the words rarely line up.</li>
+<li><strong>The latency cost is real but one-sided.</strong> BM25 answers in about half a millisecond; ColBERT takes roughly a second per query on CPU once warmed up (my 20-query experiment averaged 10 s per query because each search ran cold, paging the index in — a warmed-up probe averaged 1.1 s). That is three orders of magnitude slower than BM25, still far below a cross-encoder reranker pass or an LLM call. You pay it once per query at search time; indexing is the offline cost (136.5 s for 48 passages here, scaling roughly linearly).</li>
+</ol>
+
+<p>And the Adam example from Step 1? BM25 ranked the gold passage <code>opt-2</code> at position 9 — outside any usable top-5 shortlist, so a reranker would never have seen it. ColBERT put it at rank 1. That single query is the entire argument in miniature: the user described the behavior ("adapts a separate step size for every weight and fixes its own startup bias"), the passage described the mechanism ("adapts the learning rate per parameter... corrects both for initialization bias"), and only the system that matches <em>meaning per token</em> connected them.</p>
+
+<h2 id="which">Which approach should you use?</h2>
+
+<p>Four retrieval architectures, honest placement:</p>
+
+<ul>
+<li><strong>BM25</strong> — Use it when queries share vocabulary with documents (docs search, keyword-ish site search, tiny corpora), or as a near-free prefilter. It is deterministic, explainable, needs no GPU, and indexes in milliseconds. It cannot do paraphrase. Do not ask it to.</li>
+<li><strong>Bi-encoder dense retrieval</strong> — Use it when you need semantic matching over a large corpus with a small index (one vector per passage) and millisecond ANN search. The price is the information bottleneck: everything about a passage must survive compression into one vector. Fine for short passages; lossy for long ones.</li>
+<li><strong>ColBERT / late interaction</strong> — Use it when retrieval quality is the bottleneck and your queries paraphrase rather than quote. It keeps per-token fidelity, needs no reranker behind it, and the index stays on CPU-friendly infrastructure. Prices: larger index than bi-encoders (one vector per token, mitigated by v2 residual compression), slower queries than BM25, and a heavier indexing step. This is the sweet spot for RAG over technical/prose corpora up to millions of passages with PLAID.</li>
+<li><strong>Cross-encoder reranker</strong> — Use it when you need the last few points of accuracy on a shortlist and can afford full query-passage attention per candidate — typically as a second stage over 20–100 candidates, not as a retriever. If ColBERT is your first stage, you may find the reranker adds little: late interaction already captures most of what cross-attention buys, which is exactly why the single-stage ColBERT setup can retire the two-stage pipeline.</li>
+</ul>
+
+<p>A practical migration path if you run BM25 + reranker today: swap the BM25 stage for ColBERT first and measure whether the reranker still moves your metrics. In many RAG setups it stops earning its latency — that is the "retire your reranker" moment. If it still helps, keep it; ColBERT as a first stage feeds it better candidates than BM25 did.</p>
+
+<h2 id="takeaway">Takeaway</h2>
+
+<p>Late interaction is the rare idea that is both elegant and immediately usable: per-token embeddings, MaxSim scoring, documents encoded once and matched finely at query time. With RAGatouille it is genuinely a few lines of code — the hard parts of this tutorial were all environment friction (transformers 5, Ninja, the langchain import), not the retrieval itself. Measure on your own queries before you commit: build a small gold set with paraphrased queries the way I did here, because the overlap queries will tell you BM25 is fine and the paraphrase queries will tell you the truth. If your users describe problems and your documents describe solutions, ColBERT will earn its index.</p>
+
+<p>The full experiment scripts — corpus builder, query set, BM25 baseline, ColBERT indexing, and the scoring harness — are structured so you can drop in your own passages and queries and re-run the same comparison in an afternoon. That is the real deliverable: not my numbers, but a harness that produces <em>yours</em>.</p>
+
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="colbert-late-interaction-retrieval-tutorial"></div><div class="comments" data-comments="colbert-late-interaction-retrieval-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/scientific-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Turn your AI agent into a research scientist: a hands-on tutorial for Scientific Agent Skills</h3><div class="meta">September 30, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/page-agent-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Page Agent: give any web page its own AI agent — hands-on with Alibaba&#x27;s in-page GUI agent</h3><div class="meta">September 30, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/one-shot-playable-game-frontier-model-tutorial/"><span class="chip">Tutorials</span><h3>One-shot a playable browser game with a frontier model: the workflow behind the Opus 5.5 demos</h3><div class="meta">September 30, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/sepia-de-ai-writing-skill-tutorial/"><span class="chip">Tutorials</span><h3>Sepia: strip the AI out of your writing at the structural layer — hands-on with the 2.9K-star writing skill</h3><div class="meta">September 30, 2026 · 13 min read</div></a></div></section>
+</div></main>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
