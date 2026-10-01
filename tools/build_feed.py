@@ -9,12 +9,12 @@ news-sitemap.xml differ from what's committed.
 The feed carries 25 summary items (title + excerpt + thumbnail enclosure) —
 full article bodies live on the article pages, not in the feed.
 """
-import json, html, sys
+import json, html, os, sys
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 
 SITE = "https://aifrontierpost.com"
-REPO = "/home/hatch/workspace/ai-frontier-post"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root
 FEED_ITEMS = 25
 
 posts = json.load(open(f"{REPO}/posts.json"))
