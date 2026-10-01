@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Context Mode: stop your coding agent from burning its context window — a hands-on tutorial — AI Frontier Post</title>
+<meta name="description" content="Context Mode (24,500+ GitHub stars) is an MCP server that runs your agent&#x27;s code in an isolated sandbox so only stdout reaches the model, indexes knowledge into a local SQLite FTS5 search, and keeps sessions alive across compactions. Installed v1.0.169, ran every tool, wired it into an agent — the full hands-on walkthrough.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/context-mode-mcp-context-window-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Context Mode: stop your coding agent from burning its context window — a hands-on tutorial">
+<meta property="og:description" content="Context Mode (24,500+ GitHub stars) is an MCP server that runs your agent&#x27;s code in an isolated sandbox so only stdout reaches the model, indexes knowledge into a local SQLite FTS5 search, and keeps sessions alive across compactions. Installed v1.0.169, ran every tool, wired it into an agent — the full hands-on walkthrough.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/context-mode-mcp-context-window-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/context-mode-mcp-context-window-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Context Mode: stop your coding agent from burning its context window \u2014 a hands-on tutorial", "description": "Context Mode (24,500+ GitHub stars) is an MCP server that runs your agent's code in an isolated sandbox so only stdout reaches the model, indexes knowledge into a local SQLite FTS5 search, and keeps sessions alive across compactions. Installed v1.0.169, ran every tool, wired it into an agent \u2014 the full hands-on walkthrough.", "datePublished": "2026-10-01", "dateModified": "2026-10-01", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/context-mode-mcp-context-window-tutorial/"}, "image": "https://aifrontierpost.com/articles/context-mode-mcp-context-window-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Context Mode: stop your coding agent from burning its context window — a hands-on tutorial</h1>
+<p class="lede">Your coding agent's biggest expense isn't the model — it's the context window filling up with tool output. Context Mode (24,500+ GitHub stars) runs your agent's code in an isolated sandbox so only stdout reaches the model, indexes your knowledge into local full-text search, and keeps sessions alive across compactions. I installed v1.0.169, ran all 11 MCP tools hands-on, and wired it into an agent — here's the complete walkthrough, including the honest caveats about its 98% claim and its source-available license.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · October 1, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/context-mode-mcp-context-window-tutorial/cover.webp" alt="Editorial illustration: a mechanical engine filtering wide streams of raw data into a dense beam delivered to a robot, cyan and amber on dark navy"></figure>
+<div class="article-body">
+<p>Watch a coding agent work for half an hour and you'll notice the real bottleneck isn't the model — it's the context window filling up with tool output. A Playwright snapshot: 56 KB. Twenty GitHub issues: 59 KB. One access log: 45 KB. After 30 minutes of routine agentic work, 40% of the context is gone, spent on bytes neither you nor the model ever needed to read.</p>
+<p>Context Mode, by Mert Köseoğlu (<code>mksglu/context-mode</code> on GitHub), treats that output as data to be processed, not text to be pasted. It's an MCP server plus a set of agent hooks: code runs in an isolated sandbox and only the stdout reaches the model, documents get indexed into a local full-text search instead of being pasted wholesale, and session state survives compactions in a compact snapshot. When I looked it up on October 1, 2026, it was sitting at #3 on GitHub's daily trending list with 24,546 stars, a #1 spot on Hacker News with 570+ points, and an npm release at version 1.0.169. Its headline number is a 315 KB → 5.4 KB reduction on a real workflow — 98% of tool-output tokens kept out of context.</p>
+<p>This tutorial installs Context Mode, runs every piece of it hands-on, and wires it into an agent. Every command below actually ran on my machine — version 1.0.169, verified end to end. One thing to know up front: the project is published under the <strong>Elastic License 2.0</strong>, which is source-available but <em>not</em> an OSI-approved open-source license. I'll say more about what that means in the caveats.</p>
+
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li><strong>Node.js ≥ 22.5 or Bun</strong> — the package ships from npm.</li>
+<li><strong>An MCP-capable agent</strong> — Claude Code, Gemini CLI, VS Code or JetBrains Copilot, OpenCode, or KiloCode are all supported.</li>
+<li><strong>A few language runtimes</strong> — the sandbox supports twelve languages (JavaScript, TypeScript, Python, Shell, Ruby, Go, Rust, PHP, Perl, R, Elixir, C#), but only the ones installed on your machine count. My doctor run found 5 of 11 on this box; more on that in Step 2.</li>
+<li><strong>Ten minutes.</strong> The install is one npm command; the hooks configure themselves.</li>
+</ul>
+<p>Honesty note on the headline number: 98% refers to <em>tool-output tokens</em> (315 KB → 5.4 KB on the project's measured workflow), not your entire context window. Your system prompt, conversation history, and the model's own reasoning still count. Context Mode shrinks the biggest controllable slice — everything the agent reads from tools — which is exactly the slice that grows fastest in long sessions.</p>
+
+<h2 id="step-1-install">Step 1 — Install Context Mode</h2>
+<p>The documented install is a single global npm command:</p>
+<pre><code class="language-bash">npm install -g context-mode</code></pre>
+<p>I installed it from the npm registry and pinned what I got:</p>
+<pre><code class="language-bash">npm install context-mode
+npx context-mode --version
+# 1.0.169</code></pre>
+<p>Version 1.0.169 is what every result below was verified against. The project moves fast — 195 releases since its February 2026 debut — so if a flag ever misbehaves, <code>context-mode --help</code> is authoritative. The CLI ships a handful of subcommands: <code>doctor</code>, <code>upgrade</code>, <code>statusline</code>, and <code>hook</code> (which wires the session hooks into your agent).</p>
+
+<h2 id="step-2-doctor">Step 2 — Let doctor grade your machine</h2>
+<p>Before touching the MCP tools, run the diagnostics:</p>
+<pre><code class="language-bash">context-mode doctor</code></pre>
+<p>Here's what it reported on my machine:</p>
+<pre><code class="language-text">Runtime coverage: 5/11 languages
+  JavaScript/TypeScript .... bun 1.4.2 (auto-detected)
+  Python ................... python3 3.12.3
+MCP server ................. PASS
+Hooks ...................... configured</code></pre>
+<p>Two things worth reading carefully here. First, Bun was auto-detected for JavaScript and TypeScript — the sandbox prefers it for 3–5x faster JS/TS execution when it's present. Second, "5/11 languages" is a report on <em>your machine</em>, not a product limit: doctor can only sandbox languages whose runtimes are installed. If you live in Go or Rust, install those toolchains before expecting coverage. Everything else — MCP server, hooks — passed, so the wiring was ready.</p>
+
+<h2 id="step-3-sandbox">Step 3 — Run your first sandboxed execution</h2>
+<p>Now the core idea. I started the MCP server over stdio and asked for its tool list. It introduced itself as <code>context-mode</code>, version 1.0.169, advertising all 11 tools: six sandbox tools (<code>ctx_batch_execute</code>, <code>ctx_execute</code>, <code>ctx_execute_file</code>, <code>ctx_index</code>, <code>ctx_search</code>, <code>ctx_fetch_and_index</code>) and five meta-tools (<code>ctx_stats</code>, <code>ctx_doctor</code>, <code>ctx_upgrade</code>, <code>ctx_purge</code>, <code>ctx_insight</code>). <code>ctx_doctor</code> — the in-agent twin of the CLI doctor — reported all checks passing.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/context-mode-mcp-context-window-tutorial/img2.webp" alt="Illustration of the sandbox: a glass cube containing tangled threads of raw data, emitting a single clean beam of output toward a robot observer"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+<p>Then the first real execution — Python, computing factorials 0 through 7 and their sum:</p>
+<pre><code class="language-json">{
+  "tool": "ctx_execute",
+  "arguments": {
+    "language": "python",
+    "code": "from math import factorial\nfacts = [factorial(i) for i in range(8)]\nprint(facts)\nprint('sum:', sum(facts))"
+  }
+}</code></pre>
+<p>What came back into context was only the stdout:</p>
+<pre><code class="language-text">[1, 1, 2, 6, 24, 120, 720, 5040]
+sum: 5914</code></pre>
+<p>That's the whole trick, and it's worth stating precisely: each <code>ctx_execute</code> call spawns an isolated subprocess with its own process boundary — scripts can't see each other's memory or state — and <strong>only the stdout enters the conversation context</strong>. The raw data never leaves the sandbox. The project's own tools table puts this at 56 KB → 299 B for a typical execution.</p>
+<p>The README's canonical example makes the "before" concrete: 47 <code>Read()</code> calls dumping 700 KB to count lines across TypeScript files, versus one <code>ctx_execute("javascript", …)</code> call returning 3.6 KB. Same answer, two orders of magnitude less context.</p>
+<p>Two behaviors kick in as outputs grow. When output exceeds 5 KB <em>and</em> you pass an <code>intent</code>, Context Mode switches to intent-driven filtering: it indexes the full output into the knowledge base, searches for the sections matching your intent, and returns only those — plus a vocabulary of searchable terms for follow-up queries. Authenticated CLIs (<code>gh</code>, <code>aws</code>, <code>gcloud</code>, <code>kubectl</code>, <code>docker</code>) work through credential passthrough, inheriting your environment and config paths without exposing them to the conversation.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/context-mode-mcp-context-window-tutorial/img3.webp" alt="Illustration of intent-driven filtering: a luminous funnel distilling scattered document icons and circuit traces into a single golden crystal"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="step-4-kb">Step 4 — Build a searchable knowledge base</h2>
+<p>The sandbox keeps tool output out of context. The knowledge base keeps <em>documents</em> out of context. Instead of pasting files into the conversation, you index them once and search on demand. The engine is SQLite FTS5 with BM25 ranking, Porter stemming, trigram RRF fusion, headings weighted 5x, proximity reranking, fuzzy Levenshtein correction, and smart snippets.</p>
+<p>I pointed <code>ctx_index</code> at two Markdown notes. It reported back: <strong>2 files indexed, 2 sections</strong>. Then a <code>ctx_search</code> query returned BM25-ranked snippets with the source file paths attached — enough to answer from, without ever loading the documents into context. The project's measured number for this path is 60 KB → 40 B: index once, retrieve snippets forever.</p>
+<p>A few operational details from the docs, all verified against the real README:</p>
+<ul>
+<li><strong>TTL cache:</strong> fetched content is cached under <code>~/.context-mode/content/</code> with a default 24-hour TTL (overridable per call with <code>ttl: &lt;ms&gt;</code>; <code>ttl: 0</code> or <code>force: true</code> bypasses it), and stale entries are cleaned up after 14 days.</li>
+<li><strong>Parallel fetch:</strong> <code>ctx_fetch_and_index</code> accepts <code>requests: [{url, source}, …]</code> with <code>concurrency: 1–8</code> for multi-URL ingestion in one call.</li>
+<li><strong>Batching:</strong> <code>ctx_batch_execute</code> runs multiple commands and searches multiple queries in a single call (measured 986 KB → 62 KB), with opt-in <code>concurrency: 1–8</code> for I/O-bound batches.</li>
+<li><strong>Nuclear option:</strong> <code>ctx_purge</code> permanently deletes all indexed content from the knowledge base. It's the one destructive tool here — the schema even flags the others as read-only hints.</li>
+</ul>
+
+<h2 id="step-5-stats">Step 5 — Watch the meter: ctx_stats</h2>
+<p>Skepticism is healthy with any "98% less" claim, so the project ships its own meter. <code>ctx_stats</code> reports context savings, call counts, and session statistics: bytes returned to context versus bytes sandboxed, bytes indexed, cache hits and cache bytes saved, tokens kept out, reduction percentage, tokens saved, and dollars saved — per session and lifetime, with a per-tool breakdown.</p>
+<p>On my fresh scratch state it reported exactly what you'd expect from a new install: zeros across the board and <strong>$0.00</strong> saved. The honest way to use it is as a before/after instrument: run <code>ctx_stats</code> at the start of a session, do your normal agentic work through the <code>ctx_*</code> tools, and read it again at the end. That's the only savings number that matters — yours, on your workload.</p>
+
+<h2 id="step-6-agent">Step 6 — Wire it into your agent</h2>
+<p>The MCP tools are only half the system. The other half is hooks: PreToolUse, PostToolUse, UserPromptSubmit, PreCompact, SessionStart, and Stop. They route tool calls through the sandbox automatically, capture session events as they happen, build a resume snapshot before compaction, and restore state after it. The snapshot is priority-tiered to fit a 2 KB budget — critical state (active files, tasks, rules, decisions) is always preserved while lower-priority events drop first. Per-project SQLite keeps sessions isolated from each other.</p>
+<p>The README quantifies the hooks' value: roughly <strong>98% of tool-output tokens kept out of context</strong> with hooks, versus ~60% with instruction files (CLAUDE.md-style routing) alone. Instructions advise; hooks enforce.</p>
+<p>Wiring it up, from the official docs:</p>
+<p><strong>Claude Code (recommended) — install as a plugin:</strong></p>
+<pre><code class="language-bash">/plugin marketplace add mksglu/context-mode
+/plugin install context-mode@context-mode</code></pre>
+<p>Then verify with <code>/context-mode:ctx-doctor</code>. The plugin registers all hooks and all 11 MCP tools, plus slash commands:</p>
+<pre><code class="language-text">/context-mode:ctx-stats    per-tool savings, tokens, reduction ratio
+/context-mode:ctx-doctor   runtimes, hooks, FTS5, versions
+/context-mode:ctx-index    index a file or directory
+/context-mode:ctx-search   search indexed content
+/context-mode:ctx-upgrade  pull latest, rebuild, migrate cache, fix hooks
+/context-mode:ctx-purge    delete all indexed content
+/context-mode:ctx-insight  org analytics dashboard (context-mode.com/insight)</code></pre>
+<p><strong>MCP-only (any agent):</strong></p>
+<pre><code class="language-bash">claude mcp add context-mode -- npx -y context-mode</code></pre>
+<p>On platforms without slash-command support, you just type <code>ctx stats</code>, <code>ctx doctor</code>, <code>ctx index</code>, or <code>ctx search</code> in chat and the model calls the MCP tool. The SessionStart hook injects the routing instructions at runtime — nothing is written into your project. (One platform caveat from the docs: on Codex, PreToolUse routing currently supports deny rules only, pending upstream support for input rewrites.)</p>
+
+<h2 id="vs-alternatives">When to use Context Mode vs the alternatives</h2>
+<p>Context Mode isn't the only tool attacking context bloat. Here's how it sits next to approaches we've covered before:</p>
+<ul>
+<li><strong><a href="/articles/rtk-rust-token-killer-cli-tutorial/">RTK</a></strong> compresses shell output <em>after</em> the agent runs it — a proxy between agent and shell. Context Mode instead runs the command <em>inside its own sandbox</em> and never lets the raw output reach the agent at all. Use RTK when you want a drop-in output filter; use Context Mode when you want execution itself rerouted.</li>
+<li><strong><a href="/articles/prompt-compression-measured-guide/">Prompt compression</a></strong> shrinks what you send. Context Mode shrinks what comes <em>back</em>. They stack — compress the prompt, sandbox the tools.</li>
+<li><strong><a href="/articles/zvec-grep-semantic-code-search/">zvec-grep</a></strong> is semantic code search for your repo. Context Mode's FTS5 knowledge base is lexical (BM25 + stemming) but covers anything — docs, logs, fetched URLs — and lives behind the same MCP surface as the sandbox.</li>
+<li><strong><a href="/articles/code-review-graph-local-code-intelligence-tutorial/">code-review-graph</a></strong> maps your repo's structure so the agent reads less code. Context Mode takes the complementary route: keep execution and retrieval behind the sandbox boundary entirely.</li>
+<li><strong>Instruction files alone</strong> (CLAUDE.md routing) get you ~60% of the way per the project's measurements; the hooks exist precisely because advice degrades under pressure and enforcement doesn't.</li>
+</ul>
+<p>The honest summary: if your agents spend their sessions reading tool output, Context Mode attacks the largest line item. If your bloat is mostly prompt-side, start with compression instead.</p>
+
+<h2 id="caveats">Caveats, stated plainly</h2>
+<ul>
+<li><strong>The license is Elastic License 2.0</strong> (© 2026 Mert Koseoglu) — source-available, free to use, but <em>not</em> an OSI-approved open-source license. Read it before building commercial products or hosted services on top of this; the "open-source project" framing you'll see in trending lists is loose language.</li>
+<li><strong>Only stdout enters context.</strong> Exit codes, stderr, timing — if your script doesn't print it, the model never sees it. Write scripts that print what matters, and treat silent success as a real failure mode in agentic loops.</li>
+<li><strong>The 98% is tool-output tokens</strong> on the project's measured workflow, not a guarantee for yours. Run <code>ctx_stats</code> before and after a real session and believe your own numbers.</li>
+<li><strong>5/11 languages</strong> on my machine was a mirror of installed runtimes, not a product cap. Install the toolchains you need, then re-run <code>context-mode doctor</code>.</li>
+<li><strong>Intent filtering needs both conditions:</strong> output over 5 KB <em>and</em> an explicit intent. Small outputs come back whole; that's by design.</li>
+<li><strong><code>ctx_purge</code> is destructive</strong> — it permanently deletes the knowledge base. Everything else is read-only or additive.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway</h2>
+<p>Most context-window tooling treats the symptom — compressing, summarizing, or truncating text that's already in the window. Context Mode treats the cause: it moves execution and retrieval to the other side of a boundary the context window can't see, and only the distilled answer crosses over. The sandbox (<code>ctx_execute</code>), the knowledge base (<code>ctx_index</code> / <code>ctx_search</code>), and the hooks each do one job, and <code>ctx_stats</code> keeps all three honest.</p>
+<p>Install it with <code>npm install -g context-mode</code>, run <code>context-mode doctor</code>, and let your next long agent session be the experiment. If the project's numbers hold on your workload, the most expensive tokens in your session — the ones you never read — simply stop being spent.</p>
+
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="context-mode-mcp-context-window-tutorial"></div><div class="comments" data-comments="context-mode-mcp-context-window-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/code-review-graph-local-code-intelligence-tutorial/"><span class="chip">Tutorials</span><h3>Stop feeding your agent the whole repo: a hands-on tutorial for code-review-graph</h3><div class="meta">2026-09-29 · 12 min read</div></a><a class="rel-card" href="/articles/rtk-rust-token-killer-cli-tutorial/"><span class="chip">Tutorials</span><h3>RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy</h3><div class="meta">2026-09-27 · 12 min read</div></a><a class="rel-card" href="/articles/prompt-compression-measured-guide/"><span class="chip">Tutorials</span><h3>Cut your prompt tokens in half: a measured guide to prompt compression</h3><div class="meta">2026-09-27 · 10 min read</div></a><a class="rel-card" href="/articles/zvec-grep-semantic-code-search/"><span class="chip">Tutorials</span><h3>Search your codebase by meaning: a hands-on tutorial for zvec-grep (zg)</h3><div class="meta">2026-09-27 · 14 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Affiliate disclosure</a><a href="/about/">Corrections policy</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
