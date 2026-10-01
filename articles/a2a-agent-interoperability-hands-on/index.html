@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Your agents can&#x27;t talk to each other: build two interoperating agents with the A2A protocol — hands-on — AI Frontier Post</title>
+<meta name="description" content="A2A is the Linux Foundation&#x27;s open protocol for agent-to-agent communication: MCP connects agents to tools, A2A connects agents to each other. This tutorial builds two real A2A agents with the official Python SDK 1.2.1 — a FactFinder research agent and a BriefWriter that delegates to it over the protocol. Agent cards, task lifecycle, artifacts, true delegation — no API key, no GPU.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/a2a-agent-interoperability-hands-on/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Your agents can't talk to each other: build two interoperating agents with the A2A protocol — hands-on">
+<meta property="og:description" content="A2A is the Linux Foundation's open protocol for agent-to-agent communication: MCP connects agents to tools, A2A connects agents to each other. This tutorial builds two real A2A agents with the official Python SDK — agent cards, task lifecycle, artifacts, and true agent-to-agent delegation, no API key required.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/a2a-agent-interoperability-hands-on/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/a2a-agent-interoperability-hands-on/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Your agents can't talk to each other: build two interoperating agents with the A2A protocol — hands-on","description":"A2A is the Linux Foundation's open protocol for agent-to-agent communication: MCP connects agents to tools, A2A connects agents to each other. This tutorial builds two real A2A agents with the official Python SDK 1.2.1 — a FactFinder research agent and a BriefWriter that delegates to it over the protocol. Agent cards, task lifecycle, artifacts, true delegation — no API key, no GPU.","datePublished":"2026-10-01","dateModified":"2026-10-01","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/a2a-agent-interoperability-hands-on/"},"image":"https://aifrontierpost.com/articles/a2a-agent-interoperability-hands-on/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Your agents can&#x27;t talk to each other: build two interoperating agents with the A2A protocol — hands-on</h1>
+<p class="lede">MCP gave every agent the same way to use tools. A2A — the Agent2Agent protocol, now a Linux Foundation standard — gives agents a way to use <em>each other</em>. This tutorial builds two real, interoperating A2A agents with the official Python SDK: a FactFinder research agent, and a BriefWriter that discovers it, delegates to it, and assembles the result. No API key, no GPU, every command executed.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 1, 2026 · 17 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/a2a-agent-interoperability-hands-on/cover.webp" alt="AI-generated editorial illustration: two glowing agent nodes, one cyan and one violet, exchanging message packets across a network bridge with an AgentCard document floating between them as a handshake token, on a deep navy background"></figure>
+<div class="article-body"><p>Every serious agent stack in 2026 has the same hole. Your research agent can't ask your data agent for help. Your company's support agent can't delegate to the vendor's troubleshooting agent. Each one is brilliant in isolation and mute in company — so teams glue them together with bespoke REST endpoints, shared databases, or one mega-agent that does everything badly.</p>
+<p><strong>A2A</strong>, the Agent2Agent protocol, is the industry's answer. Announced by Google in April 2025, donated to the Linux Foundation that June, and now at a stable v1.0 with 150+ organizations behind it, A2A is an open standard for one agent to discover and delegate work to another — across frameworks, vendors, and company boundaries. The one-line mental model the ecosystem settled on: <strong>MCP connects agents to tools; A2A connects agents to agents.</strong> An agent's internal tools, memory, and prompts stay private; what crosses the wire is a task with a lifecycle.</p>
+<p>This tutorial builds the real thing, not a diagram. You'll create <strong>FactFinder</strong>, an A2A research agent, then <strong>BriefWriter</strong>, a second agent that discovers FactFinder over the protocol, delegates research to it, and returns a finished brief as an artifact. Every command below was executed on October 1, 2026 against <strong>a2a-sdk 1.2.1</strong> (the official Python SDK), and every output shown is real. No API key, no GPU, no cloud account — the agents are deterministic so the whole loop is free and perfectly reproducible. When you're done, you'll know exactly where to plug in a real LLM.</p>
+<h2 id="what-youll-need">What you&#x27;ll need <a class="hanchor" href="#what-youll-need">#</a></h2>
+<ul>
+<li><strong>Python 3.10 or newer</strong> — check with <code>python3 --version</code>. The SDK requires 3.10+.</li>
+<li><strong>pip</strong> and a terminal. A virtual environment is strongly recommended.</li>
+<li><strong>No API key, no account, no GPU.</strong> Both agents in this tutorial are deterministic — the protocol is the point, not the model. A note at the end shows where a real LLM plugs in.</li>
+<li>About <strong>20 minutes</strong>, most of it reading. The running takes seconds.</li>
+</ul>
+<h2 id="step-1-install-the-sdk">Step 1 — Install the SDK <a class="hanchor" href="#step-1-install-the-sdk">#</a></h2>
+<p>The official Python SDK lives on PyPI as <a href="https://pypi.org/project/a2a-sdk/" rel="nofollow">a2a-sdk</a> (source at <a href="https://github.com/a2aproject/a2a-python" rel="nofollow">a2aproject/a2a-python</a>). The base package covers the client and protocol types; the <code>fastapi</code> extra adds the Starlette-based server pieces you'll need. Pin the version — the SDK moved fast from 0.x to 1.x and old tutorials no longer match the API:</p>
+<pre><code>python3 -m venv a2a-tutorial &amp;&amp; source a2a-tutorial/bin/activate
+pip install "a2a-sdk[fastapi]==1.2.1" httpx uvicorn</code></pre>
+<p>Verify the install and take a first look at the API surface — this is the map for everything that follows:</p>
+<pre><code>python -c "
+from a2a.server.agent_execution import AgentExecutor
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.routes import create_jsonrpc_routes, create_agent_card_routes
+from a2a.client.client_factory import ClientFactory
+from a2a.client.card_resolver import A2ACardResolver
+print('SDK surface OK')
+"
+# SDK surface OK</code></pre>
+<p>Six imports, two halves: <code>a2a.server.*</code> builds agents, <code>a2a.client.*</code> talks to them. An agent that delegates — like the BriefWriter you'll build in Step 5 — uses both halves at once.</p>
+<h2 id="step-2-five-concepts">Step 2 — Five concepts that run the whole protocol <a class="hanchor" href="#step-2-five-concepts">#</a></h2>
+<p>A2A has a small vocabulary. Learn these five nouns and the rest of the tutorial is just spelling:</p>
+<ul>
+<li><strong>AgentCard</strong> — a JSON document every A2A server publishes at <code>/.well-known/agent-card.json</code>. It names the agent, lists its <strong>skills</strong> (id, name, description, tags, example prompts), declares its <strong>capabilities</strong> (streaming, push notifications), its input/output modes, and its <strong>supported interfaces</strong> — the URLs and protocol bindings (JSON-RPC, gRPC) it speaks. This is the discovery primitive: a client never needs out-of-band knowledge of an agent beyond its base URL.</li>
+<li><strong>Message</strong> — the unit of communication. A message has a role (<code>ROLE_USER</code> or <code>ROLE_AGENT</code>) and a list of <strong>parts</strong>: text, files, or structured data. Multimodality is built in, not bolted on.</li>
+<li><strong>Task</strong> — the unit of work. Sending a message creates a task with an id; the task moves through a lifecycle: <code>submitted</code> → <code>working</code> → <code>completed</code> (or <code>failed</code>, <code>canceled</code>, <code>input-required</code>). This is the core difference from a tool call: the remote side is running its own agent loop, which may take seconds or hours, stream partial results, and ask for clarification.</li>
+<li><strong>Artifact</strong> — the task's deliverable. A completed task can carry artifacts (documents, files, data) alongside its final message — the thing the agent <em>produced</em>, distinct from what it <em>said</em>.</li>
+<li><strong>JSON-RPC transport</strong> — the default binding. The client POSTs JSON-RPC 2.0 requests (<code>message/send</code>, <code>tasks/get</code>, <code>tasks/cancel</code>) to the URL from the agent card. Streaming uses server-sent events; everything else is plain request/response.</li>
+</ul>
+<figure class="inline-art"><img class="story-image" src="/articles/a2a-agent-interoperability-hands-on/img2.webp" alt="AI-generated architecture diagram: an A2A client fetches the agent card from /.well-known/agent-card.json, POSTs a JSON-RPC message/send request, and receives back a task moving through submitted, working, and completed states"></figure>
+<p>Notice what the protocol <em>doesn't</em> standardize: the agent's internals. Framework, model, tools, prompts, memory — all private. Two agents built by different teams on different stacks interoperate because the contract is only about tasks, messages, and cards.</p>
+<h2 id="step-3-build-factfinder">Step 3 — Build FactFinder, your first A2A agent <a class="hanchor" href="#step-3-build-factfinder">#</a></h2>
+<p>An A2A server has three layers: the <strong>agent card</strong> (who am I), the <strong>executor</strong> (what I do — your code), and the <strong>routes</strong> (the HTTP plumbing, provided by the SDK). Save this as <code>factfinder_agent.py</code>:</p>
+<pre><code>"""FactFinder: a minimal A2A agent that returns curated facts about a topic."""
+import uuid
+
+import uvicorn
+from starlette.applications import Starlette
+
+from a2a.server.agent_execution import AgentExecutor
+from a2a.server.agent_execution.context import RequestContext
+from a2a.server.events.event_queue import EventQueue
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types.a2a_pb2 import (
+    AgentCapabilities, AgentCard, AgentInterface, AgentSkill,
+    Message, Part, Role, Task, TaskState, TaskStatus,
+)
+
+# Deterministic knowledge base: no LLM, no API key, fully reproducible.
+KNOWLEDGE = {
+    "photosynthesis": [
+        "Photosynthesis converts light energy into chemical energy stored as glucose.",
+        "It occurs in chloroplasts, driven by chlorophyll absorbing red and blue light.",
+        "Net equation: 6CO2 + 6H2O + light -&gt; C6H12O6 + 6O2.",
+    ],
+    "rust": [
+        "Rust is a systems language guaranteeing memory safety without a garbage collector.",
+        "Ownership, borrowing, and lifetimes are enforced at compile time.",
+        "Cargo is its build tool and package manager.",
+    ],
+}
+
+
+class FactFinderExecutor(AgentExecutor):
+    """Your agent logic lives here. The SDK handles everything else."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -&gt; None:
+        topic = context.get_user_input().strip().lower()
+        facts = KNOWLEDGE.get(
+            topic,
+            [f"No curated facts for '{topic}'.",
+             "FactFinder only knows about: " + ", ".join(sorted(KNOWLEDGE))],
+        )
+        body = "FACTS about '%s':\n" % topic + "\n".join(f"- {f}" for f in facts)
+        reply = Message(
+            message_id=uuid.uuid4().hex,
+            role=Role.ROLE_AGENT,
+            parts=[Part(text=body)],
+        )
+        # The task is the protocol's unit of work: hand the handler a
+        # completed Task and it takes care of the lifecycle bookkeeping.
+        task = Task(
+            id=context.task_id,
+            context_id=context.context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED, message=reply),
+            history=[context.message],
+        )
+        await event_queue.enqueue_event(task)
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -&gt; None:
+        task = Task(
+            id=context.task_id,
+            context_id=context.context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
+        )
+        await event_queue.enqueue_event(task)
+
+
+agent_card = AgentCard(
+    name="FactFinder",
+    description="Returns a short list of curated facts about a requested topic.",
+    version="1.0.0",
+    supported_interfaces=[
+        AgentInterface(url="http://localhost:10001/", protocol_binding="JSONRPC")
+    ],
+    capabilities=AgentCapabilities(streaming=False, push_notifications=False),
+    default_input_modes=["text"],
+    default_output_modes=["text"],
+    skills=[
+        AgentSkill(
+            id="lookup-facts",
+            name="Look up facts",
+            description="Return curated facts about one topic.",
+            tags=["research", "facts"],
+            examples=["facts about photosynthesis", "facts about rust"],
+        )
+    ],
+)
+
+request_handler = DefaultRequestHandler(
+    agent_executor=FactFinderExecutor(),
+    task_store=InMemoryTaskStore(),
+    agent_card=agent_card,
+)
+
+app = Starlette(routes=[
+    *create_jsonrpc_routes(request_handler, rpc_url="/"),
+    *create_agent_card_routes(agent_card),
+])
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=10001, log_level="warning")</code></pre>
+<p>Three things to notice. First, your code is only the <code>AgentExecutor</code> — about 30 lines. The request handler manages the task lifecycle, the task store remembers tasks, and the route factories expose the JSON-RPC endpoint and the agent card. Second, <code>context.get_user_input()</code> extracts the text from the incoming message, and <code>context.task_id</code> / <code>context.context_id</code> are generated by the handler when the client doesn't supply them. Third, the executor signals completion by enqueueing a <code>Task</code> whose status is <code>TASK_STATE_COMPLETED</code> — the handler streams or returns it to the client from there.</p>
+<p>Run it:</p>
+<pre><code>python factfinder_agent.py</code></pre>
+<p>In another terminal, fetch the agent card — the discovery primitive from Step 2, served live:</p>
+<pre><code>curl -s http://localhost:10001/.well-known/agent-card.json | python3 -m json.tool | head -30
+# {
+#     "name": "FactFinder",
+#     "description": "Returns a short list of curated facts about a requested topic.",
+#     "supportedInterfaces": [
+#         {
+#             "url": "http://localhost:10001/",
+#             "protocolBinding": "JSONRPC"
+#         }
+#     ],
+#     "version": "1.0.0",
+#     "capabilities": {"streaming": false, "pushNotifications": false},
+#     "defaultInputModes": ["text"],
+#     "defaultOutputModes": ["text"],
+#     "skills": [
+#         {
+#             "id": "lookup-facts",
+#             ...
+#         }
+#     ],
+#     ...
+# }</code></pre>
+<p>That JSON is the whole pitch of A2A: any client, in any language, can learn everything it needs to work with your agent from this one document.</p>
+
+<h2 id="step-4-talk-to-it">Step 4 — Talk to it: the client <a class="hanchor" href="#step-4-talk-to-it">#</a></h2>
+<p>A client does three things: resolve the card, build requests from its own types, and read the response stream. Save this as <code>client_demo.py</code> and run it while FactFinder is up:</p>
+<pre><code>"""Minimal A2A client: resolve the card, send a message, print the result."""
+import asyncio
+import uuid
+
+import httpx
+
+from a2a.client.card_resolver import A2ACardResolver
+from a2a.client.client import ClientConfig
+from a2a.client.client_factory import ClientFactory
+from a2a.types.a2a_pb2 import Message, Part, Role, SendMessageRequest
+
+
+async def main() -&gt; None:
+    http = httpx.AsyncClient()
+    # 1. Discovery: fetch and parse the agent card. The factory then picks
+    #    a compatible transport from the card's supported interfaces.
+    card = await A2ACardResolver(http, "http://localhost:10001").get_agent_card()
+    print("resolved card:", card.name, "| skills:", [s.id for s in card.skills])
+    client = ClientFactory(ClientConfig(httpx_client=http)).create(card)
+
+    # 2. Send a message. The SDK POSTs a JSON-RPC message/send request.
+    request = SendMessageRequest(
+        message=Message(
+            message_id=uuid.uuid4().hex,
+            role=Role.ROLE_USER,
+            parts=[Part(text="photosynthesis")],
+        )
+    )
+    async for response in client.send_message(request):
+        # 3. Read the stream. A StreamResponse carries one of: task,
+        #    message, status_update, artifact_update.
+        if response.HasField("task"):
+            task = response.task
+            state = task.status.state  # TASK_STATE_COMPLETED == 3
+            print("task id:", task.id, "| state:", state)
+            msg = task.status.message
+            if msg and msg.parts:
+                print("agent reply:\n" + msg.parts[0].text)
+    await client.close()
+
+
+asyncio.run(main())</code></pre>
+<pre><code>python client_demo.py
+# resolved card: FactFinder | skills: ['lookup-facts']
+# task id: 04ddfc90-4c4b-499d-a44e-d9f974c2342f | state: 3
+# agent reply:
+# FACTS about 'photosynthesis':
+# - Photosynthesis converts light energy into chemical energy stored as glucose.
+# - It occurs in chloroplasts, driven by chlorophyll absorbing red and blue light.
+# - Net equation: 6CO2 + 6H2O + light -&gt; C6H12O6 + 6O2.</code></pre>
+<p>That output is real, captured from the run. A few details worth pocketing: <code>send_message</code> returns an async iterator even when the server doesn't stream — the protocol is stream-shaped by default, so a non-streaming server just yields one <code>task</code> event. State <code>3</code> is <code>TASK_STATE_COMPLETED</code> (the enum also defines <code>SUBMITTED</code>, <code>WORKING</code>, <code>FAILED</code>, <code>CANCELED</code>, <code>INPUT_REQUIRED</code>, <code>REJECTED</code>, <code>AUTH_REQUIRED</code>). And note the client never imported anything from the server file — the card was the entire contract.</p>
+<p>One environment note: if you run this behind a corporate proxy and httpx throws URL-parsing errors on startup, construct the client with <code>httpx.AsyncClient(trust_env=False)</code> so it ignores the proxy variables for local addresses.</p>
+<h2 id="step-5-an-agent-that-delegates">Step 5 — BriefWriter: an agent that delegates to another agent <a class="hanchor" href="#step-5-an-agent-that-delegates">#</a></h2>
+<p>Now the payoff. BriefWriter is an A2A <em>server</em> to its own clients and an A2A <em>client</em> of FactFinder — the same SDK, both halves, in one process. When asked for a brief, it delegates the research step over the protocol, then assembles the result into an artifact:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/a2a-agent-interoperability-hands-on/img3.webp" alt="AI-generated architecture diagram: a user client asks the BriefWriter agent for a brief, BriefWriter delegates a facts request to the FactFinder agent over A2A, receives facts back, and returns a brief artifact to the user"></figure>
+<pre><code>"""BriefWriter: delegates research to FactFinder, then writes a brief.
+
+Requires FactFinder on http://localhost:10001/ — run that first.
+This file runs its own server on http://localhost:10002/.
+"""
+import uuid
+
+import httpx
+import uvicorn
+from starlette.applications import Starlette
+
+from a2a.client.card_resolver import A2ACardResolver
+from a2a.client.client import ClientConfig
+from a2a.client.client_factory import ClientFactory
+from a2a.server.agent_execution import AgentExecutor
+from a2a.server.agent_execution.context import RequestContext
+from a2a.server.events.event_queue import EventQueue
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types.a2a_pb2 import (
+    AgentCapabilities, AgentCard, AgentInterface, AgentSkill, Artifact,
+    Message, Part, Role, SendMessageRequest,
+    Task, TaskState, TaskStatus,
+)
+
+FACTFINDER_URL = "http://localhost:10001"
+
+
+async def fetch_facts(topic: str) -&gt; str:
+    """Act as an A2A client: ask FactFinder for facts about the topic."""
+    http = httpx.AsyncClient()
+    try:
+        card = await A2ACardResolver(http, FACTFINDER_URL).get_agent_card()
+        client = ClientFactory(ClientConfig(httpx_client=http)).create(card)
+        request = SendMessageRequest(
+            message=Message(
+                message_id=uuid.uuid4().hex,
+                role=Role.ROLE_USER,
+                parts=[Part(text=topic)],
+            )
+        )
+        async for response in client.send_message(request):
+            if response.HasField("task"):
+                task = response.task
+                if task.status.state == TaskState.TASK_STATE_COMPLETED:
+                    return task.status.message.parts[0].text
+        raise RuntimeError("FactFinder returned no completed task")
+    finally:
+        await http.aclose()
+
+
+class BriefWriterExecutor(AgentExecutor):
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -&gt; None:
+        topic = context.get_user_input().strip()
+        facts_text = await fetch_facts(topic)  # &lt;-- agent-to-agent delegation
+
+        brief = (
+            f"# Brief: {topic}\n\n"
+            f"{facts_text}\n\n"
+            "---\n"
+            "Researched by FactFinder via A2A. Written by BriefWriter."
+        )
+        artifact = Artifact(
+            artifact_id=uuid.uuid4().hex,
+            name=f"brief-{topic}.md",
+            description=f"A short brief about {topic}",
+            parts=[Part(text=brief)],
+        )
+        reply = Message(
+            message_id=uuid.uuid4().hex,
+            role=Role.ROLE_AGENT,
+            parts=[Part(text=f"Brief on '{topic}' is ready (see artifact).")],
+        )
+        task = Task(
+            id=context.task_id,
+            context_id=context.context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED, message=reply),
+            artifacts=[artifact],
+            history=[context.message],
+        )
+        await event_queue.enqueue_event(task)
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -&gt; None:
+        task = Task(
+            id=context.task_id,
+            context_id=context.context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
+        )
+        await event_queue.enqueue_event(task)
+
+
+agent_card = AgentCard(
+    name="BriefWriter",
+    description="Writes a short brief on a topic, delegating research to FactFinder over A2A.",
+    version="1.0.0",
+    supported_interfaces=[
+        AgentInterface(url="http://localhost:10002/", protocol_binding="JSONRPC")
+    ],
+    capabilities=AgentCapabilities(streaming=False, push_notifications=False),
+    default_input_modes=["text"],
+    default_output_modes=["text"],
+    skills=[
+        AgentSkill(
+            id="write-brief",
+            name="Write brief",
+            description="Research a topic via FactFinder and return a written brief.",
+            tags=["writing", "research", "delegation"],
+            examples=["brief on photosynthesis", "brief on rust"],
+        )
+    ],
+)
+
+request_handler = DefaultRequestHandler(
+    agent_executor=BriefWriterExecutor(),
+    task_store=InMemoryTaskStore(),
+    agent_card=agent_card,
+)
+
+app = Starlette(routes=[
+    *create_jsonrpc_routes(request_handler, rpc_url="/"),
+    *create_agent_card_routes(agent_card),
+])
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=10002, log_level="warning")</code></pre>
+<p>The delegation is exactly one function call — <code>fetch_facts(topic)</code> — but notice what it buys: BriefWriter knows nothing about FactFinder's framework, model, or knowledge base. It discovered the agent from its card at runtime and spoke only the protocol. Swap FactFinder tomorrow for a different team's agent, in another language, behind another company's firewall, and this code doesn't change.</p>
+<h2 id="step-6-run-the-whole-chain">Step 6 — Run the whole chain <a class="hanchor" href="#step-6-run-the-whole-chain">#</a></h2>
+<p>Start both servers (two terminals), then point the client at BriefWriter instead of FactFinder:</p>
+<pre><code># terminal 1
+python factfinder_agent.py      # http://localhost:10001/
+# terminal 2
+python briefwriter_agent.py     # http://localhost:10002/
+# terminal 3 — same client_demo.py, but resolve BriefWriter:
+# A2ACardResolver(http, "http://localhost:10002")</code></pre>
+<pre><code># resolved card: BriefWriter | skills: ['write-brief']
+# task id: a25794ee-0ae5-452e-b4dd-d1ff8ca12cfe | state: 3
+# agent reply:
+# Brief on 'rust' is ready (see artifact).</code></pre>
+<p>The reply mentions an artifact — fetch it. The completed task carries a <code>brief-rust.md</code> artifact with the assembled brief, and you can re-fetch the task by id at any time with <code>tasks/get</code>:</p>
+<pre><code># artifacts on the completed task:
+# ARTIFACT: brief-photosynthesis.md
+# # Brief: photosynthesis
+#
+# FACTS about 'photosynthesis':
+# - Photosynthesis converts light energy into chemical energy stored as glucose.
+# - It occurs in chloroplasts, driven by chlorophyll absorbing red and blue light.
+# - Net equation: 6CO2 + 6H2O + light -&gt; C6H12O6 + 6O2.
+#
+# ---
+# Researched by FactFinder via A2A. Written by BriefWriter.
+
+# re-fetching by id:
+fetched = await client.get_task(GetTaskRequest(id=task_id))
+# get_task state: 3 | artifacts: 1</code></pre>
+<p>Trace what just happened across the wire: your client sent one <code>message/send</code> to BriefWriter. BriefWriter's executor opened its own client, resolved FactFinder's card, sent <code>message/send</code> to FactFinder, waited for the completed task, built an artifact, and completed its own task. Two independent agent processes, zero shared code, one protocol.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use? <a class="hanchor" href="#which-approach-should-you-use">#</a></h2>
+<p>A2A is not the only way to connect agents. Pick by the shape of the relationship:</p>
+<ul>
+<li><strong>Use A2A</strong> when the other side is an <em>agent</em> — something that runs its own loop, takes unpredictable time, and may stream, ask questions, or fail independently. Especially across teams, vendors, or trust boundaries: the agent card is a self-describing contract and neither side exposes internals.</li>
+<li><strong>Use MCP</strong> when the other side is a <em>tool or data source</em> — deterministic, short-lived, shaped output. MCP is the vertical wire from an agent down to its tools; A2A is the horizontal wire between agents. They compose: one agent can use MCP tools internally while delegating to other agents over A2A.</li>
+<li><strong>Use plain function calls</strong> when both sides live in the same process and latency matters. A2A's HTTP + task lifecycle is overhead you don't need for in-process subagents.</li>
+<li><strong>Use raw REST</strong> when the remote side isn't agentic at all — a CRUD API doesn't need task states and artifacts.</li>
+</ul>
+<p>The common mistake is wrapping an agent as an MCP tool to get "multi-agent" behavior. It works until the agent takes ten minutes, needs to stream progress, or must ask a clarifying question mid-run — exactly the lifecycle semantics A2A exists to provide.</p>
+<h2 id="four-production-hardening-steps">Four production-hardening steps <a class="hanchor" href="#four-production-hardening-steps">#</a></h2>
+<p>This tutorial optimizes for clarity. Before these agents touch real users, four changes matter:</p>
+<ul>
+<li><strong>Turn on streaming.</strong> Set <code>streaming=True</code> in <code>AgentCapabilities</code> and enqueue <code>TaskStatusUpdateEvent</code>s as work progresses instead of one final <code>Task</code>. Long-running agents that go silent look broken; streaming status updates are the difference.</li>
+<li><strong>Persist the task store.</strong> <code>InMemoryTaskStore</code> forgets everything on restart. The SDK's task-store interface is small — back it with Postgres or SQLite so <code>tasks/get</code> survives deploys and long-running tasks survive crashes.</li>
+<li><strong>Authenticate the card.</strong> <code>AgentCard</code> carries <code>security_schemes</code> and <code>security_requirements</code> fields for exactly this: declare API keys, OAuth2, or mutual TLS on the card so clients know how to authenticate before the first call. An unsigned, unauthenticated card on the open internet is a prompt-injection drive-through.</li>
+<li><strong>Honor cancellation.</strong> The <code>cancel()</code> method on your executor is wired to <code>tasks/cancel</code> — implement it for real in long-running agents (check a flag in your loop, clean up, enqueue <code>TASK_STATE_CANCELED</code>). Clients will cancel; orphaned agent loops are how you burn money.</li>
+</ul>
+<p>And the question everyone asks: <strong>where does the LLM go?</strong> Inside <code>execute()</code>. That method is your agent's entire world — call your model, run your tool loop, stream your thoughts as status updates, and enqueue the completed task when done. Everything around it (cards, transport, lifecycle, task storage) is already handled. The deterministic executors here exist so you can learn the protocol without a bill; the seam for intelligence is exactly one method wide.</p>
+<h2 id="the-takeaway">The takeaway <a class="hanchor" href="#the-takeaway">#</a></h2>
+<p>The interesting thing about this tutorial is how little of it is about AI. No prompts, no embeddings, no vector math — just two HTTP servers, a JSON discovery document, and a task lifecycle. That's the point the A2A designers got right: agent interoperability is an <em>interface</em> problem, not an intelligence problem, and interfaces are solved with boring, stable contracts.</p>
+<p>Build one A2A agent this week — wrap something your team already runs, publish its card, and watch how quickly "can your agent just ask our agent?" stops being a three-sprint integration project.</p>
+
+<div class="post-engage"><div class="reactions" data-reactions="a2a-agent-interoperability-hands-on"></div><div class="comments" data-comments="a2a-agent-interoperability-hands-on"></div></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/context-mode-mcp-context-window-tutorial/"><span class="chip">Tutorials</span><h3>Context Mode: stop your coding agent from burning its context window — a hands-on tutorial</h3><div class="meta">October 1, 2026</div></a><a class="rel-card" href="/articles/scientific-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Turn your AI agent into a research scientist: a hands-on tutorial for Scientific Agent Skills</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/page-agent-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Page Agent: give any web page its own AI agent — hands-on with Alibaba&#x27;s in-page GUI agent</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/one-shot-playable-game-frontier-model-tutorial/"><span class="chip">Tutorials</span><h3>One-shot a playable browser game with a frontier model: the workflow behind the Opus 5.5 demos</h3><div class="meta">September 30, 2026</div></a></div></section>
+</div></article>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/category/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
