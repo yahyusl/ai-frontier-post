@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Get decisions with real probabilities from any open LLM: a hands-on guide to AnyJev — AI Frontier Post</title>
+<meta name="description" content="AnyJev (nokia-applied-research/AnyJev) is the Apache-2.0 toolkit that turns any open LLM into a Jev-style decision model: typed choices, yes/no and score questions with probabilities you can actually threshold. Truncate a Qwen to two-thirds depth, serve it with vLLM, and fit a closed-form head from 100-300 labels - auto-decidable traffic goes from 7.7% to 52% at 5% risk. Every command verified against the project&#x27;s own docs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/anyjev-typed-decisions-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Get decisions with real probabilities from any open LLM: a hands-on guide to AnyJev">
+<meta property="og:description" content="AnyJev (nokia-applied-research/AnyJev) is the Apache-2.0 toolkit that turns any open LLM into a Jev-style decision model: typed choices, yes/no and score questions with probabilities you can actually threshold. Truncate a Qwen to two-thirds depth, serve it with vLLM, and fit a closed-form head from 100-300 labels - auto-decidable traffic goes from 7.7% to 52% at 5% risk. Every command verified against the project&#x27;s own docs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/anyjev-typed-decisions-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/anyjev-typed-decisions-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Get decisions with real probabilities from any open LLM: a hands-on guide to AnyJev", "description": "AnyJev (nokia-applied-research/AnyJev) is the Apache-2.0 toolkit that turns any open LLM into a Jev-style decision model: typed choices, yes/no and score questions with probabilities you can actually threshold. Truncate a Qwen to two-thirds depth, serve it with vLLM, and fit a closed-form head from 100-300 labels - auto-decidable traffic goes from 7.7% to 52% at 5% risk. Every command verified against the project's own docs.", "datePublished": "2026-10-01", "dateModified": "2026-10-01", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/articles/anyjev-typed-decisions-tutorial/cover.webp"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/anyjev-typed-decisions-tutorial/"}, "image": "https://aifrontierpost.com/articles/anyjev-typed-decisions-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Get decisions with real probabilities from any open LLM: a hands-on guide to AnyJev</h1>
+<p class="lede">Raw LLM "confidence" is a ranking wearing a probability's clothes: reorder the options and the answer flips 23% of the time. AnyJev — the Apache-2.0 toolkit from Nokia's applied-research lab that gathered ~995 stars in ten days — fixes that with training-free debiasing and a closed-form head that costs less than one forward pass. Typed questions in, thresholdable probabilities out. Every command below is verified against the project's own documentation.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 1, 2026 · 10 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/anyjev-typed-decisions-tutorial/cover.webp" alt="A glowing language-model core feeding into a row of decision dials, one highlighted amber with a rising calibrated probability bar, on a dark indigo background"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+<div class="article-body">
+<h2 id="why-now">Why this is worth your time</h2>
+
+<p>Your LLM says it is 90% sure. That number is not a probability — it is a ranking with a costume on. Reorder the options in a multiple-choice prompt and raw logits flip their answer <strong>23% of the time</strong>. And when every "0.9" gets routed to a human because nobody trusts it, your "AI automation" is a demo, not a deployment.</p>
+
+<p>The metric that actually matters is <em>auto-decidable traffic</em>: the share of decisions you can safely automate at a stated error rate. On the standard BANKING77 benchmark, raw logits let you automate 7.7% of traffic at ≤5% error. The tool in this tutorial takes that to <strong>52%</strong> — with zero to a few hundred labels, no fine-tuning, and nothing generated. It is <a href="https://github.com/nokia-applied-research/AnyJev" rel="noopener">AnyJev</a>, from a team at Nokia's applied-research lab, and it collected ~995 stars in about ten days for good reason: it turns any open LLM into a Jev-style decision model.</p>
+
+<p>What that means in practice: you ask a <strong>typed question</strong> — a choice, a yes/no, a score — and get back a decision with a probability you can threshold. No parsing "Answer: B" out of prose. No hoping the model's self-reported confidence means something. One prefill of the next-token distribution, read properly.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/anyjev-typed-decisions-tutorial/img2.webp" alt="Diagram of AnyJev's four levels: raw uncalibrated readout, L0 debiasing over option rotations, L1 temperature scaling, L2 closed-form head on a mid-layer hidden state"><figcaption>AI-generated diagram for AI Frontier Post — raw → L0 → L1 → L2</figcaption></figure>
+
+<h2 id="what-youll-need">What you'll need</h2>
+
+<ul>
+<li><strong>Python 3.10 or newer.</strong> The base package depends on numpy alone; the Hugging Face extras add torch and transformers.</li>
+<li><strong>No GPU required to follow along.</strong> The packaged demo runs on a synthetic model with numpy only, in seconds. The full serve path (truncating and serving a real model) needs a GPU with vLLM — that section is verified against the project's own docs rather than run live here.</li>
+<li><strong>A clone of the repo</strong> for the demo: it is Apache-2.0, by Jiamu Zhang, Tianze Yang, Yucheng Shi and Liang Wu (Nokia Sunnyvale, plus Tencent Hunyuan) — and, as the README states, not affiliated with TypeSafe AI or Jev.</li>
+</ul>
+
+<h2 id="step-1-demo">Step 1 — Install and run the zero-hardware demo</h2>
+
+<p>AnyJev's library installs like anything else. The demo ships inside the repo, so clone it:</p>
+
+<pre><code class="language-bash">pip install anyjev
+git clone https://github.com/nokia-applied-research/AnyJev
+cd AnyJev
+python -m demo.jev_mode --backend fake</code></pre>
+
+<p>The fake backend runs the entire Jev-mode demonstration on a synthetic model — numpy only, no download, under a second. It walks four sections: [1/4] the levels on held-out states, L0 zero-label vs the L2 head; [2/4] the same question reworded and re-listed with no new labels; [3/4] a new head fit from a few labels; [4/4] an export-then-reload round trip. The demo is honest about its own numbers: the synthetic model's numbers are planted, and it says so on screen. The real numbers are in <code>docs/jev_mode.md</code>, measured at runtime.</p>
+
+<p>What you are seeing in section [1/4] is the whole pitch. Everything else in this tutorial is the machinery behind it.</p>
+
+<h2 id="step-2-levels">Step 2 — Understand the four levels</h2>
+
+<p>Every decision AnyJev returns carries a <code>level</code>. Here is the contract, with the measured numbers (Qwen3-8B, BANKING77 20-way, 300 test items):</p>
+
+<ul>
+<li><strong>raw</strong> — a restricted softmax over the label tokens at the answer position. This is what every open Jev clone does: <code>max_tokens=1</code> plus logprobs. What you get: a ranking. Two biases are baked in: the model prefers some labels regardless of input ("prior bias") and some <em>positions</em> in the option list ("position bias" — flip the order and the argmax can change). The project says it plainly: <em>do not ship raw</em>.</li>
+<li><strong>L0</strong> — zero labels. Two training-free corrections: <em>cyclic-shift marginalization</em> (for a K-option choice, read all K rotations so every option sits at every position once, combined via geometric mean in log space — if position bias is additive in logit space, this removes it exactly) and <em>prior correction</em> (estimate the model's label prior without labels, divide it out; default is batch calibration at strength 0.75, warming up over 8 items per question). Measured: order-flip rate <strong>0.230 → 0.073</strong>, accuracy 0.747 → 0.803, calibration error (ECE) 0.240 → 0.184.</li>
+<li><strong>L1</strong> — 100–500 labels. Temperature scaling on top of L0. It does not change the ranking; it fixes the uncertainty: ECE 0.184 → <strong>0.095</strong>.</li>
+<li><strong>L2</strong> — 100–300 labels. A closed-form head per question, solved in seconds on the hidden state partway down the model — no gradients, the model's weights untouched. It costs <strong>less than one plain forward pass</strong>, and it is the row that moves the automation number: auto-decidable at ≤5% error goes <strong>7.7% → 52.0%</strong>.</li>
+</ul>
+
+<p>Downstream code can enforce quality with <code>require="L1"</code>, which refuses to act on a weaker-level decision. That is the mechanism that turns "a probability" into "a threshold I can automate against".</p>
+
+<h2 id="step-3-truncate">Step 3 — Truncate the model (keep ~two thirds)</h2>
+
+<p>Here is the counterintuitive part. A decision does not need the whole model: the head's accuracy is flat from about two thirds of the depth, because the upper blocks are busy converting the answer into token space rather than deciding anything. So AnyJev ships a truncator that writes the blocks it doesn't need away into an ordinary smaller checkpoint — vLLM, transformers, quantizers and GGUF converters all take it unchanged:</p>
+
+<pre><code class="language-bash">pip install "anyjev[hf]"
+python -m anyjev.truncate Qwen/Qwen2.5-7B-Instruct 18 ./qwen-b18</code></pre>
+
+<p>On the project's own <code>banking20</code> measurement, 18 of 28 blocks is 1.2–1.4× faster <em>and</em> two points more accurate (0.850 vs 0.830 at full depth), because a middle block is a better feature space for a linear head than the final one. Depth, the docs note, is usually a gain, not a trade.</p>
+
+<p>One flag the project explicitly steers you away from: <code>--quantization fp8</code> is available and <strong>not recommended</strong> — it buys single-question latency and costs accuracy.</p>
+
+<h2 id="step-4-serve">Step 4 — Serve it with vLLM's embed server</h2>
+
+<p>L2 reads a hidden state, so the server is an embed server whose pooler hands the state back untouched. One command:</p>
+
+<pre><code class="language-bash">vllm serve ./qwen-b18 --task embed \
+  --override-pooler-config '{"pooling_type":"LAST","normalize":false,"softmax":false}'</code></pre>
+
+<p>A deployment at L2 is, in the project's words, "a pooling server plus a few kilobytes of head": no logits, no parsing, no patched engine, nothing generated. And the head is portable across engines — one fit through transformers and served by vLLM answers 99.0% identically, with mean |Δp| of 0.0011 on BANKING77-20.</p>
+
+<h2 id="step-5-typed-question">Step 5 — Ask a typed question (L0, zero labels)</h2>
+
+<p>With the server up, the API is three objects — a backend, a typed question, a decider:</p>
+
+<pre><code class="language-python">from anyjev import Decider, Question
+from anyjev.backends.vllm import VLLMBackend
+
+d = Decider(VLLMBackend("http://localhost:8000", "./qwen-b18"))
+route = Question.choice("Which team should handle this?",
+                        ["billing", "technical", "sales", "other"], name="route")
+
+d.decide(ticket, [route])["route"].distribution  # {"billing": 0.81, "technical": 0.07, ...}</code></pre>
+
+<p>Nothing is generated and nothing is parsed: the distribution is read from one prefill of the next-token distribution, position bias averaged out over the option rotations, the label prior divided away. Questions come in three types — <code>choice</code>, <code>noul</code> (yes/no), and <code>score</code> (ordinal bins, never permuted).</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/anyjev-typed-decisions-tutorial/img3.webp" alt="Diagram of the AnyJev deployment pipeline: a model truncated at two thirds of its depth, served by a vLLM embed server, with a small closed-form head reading hidden states into calibrated decisions"><figcaption>AI-generated diagram for AI Frontier Post — truncate, serve, decide</figcaption></figure>
+
+<h2 id="step-6-rotation-budget">Step 6 — Add the rotation budget for 2.2× throughput</h2>
+
+<p>L0's safety costs prefills: one per option rotation. For an 18-option choice that is 18 reads. The rotation budget — recommended for any K-option <code>choice</code> — reads rotations one at a time and stops when the leader is far enough ahead, with the threshold calibrated so the answer matches the full cycle's a certified fraction of the time:</p>
+
+<pre><code class="language-python">d = Decider(VLLMBackend("http://localhost:8000", "./qwen-b18"), adaptive_shifts=True)
+d.calibrate_adaptive(route, unlabelled_tickets, target=0.01)  # a few hundred states, no labels
+d.decide_batch(tickets, route)      # diagnostics: shifts_used, stop_threshold</code></pre>
+
+<p>The measurement: <strong>7.2 rotations instead of 18 at a certified 1% disagreement rate</strong> — 2.2× the decisions per second on vLLM, 2.3–2.7× on the transformers backend, accuracy unchanged. It is opt-in in version 0.2.0 only because the docs tables were measured before it existed. Note that <code>calibrate_adaptive</code> needs no labels at all: the budget is calibrated against the project's own full-strength readout, not against human judgments.</p>
+
+<h2 id="step-7-fit-head">Step 7 — Fit an L2 head from 100–300 labels</h2>
+
+<p>With a hundred or so labeled decisions for your question, you get the top level — one closed-form solve:</p>
+
+<pre><code class="language-python">d = Decider(VLLMBackend("http://localhost:8000", "./qwen-b18"), level="L2")
+d.fit_head(route, states, labels, layers=[-1])  # 100-300 labels, seconds, no gradients</code></pre>
+
+<p>On LocalLLaMA/typed-decisions (20 questions × 300 labels, 2,000 held-out decisions), L2 over L0 zero-label: Qwen3-1.7B 0.494 → 0.730 at block 18/28, costing 0.70× of one forward; Qwen3-4B 0.564 → 0.786; Qwen3-8B 0.647 → 0.771; the 30B-A3B 0.630 → 0.799. Pooled calibration error: 0.03–0.05. A 1.7B at 64% of its depth reaches the number Jev publishes; a 4B ties the fine-tuned 421M Laya (0.768). One hundred labels already put the 8B head at 0.740.</p>
+
+<p>If you are running one of the five Qwen3 models the project ships heads for, you can skip the fitting entirely: <code>anyjev-heads/</code> carries 23 heads per model in a single 1.8–4.4 MB file.</p>
+
+<h2 id="step-8-pipeline">Step 8 — Measure the whole thing on your box in one command</h2>
+
+<p>Don't trust their numbers — the project agrees. One command truncates, serves, fits a head, measures accuracy, ECE and milliseconds-per-decision on held-out states, tears the server down, and repeats at full depth so there is something to compare against:</p>
+
+<pre><code class="language-bash">python -m anyjev.pipeline Qwen/Qwen2.5-7B-Instruct --labels-from banking20</code></pre>
+
+<p>Timings are a median over <code>--repeats</code> passes with the spread printed next to them — the docs are explicit that on a shared machine a single pass can report the same configuration as both faster and slower than baseline. That level of measurement honesty is why the numbers in this tutorial are worth quoting.</p>
+
+<h2 id="step-9-observe">Step 9 — Go live incrementally with observe()</h2>
+
+<p>The production pattern the project is designed around: day 0 runs at L0 with no labels, and the head arrives when the loop has collected enough:</p>
+
+<pre><code class="language-python">d.observe(q, state, label)  # solves the head at 30 labels, re-solves at 60, 120, ...</code></pre>
+
+<p>And the head maintains itself afterwards: only its feature mean and scale move, re-estimated from <em>unlabelled</em> traffic, so it follows its question across rewordings and option orders on its own. A reworded question drops the Qwen3-8B head from 0.77 to 0.65–0.70, and <strong>30 unlabelled requests bring it back to 0.74–0.75</strong> — against 0.77 for a full relabelled refit. New labels are only needed for a new question.</p>
+
+<h2 id="what-you-built">What you built</h2>
+
+<p>A calibrated typed-decision endpoint over your own open model: L0 debiasing with zero labels from the first request, an optional rotation budget for 2× throughput, and a closed-form L2 head once you have ~100 labels — one that auto-decides half your traffic at ≤5% risk instead of 7.7%. The share of traffic you can automate, not accuracy, is the metric this project optimizes, and it's the right one.</p>
+
+<h2 id="limitations">Honest limitations</h2>
+
+<p>The README carries its own limitations section, and it deserves a read — but the highlights:</p>
+
+<ul>
+<li><strong>L2 is per question and per model.</strong> A head fit on one question does not transfer to another, and only Qwen3 heads ship. Heads need hidden states, which transformers and a vLLM embed server provide; other engines don't yet (SGLang included).</li>
+<li><strong>"Accuracy" on typed-decisions is agreement with a teacher LLM</strong> — the gold is the mean of three samples of one model, and a fresh sample of that teacher agrees with it only 0.735 of the time. Calibrated disagreement with the teacher is not necessarily error.</li>
+<li><strong>Calibration cannot fix a model that cannot answer.</strong> On maze edges and Minesweeper, no readout beats the trivial baseline.</li>
+<li><strong>L0's prior correction is not a free win everywhere</strong> — the batch prior hurts when one label dominates the true marginal. The shift marginalization is the safe half; the docs quantify where each half helps.</li>
+<li><strong>At most 26 options</strong> in the letter readout (a span readout is on the roadmap, not in the code), and the coverage-at-5%-risk figures are high-variance estimates at n=300. Every decision here is scored in isolation, not inside a real agent loop.</li>
+<li><strong>Reproduce the numbers before trusting them.</strong> The project regenerates every number from committed JSON (<code>bash scripts/regen_docs.sh</code>), and a second run from a clean checkout reproduced every zero-label number bit for bit. <code>python -m anyjev.pipeline</code> exists so you can run that check on your own hardware.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway</h2>
+
+<p>Raw logits are a ranking wearing a probability's clothes. AnyJev does the unglamorous work that converts them into something you can automate against: average out position bias over cyclic shifts (L0, zero labels), divide out the label prior (L0), fix the uncertainty with temperature scaling (L1, a few hundred labels), then fit a closed-form linear head on a mid-layer hidden state that costs less than a forward pass (L2). Two-thirds of the model is plenty; a 1.7B at 18 blocks does the job of a flagship's confidence score.</p>
+
+<p>If you route tickets, triage alerts, score leads, or run any LLM-as-a-judge loop where a wrong auto-decision has a cost, this is the calibration layer you were missing. The repository is <a href="https://github.com/nokia-applied-research/AnyJev" rel="noopener">nokia-applied-research/AnyJev</a>; run the fake-backend demo first, then <code>anyjev.pipeline</code> on your own model before you believe anyone's numbers — including the ones in this article.</p>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/jeff-zero-shot-decision-models-tutorial/"><span class="chip">Tutorials</span><h3>Jeff: run Jev-style zero-shot decisions on your own machine — hands-on with the 0.8B model</h3><div class="meta">September 29, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/llm-cascade-router-tutorial/"><span class="chip">Tutorials</span><h3>Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters</h3><div class="meta">September 29, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/red-team-your-evals-reward-hacking-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your evals: catch reward hacking in your LLM judges, hands-on</h3><div class="meta">September 29, 2026 · 12 min read</div></a></div></section>
+</div></article>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)')).matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
