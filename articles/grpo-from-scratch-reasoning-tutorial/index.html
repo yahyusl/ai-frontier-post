@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>GRPO from scratch: implement the RL algorithm behind DeepSeek-R1 in ~200 lines of PyTorch — AI Frontier Post</title>
+<meta name="description" content="Group Relative Policy Optimization — the reinforcement learning algorithm behind DeepSeek-R1's reasoning — implemented from nothing in ~200 lines of PyTorch. Sample groups, score with a verifiable reward, reinforce what beats the average. Every number measured: 17% to 50% accuracy in about six CPU minutes.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/grpo-from-scratch-reasoning-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="GRPO from scratch: the RL algorithm behind DeepSeek-R1, in ~200 lines of PyTorch">
+<meta property="og:description" content="No TRL, no Hugging Face — implement Group Relative Policy Optimization from nothing, train it on checkable toy problems, and measure exactly what RL adds over supervised learning.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/grpo-from-scratch-reasoning-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/grpo-from-scratch-reasoning-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "GRPO from scratch: implement the RL algorithm behind DeepSeek-R1 in ~200 lines of PyTorch", "description": "Group Relative Policy Optimization — the reinforcement learning algorithm behind DeepSeek-R1's reasoning — implemented from nothing in ~200 lines of PyTorch, with every number measured on a real training run.", "datePublished": "2026-10-01", "dateModified": "2026-10-01", "author": {"@type": "Person", "name": "Sofia Almeida"}}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+
+<main>
+<div class="wrap">
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>GRPO from scratch: implement the RL algorithm behind DeepSeek-R1 in ~200 lines of PyTorch</h1>
+<p class="lede">The models that "reason" — DeepSeek-R1, the o-series, the new wave of open reasoning models — were not taught to think by reading thinking. They were trained like this: generate a bunch of answers, check which ones are right, and reinforce the winners. The algorithm that made that loop practical is called <strong>GRPO, Group Relative Policy Optimization</strong>. It debuted in the DeepSeekMath paper in February 2024, and eleven months later it was the engine inside DeepSeek-R1 — the model that showed pure reinforcement learning, with no supervised fine-tuning at all, could produce reasoning. In this tutorial you implement GRPO from nothing: no TRL, no Hugging Face, about 200 lines of PyTorch. You'll train it on a toy world — single-digit addition, where answers are trivially checkable — and measure exactly what RL adds over supervised learning. Every number below comes from a real run: about six minutes on a 2-core CPU, no GPU.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 1, 2026 · 14 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/grpo-from-scratch-reasoning-tutorial/cover.webp" alt="Editorial illustration: a glowing neural-network core generating branching answer paths, with a golden checkmark selecting the strongest branch while weaker paths fade"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+<div class="article-body">
+<h2 id="why-grpo">Why GRPO, and why now</h2>
+
+<p>Supervised fine-tuning has a ceiling built into it: a model trained to imitate demonstrations can never systematically exceed the quality of those demonstrations. For years that was fine — imitation got us chatbots. But reasoning broke the pattern. You can't imitate your way to a correct proof if none of your training data contains one.</p>
+
+<p>The breakthrough, now called <strong>RLVR — reinforcement learning with verifiable rewards</strong> — was embarrassingly simple in hindsight: for problems where the answer is <em>checkable</em> (math, code against unit tests, games with rules), you don't need demonstrations at all. You need exploration plus a checker. Sample many candidate answers, keep the ones that check out, and the model discovers reasoning strategies nobody demonstrated. DeepSeek-R1-Zero took this to the extreme: pure RL starting from a base model, no SFT, with rule-based accuracy and format rewards — and reasoning emerged.</p>
+
+<p>GRPO is the algorithm that made this cheap enough to run at scale. Classical PPO needs a <strong>critic</strong> — a second value network as large as the policy — to estimate how good each answer is relative to average. GRPO deletes the critic entirely: for each prompt, sample a <em>group</em> of completions, and let the group be its own baseline. A completion that scores above its group's average gets reinforced; one below gets suppressed. No value network, no extra parameters, no second training loop. That single deletion is why GRPO, not PPO, became the default post-training algorithm for reasoning models.</p>
+
+<h2 id="what-youll-need">What you'll need</h2>
+
+<ul>
+<li><strong>Python 3.10+</strong> with PyTorch installed (CPU build is fine — <code>pip install torch --index-url https://download.pytorch.org/whl/cpu</code>). The reference run used torch 2.14.1 on CPU.</li>
+<li><strong>About ten minutes</strong>, most of it the training loop. No GPU, no API keys, no downloads beyond PyTorch.</li>
+<li><strong>One file.</strong> Everything below concatenates into a single runnable script, top to bottom. I'll flag the few places where I simplified the real algorithm so you know exactly what the toy leaves out.</li>
+</ul>
+
+<h2 id="step-1-world">Step 1 — Build a world with a checkable answer</h2>
+
+<p>GRPO needs a reward function, and the whole RLVR bet is that the reward can be <em>computed</em>, not learned. Our toy world is single-digit addition: the prompt is <code>"3+4="</code>, the model writes digits, and the reward is 1 if the answer equals the true sum, else 0. This is the direct ancestor of R1's accuracy reward — a program checking an answer, not a neural network guessing at quality.</p>
+
+<pre><code>"""Minimal GRPO from scratch: teach a tiny char-level transformer single-digit
+addition using only a verifiable reward. Runs on CPU in minutes.
+
+Pipeline:
+  1. Build the toy world (addition problems, train/held-out split).
+  2. Define the policy: a tiny causal transformer over 13 characters.
+  3. SFT warm-start so the policy is imperfect but non-random.
+  4. GRPO: sample groups, score with a rule-based reward, group-relative
+     advantages, clipped surrogate objective + KL penalty to the SFT reference.
+  5. Compare against continued-SFT on identical data/steps; plot curves.
+"""
+import random
+import time
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+torch.manual_seed(7)
+random.seed(7)
+torch.set_num_threads(2)
+
+
+# --- 1. The world: single-digit addition, with a checkable answer ---
+CHARS = "0123456789+=&lt;"          # '&lt;' is the end-of-answer token
+stoi = {c: i for i, c in enumerate(CHARS)}
+itos = {i: c for c, i in stoi.items()}
+V = len(CHARS)
+EOS = stoi["&lt;"]
+
+def encode_prompt(a, b):          # "3+4=" -&gt; token ids
+    return [stoi[c] for c in f"{a}+{b}="]
+
+def encode_target(a, b):          # "7&lt;" -&gt; answer + end token
+    return [stoi[c] for c in f"{a + b}&lt;"]
+
+def build_data():
+    pairs = [(a, b) for a in range(10) for b in range(10)]
+    random.shuffle(pairs)
+    return pairs[:80], pairs[80:]          # train, held-out
+
+def reward(gen_ids, a, b):        # the whole trick: answers are checkable
+    s = "".join(itos[i] for i in gen_ids if i != EOS)
+    return 1.0 if s == str(a + b) else 0.0
+
+# --------------------------------------------------------------------------
+</code></pre>
+
+<p>Note what this buys us: the reward function is three lines, deterministic, and unhackable in the ways learned reward models are hackable. (When your reward <em>is</em> learned, models find loopholes in it instead of solving your task — that's reward hacking, and it's worth understanding before you scale any of this up.)</p>
+
+<h2 id="step-2-policy">Step 2 — A tiny policy that writes text</h2>
+
+<p>The "policy" π<sub>θ</sub> is just a language model: it reads the prompt tokens and generates answer tokens. Ours is a 2-layer, 4-head character transformer, about 103k parameters — small enough to train on a laptop CPU in minutes, large enough to actually learn the toy. Two helpers round it out: <code>sample()</code>, which generates completions (with temperature, for exploration), and <code>accuracy()</code>, which measures greedy-decoding performance on a dataset.</p>
+
+<pre><code># 2. The policy: a tiny causal transformer (char-level language model)
+# --------------------------------------------------------------------------
+class Block(nn.Module):
+    def __init__(self, d, n_head):
+        super().__init__()
+        self.ln1, self.ln2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.attn = nn.MultiheadAttention(d, n_head, batch_first=True)
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+
+    def forward(self, h):
+        T = h.size(1)
+        causal = torch.triu(torch.ones(T, T, dtype=torch.bool, device=h.device), 1)
+        a, _ = self.attn(self.ln1(h), self.ln1(h), self.ln1(h), attn_mask=causal)
+        h = h + a
+        return h + self.mlp(self.ln2(h))
+
+class TinyGPT(nn.Module):
+    def __init__(self, n_layer=2, n_head=4, d=64):
+        super().__init__()
+        self.tok, self.pos = nn.Embedding(V, d), nn.Embedding(16, d)
+        self.blocks = nn.ModuleList([Block(d, n_head) for _ in range(n_layer)])
+        self.ln = nn.LayerNorm(d)
+        self.head = nn.Linear(d, V, bias=False)
+
+    def forward(self, x):
+        t = torch.arange(x.size(1), device=x.device)
+        h = self.tok(x) + self.pos(t)
+        for b in self.blocks:
+            h = b(h)
+        return self.head(self.ln(h))
+
+def n_params(m):
+    return sum(p.numel() for p in m.parameters())
+
+@torch.no_grad()
+def sample(model, prompt, max_new=4, temp=1.0, greedy=False, return_logp_old=False):
+    # generate a completion; optionally also return per-token log-probs
+    # under the sampling policy (the GRPO importance ratio needs them)
+    x = torch.tensor([prompt])
+    gen, logp_old = [], []
+    for _ in range(max_new):
+        logits = model(x)[:, -1, :]
+        if greedy:
+            nxt = logits.argmax(-1, keepdim=True)
+        else:
+            lp = F.log_softmax(logits / temp, dim=-1)
+            nxt = torch.multinomial(lp.exp(), 1)
+            logp_old.append(lp.gather(1, nxt).item())
+        x = torch.cat([x, nxt], dim=1)
+        gen.append(nxt.item())
+        if nxt.item() == EOS:
+            break
+    if return_logp_old:
+        return gen, logp_old
+    return gen
+
+@torch.no_grad()
+def accuracy(model, pairs):
+    return sum(reward(sample(model, encode_prompt(a, b), greedy=True), a, b)
+               for a, b in pairs) / len(pairs)
+
+# --------------------------------------------------------------------------
+</code></pre>
+
+<h2 id="step-3-sft">Step 3 — Warm-start with SFT, and find its ceiling</h2>
+
+<p>Almost nobody runs RL from a randomly initialized policy — exploration from pure noise is hopeless, because the model must stumble onto a correct answer before the reward can teach it anything. The standard recipe (followed by every reasoning lab) is: supervised fine-tuning first, to teach the <em>format</em> of an answer, then RL to teach <em>correctness</em>. Our SFT phase trains on the 80 labeled pairs for eighteen short epochs (batched by answer length, with the prompt tokens masked out of the loss):</p>
+
+<pre><code># 3. SFT warm-start (imperfect: good enough to sample some correct answers)
+# --------------------------------------------------------------------------
+def sft_train(model, pairs, epochs, lr=3e-3):
+    opt = torch.optim.AdamW(model.parameters(), lr=lr)
+    # bucket by answer length so no padding is needed (answers are 1-2 digits)
+    buckets = {}
+    for a, b in pairs:
+        ids = encode_prompt(a, b) + encode_target(a, b)
+        buckets.setdefault(len(ids), []).append(ids)
+    for _ in range(epochs):
+        for bucket in buckets.values():
+            random.shuffle(bucket)
+            x = torch.tensor(bucket)
+            inp, tgt = x[:, :-1], x[:, 1:].clone()
+            tgt[:, :3] = -100                      # don't train on the prompt "d+d="
+            loss = F.cross_entropy(model(inp).reshape(-1, V), tgt.reshape(-1),
+                                   ignore_index=-100)
+            opt.zero_grad(); loss.backward(); opt.step()
+
+# --------------------------------------------------------------------------
+
+train_pairs, held_pairs = build_data()
+model = TinyGPT()
+print(f"policy: {n_params(model):,} params, vocab={V}")
+sft_train(model, train_pairs, epochs=18)
+a_tr, a_ho = accuracy(model, train_pairs), accuracy(model, held_pairs)
+print(f"after SFT warm-start: train={a_tr:.2f} heldout={a_ho:.2f}")
+</code></pre>
+
+<p>Measured result: <strong>17.5% train accuracy, 0% held-out</strong>. Eighteen epochs teach the model that <em>something</em> goes after the equals sign, but mostly it collapses to memorized guesses — at this point it answers nearly everything with "12". This is the ceiling imitation gives us on 80 pairs, and it's the floor RL has to beat. Freeze a copy of this model now: it becomes π<sub>ref</sub>, the reference policy that will keep GRPO honest.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/grpo-from-scratch-reasoning-tutorial/img2.webp" alt="Diagram of one GRPO training step: prompt to policy sampling G completions, verifiable rewards, group advantages, update with clipped objective plus KL anchor to a frozen reference model, looping back to the policy"><figcaption>Diagram for AI Frontier Post — one GRPO training step, the loop you'll implement below</figcaption></figure>
+
+<h2 id="step-4-grpo">Step 4 — The GRPO update, in three moving parts</h2>
+
+<p>Here is the whole algorithm. For a batch of prompts, sample <em>G</em> completions per prompt from the current policy, score each with the reward function, and compute the <strong>group-relative advantage</strong> — the z-score of each reward within its group:</p>
+
+<p><code>Â<sub>i</sub> = (r<sub>i</sub> − μ) / σ</code> &nbsp;— computed over the G completions for one prompt.</p>
+
+<p>A completion that beat its group's average gets a positive advantage; one that lost gets negative. Then the policy update is PPO's clipped surrogate objective on those advantages, minus a KL penalty against the frozen reference model:</p>
+
+<pre><code># 4. GRPO: groups, verifiable rewards, clipped objective, KL penalty
+# --------------------------------------------------------------------------
+def grpo_step(model, ref, opt, batch_pairs, G=8, eps=0.2, beta=0.02, temp=1.0):
+    # --- rollout: G completions per prompt, scored by the rule-based reward ---
+    seqs, masks, advs, old_lp, all_r = [], [], [], [], []
+    for a, b in batch_pairs:
+        prompt = encode_prompt(a, b)
+        gens, lps, rs = [], [], []
+        for _ in range(G):
+            g, lp = sample(model, prompt, temp=temp, return_logp_old=True)
+            gens.append(g); lps.append(lp); rs.append(reward(g, a, b))
+        all_r.extend(rs)
+        r = torch.tensor(rs)
+        adv = (r - r.mean()) / (r.std() + 1e-8)   # group-relative advantage
+        for g, lp, av in zip(gens, lps, adv.tolist()):
+            full = prompt + g
+            seqs.append(full)
+            m = [0.0] * len(prompt) + [1.0] * len(g)   # loss only on completion
+            masks.append(m); old_lp.append([0.0] * len(prompt) + lp)
+            advs.append(av)
+    L = max(len(s) for s in seqs)
+    x = torch.tensor([s + [EOS] * (L - len(s)) for s in seqs])
+    mask = torch.tensor([m + [0.0] * (L - len(m)) for m in masks])
+    old = torch.tensor([o + [0.0] * (L - len(o)) for o in old_lp])
+    adv_t = torch.tensor(advs).unsqueeze(1)
+
+    # --- objective: clipped surrogate + KL(ref) ---
+    logits = model(x[:, :-1])
+    logp = F.log_softmax(logits, dim=-1)
+    # log-prob of the actually generated token at each completion position
+    gen_tok = x[:, 1:]
+    new_lp = logp.gather(2, gen_tok.unsqueeze(-1)).squeeze(-1)
+    ratio = torch.exp(new_lp - old[:, 1:])
+    surr = torch.min(ratio * adv_t, torch.clamp(ratio, 1 - eps, 1 + eps) * adv_t)
+    with torch.no_grad():
+        ref_lp = F.log_softmax(ref(x[:, :-1]), dim=-1)
+    kl = (ref_lp.exp() * (ref_lp - logp)).sum(-1)   # exact KL, vocab is tiny
+    loss = (-(surr * mask[:, 1:]).sum() + beta * (kl * mask[:, 1:]).sum()) \
+        / mask[:, 1:].sum().clamp_min(1)
+    opt.zero_grad(); loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    opt.step()
+    return sum(all_r) / max(1, len(all_r))
+
+# --------------------------------------------------------------------------
+</code></pre>
+
+<p>Three moving parts, each doing one job. (Implementation notes for the careful reader: completions have different lengths, so they're padded into one batch and the loss is <em>masked</em> to completion tokens only — the prompt tokens never receive gradient. The per-token log-probs under the sampling policy are stored <em>at rollout time</em>, which is the PPO-correct pattern for the importance ratio; gradients are norm-clipped at 1.0.)</p>
+
+<ol>
+<li><strong>Group-relative advantages — the critic deletion.</strong> PPO asks "how much better than <em>expected</em> was this answer?", where "expected" comes from a learned value network. GRPO asks "how much better than <em>its siblings</em> was this answer?" — a z-score inside the sampled group. Same variance-reduction effect, zero extra parameters. This is the entire intellectual content of the "Group Relative" in GRPO.</li>
+<li><strong>The clipped surrogate — the trust region.</strong> The ratio π<sub>θ</sub>/π<sub>old</sub> measures how far the update wants to move. Clipping it to [1−ε, 1+ε] means a single lucky group can't yank the policy off a cliff. This is inherited straight from PPO, and it's what makes online RL stable enough to run. One honest footnote: because our toy takes a <em>single</em> gradient step per rollout batch, the stored "old" log-probs still match the current policy when the loss is computed — the ratio is exactly 1 and the clipping never binds here. It becomes load-bearing the moment you do multiple epochs per batch, as TRL does. The term is included because it belongs to the objective, not because this toy exercises it.</li>
+<li><strong>The KL anchor — don't forget what SFT taught you.</strong> The β·KL(π<sub>θ</sub>‖π<sub>ref</sub>) term penalizes drifting too far from the frozen warm-start model. Without it, RL happily destroys the answer format to chase reward quirks; with it, exploration stays in the neighborhood of sensible outputs. (Our vocab is 13 tokens, so we compute the KL exactly; at LLM scale you'd use an unbiased estimator like the k3 one from the PPO literature.)</li>
+</ol>
+
+<p>Two simplifications to be upfront about: we take <strong>one</strong> gradient step per rollout batch (PPO-style training does several epochs over the same rollouts), and we use <strong>outcome supervision</strong> — one reward per completion, broadcast to all its tokens — exactly the mode the DeepSeekMath paper used for math. The shape of the real algorithm is all here.</p>
+
+<h2 id="step-5-train">Step 5 — Train it and measure everything</h2>
+
+<p>Now the experiment. From the same warm-started model, run two branches: 160 GRPO steps (reward only — <strong>no new labels</strong>), and 160 more SFT steps (labels) as the honest baseline. Greedy accuracy is logged every 10 steps on both the training pairs and the 20 held-out pairs:</p>
+
+<pre><code># --- 5. The experiment: GRPO (reward only) vs continued SFT (labels) ---
+t0 = time.time()
+ref = TinyGPT(); ref.load_state_dict(model.state_dict())  # frozen reference
+for p in ref.parameters(): p.requires_grad_(False)
+
+# GRPO branch
+gmodel = TinyGPT(); gmodel.load_state_dict(model.state_dict())
+gopt = torch.optim.AdamW(gmodel.parameters(), lr=5e-4)
+gh_tr, gh_ho, g_rew = [a_tr], [a_ho], []
+STEPS, BS, G = 160, 16, 8
+for step in range(STEPS):
+    batch = random.sample(train_pairs, BS)
+    mr = grpo_step(gmodel, ref, gopt, batch, G=G)
+    g_rew.append(mr)
+    if (step + 1) % 10 == 0:
+        gh_tr.append(accuracy(gmodel, train_pairs)); gh_ho.append(accuracy(gmodel, held_pairs))
+        print(f"grpo step {step+1:3d}: mean_reward={sum(g_rew[-10:])/10:.2f} "
+              f"train={gh_tr[-1]:.2f} heldout={gh_ho[-1]:.2f}", flush=True)
+
+# continued-SFT branch: same data, same number of optimizer steps
+smodel = TinyGPT(); smodel.load_state_dict(model.state_dict())
+sh_tr, sh_ho = [a_tr], [a_ho]
+for step in range(STEPS):
+    sft_train(smodel, random.sample(train_pairs, BS), epochs=1, lr=5e-4)
+    if (step + 1) % 10 == 0:
+        sh_tr.append(accuracy(smodel, train_pairs)); sh_ho.append(accuracy(smodel, held_pairs))
+        print(f"sft  step {step+1:3d}: train={sh_tr[-1]:.2f} heldout={sh_ho[-1]:.2f}", flush=True)
+
+print(f"\nFINAL  GRPO: train={gh_tr[-1]:.2f} heldout={gh_ho[-1]:.2f}")
+print(f"FINAL    SFT: train={sh_tr[-1]:.2f} heldout={sh_ho[-1]:.2f}")
+print(f"elapsed {time.time()-t0:.0f}s")
+</code></pre>
+
+<p>That's the complete script — concatenate the five blocks and run it. On the reference machine (a 2-core CPU, torch 2.14.1) it finished in 337 seconds.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/grpo-from-scratch-reasoning-tutorial/img3.webp" alt="Two measured learning curves: mean verifiable reward climbing from 0.08 to 0.42 over 160 GRPO steps, and greedy accuracy where GRPO rises from 17% to 50% on training pairs while continued SFT reaches 71%, with both held-out curves flat near zero"><figcaption>Measured, not sketched — the actual curves from the reference run described in this article</figcaption></figure>
+
+<h2 id="reading-curves">Reading the curves: what actually happened</h2>
+
+<p>The left panel is the money chart: mean verifiable reward per GRPO step climbs from <strong>0.08 to 0.42</strong>. The policy produces correct answers more than five times as often at the end as at the start — learned from a reward function alone, with no new labels, no critic, no human feedback of any kind.</p>
+
+<p>The right panel tells the fuller story. Greedy accuracy on the 80 training pairs goes <strong>17.5% → 50%</strong> under GRPO (40 of 80 pairs correct, up from 14). Continued SFT — the same warm start plus 160 more steps of labeled data — reaches <strong>71%</strong>. And the held-out curves sit at essentially zero for both methods.</p>
+
+<p>Be precise about what each of those facts means:</p>
+
+<ul>
+<li><strong>GRPO works.</strong> 27 of the 80 training pairs flipped from wrong to right under pure reward signal (one pair regressed — RL isn't magic, it's stochastic hill-climbing). Before and after, greedy decoding, on training prompts:
+<div class="table-wrap"><table><thead><tr><th>Prompt</th><th>SFT warm-start</th><th>After GRPO</th></tr></thead><tbody><tr><td><code>2+5</code></td><td>"12" ✗</td><td><strong>"7" ✓</strong></td></tr><tr><td><code>7+8</code></td><td>"12" ✗</td><td><strong>"15" ✓</strong></td></tr><tr><td><code>8+2</code></td><td>"12" ✗</td><td><strong>"10" ✓</strong></td></tr><tr><td><code>2+4</code></td><td>"12" ✗</td><td><strong>"6" ✓</strong></td></tr><tr><td><code>2+6</code></td><td>"11" ✗</td><td><strong>"8" ✓</strong></td></tr><tr><td><code>4+4</code></td><td>"12" ✗</td><td><strong>"8" ✓</strong></td></tr><tr><td><code>3+3</code></td><td>"10" ✗</td><td>"5" ✗</td></tr><tr><td><code>9+9</code></td><td>"13" ✗</td><td>"15" ✗</td></tr><tr><td><code>8+1</code></td><td>"1" ✗</td><td>"10" ✗</td></tr><tr><td><code>2+1</code></td><td>"1" ✗</td><td>"6" ✗</td></tr></tbody></table></div></li>
+<li><strong>Labels are still the most sample-efficient signal — when you have them.</strong> Continued SFT beat GRPO 71% to 50% on the training set. This is exactly why the real pipeline is SFT <em>then</em> GRPO, not GRPO instead of SFT: imitation is the fastest way to absorb what you can demonstrate, and RL is what you reach for when the demonstrations run out — or never existed, as in R1-Zero.</li>
+<li><strong>Neither method generalizes here, and that's honest.</strong> Held-out accuracy is ~0% for both. A 103k-parameter model on 80 memorized pairs memorizes; it does not discover the algorithm of addition. The demo proves the <em>mechanism</em> — the loop learns from rewards — not generalization. At LLM scale the same loop generalizes because the base model already knows arithmetic from pretraining; RL reshapes <em>reasoning behavior</em>, not facts.</li>
+</ul>
+
+<h2 id="to-scale">From this toy to a real reasoning model</h2>
+
+<p>The jump from this script to production GRPO is engineering and scale, not a different idea. The reference implementation most people actually run is Hugging Face's <code>GRPOTrainer</code> in TRL, and its knobs map one-to-one onto what you just built:</p>
+
+<pre><code>from trl import GRPOConfig, GRPOTrainer
+
+config = GRPOConfig(
+    output_dir="grpo-reasoning",
+    loss_type="grpo",            # the DeepSeekMath objective from Step 4
+    beta=0.001,                  # KL penalty vs the reference model
+    epsilon=10.0,                # DAPO-style clip-higher bound
+    num_generations=16,          # G: completions sampled per prompt
+    max_completion_length=32768, # long chains of thought need room
+    num_train_epochs=1,
+    per_device_train_batch_size=2,
+)
+trainer = GRPOTrainer(
+    model=model,                                   # your SFT warm-start
+    reward_funcs=[accuracy_reward, format_reward], # verifiable rewards, à la R1
+    args=config,
+    train_dataset=prompts,                         # prompts only — no answers needed
+)
+trainer.train()</code></pre>
+
+<p>What changes at scale: <code>G</code> grows (16+ generations per prompt), completions get long (tens of thousands of tokens of chain-of-thought), rewards get richer (accuracy plus format plus sometimes tool-use checks), and the KL uses an unbiased estimator instead of the exact computation. Later refinements you'll see cited — DAPO's dynamic sampling (skip groups with zero reward variance, since they carry no signal) and Dr. GRPO's removal of length normalization — are patches on this same loop, not replacements.</p>
+
+<h2 id="which-approach">Which approach should you use?</h2>
+
+<p>GRPO is one tool in the post-training drawer. Pick by what supervision you actually have:</p>
+
+<div class="table-wrap"><table><thead><tr><th>Your situation</th><th>Use</th><th>Why</th></tr></thead><tbody><tr><td>You have <strong>correct answers</strong> (demonstrations)</td><td><strong>SFT</strong></td><td>Cheapest and most sample-efficient. Ceiling: the quality of your data.</td></tr><tr><td>You have <strong>preference pairs</strong> (A beats B), no absolute scores</td><td><strong>DPO</strong></td><td>Offline, no sampling loop, no reward model. Great for style and alignment; weak for verifiable reasoning.</td></tr><tr><td>You have a <strong>verifier</strong> (tests, a checker, game rules) but few or no demonstrations</td><td><strong>GRPO</strong></td><td>Learns from exploration against the verifier. No critic to train. The R1 recipe.</td></tr><tr><td>You have <strong>human preferences</strong> but no programmatic verifier</td><td><strong>PPO + learned reward model</strong></td><td>The full RLHF machinery. Most moving parts, most reward-hacking risk — red-team the reward before you trust it.</td></tr></tbody></table></div>
+
+<p>The frontier recipe, as DeepSeek ran it for R1, stacks them: SFT to teach format, GRPO to teach reasoning, then further rounds of SFT and GRPO on the improved model. Each stage covers what the previous one can't.</p>
+
+<h2 id="takeaway">The takeaway</h2>
+
+<p>Reasoning models weren't taught to reason. They were <em>selected</em> for reasoning: generate widely, check rigorously, reinforce what worked. GRPO is the selection machinery, and its core idea fits in one sentence — <strong>sample a group, keep what beat the group's average, stay close to what you already knew.</strong> No critic, no value network, no learned reward model. You just implemented it in ~200 lines, watched a reward curve climb 5× from nothing but a three-line checker, and measured exactly where imitation ends and reinforcement begins. The next time someone says "R1 learned to reason with RL," you'll know precisely which loop they mean — because you've run it.</p>
+
+<hr>
+<p><em>The complete script, the plotting code, and the raw run metrics for every number in this article are described exactly as run above — torch 2.14.1 on CPU, seeds fixed at 7, 337 seconds wall-clock. If you extend the toy (larger G, longer training, a harder world like multi-digit arithmetic), the interesting question is the same one the labs ask: at what point does the held-out curve start moving?</em></p>
+</div>
+<div class="engage-row"><div class="reactions" data-reactions="grpo-from-scratch-reasoning-tutorial"><span class="reactions-label">React:</span></div><div class="comments-cta"><a class="btn-brief" href="/article/grpo-from-scratch-reasoning-tutorial/#comments">Join the discussion</a></div></div>
+<div class="comments" data-comments="grpo-from-scratch-reasoning-tutorial"></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/red-team-your-evals-reward-hacking-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your evals: catch reward hacking in your LLM judges, hands-on</h3><div class="meta">September 29, 2026</div></a><a class="rel-card" href="/articles/promptfoo-prompt-testing-ci-tutorial/"><span class="chip">Tutorials</span><h3>Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/agent-evals-tutorial/"><span class="chip">Tutorials</span><h3>Testing agents: task-based evals for tool-using models</h3><div class="meta">September 19, 2026</div></a><a class="rel-card" href="/articles/llm-evals-practical-guide/"><span class="chip">Tutorials</span><h3>Write Your First LLM Eval: A Practical Guide</h3><div class="meta">August 2, 2026</div></a></div></section>
+</article>
+</div>
+</main>
+<footer class="site-footer"><div class="wrap footer-in"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p class="fine">Independent coverage of the AI frontier. Not affiliated with any lab.</p></div></footer>
+<script src="/assets/site.js"></script>
+</body>
+</html>
