@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>LoopGain: stop your agent loop the moment it actually converges — hands-on with the control-theoretic cost controller — AI Frontier Post</title>
+<meta name="description" content="LoopGain is an Apache-2.0 Python library that replaces max_iterations with a control-theoretic stop-and-rollback policy: it watches your loop&#x27;s error trajectory, stops the moment it converges, and rolls back to the best iteration. Install it, run the verified examples, and wire it into any verify-revise loop.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/loopgain-agent-loop-cost-controller-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="LoopGain: stop your agent loop the moment it actually converges — hands-on with the control-theoretic cost controller">
+<meta property="og:description" content="LoopGain is an Apache-2.0 Python library that replaces max_iterations with a control-theoretic stop-and-rollback policy: it watches your loop&#x27;s error trajectory, stops the moment it converges, and rolls back to the best iteration. Install it, run the verified examples, and wire it into any verify-revise loop.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/loopgain-agent-loop-cost-controller-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "LoopGain: stop your agent loop the moment it actually converges — hands-on with the control-theoretic cost controller", "description": "LoopGain is an Apache-2.0 Python library that replaces max_iterations with a control-theoretic stop-and-rollback policy: it watches your loop&#x27;s error trajectory, stops the moment it converges, and rolls back to the best iteration. Install it, run the verified examples, and wire it into any verify-revise loop.", "datePublished": "2026-10-01", "dateModified": "2026-10-01", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/loopgain-agent-loop-cost-controller-tutorial/"}, "image": "https://aifrontierpost.com/assets/og-card.png"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>LoopGain: stop your agent loop the moment it actually converges — hands-on with the control-theoretic cost controller</h1>
+<p class="lede">Every production agent loop ends the same way: <code>max_iterations = N</code>. LoopGain — the Apache-2.0 Python library climbing GitHub's trending lists this week — replaces that fixed cap with a control-theoretic stop-and-rollback policy: it watches your loop's error trajectory, stops the moment it actually converges, and hands back the best iteration when the loop degrades. Pure Python, zero dependencies, $0 to learn. Every command and code block below ran exactly as shown.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · October 1, 2026 · 12 min read</span></span></div>
+</header>
+<div class="article-body">
+<h2 id="why-now">Why this is blowing up now</h2>
+
+<p>Every production agent loop you have written ends the same way: <code>max_iterations = N</code>. It is the embarrassing default of agentic AI — the project's README says so outright. Set the cap too low and you ship bad output; set it too high and you burn tokens on revisions that change nothing. Patience counters ("stop after three non-improving rounds") are only slightly better: they count iterations, not improvement.</p>
+
+<p>LoopGain (<a href="https://github.com/loopgain-ai/loopgain" rel="noopener">loopgain-ai/loopgain</a>, Apache-2.0) replaces the fixed cap with a control-theoretic stop-and-rollback policy grounded in the Barkhausen criterion — a 1921 result from feedback-oscillator analysis. It watches a single number, your loop's error signal, classifies the error trajectory with four statistical features, and stops the loop the moment it has actually converged. When the loop degrades instead of improving, it aborts and hands you back the best iteration it saw, not the wreckage.</p>
+
+<p>It is surfacing on GitHub trending roundups this week — it led the September 23 "7 Open-Source AI Repos Worth Watching" list at 124 stars and climbing — and the numbers behind it are unusually well-documented for a young project. Its public benchmark (2,000 paired trials across 10 workload cells, reproducible from a companion repo) claims 92.8% less API spend than <code>max_iter=20</code> ($27.05 down to $1.94 in total benchmark spend), roughly 15× faster median wall-clock (30.9s to 2.1s), judge win-rates of 0.50–0.63 on natural workloads and 0.92–0.95 on engineered-failure workloads — with zero of six pre-registered kill criteria firing. Treat those as the project's own benchmark claims, not independent verification.</p>
+
+<p>What makes it worth a tutorial: it is pure Python with zero runtime dependencies, installs in seconds, costs $0 and needs no API key to learn, and its core API is three lines. Everything below ran exactly as shown, on loopgain 0.6.5.</p>
+
+<h2 id="what-you-need">What you'll need</h2>
+
+<ul>
+<li>Python 3.10 or newer — check with <code>python3 --version</code>. LoopGain supports 3.10+.</li>
+<li><code>pip</code>, ideally inside a virtual environment. The library has no runtime dependencies.</li>
+<li>A terminal. Nothing else: no API key, no GPU, no model weights, no account. Every example here runs with $0 of API spend, because the error signal is yours to define — I demonstrate it with deterministic trajectories you can inspect line by line.</li>
+<li>Optional, for the adapter section: one of LangGraph, CrewAI, AutoGen, LangChain, the OpenAI Agents SDK, or the Claude Agent SDK in your own project.</li>
+</ul>
+
+<h2 id="step-1-install">Step 1 — Install and verify</h2>
+
+<pre><code class="language-bash">pip install loopgain
+loopgain --version</code></pre>
+
+<p>Expected output (version at time of writing):</p>
+
+<pre><code class="language-text">loopgain 0.6.5</code></pre>
+
+<p>Confirm the import works, and check the telemetry default — the library's anonymous usage telemetry is opt-in and default-decline:</p>
+
+<pre><code class="language-bash">python3 -c "from loopgain import LoopGain; print('import ok')"
+loopgain telemetry --show</code></pre>
+
+<p><code>telemetry --show</code> prints the current status and exactly what would be sent if you ever opted in. Nothing leaves your machine unless you explicitly enable it (<code>loopgain telemetry --enable</code> or <code>LOOPGAIN_TELEMETRY=1</code>); <code>DO_NOT_TRACK=1</code> is honored as a hard opt-out, and CI environments are auto-declined silently. The fleet-dashboard telemetry is a separate, per-call opt-in covered in Step 6. The library itself never phones home.</p>
+
+<h2 id="step-2-first-loop">Step 2 — Wrap your first loop</h2>
+
+<p>The whole core API is three calls: construct a monitor, <code>observe()</code> each iteration's error, and let <code>should_continue()</code> drive the loop:</p>
+
+<pre><code class="language-python">from loopgain import LoopGain
+
+lg = LoopGain(target_error=0.0, max_iterations=20)
+
+errors = [12, 9, 7, 5, 3, 2, 1, 0]  # your verifier's error per iteration
+i = 0
+while lg.should_continue() and i &lt; len(errors):
+    state = lg.observe(errors[i], output=f"draft-v{i}")
+    print(f"iter {i}: error={errors[i]} -&gt; {state}")
+    i += 1
+
+r = lg.result
+print(r.outcome, r.iterations_used, r.best_index, r.savings_vs_fixed_cap)</code></pre>
+
+<p>Run it. The exact output on 0.6.5:</p>
+
+<pre><code class="language-text">iter 0: error=12 -&gt; FAST_CONVERGE
+iter 1: error=9 -&gt; CONVERGING
+iter 2: error=7 -&gt; CONVERGING
+iter 3: error=5 -&gt; CONVERGING
+iter 4: error=3 -&gt; CONVERGING
+iter 5: error=2 -&gt; CONVERGING
+iter 6: error=1 -&gt; FAST_CONVERGE
+iter 7: error=0 -&gt; TARGET_MET
+converged 8 7 2</code></pre>
+
+<p>Two things to notice. First, the short-circuit: with the default <code>target_error=0.0</code>, the moment an observation reads exactly zero, the loop stops with state <code>TARGET_MET</code> — zero is the natural completion signal for verifier-driven loops. Second, the result: <code>outcome</code> is <code>"converged"</code>, <code>iterations_used</code> is 8, <code>best_index</code> is 7 (the zero-error iteration), and <code>savings_vs_fixed_cap</code> is 2 — the monitor assumed a fixed cap of 10 (the <code>assumed_fixed_cap</code> default) and you used 8. Pass <code>assumed_fixed_cap=20</code> and the identical run reports 16.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/loopgain-agent-loop-cost-controller-tutorial/img2.webp" alt="Illustration of an error-trajectory curve descending then oscillating, with a rollback arrow curving back to the lowest-error point"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="step-3-error-signal">Step 3 — Define your error signal</h2>
+
+<p>LoopGain knows nothing about your loop's domain. The one thing you provide is a single non-negative number per iteration that says how wrong the current output is — lower is better, zero means done. The project's docs suggest this mapping, worth stealing verbatim:</p>
+
+<table>
+<thead><tr><th>Your loop</th><th>Error signal</th></tr></thead>
+<tbody>
+<tr><td>Agentic coding (write code → run tests)</td><td>number of <strong>failing tests</strong> (10 → 3 → 0)</td></tr>
+<tr><td>JSON / structured extraction</td><td>number of <strong>schema violations</strong></td></tr>
+<tr><td>RAG with self-correction</td><td>number of <strong>required facts still missing</strong></td></tr>
+<tr><td>Self-refinement with an LLM judge</td><td>judge's <strong>gap to target</strong> (e.g. <code>10 − quality_score</code>)</td></tr>
+<tr><td>Lint / format loop</td><td><strong>lint error count</strong></td></tr>
+</tbody>
+</table>
+
+<p>Two mechanics matter.</p>
+
+<p><strong>Numbers or sequences.</strong> <code>observe()</code> accepts a plain number, or any sequence — in which case its length becomes the magnitude. Hand it the raw list of failing tests and never pre-count:</p>
+
+<pre><code class="language-python">lg = LoopGain(target_error=0.0)
+for failing, out in [(["t_login", "t_checkout", "t_refund"], "v0"),
+                     (["t_refund"], "v1"),
+                     ([], "v2")]:
+    print(lg.observe(failing, output=out), lg.should_continue())</code></pre>
+
+<pre><code class="language-text">FAST_CONVERGE True
+CONVERGING True
+TARGET_MET False</code></pre>
+
+<p>An empty list has length zero, which trips the default target's short-circuit. The loop ends the moment the list is empty — which is exactly when you'd stop anyway.</p>
+
+<p><strong>When quality has no natural zero.</strong> Fuzzy targets — style scores, open-ended rewrites — never read exactly zero. Pass <code>target_error=None</code> and the short-circuit is disabled: the monitor then stops when the number stops improving, wherever the plateau sits. The next section shows exactly what that looks like.</p>
+
+<h2 id="step-4-end-to-end">Step 4 — End to end: a self-healing JSON repair loop</h2>
+
+<p>Now a complete loop with a real verifier. The scenario: an extractor produces JSON, a schema check counts violations, a reviser repairs them. To keep this runnable for $0, the reviser below is a deterministic stand-in for an LLM call — swap in your real model call and nothing else changes, because the only contract LoopGain sees is the error number:</p>
+
+<pre><code class="language-python">from loopgain import LoopGain
+
+REQUIRED = {"name": str, "email": str, "age": int}
+
+def verify(payload):
+    """Real verifier: returns the list of schema violations."""
+    problems = []
+    for key, typ in REQUIRED.items():
+        if key not in payload:
+            problems.append(f"missing:{key}")
+        elif not isinstance(payload[key], typ):
+            problems.append(f"type:{key}")
+    return problems
+
+# Stand-in reviser: fixes one violation per iteration (your LLM goes here).
+FIXES = [("name", "Ada"), ("email", "ada@example.com"), ("age", 36)]
+
+lg = LoopGain(target_error=0.0, max_iterations=20)
+payload = {}
+for i, (key, val) in enumerate(FIXES):
+    problems = verify(payload)
+    state = lg.observe(problems, output=dict(payload))
+    print(f"iter {i}: {len(problems)} violations -&gt; {state}")
+    if not lg.should_continue():
+        break
+    payload[key] = val
+else:
+    # fixes exhausted with the loop still alive: check the final payload
+    lg.observe(verify(payload), output=dict(payload))
+
+r = lg.result
+print("outcome:", r.outcome)
+print("best output:", r.best_output)
+print("iterations used:", r.iterations_used)</code></pre>
+
+<pre><code class="language-text">iter 0: 3 violations -&gt; FAST_CONVERGE
+iter 1: 2 violations -&gt; CONVERGING
+iter 2: 1 violations -&gt; CONVERGING
+outcome: converged
+best output: {'name': 'Ada', 'email': 'ada@example.com', 'age': 36}
+iterations used: 4</code></pre>
+
+<p>The verifier is doing the real work here — the list of violations is a genuine error signal, and the final <code>observe()</code> sees zero violations and fires <code>TARGET_MET</code>. <code>best_output</code> is the fully repaired payload.</p>
+
+<p>Now the two cases that justify the library. First, the plateau: the loop improves, then stalls at 4 violations with <code>target_error=None</code> (no natural zero):</p>
+
+<pre><code class="language-python">lg = LoopGain(target_error=None, max_iterations=20)
+traj = [12, 10, 8, 6, 5, 4, 4, 4, 4, 4]
+i = 0
+while lg.should_continue() and i &lt; len(traj):
+    print(f"iter {i}: error={traj[i]} -&gt; {lg.observe(traj[i], output=f'v{i}')}")
+    i += 1
+r = lg.result
+print(r.outcome, r.iterations_used, r.best_index, r.best_error)</code></pre>
+
+<pre><code class="language-text">iter 0: error=12 -&gt; FAST_CONVERGE
+iter 1: error=10 -&gt; CONVERGING
+iter 2: error=8 -&gt; CONVERGING
+iter 3: error=6 -&gt; CONVERGING
+iter 4: error=5 -&gt; CONVERGING
+iter 5: error=4 -&gt; CONVERGING
+iter 6: error=4 -&gt; CONVERGING
+iter 7: error=4 -&gt; CONVERGING
+iter 8: error=4 -&gt; STALLING
+iter 9: error=4 -&gt; STALLING
+stalled 10 5 4.0</code></pre>
+
+<p>After two consecutive stalling readings the monitor stops and reports <code>stalled</code> — best error 4.0 at iteration 5, the first time the loop reached it. A fixed cap of 20 would have burned 10 more iterations for zero improvement. Note the discipline this forces on you: a stall at 4 violations is a quality gap the controller cannot see — check <code>result.best_error</code> before you trust the output.</p>
+
+<p>Second, the divergence — the case that earns the "rollback" in the name. Error jumps upward instead of improving:</p>
+
+<pre><code class="language-python">lg = LoopGain(target_error=None, max_iterations=25)
+for i, e in enumerate([3, 4, 6, 9, 13, 18]):
+    state = lg.observe(e, output=f"v{i}")
+    print(f"iter {i}: error={e} -&gt; {state}")
+    if not lg.should_continue():
+        break
+r = lg.result
+print(r.outcome, "| best:", r.best_output, "| iters:", r.iterations_used)</code></pre>
+
+<pre><code class="language-text">iter 0: error=3 -&gt; FAST_CONVERGE
+iter 1: error=4 -&gt; DIVERGING
+diverged | best: v0 | iters: 2</code></pre>
+
+<p>The monitor fired <code>DIVERGING</code> after a single upward jump, aborted the loop at iteration 2, and rolled back to <code>v0</code> — the best output it had seen. Divergence detection becomes "abort with the best you've seen so far" instead of "abort with garbage." That is the free quality floor.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/loopgain-agent-loop-cost-controller-tutorial/img3.webp" alt="Illustration of two agent workflow paths: one running wastefully into static, one stopped early at a glowing checkpoint with the remainder dissolving into saved light"><figcaption>Credit: AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="step-5-reading-result">Step 5 — Read the result like a dashboard</h2>
+
+<p>After the loop, <code>lg.result</code> is a <code>LoopGainResult</code>. The fields you will actually use:</p>
+
+<ul>
+<li><code>outcome</code> — one of <code>converged</code> (target met or clean convergence), <code>stalled</code> (improvement plateaued), <code>oscillating</code> (bouncing with no trend), <code>diverged</code> (getting worse — aborted), or <code>max_iterations</code> (the hard backstop fired).</li>
+<li><code>best_output</code> / <code>best_index</code> / <code>best_error</code> — the lowest-error iteration observed. Ship this, not the last iteration.</li>
+<li><code>iterations_used</code>, <code>error_history</code> (every observed error), <code>convergence_profile</code>, and <code>savings_vs_fixed_cap</code> — which is simply <code>assumed_fixed_cap − iterations_used</code>. Set <code>assumed_fixed_cap</code> to your current fixed cap and the number becomes a direct apples-to-apples comparison with the policy you have today.</li>
+</ul>
+
+<p>Behind the outcomes sits a five-state classifier. Each trajectory is routed on four features: cumulative error reduction, the OLS slope of log10(error), the slope's t-test p-value, and the residual oscillation magnitude. The decision is conservative by design — it requires both statistical significance and meaningful motion before terminating, which is why thin evidence (4 or fewer observations) falls back to stalling rather than risking a false abort. The project recommends a minimum of 6 iterations for reliable trend significance.</p>
+
+<p>Two honest limits, stated in the project's own docs and worth repeating. LoopGain detects <em>convergence, not correctness</em> — it knows when more iterations won't help, not whether the answer is right. And it is only as good as your verifier: in the project's benchmark, 4.5% of converged runs (16 of 355) passed every in-loop check yet failed the full held-out test suite. Pair it with the strongest verifier you can afford at the stop — executable tests over a sampled subset, a schema check over a vibe, a held-out check the loop didn't optimize against.</p>
+
+<h2 id="framework-adapters">Step 6 — Wire it into a real framework</h2>
+
+<p>If your loop already lives in an agent framework, you don't rewrite it. Thin adapters under <code>loopgain.integrations</code> drive the framework's own iteration with your monitor — the frameworks are optional dependencies, installed as extras:</p>
+
+<pre><code class="language-bash">pip install 'loopgain[langgraph]'        # or crewai, autogen, langchain,
+pip install 'loopgain[openai-agents]'    # claude-agent-sdk, or [all]</code></pre>
+
+<p>Every adapter takes your <code>LoopGain</code> instance plus an <code>error_fn</code> you provide — the framework can't know what "wrong" means in your domain, so the adapter doesn't guess. The LangGraph shape, from the project's docs:</p>
+
+<pre><code class="language-python">from loopgain import LoopGain
+from loopgain.integrations import LangGraphAdapter
+
+lg = LoopGain(target_error=0.1, max_iterations=20)
+adapter = LangGraphAdapter(
+    lg=lg,
+    error_fn=lambda update: len(update.get("verifier", {}).get("errors", [])),
+)
+final_state = adapter.run(graph, {"draft": initial})</code></pre>
+
+<p>Adapters exist for CrewAI (<code>task_error_fn</code> / <code>step_error_fn</code>), AutoGen v0.4 (<code>observe_sources={"verifier"}</code>), LangChain, the OpenAI Agents SDK, and the Claude Agent SDK — all with the same <code>lg</code> + <code>error_fn</code> shape. I did not execute the adapter examples here (they need a live framework and model calls); the raw API in Steps 2–5 is the part verified end to end.</p>
+
+<p>One more opt-in worth knowing: <code>lg.send_telemetry(...)</code> posts a single anonymized aggregate to your fleet dashboard after the loop terminates — state transitions, iteration counts, savings, never prompts, outputs, or error contents — and only when you call it. The hosted receiver and dashboard are both open-source and self-hostable. This is separate from the anonymous usage funnel in Step 1, which stays off unless you turn it on.</p>
+
+<h2 id="when-to-use">When to use this vs the alternatives</h2>
+
+<p><strong>vs <code>max_iterations</code>:</strong> the fixed cap is either wasteful or dangerous, and you don't get to choose which on any given run. LoopGain makes the decision from the full error trajectory instead of the iteration count. The project's benchmark claims 92.8% spend savings against a cap of 20; your number depends on how often your loops currently overshoot.</p>
+
+<p><strong>vs a hand-rolled patience counter</strong> ("stop after k non-improving rounds"): patience counts flat iterations; LoopGain measures the trend statistically — it keeps going through noisy-but-improving runs a patience counter would kill, catches divergence a counter would sleep through, and hands you the rollback for free.</p>
+
+<p><strong>vs LLM-as-a-judge gating:</strong> a judge answers "is this good enough" per output; LoopGain answers "is more iterating worth it" across outputs. They compose: feed the judge's gap-to-target in as your error signal and LoopGain decides when to stop paying the judge.</p>
+
+<p><strong>vs token observability tools:</strong> dashboards like <a href="/articles/agent-console-token-observability-tutorial/">Agent Console</a> tell you where the money went; LoopGain stops the spending. They compose too — measure with the dashboard, cap with the controller. The same bill is attacked from the prompt side by <a href="/articles/prompt-compression-measured-guide/">prompt compression</a>, <a href="/articles/llm-cascade-router-tutorial/">cascade routing</a>, and <a href="/articles/rtk-rust-token-killer-cli-tutorial/">RTK's output filtering</a>; LoopGain is the only one of the four that watches the loop itself.</p>
+
+<p><strong>When not to use it:</strong> if your loop has no measurable error signal — pure open-ended generation with no verifier — there is nothing for the classifier to watch, and <code>target_error=None</code> on noise is just a slower way to hit <code>max_iterations</code>. Build the verifier first. And per the docs, don't tune <code>TrajectoryThresholds</code> until you have production traces of your own.</p>
+
+<h2 id="takeaway">The takeaway</h2>
+
+<p>LoopGain does one thing: it watches the error trajectory of an iterative agent loop and stops it the moment more iterations stop helping — rolling back to the best version when the loop degrades. Three lines wrap any loop, the error signal is whatever your verifier already measures, and the whole thing is pure Python with no dependencies and no telemetry unless you opt in. Point it at your most expensive verify-revise loop with <code>assumed_fixed_cap</code> set to your current cap, and let <code>savings_vs_fixed_cap</code> tell you whether your fixed cap was ever the right policy. For most loops, it wasn't.</p>
+
+<div class="post-engage"><div class="reactions" data-reactions="loopgain-agent-loop-cost-controller-tutorial"></div><div class="comments" data-comments="loopgain-agent-loop-cost-controller-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/agent-console-token-observability-tutorial/"><span class="chip">Tutorials</span><h3>See exactly what your coding agents cost: hands-on with Agent Console, the 765-star local-first token dashboard</h3><div class="meta">October 1, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/llm-cascade-router-tutorial/"><span class="chip">Tutorials</span><h3>Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters</h3><div class="meta">September 29, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/rtk-rust-token-killer-cli-tutorial/"><span class="chip">Tutorials</span><h3>RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy</h3><div class="meta">September 27, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/prompt-compression-measured-guide/"><span class="chip">Tutorials</span><h3>Cut your prompt tokens in half: a measured guide to prompt compression</h3><div class="meta">September 27, 2026 · 10 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
