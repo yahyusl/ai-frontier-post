@@ -16,7 +16,7 @@ Exit non-zero with a list of problems on any drift.
 import json, os, re, subprocess, sys
 from datetime import datetime
 
-REPO = "/home/hatch/workspace/ai-frontier-post"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (CI checkout or local)
 os.chdir(REPO)
 problems = []
 
