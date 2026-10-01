@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>See exactly what your coding agents cost: hands-on with Agent Console, the 765-star local-first token dashboard — AI Frontier Post</title>
+<meta name="description" content="Agent Console (765 GitHub stars, MIT) reads the transcripts Claude Code and Codex already write on your machine and turns them into a local dashboard: tokens by class, per-model cost estimates, live burn rate, and spend alerts — no account, no telemetry, no build step. This tutorial installs it from source and from the signed v0.4.1 release, walks the demo, points it at real sessions, joins a second machine to a team hub, and feeds the numbers to Prometheus and Grafana.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/agent-console-token-observability-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="See exactly what your coding agents cost: hands-on with Agent Console, the 765-star local-first token dashboard">
+<meta property="og:description" content="Agent Console (765 GitHub stars, MIT) reads the transcripts Claude Code and Codex already write on your machine and turns them into a local dashboard: tokens by class, per-model cost estimates, live burn rate, and spend alerts — no account, no telemetry, no build step. This tutorial installs it from source and from the signed v0.4.1 release, walks the demo, points it at real sessions, joins a second machine to a team hub, and feeds the numbers to Prometheus and Grafana.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/agent-console-token-observability-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/agent-console-token-observability-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"See exactly what your coding agents cost: hands-on with Agent Console, the 765-star local-first token dashboard","description":"Agent Console (765 GitHub stars, MIT) reads the transcripts Claude Code and Codex already write on your machine and turns them into a local dashboard: tokens by class, per-model cost estimates, live burn rate, and spend alerts \u2014 no account, no telemetry, no build step.","datePublished":"2026-10-01","dateModified":"2026-10-01","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/agent-console-token-observability-tutorial/"},"image":"https://aifrontierpost.com/articles/agent-console-token-observability-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>See exactly what your coding agents cost: hands-on with Agent Console, the 765-star local-first token dashboard</h1>
+<p class="lede">Your coding agents burn tokens and money in the background and never tell you. <strong>Agent Console</strong> reads the session transcripts Claude Code and Codex already write on your disk and turns them into one local dashboard — tokens by class, per-model cost estimates, live burn rate, and alerts for spikes and runaway tool loops. No account, no telemetry, nothing leaves your machine. This tutorial installs it (from source and from the signed v0.4.1 release), tours the demo, points it at your real sessions, and connects a second machine to a team hub.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 1, 2026 · 9 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/agent-console-token-observability-tutorial/cover.webp" alt="Agent Console's dark demo dashboard: token counts split by class over the last 24 hours, a tokens-over-time graph, per-model and per-machine cost breakdowns, a live burn-rate panel, and per-session lanes — all figures synthetic and stamped DEMO"><figcaption>Demo-mode screenshot from the Agent Console repository (MIT license, LockedIn Labs) — every figure is synthetic, generated by the --demo flag.</figcaption></figure>
+<div class="article-body"><p>You have no idea what your coding agents cost you. Claude Code sessions run for hours, spinning up subagents, retrying tool calls, re-reading files — and the bill arrives as a single number at the end of the month. Somewhere in between, a runaway loop burned a dollar a minute and nobody noticed.</p>
+<p><strong>Agent Console</strong> by <a href="https://github.com/LockedinLabs-AI/agent-console" rel="nofollow">LockedIn Labs</a> fixes the blindness without any cloud service. It's an open-source (MIT), local-first dashboard that reads the session transcripts Claude Code and Codex already write on your machine and shows you, per session, per model, and per machine: tokens split by class (output, cache write, uncached input, cache read), list-price cost estimates, live burn rate in tokens per minute and dollars per hour, and alerts for burn spikes and repeated tool calls. It picked up 765 GitHub stars in eleven days — a sign the pain is widely felt.</p>
+<p>This tutorial installs it two ways, tours the demo, points it at your real sessions, joins a second machine to a team hub, and wires the numbers into Prometheus and Grafana. Every command below was executed on October 1, 2026 against the <strong>v0.4.1</strong> release (published September 27, 2026).</p>
+<h2 id="what-youll-need">What you&#x27;ll need <a class="hanchor" href="#what-youll-need">#</a></h2>
+<ul>
+<li><strong>Node.js 22 or newer</strong> — check with <code>node --version</code>. Grab the LTS build from <a href="https://nodejs.org" rel="nofollow">nodejs.org</a> if you're short.</li>
+<li><strong>Git</strong> (only for the source route) or a browser to download the release archive.</li>
+<li><strong>Claude Code or Codex</strong> with some session history — or nothing at all; the <code>--demo</code> flag generates a synthetic team so you can look around first.</li>
+<li>About <strong>15 minutes</strong>. There is no account to create, no package to install, and no build step.</li>
+</ul>
+<h2 id="step-1-get-agent-console">Step 1 — Get Agent Console <a class="hanchor" href="#step-1-get-agent-console">#</a></h2>
+<p>Two supported routes, both verified for this tutorial. The source route is fastest:</p>
+<pre><code>git clone https://github.com/LockedinLabs-AI/agent-console.git
+cd agent-console
+node bin/agent-console.mjs --open</code></pre>
+<p>That command runs the checkout in place, reads the Claude Code and Codex history already on this computer, and opens the console in your browser — signed in, normally at <code>http://127.0.0.1:6787</code>. The console binds to loopback only; nothing is reachable from the network unless you ask it to be.</p>
+<p>Prefer an install to a checkout? The v0.4.1 release publishes a Node package archive (plus signed standalone binaries for macOS, Linux, and Windows, with <code>SHA256SUMS</code>, build attestations, and a CycloneDX SBOM on every release). One honest caveat from the docs, stated plainly: the <code>@lockedinlabs/agent-console</code> name is <em>not</em> published on the npm registry, the documented Homebrew tap is not verified as available, and no container image is verified — so install the published GitHub archive directly:</p>
+<pre><code>npm install --global --ignore-scripts https://github.com/LockedinLabs-AI/agent-console/releases/download/v0.4.1/lockedinlabs-agent-console-0.4.1.tgz
+agent-console --open</code></pre>
+<p>(On Windows PowerShell use <code>npm.cmd</code> and <code>agent-console.cmd</code>.) Verify the install with <code>--help</code> — the full CLI surface, including the <code>join</code>, <code>report</code>, <code>stop</code>, <code>leave</code>, <code>metrics-token</code>, and <code>policy</code> subcommands, prints from there.</p>
+<h2 id="step-2-look-around-in-demo-mode">Step 2 — Look around in demo mode first <a class="hanchor" href="#step-2-look-around-in-demo-mode">#</a></h2>
+<p>Before pointing anything at your real data, take the tour on synthetic numbers. <code>--demo</code> spins up a fake team; it reads nothing and accepts no machine:</p>
+<pre><code>node bin/agent-console.mjs --demo --open</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/agent-console-token-observability-tutorial/img2.webp" alt="Agent Console's light-theme demo dashboard: token totals by class, tokens-over-time chart, per-model cost table, burn-rate panel, and per-session lanes with models and activity"><figcaption>Demo-mode dashboard in the light theme — screenshots from the Agent Console repository (MIT, LockedIn Labs); every figure is synthetic, stamped DEMO.</figcaption></figure>
+<p>In the first thirty seconds you see: the last 24 hours of tokens (switchable to the last hour, 7 days, or 30 days), split into <strong>cache read, cache write, output, and uncached input</strong>; their list-price estimate; <strong>burn right now</strong> in tokens per minute and dollars per hour; one lane per session with its model, its subagents, and its last hour of activity; and every machine and person reporting, each with a share of the total. The <strong>ATTENTION</strong> panel is where the money insight lives: it flags <strong>burn spikes</strong> ("5.5× normal, 3.3M tok / 5 min") and <strong>repeated tool calls</strong> — exactly the runaway-loop behavior that silently inflates bills.</p>
+<p>Note the demo figures are watermarked and the README says it plainly: <em>estimates say they are estimates; unknown readings are shown as unknown, never as zero.</em> That's the project's honesty policy, and it runs through the whole product.</p>
+<h2 id="step-3-point-it-at-your-real-sessions">Step 3 — Point it at your real sessions <a class="hanchor" href="#step-3-point-it-at-your-real-sessions">#</a></h2>
+<p>Drop <code>--demo</code> and run it for real:</p>
+<pre><code>node bin/agent-console.mjs --open</code></pre>
+<p>The console finds transcripts where the agents put them, no configuration: Claude Code's <code>CLAUDE_CONFIG_DIR</code> (its <code>projects</code> folder) when set, otherwise <code>~/.claude/projects</code> and <code>~/.config/claude/projects</code>; Codex's <code>CODEX_HOME</code> (its <code>sessions</code> folder, plus <code>archived_sessions</code>) when set, otherwise <code>~/.codex/sessions</code> with <code>~/.codex/archived_sessions</code>. It re-reads every 2 seconds (<code>--poll-ms</code>), keeps 8 days of history by default (<code>--retention-days</code>, 1–90), and tells you in the window which folders it read — or says plainly when it found nothing.</p>
+<p>Non-standard layout? Override the transcript roots directly:</p>
+<pre><code>node bin/agent-console.mjs --open --claude-root ~/work/claude-data --codex-root ~/work/codex-data</code></pre>
+<p>Useful options for a machine you run daily: <code>--name</code> and <code>--person</code> label this computer on the console, and <code>--port</code> moves the console off its default 6787 (always 127.0.0.1-only; the reporting port sits one above it at 6788). Every option also has an environment-variable twin (<code>AGENT_CONSOLE_PORT</code>, <code>AGENT_CONSOLE_RETENTION_DAYS</code>, …) for service-managed setups. Run <code>node bin/agent-console.mjs --help</code> for the complete table.</p>
+<h2 id="step-4-read-the-numbers-like-a-cost-engineer">Step 4 — Read the numbers like a cost engineer <a class="hanchor" href="#step-4-read-the-numbers-like-a-cost-engineer">#</a></h2>
+<p>Now the part that pays for the fifteen minutes. Three views matter:</p>
+<ul>
+<li><strong>Tokens by class.</strong> Cache reads are typically ~90% of tokens and a few percent of cost; output and cache writes are where the money goes. The <strong>spend spectrum</strong> panel shows cost share next to token share per class, which instantly tells you whether a session is spending on thinking (output) or on re-reading context (cache write).</li>
+<li><strong>Burn right now.</strong> Tokens per minute and estimated dollars per hour, live. Leave this up during a long agent run; a spike you catch at minute five costs cents, the one you discover tomorrow costs dollars.</li>
+<li><strong>Per-session lanes.</strong> Each lane shows the model, subagents, uncached vs. out tokens, total spend, and context size. Sort by spend to find which session — and which model — is your most expensive habit. The demo above is instructive: an opus-class model on a side task while a cheaper model does the main work is the pattern to kill.</li>
+</ul>
+<p>For always-on watching, the console has desktop alerts with spike and stall detection (<code>--desktop-alerts</code>, <code>--alert-spike-factor</code>, <code>--alert-stall-minutes</code>) that reuse the same logic as the ATTENTION panel.</p>
+<h2 id="step-5-present-it-without-leaking">Step 5 — Present it without leaking anything <a class="hanchor" href="#step-5-present-it-without-leaking">#</a></h2>
+<p>Press <strong>P</strong>. Presenting mode replaces every project, machine, and person with a stand-in name, so you can screen-share your spend in a team meeting without broadcasting client project names:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/agent-console-token-observability-tutorial/img3.webp" alt="Agent Console in presenting mode: project, machine, and person names replaced with stand-in names while token and cost figures stay visible"><figcaption>Presenting mode (press P): stand-in names for projects, machines, and people — screenshot from the Agent Console repository (MIT, LockedIn Labs).</figcaption></figure>
+<p>The privacy model underneath is worth stating precisely, because "local-first" gets thrown around loosely. The console itself sends nothing anywhere — no telemetry, no update check, no crash reporting, no account. When machines report to a hub, only <strong>model ids, minute timestamps, token counts, and salted hashes</strong> cross the wire — never a prompt, a reply, a file path, or a file's contents. Three opt-ins exist and each is off unless you pass it: <code>--share-project-names</code> (folder <em>names</em>, never paths), <code>--share-alerts</code>, and <code>--share-tool-activity</code> (alerts and tool calls as kinds and counts). A test in the repo pushes transcripts full of planted canaries through the real reporter and the real hub and checks every byte that crosses the wire.</p>
+<h2 id="step-6-add-a-second-machine">Step 6 — Add a second machine (the team hub) <a class="hanchor" href="#step-6-add-a-second-machine">#</a></h2>
+<p>Run a laptop and a build box? One console can watch both. On the machine that hosts the console, open the join view and copy the <strong>join link</strong>; on the other machine, run:</p>
+<pre><code>node bin/agent-console.mjs join '&lt;join link&gt;'</code></pre>
+<p>The reporter enrolls with a device token and keeps reporting after restarts (<code>report</code>), and <code>stop</code> / <code>leave</code> pause or end the enrolment. Each machine keeps its own lanes and nothing is counted twice. Two networking notes from the docs, quoted because they matter: the reporting port accepts joins from private networks by default; add <code>--allow-public</code> to open it wider, or <code>--allow-cgnat</code> for 100.64.0.0/10 (Tailscale, carrier-grade NAT). On a server that hosts the hub without running agents itself, <code>--no-local</code> stops it from reading that machine.</p>
+<p>There's a second trick in the same CLI: <code>policy diff|apply|remove</code> installs a repository's <code>agent-policy.yaml</code> as Claude Code project files — the observability console doubling as the enforcement point for the rules your spend depends on.</p>
+<h2 id="step-7-optional-feed-prometheus-and-grafana">Step 7 (optional) — Feed the numbers to Prometheus and Grafana <a class="hanchor" href="#step-7-optional-feed-prometheus-and-grafana">#</a></h2>
+<p>If your org already watches infrastructure in Grafana, the console speaks that language too. Generate the scrape token:</p>
+<pre><code>node bin/agent-console.mjs metrics-token</code></pre>
+<p>That unlocks the <code>/metrics</code> Prometheus endpoint (plus optional ingest of Claude Code OpenTelemetry and Kong or LiteLLM token metrics), and the repo ships a ready-made dashboard at <code>docs/grafana-agent-console.json</code>. Same numbers as the console, now next to your CPU graphs.</p>
+<h2 id="what-you-built">What you built <a class="hanchor" href="#what-you-built">#</a></h2>
+<p>One local dashboard — bound to loopback, MIT-licensed, no account, no telemetry — showing every Claude Code and Codex session on your machine: tokens by class, per-model list-price cost, live burn rate, per-session lanes, and alerts for spikes and runaway tool loops. Optionally: a second machine reporting into the same view, and the whole thing mirrored into Prometheus/Grafana. Total new infrastructure: zero services, zero signups.</p>
+<h2 id="honest-limitations">Honest limitations <a class="hanchor" href="#honest-limitations">#</a></h2>
+<ul>
+<li><strong>Claude Code and Codex only.</strong> The console reads the transcript formats those two agents write. Cursor, Copilot, Gemini CLI, and friends aren't parsed — if your spend lives there, this won't see it.</li>
+<li><strong>Costs are list-price estimates.</strong> The project labels them as estimates everywhere and shows unknown as unknown, never as zero — but they won't match negotiated rates, credits, or subscription pricing. Treat them as directional, not as an invoice.</li>
+<li><strong>Young project, moving fast.</strong> 765 stars in eleven days means the docs are honest about rough edges (the npm name isn't published, the Homebrew tap is unverified, the Windows executable isn't code-signed). Pin the release you tested — v0.4.1 here — and re-check flags after upgrades.</li>
+<li><strong>It only sees what's on disk.</strong> Sessions that never write local transcripts (browser-based or remote IDE variants) stay invisible, and 8 days of retention is the default — raise <code>--retention-days</code> if you want longer history.</li>
+</ul>
+<h2 id="the-takeaway">The takeaway <a class="hanchor" href="#the-takeaway">#</a></h2>
+<p>Token spend is the cloud bill of the agent era, and most teams still fly it blind. Agent Console doesn't optimize anything — it does the more important first step, which is <em>showing</em> you: which session, which model, which class of token, burning how fast, right now. The demo takes two minutes; the moment you see your first burn spike flagged in real time, you'll leave it running.</p>
+<p>Run it from source this week, press P before your next screen-share, and find out which of your habits is the expensive one.</p>
+</div>
+
+<div class="post-engage"><div class="reactions" data-reactions="agent-console-token-observability-tutorial"></div><div class="comments" data-comments="agent-console-token-observability-tutorial"></div></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/context-mode-mcp-context-window-tutorial/"><span class="chip">Tutorials</span><h3>Context Mode: stop your coding agent from burning its context window — a hands-on tutorial</h3><div class="meta">October 1, 2026</div></a><a class="rel-card" href="/articles/scientific-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Turn your AI agent into a research scientist: a hands-on tutorial for Scientific Agent Skills</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/page-agent-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Page Agent: give any web page its own AI agent — hands-on with Alibaba&#x27;s in-page GUI agent</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/one-shot-playable-game-frontier-model-tutorial/"><span class="chip">Tutorials</span><h3>One-shot a playable browser game with a frontier model: the workflow behind the Opus 5.5 demos</h3><div class="meta">September 30, 2026</div></a></div></section>
+</div></article>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/category/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
