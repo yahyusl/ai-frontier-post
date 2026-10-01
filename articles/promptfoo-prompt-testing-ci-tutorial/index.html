@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on — AI Frontier Post</title>
+<meta name="description" content="promptfoo is an open-source CLI for test-driven LLM development: write assertions for your prompts, run them like a test suite, and gate deploys on the results. This tutorial builds a real prompt eval from scratch — mock provider, six assertions, a caught regression, CSV test scaling, and a CI gate — no API key required.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/promptfoo-prompt-testing-ci-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on">
+<meta property="og:description" content="promptfoo is an open-source CLI for test-driven LLM development: write assertions for your prompts, run them like a test suite, and gate deploys on the results. This tutorial builds a real prompt eval from scratch — no API key required.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/promptfoo-prompt-testing-ci-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/promptfoo-prompt-testing-ci-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-09-30">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on","description":"promptfoo is an open-source CLI for test-driven LLM development: write assertions for your prompts, run them like a test suite, and gate deploys on the results. This tutorial builds a real prompt eval from scratch — mock provider, six assertions, a caught regression, CSV test scaling, and a CI gate — no API key required.","datePublished":"2026-09-30","dateModified":"2026-09-30","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/promptfoo-prompt-testing-ci-tutorial/"},"image":"https://aifrontierpost.com/articles/promptfoo-prompt-testing-ci-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on</h1>
+<p class="lede">promptfoo is an open-source CLI for test-driven LLM development: write assertions for your prompts, run them like a test suite, and gate deploys on the results. This tutorial builds a real prompt eval from scratch — a zero-cost mock provider, eight assertion types, a caught regression, CSV test scaling, and a CI gate — with no API key and no GPU.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · September 30, 2026 · 16 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/promptfoo-prompt-testing-ci-tutorial/cover.webp" alt="AI-generated editorial illustration: a glowing checklist of test assertions with green checkmarks and red X marks floating over a dark terminal window of LLM prompt text, connected by circuit traces on a deep navy background"></figure>
+<div class="article-body"><p>You would never ship a payments function without tests. But the prompt that decides which customers get a refund? That ships on vibes — edited in a chat window, eyeballed once, and pasted into production. Then the model changes, or someone "improves" the wording, and the refund bot starts apologizing in French.</p>
+<p><strong>promptfoo</strong> (<a href="https://promptfoo.dev">promptfoo.dev</a>) is the open-source tool that fixes this: a CLI and library for test-driven LLM development. You define prompts, providers, and test cases in a YAML config, attach assertions to the outputs, and run <code>promptfoo eval</code> the way you'd run <code>pytest</code>. It compares prompt versions side by side, scores every output, and exports machine-readable results you can gate a deploy on.</p>
+<p>This tutorial does the whole loop for real. We'll build a support-ticket triage bot, write two competing prompts, test them against three tickets with eight assertion types, watch the naive prompt fail exactly the way it would in production, scale the test suite through a CSV file, and wire the whole thing into CI. Every command below was executed on September 30, 2026 against promptfoo <strong>0.123.1</strong>, and every output shown is real. Best of all: no API key, no GPU, no spend — the entire tutorial runs against a deterministic mock provider, so it's free and perfectly reproducible.</p>
+<h2 id="what-youll-need">What you'll need <a class="hanchor" href="#what-youll-need">#</a></h2>
+<ul>
+<li><strong>Node.js 22 or newer</strong> — check with <code>node --version</code>. promptfoo ships as an npm package; we'll run it through <code>npx</code> so nothing is installed globally.</li>
+<li><strong>Python 3</strong> — only for the mock provider in Steps 2–7 (a ~60-line script, no dependencies).</li>
+<li>A terminal and about <strong>10 minutes of patience once</strong> — the first <code>npx</code> invocation downloads the package through npm; after that it's cached.</li>
+<li><strong>No API key, no account, no GPU.</strong> Model-graded assertions (like <code>llm-rubric</code>) exist and are documented, but this tutorial sticks to deterministic assertions so everything runs offline.</li>
+</ul>
+<h2 id="step-1-install-promptfoo">Step 1 — Install promptfoo <a class="hanchor" href="#step-1-install-promptfoo">#</a></h2>
+<p>No install step, really — <code>npx</code> fetches and runs the latest release on demand:</p>
+<pre><code>npx -y promptfoo@latest --version
+# 0.123.1</code></pre>
+<p>That's the version every command in this tutorial was verified against. If you'd rather have it on your PATH permanently, <code>npm install -g promptfoo</code> works too — the commands are identical either way. A quick <code>promptfoo eval --help</code> is worth reading in full; the flag list we'll actually use (<code>--no-cache</code>, <code>--filter-prompts</code>, <code>-o</code>, <code>--table</code>) is small, but the CLI also offers first-N filters, metadata filters, sampling, output transforms, and JUnit/XML/CSV/HTML export.</p>
+<h2 id="step-2-a-provider-that-costs-0">Step 2 — A provider that costs $0: the mock Python provider <a class="hanchor" href="#step-2-a-provider-that-costs-0">#</a></h2>
+<p>promptfoo's <code>providers</code> list accepts real model IDs (<code>openai:gpt-6-luna</code>, <code>anthropic:messages:claude-opus-4-6</code>, <code>google:gemini-3.8-flash</code>, <code>ollama:llama2</code> — the names straight from the docs), but it also accepts a <strong>Python file</strong> exporting a <code>call_api(prompt, options, context)</code> function. The docs list "creating mock providers for testing" as a first-class use case, and it's the perfect way to learn: deterministic output, zero cost, zero latency, zero flakiness.</p>
+<p>Create a project directory and save this as <code>mock_support_bot.py</code>. It reads the rendered prompt, detects which prompt variant is being tested, and returns a canned response keyed off ticket keywords:</p>
+<pre><code>"""Deterministic mock support-bot: no network, no API key."""
+
+def _variant(prompt: str) -&gt; str:
+    # The v2 prompt explicitly asks for JSON output; v1 does not.
+    if "Return your answer as JSON" in prompt:
+        return "v2"
+    return "v1"
+
+
+def _subject(ticket: str):
+    tl = ticket.lower()
+    if "password" in tl or "reset" in tl:
+        return "password reset email issue", "account"
+    if "charged" in tl or "refund" in tl or "invoice" in tl:
+        return "duplicate billing charge", "billing"
+    return "router connectivity issue", "network"
+
+
+def call_api(prompt, options, context):
+    variant = _variant(prompt)
+    ticket = ((context or {}).get("vars", {}) or {}).get("ticket", "")
+    subject, category = _subject(ticket)
+
+    if variant == "v1":
+        output = (
+            "I'm really sorry about the trouble you're having! "
+            "I've looked at your message and I think the best thing is to try "
+            "restarting the router, and if that doesn't work please let me know "
+            "and I will escalate this to our support team. Sorry again!"
+        )
+    else:
+        output = (
+            '{"summary": "%s", "category": "%s", '
+            '"next_step": "restart router, then check link lights", '
+            '"escalate": false}' % (subject, category)
+        )
+    return {
+        "output": output,
+        "tokenUsage": {"prompt": 120, "completion": 60, "total": 180},
+    }</code></pre>
+<p>Two honest caveats before we go further. First, a mock is a <em>stand-in</em>: it proves your test harness works, not that a real model behaves. When you graduate to a real provider, pin <code>temperature: 0</code> and use <code>--repeat</code> to check stability — LLMs are nondeterministic and your assertions need to survive that. Second, the mock returns token usage so promptfoo's cost/latency tracking still exercises; real providers report the real numbers.</p>
+<h2 id="step-3-two-prompts-one-shootout">Step 3 — Two prompts, one shootout <a class="hanchor" href="#step-3-two-prompts-one-shootout">#</a></h2>
+<p>promptfoo treats each prompt file as a <strong>column</strong> in a results matrix: every prompt runs against every test case, so comparing prompt versions is the default workflow, not a special mode. Save these two:</p>
+<p><code>prompt-v1.txt</code> — the naive prompt, the kind that ships on vibes:</p>
+<pre><code>You are a helpful support agent. Answer the customer's ticket below.
+
+Ticket: {{ticket}}</code></pre>
+<p><code>prompt-v2.txt</code> — the engineered prompt, with a strict output contract:</p>
+<pre><code>You are a terse support-triage bot. Never apologize. Return your answer as JSON with exactly these keys: summary, category, next_step, escalate. No prose outside the JSON object.
+
+Ticket: {{ticket}}</code></pre>
+<p><code>{{ticket}}</code> is the variable each test case will fill in. Notice that v2's entire strategy is a <em>machine-checkable contract</em> — JSON shape, required keys, no apologies. That's the bet the test suite is about to settle.</p>
+<h2 id="step-4-the-test-suite">Step 4 — The test suite: prompts × providers × assertions <a class="hanchor" href="#step-4-the-test-suite">#</a></h2>
+<p>The heart of promptfoo is <code>promptfooconfig.yaml</code>. It declares the full matrix — prompts, providers, test cases — and, crucially, the <strong>assertions</strong> that decide pass or fail for every cell:</p>
+<pre><code>description: "Support-bot prompt shootout: naive prompt vs JSON-structured prompt"
+
+prompts:
+  - file://prompt-v1.txt
+  - file://prompt-v2.txt
+
+providers:
+  - id: file://mock_support_bot.py
+    label: mock-support-bot
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.length &lt; 500
+
+tests:
+  - description: "Router connectivity ticket"
+    vars:
+      ticket: "My internet drops every evening around 8pm. Router model AX5400."
+    assert:
+      - type: icontains
+        value: router
+      - type: not-contains
+        value: sorry
+      - type: regex
+        value: '"category":\s*"[a-z]+"'
+
+  - description: "Billing refund ticket"
+    vars:
+      ticket: "I was charged twice for my March invoice. Please refund the duplicate."
+    assert:
+      - type: is-json
+      - type: python
+        value: |
+          import json
+          try:
+              obj = json.loads(output)
+          except Exception:
+              return False
+          return "escalate" in obj and "next_step" in obj
+
+  - description: "Password reset ticket"
+    vars:
+      ticket: "I forgot my password and the reset email never arrives."
+    assert:
+      - type: icontains-any
+        value: [password, reset]
+      - type: not-icontains
+        value: sorry</code></pre>
+<p>Three mechanics worth naming. <strong><code>defaultTest</code></strong> applies its assertions to <em>every</em> test case — here, a global "keep responses under 500 characters" rule. A test can opt out with <code>options: {disableDefaultAsserts: true}</code>. And <strong>weights</strong>: every assertion accepts a <code>weight</code>, scores combine into a weighted average, and a per-test <code>threshold</code> decides pass/fail. We verified this directly: a test with a passing <code>icontains</code> (weight 3) and a failing <code>is-json</code> (weight 1) scored exactly 0.75 — and with <code>threshold: 0.75</code> it passed, since the comparison is score ≥ threshold.</p>
+<p>Here's the assertion tour — every one of these was executed in this tutorial, not copied from docs:</p>
+<ul>
+<li><strong><code>javascript</code></strong> — run JS against the output: <code>output.length &lt; 500</code>.</li>
+<li><strong><code>python</code></strong> — run Python with <code>output</code> in scope; return truthy to pass. Lesson learned the hard way: my first version called <code>json.loads(output)</code> bare, and when v1 returned prose instead of JSON the eval crashed with a traceback. Wrap parsing in try/except and return <code>False</code> — a malformed output is a <em>failed assertion</em>, not a crashed harness.</li>
+<li><strong><code>icontains</code> / <code>not-contains</code> / <code>not-icontains</code></strong> — case-insensitive (or sensitive) substring checks and their negations. The <code>not-</code> prefix negates any deterministic assertion type.</li>
+<li><strong><code>regex</code></strong> — pattern matching; here it enforces the <code>"category": "..."</code> JSON shape without parsing.</li>
+<li><strong><code>is-json</code></strong> — rejects any output that isn't parseable JSON. This single assertion is what kills the naive prompt.</li>
+<li><strong><code>icontains-any</code></strong> — passes if <em>any</em> of the listed values appears.</li>
+</ul>
+<p>Beyond these, the docs offer <strong>model-graded assertions</strong> (<code>llm-rubric</code>, <code>factuality</code>, <code>similar</code> with a cosine-similarity threshold, <code>context-faithfulness</code> for RAG) that use a judge model to score outputs, plus <code>cost</code> and <code>latency</code> thresholds and assertion sets. I didn't run those here — they need an API key and a judge model, which breaks the zero-cost premise — but the deterministic set above covers the majority of prompt-regression work.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/promptfoo-prompt-testing-ci-tutorial/img2.webp" alt="AI-generated editorial illustration: two glowing prompt documents facing each other across a pass-fail comparison matrix of green checkmarks and red crosses on a dark navy background"></figure>
+<h2 id="step-5-run-the-eval">Step 5 — Run the eval <a class="hanchor" href="#step-5-run-the-eval">#</a></h2>
+<pre><code>promptfoo eval --no-cache</code></pre>
+<p>(<code>--no-cache</code> forces a fresh run instead of reusing cached results — essential when you're iterating on prompts.) Real output, abridged:</p>
+<pre><code>Starting evaluation eval-Hbz-2026-09-30T23:57:30
+Running 6 test cases (up to 4 at a time)...
+
+┌────────────────────────────────────────┬────────────────────────┬────────────────────────┐
+│ ticket                                 │ [mock-support-bot]     │ [mock-support-bot]     │
+│                                        │ prompt-v1.txt          │ prompt-v2.txt          │
+├────────────────────────────────────────┼────────────────────────┼────────────────────────┤
+│ My internet drops every evening around │ [FAIL] I'm really      │ [PASS] {"summary":     │
+│ 8pm. Router model AX5400.              │ sorry about the        │ "router connectivity    │
+│                                        │ trouble you're         │ issue", "category":    │
+│                                        │ having! ...            │ "network", ...}        │
+├────────────────────────────────────────┼────────────────────────┼────────────────────────┤
+│ ...                                    │ ...                    │ ...                    │
+└────────────────────────────────────────┴────────────────────────┴────────────────────────┘
+
+Results:
+  ✓ 3 passed (50.00%)
+  ✗ 3 failed (50.00%)
+  0 errors (0%)</code></pre>
+<p>Six cells: 2 prompts × 3 tickets. The default table prints the full matrix in your terminal; <code>--table-cell-max-length</code> trims long cells, and <code>promptfoo view</code> opens the same results in a web UI for clicking through outputs (it needs a browser, so I stayed in the CLI here).</p>
+<h2 id="step-6-read-the-regression">Step 6 — Read the regression the suite just caught <a class="hanchor" href="#step-6-read-the-regression">#</a></h2>
+<p>Here's the scoreboard that matters:</p>
+<ul>
+<li><strong>prompt v1 (naive): 0/3.</strong> It fails every ticket — the <code>is-json</code> assertion rejects its prose, the <code>regex</code> finds no <code>"category"</code> key, and <code>not-contains: sorry</code> catches the double apology.</li>
+<li><strong>prompt v2 (JSON contract): 3/3.</strong> Every ticket passes every assertion, including the global <code>output.length &lt; 500</code> rule.</li>
+</ul>
+<p>This is the entire value proposition in one screen. The failure isn't a vibe or a feeling — it's <em>which assertion failed on which test case</em>, reproducible on every run. If someone "improves" v2 next month and the JSON contract breaks, this suite catches it before the deploy does. That's what "test your prompts like code" actually means: the prompt is a build artifact, and the eval is its test suite.</p>
+<h2 id="step-7-scale-with-csv">Step 7 — Scale the suite with CSV test cases <a class="hanchor" href="#step-7-scale-with-csv">#</a></h2>
+<p>Three hand-written YAML tests are a start; real suites have hundreds, and those usually live in a spreadsheet. promptfoo loads test cases from CSV — each column is a variable, and special <code>__expectedN</code> columns carry assertions in <code>type: value</code> form (a bare value defaults to <code>equals</code>):</p>
+<pre><code>ticket,__expected1,__expected2
+"My internet drops every evening around 8pm.","icontains: router","is-json"
+"I was charged twice for my March invoice.","icontains: billing","not-icontains: sorry"</code></pre>
+<pre><code># csv-config.yaml
+prompts:
+  - file://prompt-v2.txt
+providers:
+  - file://mock_support_bot.py
+tests: file://tests.csv</code></pre>
+<pre><code>promptfoo eval -c csv-config.yaml --no-cache --no-table
+
+Results:
+  ✓ 2 passed (100%)
+  0 failed (0%)</code></pre>
+<p>Verified working. The docs also document <code>__description</code>, <code>__threshold</code>, and <code>__metadata:*</code> columns (the last enables <code>--filter-metadata</code>), plus Google Sheets as a live test source — handy when non-engineers own the test cases. One quoting gotcha from the docs: values containing commas need doubled quotes inside the quoted cell (<code>"contains-all: ""1,000"",in stock"</code>).</p>
+<h2 id="step-8-iterate-fast">Step 8 — Iterate fast: run only what changed <a class="hanchor" href="#step-8-iterate-fast">#</a></h2>
+<p>Once the suite grows, you don't want the full matrix on every tweak. Verified in this tutorial:</p>
+<pre><code># Only the v2 prompt — note: this is a REGEX, not a glob.
+# --filter-prompts='*v2*' crashes with "Invalid regex pattern".
+promptfoo eval --no-cache --filter-prompts='v2' --no-table
+
+Results:
+  ✓ 3 passed (100%)</code></pre>
+<p>The full <code>--help</code> (read it — it's the source of truth for your installed version) offers more: <code>--filter-pattern</code> and <code>--filter-range</code> for tests, <code>--filter-failing &lt;results.json&gt;</code> to re-run only what failed last time, <code>--filter-errors-only</code>, <code>--filter-sample</code> with a seed for quick smoke runs, <code>--var k=v</code> to inject variables, <code>-j</code> for concurrency, <code>--repeat</code> and <code>--delay</code> for stability and rate-limit friendliness, and <code>promptfoo validate</code> to check your config before you run it (ours reports <code>Configuration is valid.</code>).</p>
+<h2 id="step-9-gate-your-deploys">Step 9 — Gate your deploys: prompt evals in CI <a class="hanchor" href="#step-9-gate-your-deploys">#</a></h2>
+<p>Here's the most important finding in this tutorial, and it's a gotcha: <strong><code>promptfoo eval</code> exits 0 even when assertions fail.</strong> Our 3-failed run above returned exit code 0. Unlike pytest, a red suite won't fail your build by itself — you have to gate explicitly. That's what machine-readable output is for:</p>
+<pre><code>promptfoo eval --no-cache -o results.json -o junit.xml</code></pre>
+<p><code>results.json</code> contains every test run with <code>success</code>, <code>score</code>, <code>failureReason</code>, and per-assertion <code>componentResults</code>; <code>junit.xml</code> feeds straight into CI test dashboards. A tiny gate script turns the JSON into an exit code:</p>
+<pre><code>"""Fail the build when any promptfoo test fails."""
+import json, sys
+
+results = json.load(open(sys.argv[1]))["results"]["results"]
+failed = [r for r in results if not r["success"]]
+for r in failed:
+    label = r["prompt"]["label"][:40]
+    desc = (r["testCase"].get("description") or "?")[:50]
+    print(f"FAIL  [{label}]  {desc}")
+print(f"\n{len(results) - len(failed)}/{len(results)} passed")
+sys.exit(1 if failed else 0)</code></pre>
+<p>Verified against our real runs: exit 1 with the three v1 failures listed, exit 0 on the all-green CSV run. The GitHub Actions workflow is then straightforward:</p>
+<pre><code>name: prompt-evals
+on:
+  pull_request:
+    paths: ["prompts/**", "promptfooconfig.yaml"]
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npx -y promptfoo@latest eval --no-cache -o results.json -o junit.xml
+      - run: python gate.py results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: promptfoo-results, path: "results.json,junit.xml" }</code></pre>
+<p>Now a prompt change that breaks the JSON contract fails the PR exactly like a broken unit test. For the model-graded assertions in production suites, note the cost implication: every CI run spends judge-model tokens, so many teams run deterministic assertions on every PR and reserve <code>llm-rubric</code> evals for nightly runs or release branches.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/promptfoo-prompt-testing-ci-tutorial/img3.webp" alt="AI-generated editorial illustration: a continuous-integration pipeline as a glowing conveyor belt carrying prompt cards through green pass gates and a red gate stopping a defective card, on a dark navy background"></figure>
+<h2 id="should-you-adopt-it">Should you adopt it? <a class="hanchor" href="#should-you-adopt-it">#</a></h2>
+<ul>
+<li><strong>Adopt it if</strong> you iterate on prompts at all, compare models or prompt versions, or have ever been bitten by a "small wording tweak" that silently changed behavior. The mock-provider workflow means the harness costs nothing to try.</li>
+<li><strong>Start with deterministic assertions.</strong> <code>is-json</code>, <code>icontains</code>, <code>regex</code>, and <code>javascript</code>/<code>python</code> checks are fast, free, and stable. Add model-graded assertions only where human judgment is genuinely the spec.</li>
+<li><strong>Watch the seams.</strong> The exit-code behavior means you must wire the gate yourself — don't assume red means failed in CI. Mock providers validate the harness, not the model; re-run the suite against the real provider with <code>temperature: 0</code> and <code>--repeat</code> before trusting green. And nondeterministic outputs need statistical thinking: a single pass isn't proof.</li>
+<li><strong>Skip it if</strong> your prompts are truly one-off and never change. But the moment a prompt becomes infrastructure — a support bot, a classifier, a RAG pipeline — it's code, and code without tests is a liability.</li>
+</ul>
+<h2 id="the-takeaway">The takeaway <a class="hanchor" href="#the-takeaway">#</a></h2>
+<p>The uncomfortable truth this tutorial demonstrates is how little it takes. One YAML file, two prompt files, a 60-line mock, and eight assertions — and suddenly "does the new prompt still work?" is an answered question instead of a hope. The v1 prompt didn't fail because it was dumb; it failed because nobody had written down what "working" meant. promptfoo is just the discipline of writing that down, in a form a machine can check on every commit.</p>
+<p>Clone the pattern tonight: pick one prompt in your stack that matters, write three test cases with assertions for its output contract, and run <code>promptfoo eval</code>. If it goes green, you have a regression suite. If it goes red, you just found the bug your users were going to find for you.</p>
+
+<div class="post-engage"><div class="reactions" data-reactions="promptfoo-prompt-testing-ci-tutorial"></div><div class="comments" data-comments="promptfoo-prompt-testing-ci-tutorial"></div></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/deep-research-agent-evidence-engine/"><span class="chip">Tutorials</span><h3>Build a deep-research agent that never hallucinates its sources</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/openai-agents-api-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Stop writing your own agent loop: a hands-on tutorial for OpenAI's Agents API</h3><div class="meta">September 29, 2026</div></a><a class="rel-card" href="/articles/llm-cascade-router-tutorial/"><span class="chip">Tutorials</span><h3>Stop paying flagship prices for easy questions: build an LLM cascade router that escalates only when it matters</h3><div class="meta">September 29, 2026</div></a><a class="rel-card" href="/articles/semantic-cache-llm-tutorial/"><span class="chip">Tutorials</span><h3>Stop paying twice for the same question: build a semantic cache for your LLM app</h3><div class="meta">September 26, 2026</div></a></div></section>
+</div></article>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/category/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
