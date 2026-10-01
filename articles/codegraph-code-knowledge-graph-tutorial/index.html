@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop letting your coding agent grep: hands-on with CodeGraph, the 72K-star pre-indexed code knowledge graph — AI Frontier Post</title>
+<meta name="description" content="CodeGraph pre-indexes your entire codebase into a local knowledge graph — every symbol, call edge, and import — so your coding agent answers architecture questions in one call instead of forty grep-and-Read round-trips. This hands-on tutorial installs v1.6.1, indexes a real project, runs every query that matters, and wires the MCP server into Claude Code and friends. No API key, no cloud.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/codegraph-code-knowledge-graph-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop letting your coding agent grep: hands-on with CodeGraph, the 72K-star pre-indexed code knowledge graph">
+<meta property="og:description" content="CodeGraph builds a pre-indexed knowledge graph of your codebase into local SQLite, then answers how-does-X-work in a single call. This tutorial installs v1.6.1, indexes a real project, runs every query that matters, and wires the MCP server into your coding agent — no API key, no cloud.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/codegraph-code-knowledge-graph-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/codegraph-code-knowledge-graph-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Stop letting your coding agent grep: hands-on with CodeGraph, the 72K-star pre-indexed code knowledge graph","description":"CodeGraph pre-indexes your entire codebase into a local knowledge graph — every symbol, call edge, and import — so your coding agent answers architecture questions in one call instead of forty grep-and-Read round-trips. This hands-on tutorial installs v1.6.1, indexes a real project, runs every query that matters, and wires the MCP server into Claude Code and friends. No API key, no cloud.","datePublished":"2026-10-01","dateModified":"2026-10-01","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/codegraph-code-knowledge-graph-tutorial/"},"image":"https://aifrontierpost.com/articles/codegraph-code-knowledge-graph-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Your agents can&#x27;t talk to each other: build two interoperating agents with the A2A protocol — hands-on</h1>
+<p class="lede">Your coding agent answers <em>how does X work</em> by grepping — a dozen glob, grep, and Read calls per question, billed to you twice. CodeGraph pre-builds a knowledge graph of the whole codebase into local SQLite, so one <code>explore</code> call returns the symbols, the call paths, and the blast radius. This tutorial installs v1.6.1, indexes a real project, runs every query that matters, and wires the MCP server into your agent. No API key, no cloud, every command executed.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 1, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/codegraph-code-knowledge-graph-tutorial/cover.webp" alt="AI-generated editorial illustration: scattered code file icons on the left dissolving into a luminous knowledge graph on the right, one highlighted node radiating call-path lines to its callers and callees, on a deep navy background"></figure>
+<div class="article-body"><p>Every coding agent you have watched work has the same expensive habit: it greps. Hand it a question about an unfamiliar codebase and it fires off a dozen glob, grep, and Read calls, reconstructing the call graph in its head one file at a time — and you pay for every one of those tokens twice, once to fetch the context and once to hold it.</p>
+<p><strong>CodeGraph</strong> attacks that habit from the other end. Instead of letting the agent discover structure at query time, it pre-builds a knowledge graph of the entire codebase — every symbol, every call edge, every import — into a local SQLite database, then answers <em>how does X work</em> from the graph in a single call. No embeddings, no vector database, no API keys, no cloud account. It is MIT-licensed, built around a Rust parsing kernel, and it is currently one of the fastest-growing developer tools on GitHub: <strong>over 72,600 stars</strong>, 1,275 commits, 32 releases, sitting on GitHub&#x27;s daily trending list the day this tutorial was written (October 1, 2026).</p>
+<p>The claim that got it there is unusually well-documented. CodeGraph&#x27;s published benchmark (re-measured August 5, 2026, on Claude Opus 4.8, seven real open-source repos, median of four runs per arm) reports <strong>88% fewer tool calls, 53% faster answers, 62% fewer tokens, and 44% lower cost</strong> per architecture question — with the rare honest footnote that CodeGraph responses leave <strong>~80% more retrieval context resident</strong> in the window afterward (67k vs 18k tokens on the VS Code repo). Fewer tokens burned finding the answer; a bigger answer kept around. Both true at once, and they publish the per-repo tables and the residual-context caveat in their own docs.</p>
+<p>Every command below was executed on October 1, 2026 against <strong>CodeGraph v1.6.1</strong> on Linux, and every output shown is real. You will install it, index a sample project, run every query that matters, and wire its MCP server into a coding agent — then decide for yourself whether it earns a place in your loop.</p>
+<h2 id="what-youll-need">What you&#x27;ll need <a class="hanchor" href="#what-youll-need">#</a></h2>
+<ul>
+<li>A Linux, macOS, or Windows machine. The CLI ships as a self-contained bundle (it vendors its own Node runtime), so nothing needs compiling and no Node.js install is required. An npm route exists if you prefer it.</li>
+<li>A code project to index — anything with real cross-file calls. You will build a four-file Python demo here, then point it at your own repository.</li>
+<li>A coding agent (Claude Code, Cursor, Codex, opencode, Gemini CLI, or similar) only for the final wiring step. Everything before that runs in a plain terminal.</li>
+<li>No API keys, no accounts, no GPU. Indexing is fully local. Telemetry is on by default and takes one command to disable — covered in Step 7.</li>
+</ul>
+<h2 id="step-1-install">Step 1 — Install CodeGraph <a class="hanchor" href="#step-1-install">#</a></h2>
+<p>Two routes, both current as of v1.6.1. Route A is the one-liner from the project&#x27;s README: it downloads the release bundle for your OS and architecture, drops it in <code>~/.codegraph</code>, and symlinks <code>codegraph</code> onto your PATH:</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh</code></pre>
+<p>Route B is npm, if that is how you manage CLI tools:</p>
+<pre><code>npm i -g @colbymchenry/codegraph</code></pre>
+<p>Verify the install:</p>
+<pre><code>codegraph --version
+# 1.6.1</code></pre>
+<p>One environment note: on some containerized or restricted systems the installer&#x27;s tar extraction can fail on file ownership. If the one-liner errors out during extraction, use the npm route instead — same binary, no extraction quirks.</p>
+<h2 id="step-2-index">Step 2 — Index your first project <a class="hanchor" href="#step-2-index">#</a></h2>
+<p>You need a project with genuine cross-file relationships for the graph to be interesting. Build this four-file Python task tracker — it takes thirty seconds and every later step runs against it:</p>
+<pre><code>mkdir -p taskflow &amp;&amp; cd taskflow</code></pre>
+<p><code>models.py</code> — the domain:</p>
+<pre><code>"""Domain models for the task tracker."""
+from dataclasses import dataclass, field
+from datetime import datetime
+
+@dataclass
+class Task:
+    title: str
+    done: bool = False
+    created_at: datetime = field(default_factory=datetime.utcnow)
+
+    def mark_done(self):
+        self.done = True
+
+    def is_overdue(self, deadline: datetime) -&gt; bool:
+        return not self.done and datetime.utcnow() &gt; deadline</code></pre>
+<p><code>storage.py</code> — persistence:</p>
+<pre><code>"""JSON-file persistence layer."""
+import json
+import os
+from models import Task
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "tasks.json")
+
+def load_tasks():
+    if not os.path.exists(DB_PATH):
+        return []
+    with open(DB_PATH) as f:
+        raw = json.load(f)
+    return [Task(**item) for item in raw]
+
+def save_tasks(tasks):
+    with open(DB_PATH, "w") as f:
+        json.dump([t.__dict__ for t in tasks], f, default=str)</code></pre>
+<p><code>service.py</code> — business logic:</p>
+<pre><code>"""Business logic: the only place tasks get created or completed."""
+from models import Task
+from storage import load_tasks, save_tasks
+
+def add_task(title: str) -&gt; Task:
+    tasks = load_tasks()
+    task = Task(title=title)
+    tasks.append(task)
+    save_tasks(tasks)
+    return task
+
+def complete_task(index: int) -&gt; Task:
+    tasks = load_tasks()
+    task = tasks[index]
+    task.mark_done()
+    save_tasks(tasks)
+    return task
+
+def list_open_tasks():
+    return [t for t in load_tasks() if not t.done]</code></pre>
+<p><code>cli.py</code> — the entry point:</p>
+<pre><code>"""Command-line interface."""
+import sys
+from service import add_task, complete_task, list_open_tasks
+
+def main(argv):
+    cmd = argv[1] if len(argv) &gt; 1 else "list"
+    if cmd == "add":
+        task = add_task(" ".join(argv[2:]))
+        print(f"added: {task.title}")
+    elif cmd == "done":
+        task = complete_task(int(argv[2]))
+        print(f"completed: {task.title}")
+    else:
+        for i, t in enumerate(list_open_tasks()):
+            print(f"{i}. {t.title}")
+
+if __name__ == "__main__":
+    main(sys.argv)</code></pre>
+<p>Now build the index. One command, from the project root:</p>
+<pre><code>codegraph init</code></pre>
+<p>Real output:</p>
+<pre><code>◆  Initialized in /home/hatch/.../taskflow
+Scanning files...
+Parsing code...
+Resolving refs...
+Linking dynamic dispatch...
+◆  Indexed 4 files
+●  23 nodes, 40 edges in 1.1s</code></pre>
+<p>Four files became 23 nodes (classes, functions, methods, imports, variables, files) and 40 edges (calls, imports, definitions) in just over a second. The index lives in <code>.codegraph/codegraph.db</code> — a plain SQLite database, 0.18 MB for this demo. Inspect what you built:</p>
+<pre><code>codegraph status</code></pre>
+<pre><code>CodeGraph Status
+
+Project: /home/hatch/.../taskflow
+
+Index Statistics:
+  Files:     4
+  Nodes:     23
+  Edges:     40
+  DB Size:   0.18 MB
+  Backend:   node:sqlite — built-in (full WAL)
+
+Nodes by Kind:
+  import          9
+  function        6
+  file            4
+  method          2
+  class           1
+  variable        1
+
+✓ Index is up to date</code></pre>
+<p>What it skipped without being told: <code>node_modules</code>, <code>dist</code>, <code>build</code>, <code>.git</code>, files over 1 MB, and everything in <code>.gitignore</code> — so the graph is your code, not third-party noise. If you ever need to tune that, an optional <code>codegraph.json</code> at the project root supports <code>exclude</code>, <code>include</code>, <code>deprioritize</code>, and custom extension-to-language mappings. Language support is automatic from the file extension across 30 languages, from TypeScript and Python to Rust, Go, CUDA, and Solidity.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/codegraph-code-knowledge-graph-tutorial/img2.webp" alt="AI-generated architecture diagram: source files in several languages flow into a central engine, which produces a glowing knowledge graph that serves both a terminal CLI and an AI coding agent"></figure>
+<h2 id="step-3-query">Step 3 — Ask the graph questions (this replaces grep) <a class="hanchor" href="#step-3-query">#</a></h2>
+<p>Start with symbol search. Where grep returns lines, <code>query</code> returns typed symbols with signatures:</p>
+<pre><code>codegraph query "Task"</code></pre>
+<pre><code>Search Results for "Task":
+
+class       Task
+  models.py:6
+
+function    load_tasks
+  storage.py:8
+  ()
+
+function    save_tasks
+  storage.py:15
+  (tasks)
+
+function    list_open_tasks
+  service.py:19
+  ()
+
+function    add_task
+  service.py:5
+  (title: str) -&gt; Task
+
+function    complete_task
+  service.py:12
+  (index: int) -&gt; Task
+
+method      mark_done
+  models.py:11
+  (self)</code></pre>
+<p>Now the call graph — the thing grep fundamentally cannot give you. Who calls <code>mark_done</code>?</p>
+<pre><code>codegraph callers "mark_done"</code></pre>
+<pre><code>Callers of "mark_done" (1):
+
+method Task::mark_done (python) — models.py:11
+function    complete_task
+  service.py:12</code></pre>
+<p>And what does <code>main</code> call, transitively visible at a glance?</p>
+<pre><code>codegraph callees "main"</code></pre>
+<pre><code>Callees of "main" (3):
+
+function main (python) — cli.py:5
+function    complete_task
+  service.py:12
+
+function    list_open_tasks
+  service.py:19
+
+function    add_task
+  service.py:5</code></pre>
+<p>To read one symbol with its full caller and callee trail — source included, no separate Read step:</p>
+<pre><code>codegraph node "complete_task"</code></pre>
+<pre><code>**complete_task** (function)
+
+**Location:** service.py:12
+**Signature:** `(index: int) -&gt; Task`
+
+```python
+12	def complete_task(index: int) -&gt; Task:
+13	    tasks = load_tasks()
+14	    task = tasks[index]
+15	    task.mark_done()
+16	    save_tasks(tasks)
+17	    return task
+```
+**Trail — codegraph_node any of these to follow it (no Read needed)**
+**Calls →** load_tasks (storage.py:8), save_tasks (storage.py:15), mark_done (models.py:11)
+**Called by ←** main (cli.py:5), cli.py (cli.py:1)</code></pre>
+<p>That last line is the whole pitch in miniature: one command, the symbol&#x27;s source, everything it calls, everything that calls it. An agent doing this with grep and Read would need half a dozen round-trips to assemble the same picture.</p>
+<h2 id="step-4-blast-radius">Step 4 — See the blast radius before you edit <a class="hanchor" href="#step-4-blast-radius">#</a></h2>
+<p>Here is the end-to-end use case that justifies the index: you are about to change <code>Task.mark_done</code> and you want to know what breaks. Ask the graph:</p>
+<pre><code>codegraph impact "Task.mark_done"</code></pre>
+<pre><code>Impact of changing "Task.mark_done" — 4 affected symbols:
+
+method Task::mark_done (python) — models.py:11
+models.py
+  method      mark_done:11
+
+service.py
+  function    complete_task:12
+
+cli.py
+  function    main:5
+  file        cli.py:1</code></pre>
+<p>The chain is exact: <code>mark_done</code> → <code>complete_task</code> → <code>main</code>. In a four-file demo you could hold this in your head; in an 11,000-file TypeScript monorepo you cannot, and that is precisely the codebase where this command earns its keep.</p>
+<p>The companion command maps changed files to the tests that cover them:</p>
+<pre><code>codegraph affected service.py</code></pre>
+<pre><code>ℹ No test files affected by the changed files.</code></pre>
+<p>Honest output for an honest situation — the demo has no tests. In a real project with a test suite, this returns the test files within reach of your change, which is the list you hand to your agent (or your CI) before merging.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/codegraph-code-knowledge-graph-tutorial/img3.webp" alt="AI-generated split illustration: on the left a coding agent tangled in red threads among scattered files and magnifiers, on the right the same agent calmly holding a single glowing graph orb"></figure>
+<h2 id="step-5-explore">Step 5 — The one-call answer: explore and context <a class="hanchor" href="#step-5-explore">#</a></h2>
+<p>So far you have driven the graph by hand. The agent-facing primitive is <code>explore</code>: one natural-language question in, the relevant symbols&#x27; verbatim source plus the call paths between them and a blast-radius summary out. This is the exact output the MCP tool returns, so what you see here is what your agent will see:</p>
+<pre><code>codegraph explore "how does completing a task work"</code></pre>
+<pre><code>**Exploration: how does completing a task work**
+
+Found 11 symbols across 3 files.
+
+**Blast radius — what depends on these (update/verify before editing)**
+
+- `complete_task` (service.py:12) — 2 callers in `cli.py`; no tests found within 3 caller hops
+- `Task` (models.py:6) — 4 callers in `service.py`, `storage.py`; no tests found within 3 caller hops
+- `load_tasks` (storage.py:8) — 4 callers in `service.py`; no tests found within 3 caller hops
+- `save_tasks` (storage.py:15) — 3 callers in `service.py`; no tests found within 3 caller hops
+- `list_open_tasks` (service.py:19) — 2 callers in `cli.py`; no tests found within 3 caller hops
+
+**Source Code**
+
+&gt; The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache.</code></pre>
+<p>That quoted guarantee matters more than it looks: the source blocks are re-read from disk at call time, so the agent is never reasoning over a stale cache. Followed by the full line-numbered source of <code>service.py</code>, <code>storage.py</code>, and <code>models.py</code> — everything needed to answer, nothing else.</p>
+<p>For planning a change rather than understanding one, there is <code>context</code>:</p>
+<pre><code>codegraph context "add priority field to tasks"</code></pre>
+<pre><code>## Code Context
+
+**Query:** add priority field to tasks
+
+### Entry Points
+
+- **add_task** (function) - service.py:5
+  `(title: str) -&gt; Task`
+- **Task** (class) - models.py:6
+- **load_tasks** (function) - storage.py:8
+  `()`
+
+### Related Symbols
+
+- storage.py: save_tasks:15, DB_PATH:6
+- cli.py: main:5
+- models.py: is_overdue:14, mark_done:11
+- service.py: complete_task:12, list_open_tasks:19</code></pre>
+<p>Entry points first, related symbols second, then the code — a ready-made briefing for the agent about to implement the feature. This is the command you would paste into a task prompt, or that the MCP server hands over automatically.</p>
+<h2 id="step-6-agent">Step 6 — Wire it into your coding agent <a class="hanchor" href="#step-6-agent">#</a></h2>
+<p>The CLI is useful on its own, but the trending use case — the one driving those 72,000 stars — is the agent loop. CodeGraph ships an MCP server, and <code>codegraph install</code> wires it into your agents for you. Run it and it auto-detects what you have installed:</p>
+<pre><code>codegraph install</code></pre>
+<p>Supported targets, verified from the installer itself: Claude Code, Cursor, Codex CLI, opencode, Hermes Agent, Gemini CLI, Antigravity IDE, Kiro, and GitHub Copilot (VS Code, Copilot CLI, and JetBrains). For a non-interactive setup — dotfiles, containers, CI images:</p>
+<pre><code>codegraph install -y</code></pre>
+<p>To see exactly what gets written before you commit to it, print the config snippet for your agent without touching any files:</p>
+<pre><code>codegraph install --print-config claude</code></pre>
+<pre><code># Add to /home/hatch/.claude.json
+
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp"
+      ],
+      "alwaysLoad": true
+    }
+  }
+}</code></pre>
+<p>The server itself is <code>codegraph serve --mcp</code> over stdio. I verified the handshake directly: initialize returns server <code>codegraph</code> 1.6.1, and <code>tools/list</code> returns exactly one tool — <code>codegraph_explore</code>. That singularity is deliberate, not a missing feature. The project&#x27;s docs state that measured agent behavior showed one strong tool steers agents better than a menu of narrower ones: fewer mis-picks, less context spent choosing. The narrower tools (<code>codegraph_node</code>, <code>codegraph_search</code>, <code>codegraph_callers</code>, <code>codegraph_callees</code>, <code>codegraph_impact</code>, <code>codegraph_files</code>, <code>codegraph_status</code>) stay fully functional but unlisted — everything they return already arrives inline in an explore response — and you can re-list any of them with the <code>CODEGRAPH_MCP_TOOLS</code> environment variable, e.g. <code>CODEGRAPH_MCP_TOOLS=explore,node,search,callers</code>.</p>
+<p>Two details worth knowing before you rely on it daily. First, the server accepts a <code>projectPath</code> parameter, so one agent session can query several indexed projects — a sub-service in a monorepo, a second repo — without re-indexing. Second, a path with no index does not fail loudly; the tools return guidance to fall back to built-in tools, and indexing stays your decision.</p>
+<h2 id="step-7-fresh">Step 7 — Keeping the index fresh (and an honest caveat) <a class="hanchor" href="#step-7-fresh">#</a></h2>
+<p>CodeGraph advertises auto-sync: a file watcher updates the graph on every change, so the index is never stale. On a normal desktop install that is how it behaves. Here is what I actually observed, because the caveat is instructive: in a headless environment with no background daemon running, I appended a new function to <code>service.py</code> and <code>codegraph status</code> reported it plainly instead of silently serving stale data:</p>
+<pre><code>Pending Changes:
+  Modified:  1 files
+ℹ Run "codegraph sync" to update the index</code></pre>
+<p>The fix is one command, and it is fast:</p>
+<pre><code>codegraph sync</code></pre>
+<pre><code>◆  Synced 1 changed files
+●  Modified: 1 — 7 nodes in 115ms
+└  Done</code></pre>
+<p>One changed file, seven nodes updated, 115 milliseconds — and a query for the new function immediately resolves. The takeaway for your setup: on a developer workstation the watcher handles this invisibly; in containers, CI, or remote dev boxes, put <code>codegraph sync</code> in your workflow (a git hook or a pre-prompt step) and treat a <code>Pending Changes</code> status as the signal it is.</p>
+<p>A related housekeeping note: CodeGraph collects anonymous usage statistics by default — which commands run, which languages get indexed — to guide development. Never code, paths, symbol names, queries, or IP addresses; usage is aggregated locally into daily totals before anything is sent. Disable it any time:</p>
+<pre><code>codegraph telemetry off    # or: CODEGRAPH_TELEMETRY=0, or DO_NOT_TRACK=1</code></pre>
+<h2 id="vs-alternatives">When to use CodeGraph vs the alternatives <a class="hanchor" href="#vs-alternatives">#</a></h2>
+<p><strong>Versus grep, glob, and Read loops:</strong> that is the thing CodeGraph replaces. If your agent answers architecture questions by crawling files, the graph collapses up to 43 tool calls into one to four <code>explore</code> calls (their measured range on real repos). Keep grep for one-off text searches; stop using it as an architecture-discovery strategy.</p>
+<p><strong>Versus ctags and language servers:</strong> complementary, not competing. An LSP answers <em>where is this defined</em> with perfect precision; the graph answers <em>how does this flow work and what breaks if I touch it</em> across file and language boundaries, in a shape an agent can consume without an editor attached. You want both; they do different jobs.</p>
+<p><strong>Versus vector/RAG code search:</strong> embeddings win on fuzzy semantic similarity (<em>find code that handles retries</em>); the graph wins on structure, determinism, and cost — zero API spend, zero embedding-model drift, and edges that reflect actual calls rather than textual similarity. For <em>how does X reach Y</em> questions, structure beats similarity.</p>
+<p><strong>Versus session-memory tools</strong> (like Context Mode, covered on this blog): different halves of the same problem. Context Mode shrinks what the agent burns holding tool output; CodeGraph shrinks what the agent needs to fetch in the first place. They coexist fine — index the structure, sandbox the output.</p>
+<h2 id="takeaway">The takeaway <a class="hanchor" href="#takeaway">#</a></h2>
+<p>CodeGraph earns its trending slot because it removes a real tax instead of adding a feature. Your agent&#x27;s most expensive habit — rediscovering your codebase&#x27;s structure on every question — becomes a one-time, one-second indexing cost plus a single <code>explore</code> call per question. The install is one line, the index is a local SQLite file you can inspect, there are no keys and no cloud, and the project documents both its wins and its costs with unusual candor.</p>
+<p>Start with <code>codegraph init</code> on the repository you know least well. Ask it how the thing you are afraid to touch works. Check the blast radius with <code>impact</code> before your next refactor. If the answers change how you work, run <code>codegraph install</code> and let your agent ask the graph instead of grepping — that is the loop 72,000 developers starred.</p>
+</div>
+
+<div class="post-engage"><div class="reactions" data-reactions="codegraph-code-knowledge-graph-tutorial"></div><div class="comments" data-comments="codegraph-code-knowledge-graph-tutorial"></div></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/papergraph-mcp-math-paper-reading-tutorial/"><span class="chip">Tutorials</span><h3>PaperGraph MCP: turn an arXiv math paper into a theorem map, proof-evidence trail, and a reading report — hands-on</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/context-mode-mcp-context-window-tutorial/"><span class="chip">Tutorials</span><h3>Context Mode: stop your coding agent from burning its context window — a hands-on tutorial</h3><div class="meta">October 1, 2026</div></a><a class="rel-card" href="/articles/archify-interactive-diagrams-tutorial/"><span class="chip">Tutorials</span><h3>Diagrams your agent can defend: hands-on with Archify, the 73K-star skill for verifiable architecture diagrams</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/a2a-agent-interoperability-hands-on/"><span class="chip">Tutorials</span><h3>Your agents can&#x27;t talk to each other: build two interoperating agents with the A2A protocol — hands-on</h3><div class="meta">October 1, 2026</div></a></div></section>
+</div></article>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/category/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
