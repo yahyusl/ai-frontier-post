@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute's framework — AI Frontier Post</title>
+<meta name="description" content="inspect_ai is the open-source eval framework from the UK AI Safety Institute: datasets, solvers, and scorers composed into reproducible Tasks. Build a multiple-choice benchmark, a custom numeric grader, and a tool-using agent eval — all runnable with zero API keys via the scriptable mock model.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/inspect-ai-eval-framework-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Stop vibe-checking your model: write real evals with inspect_ai">
+<meta property="og:description" content="The UK AI Safety Institute's open-source eval framework: build a multiple-choice benchmark, a custom grader, and a tool-using agent eval — every line runs with zero API keys.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/inspect-ai-eval-framework-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/inspect-ai-eval-framework-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute's framework", "description": "Build three working evals in the UK AI Safety Institute's open-source eval framework — a multiple-choice benchmark, a custom numeric grader, and a tool-using agent eval — all runnable with zero API keys.", "datePublished": "2026-10-01", "dateModified": "2026-10-01", "author": {"@type": "Person", "name": "Sofia Almeida"}}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+
+<main>
+<div class="wrap">
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute's framework</h1>
+<p class="lede">You changed the system prompt, tried three questions by hand, squinted at the answers, and shipped it. That is how most teams "evaluate" their LLM features — and it is why most of them cannot tell you whether last week's prompt edit helped or hurt. The fix is a real eval harness: fixed datasets, scripted graders, and logs you can diff instead of vibes you forget. The UK AI Safety Institute built that harness, open source, and it has quietly become the default tool serious eval work is written in: <strong>inspect_ai</strong>. In this tutorial you build three working evals in it — a multiple-choice benchmark, a custom numeric grader, and a full tool-using agent eval — and every line runs on your machine with zero API keys, because inspect_ai ships a scriptable mock model built for exactly this.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 1, 2026 · 12 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/inspect-ai-eval-framework-tutorial/cover.webp" alt="Editorial illustration: a glowing neural-network brain examined under a giant magnifying glass, beside a checklist and a score gauge"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+<div class="article-body">
+
+<p>Here is the uncomfortable truth about LLM development in 2026: the models got dramatically better, and most teams' measurement discipline did not. A prompt tweak here, a model swap there, a thumbs-up from a product manager — and nobody can reconstruct, a month later, what was actually tried or what it did. Frontier labs don't work this way. They work in <strong>evals</strong>: versioned datasets of test cases, deterministic graders, and logs that make every run comparable to every other run.</p>
+
+<p>inspect_ai is the framework the UK AI Safety Institute (built with Meridian Labs) wrote to do that work at scale. It is one mental model with three moving parts:</p>
+
+<ul>
+<li><strong>Dataset</strong> — test cases, each carrying an <code>input</code> and a <code>target</code>.</li>
+<li><strong>Solver</strong> — whatever produces an answer: one model call, a prompt chain, or a full tool-using agent.</li>
+<li><strong>Scorer</strong> — whatever turns an answer into a number: text matching, a custom function, or another model grading.</li>
+</ul>
+
+<p>A <strong>Task</strong> binds the three together. Around that core you get the infrastructure that makes evals livable: 20+ model providers, sandboxed tool execution, parallel runs, resumable logs, and a web viewer for reading transcripts. There are also 200+ prebuilt benchmark implementations in the companion <code>inspect_evals</code> package — but this tutorial is about <em>writing your own</em>, because the eval that matters to you is the one that measures your product.</p>
+
+<h2 id="what-youll-need">What you'll need</h2>
+
+<ul>
+<li><strong>Python 3.10+</strong> and <code>pip install inspect-ai</code>. The reference run used inspect_ai 0.3.273 on Python 3.12 — CPU only, no GPU anywhere in this tutorial.</li>
+<li><strong>Zero API keys.</strong> Every eval below runs against <code>mockllm/model</code>, inspect_ai's built-in mock provider. You can script exactly what it returns, so the scores below are deterministic and reproducible on your machine. When you have a real key, swapping in <code>openai/gpt-4o-mini</code> or <code>anthropic/claude-sonnet-4-6</code> is a one-line change — I show where.</li>
+<li><strong>About 20 minutes.</strong> Three small files, each one runnable top to bottom. Every number quoted below came from an actual run, and I'll show you the exact outputs.</li>
+</ul>
+
+<h2 id="1-your-first-eval-in-twenty-lines">1. Your first eval in twenty lines</h2>
+
+<p>The smallest useful eval: four multiple-choice questions, a solver that formats them, a scorer that checks the letter. Save this as <code>hello_eval.py</code>:</p>
+
+<pre><code class="language-python">from inspect_ai import Task, eval, task
+from inspect_ai.dataset import Sample
+from inspect_ai.model import ModelOutput
+from inspect_ai.scorer import choice
+from inspect_ai.solver import multiple_choice
+
+QUESTIONS = [
+    ("What is the capital of France?",
+     ["London", "Berlin", "Paris", "Madrid"], "C"),
+    ("2 + 2 * 2 = ?", ["4", "6", "8", "2"], "B"),
+    ("Which planet is known as the Red Planet?",
+     ["Venus", "Mars", "Jupiter", "Saturn"], "B"),
+    ("What does CPU stand for?",
+     ["Central Process Unit", "Central Processing Unit",
+      "Computer Personal Unit", "Central Processor Utility"], "B"),
+]
+
+@task
+def capitals():
+    return Task(
+        dataset=[
+            Sample(input=q, choices=choices, target=target)
+            for q, choices, target in QUESTIONS
+        ],
+        solver=[multiple_choice()],
+        scorer=choice(),
+    )
+
+if __name__ == "__main__":
+    # Script the mock model: it "answers" C, B, A, B.
+    # 3 of 4 correct on purpose, so we get a real 0.75, not a toy 1.0.
+    mock_answers = ["ANSWER: C", "ANSWER: B", "ANSWER: A", "ANSWER: B"]
+    log = eval(
+        capitals(),
+        model="mockllm/model",
+        model_args={
+            "custom_outputs": (
+                ModelOutput.from_content(model="mockllm", content=a)
+                for a in mock_answers
+            )
+        },
+    )[0]
+    print("accuracy:", log.results.scores[0].metrics["accuracy"].value)</code></pre>
+
+<p>Run it with <code>python hello_eval.py</code>. Output:</p>
+
+<pre><code class="language-text">choice
+accuracy  0.750
+stderr    0.250
+
+Log: logs/2026-10-01T23-31-06-00-00_capitals_jaRoNHsqQ8Ng322hHF9okj.eval
+
+accuracy: 0.75</code></pre>
+
+<p>Three things are worth noticing, because they are the whole framework in miniature:</p>
+
+<ul>
+<li><strong>The solver owns the response format.</strong> <code>multiple_choice()</code> doesn't just paste the question — it instructs the model to answer as <code>ANSWER: $LETTER</code>, and <code>choice()</code> parses exactly that. When I first scripted the mock to return bare letters like <code>C</code>, every sample scored <code>invalid_response_format</code>. Real models fail this way too, and now you know where that failure lives: in the solver/scorer contract, not in the model.</li>
+<li><strong><code>mockllm/model</code> is a first-class testing tool.</strong> Its <code>custom_outputs</code> model arg accepts an iterable (or generator, or callable) of <code>ModelOutput</code> objects. That one hook is what makes this entire tutorial keyless: you script the model's behavior, and the eval machinery — formatting, scoring, logging — runs for real.</li>
+<li><strong>The stderr is the point.</strong> 0.75 ± 0.25 on four samples is a joke of a measurement, and the framework says so to your face. A serious eval has hundreds of samples; the machinery is identical.</li>
+</ul>
+
+<p>With a real key, the same file runs against a frontier model two ways — CLI (<code>inspect eval hello_eval.py --model openai/gpt-4o-mini</code>) or the Python <code>eval()</code> call you already used, with <code>model="openai/gpt-4o-mini"</code>.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/inspect-ai-eval-framework-tutorial/img2.webp" alt="Diagram of the inspect_ai evaluation pipeline: Dataset feeds Solver feeds Scorer feeds Eval Log"><figcaption>AI-generated diagram for AI Frontier Post — the inspect_ai pipeline: dataset, solver, scorer, eval log</figcaption></figure>
+
+<h2 id="2-read-the-log-like-a-researcher">2. Read the log like a researcher</h2>
+
+<p>Every run writes an <code>.eval</code> log into <code>./logs/</code>. This is the artifact the whole framework is organized around: per-sample inputs, the full message transcript, token usage, and scores — in one versioned, diffable file. Two ways to read it:</p>
+
+<p><strong><code>inspect view</code></strong> starts a local web UI for browsing runs, drilling into transcripts, and comparing samples. <strong>Programmatically</strong>, the log is just data:</p>
+
+<pre><code class="language-python">from inspect_ai.log import read_eval_log
+
+log = read_eval_log("logs/2026-10-01T23-31-06-00-00_capitals_jaRoNHsqQ8Ng322hHF9okj.eval")
+s = log.samples[2]  # the one we got wrong
+print("TARGET:", s.target)            # B
+print("COMPLETION:", s.output.completion)  # ANSWER: A
+print("SCORE:", s.scores["choice"].value)  # I (incorrect)</code></pre>
+
+<p>This is the habit that separates evals from vibes: when the scoreboard says 0.75, you don't re-run and hope — you open the log and read the one failure. Samples carry <code>metadata</code> too, so you can slice scores by category (question type, difficulty, model version) with grouped metrics later. Treat the log as the deliverable and the terminal scoreboard as the summary.</p>
+
+<h2 id="3-write-your-own-scorer">3. Write your own scorer</h2>
+
+<p>Built-in scorers (<code>choice</code>, <code>includes</code>, <code>match</code>, <code>model_graded_qa</code>) cover common shapes. Everything else is a <code>@scorer</code> function that takes the task state and the target and returns a <code>Score</code>. Save this as <code>math_eval.py</code>:</p>
+
+<pre><code class="language-python">from inspect_ai import Task, eval, task
+from inspect_ai.dataset import Sample
+from inspect_ai.model import ModelOutput
+from inspect_ai.scorer import Score, Target, mean, scorer, stderr
+from inspect_ai.solver import generate
+from inspect_ai.solver._task_state import TaskState
+
+@scorer(metrics=[mean(), stderr()])
+def numeric_within_tolerance(tolerance: float = 0.05):
+    async def score(state: TaskState, target: Target):
+        raw = state.output.completion.strip().replace(",", "")
+        try:
+            answer = float(raw)
+            expected = float(target.text)
+            correct = abs(answer - expected) &lt;= tolerance
+        except (ValueError, TypeError):
+            answer, correct = None, False
+        return Score(
+            value=1.0 if correct else 0.0,
+            answer=str(answer),
+            explanation=(
+                f"model answered {answer}, expected {target.text} "
+                f"(tolerance {tolerance})"
+            ),
+        )
+    return score
+
+@task
+def mental_math():
+    return Task(
+        dataset=[
+            Sample(input="What is 15% of 240? Reply with just the number.",
+                   target="36"),
+            Sample(input="What is 7 * 13? Reply with just the number.",
+                   target="91"),
+            Sample(input="What is 144 / 12? Reply with just the number.",
+                   target="12"),
+            Sample(input="What is 2^10? Reply with just the number.",
+                   target="1024"),
+        ],
+        solver=[generate()],
+        scorer=numeric_within_tolerance(),
+    )
+
+if __name__ == "__main__":
+    # 2 right, 1 wrong, 1 non-numeric (exercises the parse-failure path)
+    mock_answers = ["36", "90", "twelve", "1024"]
+    log = eval(
+        mental_math(),
+        model="mockllm/model",
+        model_args={
+            "custom_outputs": (
+                ModelOutput.from_content(model="mockllm", content=a)
+                for a in mock_answers
+            )
+        },
+    )[0]
+    print("mean score:", log.results.scores[0].metrics["mean"].value)
+    for s in log.samples:
+        sc = s.scores["numeric_within_tolerance"]
+        print(f"  score={sc.value} explanation={sc.explanation}")</code></pre>
+
+<p>Output:</p>
+
+<pre><code class="language-text">numeric_within_tolerance
+mean    0.500
+stderr  0.289
+
+mean score: 0.5
+  score=1.0 explanation=model answered 36.0, expected 36 (tolerance 0.05)
+  score=0.0 explanation=model answered 90.0, expected 91 (tolerance 0.05)
+  score=0.0 explanation=model answered None, expected 12 (tolerance 0.05)
+  score=1.0 explanation=model answered 1024.0, expected 1024 (tolerance 0.05)</code></pre>
+
+<p>The anatomy of a scorer, all in one function:</p>
+
+<ul>
+<li><code>state.output.completion</code> is the model's final text; <code>target.text</code> is the expected answer. The scorer is async and can do anything — call a unit test, run a regex, or invoke another model (that's what <code>model_graded_qa</code> is).</li>
+<li><code>Score(value=..., answer=..., explanation=...)</code> separates the number (what aggregates) from the human-readable record (what you read in the log). Always fill in <code>explanation</code> — future-you debugging a regression will thank present-you.</li>
+<li><code>metrics=[mean(), stderr()]</code> declares how per-sample scores aggregate. Custom metrics (pass@k, grouped-by-metadata) plug in here.</li>
+<li><strong>Graders must decide what garbage means.</strong> The model answered <code>twelve</code>; the scorer fails it closed with <code>answer=None</code>. That decision is now explicit, versioned code — not a judgment call you make differently each Tuesday.</li>
+</ul>
+
+<h2 id="4-evaluate-a-tool-using-agent">4. Evaluate a tool-using agent</h2>
+
+<p>This is inspect_ai's sweet spot — the thing a 30-line script can't do. You give the model a real tool, run the built-in <code>react()</code> agent (reason → act → observe → submit), and score <em>the transcript</em>: did the agent actually call the tool with the right arguments?</p>
+
+<p>First the tool. Custom tools are factory functions — the framework builds the tool's schema from the inner function's signature and docstring, and <strong>every parameter needs a documented description</strong> (I hit that validation error so you don't have to):</p>
+
+<pre><code class="language-python">from inspect_ai.tool import Tool, tool
+
+@tool
+def multiply() -> Tool:
+    async def execute(a: float, b: float):
+        """Multiply two numbers together. Always use this tool for
+        multiplication instead of doing the arithmetic yourself.
+
+        Args:
+            a: the first number to multiply
+            b: the second number to multiply
+        """
+        return a * b
+    return execute</code></pre>
+
+<p>Now the agent eval. The scorer inspects <code>tool_calls</code> on the assistant messages — the structured record of what the agent did, not the text it wrote:</p>
+
+<pre><code class="language-python">from inspect_ai import Task, eval, task
+from inspect_ai.agent import react
+from inspect_ai.dataset import Sample
+from inspect_ai.model import ModelOutput
+from inspect_ai.scorer import Score, Target, mean, scorer, stderr
+from inspect_ai.solver._task_state import TaskState
+from inspect_ai.tool import Tool, tool
+
+# The multiply tool from the previous step, included so this file
+# runs on its own:
+@tool
+def multiply() -> Tool:
+    async def execute(a: float, b: float):
+        """Multiply two numbers together. Always use this tool for
+        multiplication instead of doing the arithmetic yourself.
+
+        Args:
+            a: the first number to multiply
+            b: the second number to multiply
+        """
+        return a * b
+    return execute
+
+@scorer(metrics=[mean(), stderr()])
+def used_tool_correctly():
+    async def score(state: TaskState, target: Target):
+        calls = []
+        for m in state.messages:
+            for tc in getattr(m, "tool_calls", None) or []:
+                if tc.function == "multiply":
+                    calls.append(tc)
+        hit = any(
+            tc.arguments.get("a") == 7 and tc.arguments.get("b") == 6
+            for tc in calls
+        )
+        return Score(
+            value=1.0 if hit else 0.0,
+            answer=f"{len(calls)} multiply call(s)",
+            explanation=f"multiply(7, 6) called with correct args: {hit}",
+        )
+    return score
+
+@task
+def calculator_agent():
+    return Task(
+        dataset=[
+            Sample(
+                input="What is 7 times 6? Use the multiply tool, "
+                      "then report the answer.",
+                target="42",
+            ),
+        ],
+        solver=[react(
+            prompt="You are a calculator agent.",
+            tools=[multiply()],
+            attempts=2,
+        )],
+        scorer=used_tool_correctly(),
+    )
+
+if __name__ == "__main__":
+    log = eval(
+        calculator_agent(),
+        model="mockllm/model",
+        model_args={
+            "custom_outputs": [
+                # turn 1: the "model" calls the tool with correct args
+                ModelOutput.for_tool_call(
+                    model="mockllm", tool_name="multiply",
+                    tool_arguments={"a": 7, "b": 6},
+                ),
+                # turn 2: it sees the result, then answers in text
+                ModelOutput.from_content(
+                    model="mockllm", content="The answer is 42."),
+                # turn 3: react() ends the loop on a submit() call
+                ModelOutput.for_tool_call(
+                    model="mockllm", tool_name="submit",
+                    tool_arguments={"answer": "42"},
+                ),
+            ]
+        },
+    )[0]
+    print("mean score:", log.results.scores[0].metrics["mean"].value)</code></pre>
+
+<p>Output: <code>mean score: 1.0</code>. And the transcript in the log is the real prize — the complete reason-act-observe loop, executed by actual code:</p>
+
+<pre><code class="language-text">== user
+What is 7 times 6? Use the multiply tool, then report the answer.
+== assistant
+tool call for tool multiply
+== tool
+42.0
+== assistant
+The answer is 42.
+== user
+Please proceed to the next step... call the `submit()` tool with your final answer.
+== assistant
+tool call for tool submit
+42</code></pre>
+
+<p>The mock scripted the <em>model's</em> side, but everything else ran for real: the tool schema was generated from your docstring, the framework dispatched the call, your Python <code>execute</code> ran and returned <code>42.0</code>, and the scorer verified the call arguments from the transcript. Swap <code>mockllm/model</code> for a real model and the only thing that changes is who decides to call the tool.</p>
+
+<p>Two details that matter in production:</p>
+
+<ul>
+<li><strong>The loop ends at <code>submit()</code>.</strong> <code>react()</code> appends a <code>submit(answer: str)</code> tool; the agent runs until the model calls it. With <code>attempts=2</code>, the agent even <strong>re-scores its own submission with your scorer</strong> and retries when it isn't 1.0 — your grader is load-bearing inside the loop, not just after it.</li>
+<li><strong>Score behavior, not text.</strong> A model that writes "42" without touching the tool fails this eval — correctly. For agent evals, the transcript is the answer.</li>
+</ul>
+
+<figure class="inline-art"><img class="story-image" src="/articles/inspect-ai-eval-framework-tutorial/img3.webp" alt="Diagram of the ReAct agent loop: prompt, model thinks, tool call, tool executes, observation, submit answer, with a scorer verifying the tool call"><figcaption>AI-generated diagram for AI Frontier Post — the ReAct loop: reason, act, observe, submit, scored</figcaption></figure>
+
+<h2 id="which-approach-should-you-use">Which approach should you use?</h2>
+
+<p>inspect_ai is the right default for serious eval work, but it isn't the only tool. Pick by the shape of your problem:</p>
+
+<div class="table-wrap"><table><thead><tr><th>Your situation</th><th>Use</th><th>Why</th></tr></thead><tbody><tr><td>A 30-line one-off check you'll run twice</td><td><strong>A plain script</strong></td><td>inspect_ai's structure is overhead for trivial evals — its own docs say so.</td></tr><tr><td>Custom agent or tool-use evals you need reproducible and shareable</td><td><strong>inspect_ai</strong></td><td>Solvers, sandboxed tools, transcripts-as-evidence, and logs you can diff. This tutorial.</td></tr><tr><td>Academic log-probability benchmarks (MMLU, ARC, HellaSwag) with established numbers</td><td><strong>lm-evaluation-harness</strong> (EleutherAI)</td><td>The comparable-scores tooling lives there; inspect_ai is generation-based.</td></tr><tr><td>Prompt regression tests running in CI on every commit</td><td><strong>promptfoo</strong></td><td>Purpose-built for prompt-as-code workflows — see our <a href="/articles/promptfoo-prompt-testing-ci-tutorial/">hands-on promptfoo tutorial</a>.</td></tr><tr><td>"Just have an LLM grade the outputs"</td><td><strong>Fix the process first</strong></td><td>Model-graded scoring is a component (<code>model_graded_qa</code>), not an eval strategy. Read our <a href="/articles/red-team-your-evals-reward-hacking-tutorial/">guide to red-teaming your LLM judges</a> before you trust one.</td></tr></tbody></table></div>
+
+<p>Where to go next inside inspect_ai: the <code>inspect_evals</code> package ships 200+ ready-to-run benchmarks (SWE-bench, GPQA, CyBench, AgentHarm among them) — run one against your model before writing your own, to calibrate. Then write the eval only you can write: the one whose samples are your product's actual failure modes. An eval of twenty well-chosen real failures beats a benchmark of two thousand generic questions.</p>
+
+<h2 id="the-takeaway">The takeaway</h2>
+
+<p>Evals are the difference between "we think the new prompt is better" and "the new prompt scores 0.81 ± 0.03 against 0.74 ± 0.03 on the same 400 cases, and here is the log." inspect_ai gives you the three primitives — <strong>dataset, solver, scorer</strong> — plus the infrastructure that makes them livable: scriptable mock models for keyless development, real tool execution inside agent loops, transcript-aware graders, and logs that are the deliverable. You just ran all of it with no API key and no GPU. The next step is the one that actually matters: point it at your own product's failure modes, and never ship on vibes again.</p>
+
+<hr>
+<p><em>Every number in this article was measured, not sketched: inspect_ai 0.3.273 on Python 3.12, CPU only, scripted mockllm outputs — multiple-choice accuracy 0.75 ± 0.25 (n=4), custom numeric scorer mean 0.50 ± 0.29 (n=4), agent tool-use eval 1.0 (n=1). The three scripts run top to bottom as printed.</em></p>
+</div>
+<div class="engage-row"><div class="reactions" data-reactions="inspect-ai-eval-framework-tutorial"><span class="reactions-label">React:</span></div><div class="comments-cta"><a class="btn-brief" href="/article/inspect-ai-eval-framework-tutorial/#comments">Join the discussion</a></div></div>
+<div class="comments" data-comments="inspect-ai-eval-framework-tutorial"></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/agent-evals-tutorial/"><span class="chip">Tutorials</span><h3>Testing agents: task-based evals for tool-using models</h3><div class="meta">September 19, 2026</div></a><a class="rel-card" href="/articles/red-team-your-evals-reward-hacking-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your evals: catch reward hacking in your LLM judges, hands-on</h3><div class="meta">September 29, 2026</div></a><a class="rel-card" href="/articles/promptfoo-prompt-testing-ci-tutorial/"><span class="chip">Tutorials</span><h3>Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on</h3><div class="meta">September 30, 2026</div></a><a class="rel-card" href="/articles/laya-typed-decisions-tutorial/"><span class="chip">Tutorials</span><h3>Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine</h3><div class="meta">September 27, 2026</div></a></div></section>
+</article>
+</div>
+</main>
+<footer class="site-footer"><div class="wrap footer-in"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p class="fine">Independent coverage of the AI frontier. Not affiliated with any lab.</p></div></footer>
+<script src="/assets/site.js"></script>
+</body>
+</html>
