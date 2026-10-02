@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Merge models, don't just train them: hands-on model merging with MergeKit — AI Frontier Post</title>
+<meta name="description" content="SLERP, task arithmetic, and TIES/DARE, explained by actually running them: merge Qwen2.5-0.5B with its instruct sibling on a CPU, verify the identity merge, and measure what the midpoint really does.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/mergekit-model-merging-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Merge models, don't just train them: hands-on model merging with MergeKit">
+<meta property="og:description" content="SLERP, task arithmetic, and TIES/DARE, explained by actually running them: merge Qwen2.5-0.5B with its instruct sibling on a CPU, verify the identity merge, and measure what the midpoint really does.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mergekit-model-merging-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/mergekit-model-merging-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-10-02">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Merge models, don't just train them: hands-on model merging with MergeKit", "description": "SLERP, task arithmetic, and TIES/DARE, explained by actually running them: merge Qwen2.5-0.5B with its instruct sibling on a CPU, verify the identity merge, and measure what the midpoint really does.", "datePublished": "2026-10-02", "dateModified": "2026-10-02", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/mergekit-model-merging-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/mergekit-model-merging-hands-on-tutorial/cover.webp"}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+
+<main>
+<div class="wrap">
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Merge models, don't just train them: hands-on model merging with MergeKit</h1>
+<p class="lede">Some of the most capable open-weight models on the Hugging Face Hub were never trained — they were merged. Here is the full workflow, measured on a CPU: task arithmetic, SLERP, and how to pick a method.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 2, 2026 · 13 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/mergekit-model-merging-hands-on-tutorial/cover.webp" alt="Two glowing neural-network spheres, one cyan and one amber, fusing into a single sphere"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+<div class="article-body">
+<p class="lede">Some of the most capable open-weight models on the Hugging Face Hub were never trained. They were <em>merged</em> — built by doing arithmetic directly on the weights of two or more existing models, with no gradient descent involved. It sounds like alchemy, and in 2023 it mostly was: forum recipes, vibes, and a lot of broken checkpoints. Then Arcee AI's Charles Goddard turned the folk practice into a toolkit, <strong>MergeKit</strong> (7,300+ stars on GitHub, with an EMNLP 2024 Industry Track paper to its name), and the community merged thousands of models with it — some of which topped the open LLM leaderboards of their era. This tutorial takes you from zero to a real, measured merge on your own CPU: no GPU, no training, no API keys.</p>
+
+<h2 id="why-merge">1. Why merging works (the 90-second theory)</h2>
+<p>Two models that share an architecture and a common ancestor — say, a base model and its instruction-tuned sibling — live in the same broad basin of the loss landscape. Their weights are nearby points, not random ones. Blending those points usually produces a working model, because the path between them stays in low-loss territory. Three ideas built on this observation cover nearly every merge you'll ever run:</p>
+<ul>
+<li><strong>Linear averaging ("model soups").</strong> Take the element-wise weighted average of the weights. Wortsman et al. (2022) showed that averaging fine-tuned checkpoints of the same run improves accuracy with zero extra inference cost. Simple, but the midpoint can sag when the endpoints are far apart.</li>
+<li><strong>SLERP.</strong> Interpolate along the great-circle arc between the two weight vectors instead of the straight chord. The arc preserves weight magnitudes, and magnitude matters: a transformer's activations are calibrated to the scale of its weights, so naive averaging can quietly degrade quality even when the direction is right.</li>
+<li><strong>Task arithmetic.</strong> Compute a <em>task vector</em> — the difference between a fine-tuned model and its base — and treat it as a portable bundle of the skill that fine-tuning added. Add fractions of task vectors back onto a base to assemble new capability mixes. TIES, DARE, and DELLA all extend this idea by sparsifying the vectors first, so unrelated skills interfere less (Ilharco et al., 2022; Yadav et al., 2023; Yu et al., 2023).</li>
+</ul>
+<p>MergeKit implements all of these and more — linear, SLERP, NuSLERP, multi-SLERP, Karcher mean, task arithmetic, TIES, DARE, DELLA, breadcrumbs, SCE, model stock, passthrough "frankenmerging" — behind one YAML config format and one command, <code>mergekit-yaml</code>. It streams tensors through the arithmetic out-of-core, so a merge runs on CPU or with as little as 8&nbsp;GB of VRAM.</p>
+
+<h2 id="what-you-need">2. What you'll need</h2>
+<ul>
+<li>Python 3.10+ and <code>pip</code>. Everything below ran on a 2-core CPU-only Linux VM — no GPU anywhere.</li>
+<li>About 3&nbsp;GB of free disk: two half-billion-parameter models plus the merges.</li>
+<li>Two shape-compatible models. Our pair: <code>Qwen/Qwen2.5-0.5B</code> (the base) and <code>Qwen/Qwen2.5-0.5B-Instruct</code> (its instruction-tuned sibling). Same architecture, same tokenizer, common ancestor — the safest possible recipe.</li>
+<li>MergeKit itself: <code>pip install mergekit</code>. This run used <strong>mergekit 0.1.4</strong> (LGPL-3.0). One real-world snag, documented honestly in the gotchas: 0.1.4's CLI can crash on startup with a pydantic <code>PydanticUserError</code> about <code>ConfiguredModuleArchitecture</code> not being fully defined. The fix is a three-line wrapper that imports <code>torch</code> and calls <code>model_rebuild()</code> on mergekit's models before invoking the CLI entry point — we ran every merge below through it.</li>
+</ul>
+<p>The golden rule of merging, worth stating before you touch anything: <strong>same architecture, same vocabulary, shared ancestor.</strong> Merging a base with its own fine-tune is the safest recipe; merging two fine-tunes of the same base is the classic use case. Cross-family merges need extra machinery and fail silently more often than you'd like — fluent text, subtly wrong behavior. Always evaluate the merged model on the tasks you care about, because weight-space arithmetic gives no guarantees.</p>
+
+<h2 id="install">3. Install MergeKit and learn the config format</h2>
+<pre><code class="language-bash">pip install mergekit
+mergekit-yaml --help   # mergekit-yaml CONFIG_FILE OUT_PATH [--cuda] [--allow-crimes] ...</code></pre>
+<p>Every merge is a YAML document with four load-bearing fields:</p>
+<ul>
+<li><code>merge_method</code> — one of <code>linear</code>, <code>slerp</code>, <code>task_arithmetic</code>, <code>ties</code>, <code>dare_ties</code>, and friends.</li>
+<li><code>models</code> — the inputs, each with optional per-model <code>parameters</code> (weights, densities).</li>
+<li><code>base_model</code> — required for the task-vector methods and SLERP; the anchor everything is measured against.</li>
+<li><code>parameters</code> — method knobs: <code>t</code> for SLERP (0 yields the base, 1 the other model), <code>weight</code>/<code>lambda</code> for task arithmetic, <code>density</code> for the sparsifying methods.</li>
+</ul>
+<p>Two more fields control precision and tokenizers: <code>dtype</code> casts inputs before merging (omit it and matching bfloat16 weights stay bfloat16; linear and SLERP compute in float32 internally and cast back), and <code>tokenizer: {source: union}</code> decides the output vocabulary. Our pair shares a tokenizer, so <code>union</code> looks like a formality — but it wasn't, quite: see the gotchas.</p>
+
+<h2 id="sanity-merge">4. Sanity check: rebuild the instruct model with task arithmetic</h2>
+<p>Before doing anything interesting, verify the machinery. Task arithmetic says: <code>merged = base + λ · Σ weightᵢ · (modelᵢ − base)</code>. With a single model, weight 1.0, and λ = 1.0, that formula reduces to the instruct model itself. If MergeKit's implementation is correct, the output should be near-identical to <code>Qwen2.5-0.5B-Instruct</code>. Save this as <code>taskarith.yml</code>:</p>
+<pre><code class="language-yaml">merge_method: task_arithmetic
+base_model: Qwen/Qwen2.5-0.5B
+models:
+  - model: Qwen/Qwen2.5-0.5B-Instruct
+    parameters:
+      weight: 1.0
+parameters:
+  lambda: 1.0
+dtype: bfloat16
+tokenizer:
+  source: union</code></pre>
+<pre><code class="language-bash">mergekit-yaml taskarith.yml ./merged-taskarith   # 108 seconds on our 2-core CPU box</code></pre>
+<p>Then we compared the merged weights against the real instruct model, tensor by tensor, straight from the safetensors files:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Tensor</th><th>‖instruct‖</th><th>‖merged − instruct‖</th><th>Relative error</th></tr></thead>
+<tbody>
+<tr><td><code>layers.0.attn.q_proj.weight</code></td><td>60.68</td><td>0.0032</td><td>5 × 10⁻⁵</td></tr>
+<tr><td><code>layers.12.mlp.down_proj.weight</code></td><td>38.76</td><td>0.0023</td><td>6 × 10⁻⁵</td></tr>
+<tr><td><code>embed_tokens.weight</code> (overlap)</td><td>175.00</td><td>0.0161</td><td>9 × 10⁻⁵</td></tr>
+</tbody></table></div>
+<p>The distances are floating-point dust from the float32-then-cast-back round trip, exactly as the docs describe. The machinery works. This identity merge is the cheapest possible validation that your install, your config schema, and your mental model all agree — run it first whenever a merge behaves strangely later. If the identity merge doesn't reproduce, the problem is your setup, not your method.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mergekit-model-merging-hands-on-tutorial/img3.webp" alt="Diagram of task-vector arithmetic: skill vectors radiating from a central base model sphere"><figcaption>AI-generated illustration for AI Frontier Post. Task arithmetic treats each fine-tune minus its base as a portable skill vector.</figcaption></figure>
+
+<h2 id="slerp-merge">5. The real merge: SLERP halfway between base and instruct</h2>
+<p>Now the interesting one. SLERP with <code>t: 0.5</code> walks the great-circle arc halfway from the base model to the instruct model:</p>
+<pre><code class="language-yaml">merge_method: slerp
+base_model: Qwen/Qwen2.5-0.5B
+models:
+  - model: Qwen/Qwen2.5-0.5B
+  - model: Qwen/Qwen2.5-0.5B-Instruct
+parameters:
+  t: 0.5
+dtype: bfloat16
+tokenizer:
+  source: union</code></pre>
+<pre><code class="language-bash">mergekit-yaml slerp.yml ./merged-slerp   # 77 seconds on CPU</code></pre>
+<p>Note the <code>base_model</code> line: SLERP takes exactly two models, and one must be designated the base. The output directory contains the merged <code>model.safetensors</code> plus a generated <code>README.md</code> and the <code>mergekit_config.yml</code> that produced it — free provenance for your model card.</p>
+<p>Does the arc actually beat the chord here? We measured both. L2 norms for two representative matrices:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Tensor</th><th>‖base‖</th><th>‖instruct‖</th><th>‖SLERP t=0.5‖</th><th>‖linear 0.5/0.5‖</th></tr></thead>
+<tbody>
+<tr><td><code>layers.0.attn.q_proj.weight</code></td><td>60.68</td><td>59.80</td><td>60.29</td><td>60.20</td></tr>
+<tr><td><code>layers.12.mlp.down_proj.weight</code></td><td>38.76</td><td>38.04</td><td>38.42</td><td>38.37</td></tr>
+</tbody></table></div>
+<p>Honest reading: for <em>this</em> pair the difference is small — base and instruct are close relatives, so the chord barely cuts the corner and SLERP's norm preservation buys you ~0.15%. The arc earns its keep when the endpoints are far apart (two different specialists, say), where naive averaging visibly shrinks every matrix and the generations go dull. Also note the SLERP midpoint sits at nearly equal distance from both parents (2.16 vs 2.19 on q_proj) — a true geometric midpoint, which is exactly what <code>t=0.5</code> promises.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mergekit-model-merging-hands-on-tutorial/img2.webp" alt="Diagram contrasting SLERP's curved arc along a sphere surface with the straight chord of linear interpolation"><figcaption>AI-generated illustration for AI Frontier Post. SLERP travels the arc; linear interpolation cuts the chord.</figcaption></figure>
+
+<h2 id="measure">6. Measure the merge: perplexity and real generations</h2>
+<p>Weight-space prettiness means nothing without behavior. We scored four checkpoints — base, instruct, our task-arithmetic rebuild, and the SLERP midpoint — on two probes. First, perplexity on a fixed 647-token held-out passage about model merging (lower is better):</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Model</th><th>Perplexity (647 tokens)</th></tr></thead>
+<tbody>
+<tr><td>Qwen2.5-0.5B (base)</td><td>25.542</td></tr>
+<tr><td>Qwen2.5-0.5B-Instruct</td><td>25.762</td></tr>
+<tr><td>Task-arithmetic rebuild</td><td><strong>25.762</strong></td></tr>
+<tr><td>SLERP t=0.5</td><td><strong>25.421</strong></td></tr>
+</tbody></table></div>
+<p>Two things to read here. The rebuild lands <em>exactly</em> on the instruct model's perplexity — the identity check holds at the behavior level too, not just in weight space. And the SLERP midpoint is the best of the four: a genuine interpolation that landed in a slightly better spot than either parent, the "free lunch" the merging literature keeps reporting.</p>
+<p>Second, greedy generations (temperature 0, 40 new tokens) on three plain-continuation prompts, identical for every model — no chat template, so nobody gets a formatting advantage:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Prompt</th><th>Base</th><th>Instruct</th><th>Rebuild</th><th>SLERP</th></tr></thead>
+<tbody>
+<tr><td><code>The capital of France is</code></td><td>"Paris. It is the largest city in Europe and the second largest in the world…"</td><td>"Paris. It was founded in 789 AD by Charlemagne…"</td><td>"Paris. It is the largest city in Europe and the third largest city in the world…"</td><td>"Paris. It is the largest city in Europe and the third largest in the world…"</td></tr>
+<tr><td><code>Summarize in one sentence: The Eiffel Tower…</code></td><td>Continues with tower facts (ignores the instruction)</td><td>"…Summary: The Eiffel Tower, a massive iron lattice tower, stands as…"</td><td>Continues with tower facts</td><td>"It was built by Gustave Eiffel, a French engineer, and is located in Paris…"</td></tr>
+<tr><td><code>Once upon a time, in a land of talking robots,</code></td><td>"…a young robot named R2-D2… always ready to help others."</td><td>"…a young robot named R2-D2… love of exploring the galaxy."</td><td>"…a young robot named R2-D2… playful nature…"</td><td>"…a young inventor named Alex. Alex had a unique idea for a robot…"</td></tr>
+</tbody></table></div>
+<p>What this actually shows, stated carefully:</p>
+<ul>
+<li>The instruct model's <code>Summary:</code> marker on prompt 2 is instruction-tuning leaking through even in plain continuation — the one place its training clearly shows. The merged models sit between base and instruct in style, which is what an interpolation should do.</li>
+<li>The rebuild and the true instruct model have <em>identical</em> perplexity yet diverge on some greedy generations (compare "second largest" vs "third largest"). Tiny weight dust flips close token races — generation is chaotic under small perturbations, so never treat one greedy sample as proof of identity. Measure distributions, not anecdotes.</li>
+<li>The SLERP midpoint invents its own story character ("Alex") on prompt 3 instead of copying either parent's R2-D2. Interpolated weights can produce genuinely intermediate behavior, not just a coin flip between parents.</li>
+<li>And the necessary caveat: these are 0.5B models. Every one of them states false facts with total confidence (Paris was not founded in 789 AD by Charlemagne). This tutorial's models are plumbing for demonstrating the <em>mechanics</em> — repeat the recipe at 7B+ and the same pattern shows up with far more fluent text.</li>
+</ul>
+
+<h2 id="which-method">7. Which approach should you use?</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Situation</th><th>Method</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Averaging checkpoints of one fine-tuning run</td><td><code>linear</code></td><td>Model-soup territory; endpoints are close, the chord is fine, and it's the cheapest option. Weights default to normalizing to sum to 1.</td></tr>
+<tr><td>Blending two distinct models (base ↔ instruct, chat ↔ code)</td><td><code>slerp</code> with <code>t</code> to taste</td><td>Preserves weight magnitudes along the arc; start at 0.5 and walk <code>t</code> in 0.1 steps.</td></tr>
+<tr><td>Combining skills from several fine-tunes of one base</td><td><code>ties</code> / <code>dare_ties</code></td><td>Task vectors + sparsification + sign consensus tame interference; tune <code>density</code> (fraction of weights kept) per model.</td></tr>
+<tr><td>Dialing one behavior up or down</td><td><code>task_arithmetic</code></td><td>Scale a single task vector with <code>weight</code>/<code>lambda</code>; the identity check in step 4 is your debugger.</td></tr>
+<tr><td>Stitching layers from different models</td><td><code>passthrough</code> slices</td><td>"Frankenmerging": early layers from one model, late layers from another. Powerful, fragile — validate hard.</td></tr>
+</tbody></table></div>
+<p>Two parameters deserve a final word. <code>density</code> (TIES/DARE) is the fraction of each task vector retained after pruning — 0.5 is a sane start; lower values merge more models with less interference but wash out subtle skills. <code>t</code> (SLERP) is not a linear blend knob: because the arc preserves norms, <code>t=0.5</code> is a true geometric midpoint, and small steps near the endpoints move behavior faster than steps in the middle.</p>
+
+<h2 id="gotchas">8. Gotchas that bite everyone once</h2>
+<ul>
+<li><strong>The tokenizer union can resize your embeddings.</strong> Our models' configs claimed a 151,936-token vocabulary, but the actual tokenizers only define 151,665 tokens. MergeKit aligned the embedding matrices to the union vocabulary, so the merged model has 151,665-row embeddings. The 271 dropped rows are token IDs the tokenizer never emits — harmless here, and the merged config + tokenizer are self-consistent — but if you diff merged weights against a parent, compare overlapping rows or you'll get a shape error. This is the <code>tokenizer:</code> block doing its documented job.</li>
+<li><strong>mergekit 0.1.4's CLI can crash before it starts.</strong> We hit <code>PydanticUserError: ConfiguredModuleArchitecture is not fully defined</code> on a fresh install. Workaround: import <code>torch</code> first, call <code>model_rebuild()</code> on mergekit's pydantic models, then invoke the CLI. If a future release fixes the import order, delete the wrapper.</li>
+<li><strong>Chat templates don't merge themselves.</strong> MergeKit copies a template (<code>chat_template: "auto"</code> picks the most common among inputs; ours wrote a <code>chat_template.jinja</code> into the output). If your parents use different formats, decide explicitly which one the child speaks.</li>
+<li><strong>bf16 in, bf16 out — unless you say otherwise.</strong> <code>dtype</code> casts inputs before merging; <code>out_dtype</code> casts after. Forgetting this is how you accidentally ship a float32 model twice the size you expected.</li>
+<li><strong>License hygiene.</strong> A merge is a derivative work of every parent. If a parent's license restricts redistribution, your merge inherits the restriction. Check before uploading.</li>
+<li><strong>Evaluate, always.</strong> Merging gives no behavioral guarantees. Perplexity on a held-out passage plus a handful of greedy generations — the two probes in this tutorial — take minutes on CPU and catch most silent failures.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway</h2>
+<p>Model merging turns the open-weight ecosystem into composable parts: take an instruction-tuned model and a base, or two specialists, and blend them with a config file instead of a training run. The workflow that actually works is boring in the best way — verify the identity merge first, pick SLERP for distant pairs and linear for close ones, reach for TIES/DARE when combining several fine-tunes, and measure everything on real generations. On a CPU-only machine, the whole loop from <code>pip install mergekit</code> to a measured SLERP merge took about twenty minutes of compute. The next time you catch yourself thinking "I wish there were a model halfway between these two" — there can be, by lunchtime.</p>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/gguf-quantization-imatrix-measured/"><span class="chip">Tutorials</span><h3>Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</h3><div class="meta">September 28, 2026</div></a><a class="rel-card" href="/articles/nvidia-model-optimizer-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with NVIDIA Model Optimizer: quantize once, export anywhere</h3><div class="meta">September 29, 2026</div></a><a class="rel-card" href="/articles/colibri-run-frontier-moe-consumer-hardware/"><span class="chip">Tutorials</span><h3>Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri</h3><div class="meta">September 28, 2026</div></a><a class="rel-card" href="/articles/qwen3-8-27b-local-setup/"><span class="chip">Tutorials</span><h3>Qwen3.8-27B on your own hardware: the complete local setup guide</h3><div class="meta">September 25, 2026</div></a></div></section>
+<div class="engage-row"><div class="reactions" data-reactions="mergekit-model-merging-hands-on-tutorial"><span class="reactions-label">React:</span></div><div class="comments-cta"><a class="btn-brief" href="/article/mergekit-model-merging-hands-on-tutorial/#comments">Join the discussion</a></div></div>
+<div class="comments" data-comments="mergekit-model-merging-hands-on-tutorial"></div>
+</div></article>
+</div></main>
