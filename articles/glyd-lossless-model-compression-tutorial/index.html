@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Fit Qwen3-32B on one GPU instead of two: hands-on with Glyd&#x27;s lossless model compression — AI Frontier Post</title>
+<meta name="description" content="Glyd (surya-koritala/Glyd) compresses bf16 weights and KV cache losslessly — about 33% less GPU memory, bit for bit. Pack a model with the CLI, load it packed in Python, serve it through vLLM, and put the compression levels to work on your own data. Every command below is from the project&#x27;s own README.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/glyd-lossless-model-compression-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Fit Qwen3-32B on one GPU instead of two: hands-on with Glyd&#x27;s lossless model compression">
+<meta property="og:description" content="Glyd compresses bf16 weights and KV cache losslessly — about 33% less GPU memory, bit for bit. Pack, load, and serve a model the compressed way, hands-on.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/glyd-lossless-model-compression-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/glyd-lossless-model-compression-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-10-01">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{&quot;@context&quot;: &quot;https://schema.org&quot;, &quot;@type&quot;: &quot;NewsArticle&quot;, &quot;headline&quot;: &quot;Fit Qwen3-32B on one GPU instead of two: hands-on with Glyd&#x27;s lossless model compression&quot;, &quot;description&quot;: &quot;Glyd (surya-koritala/Glyd) compresses bf16 weights and KV cache losslessly — about 33% less GPU memory, bit for bit. Pack a model with the CLI, load it packed in Python, serve it through vLLM, and put the compression levels to work on your own data. Every command below is from the project&#x27;s own README.&quot;, &quot;datePublished&quot;: &quot;2026-10-01&quot;, &quot;dateModified&quot;: &quot;2026-10-01&quot;, &quot;author&quot;: {&quot;@type&quot;: &quot;Person&quot;, &quot;name&quot;: &quot;Sofia Almeida&quot;}}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+
+<main>
+<div class="wrap">
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Fit Qwen3-32B on one GPU instead of two: hands-on with Glyd&#x27;s lossless model compression</h1>
+<p class="lede">You changed nothing and ran out of GPU memory anyway. Every model you serve sits in VRAM as bf16 numbers whose sign and mantissa are essentially noise — and a new Rust project called Glyd (<strong>surya-koritala/Glyd</strong>, about 240 GitHub stars since its September 19 debut) squeezes roughly 33% of those bits out, losslessly, decoding them on the GPU where the matrix product runs. In this tutorial you pack a model with the CLI, load it packed in Python, and serve it through vLLM — Qwen3-32B fits on one 48&nbsp;GB card instead of two — then put Glyd's standalone compression levels to work on your own files. Every command below is taken from the project's own README (release v0.14.3), and every number is measured in its benchmark logs.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 1, 2026 · 9 min read</span></span></div>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/glyd-lossless-model-compression-tutorial/cover.webp" alt="Editorial illustration: a GPU circuit board glowing green-cyan, streams of data bits flowing from large blocks into smaller compressed ones"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+<div class="article-body">
+
+<p>The insight behind Glyd is a bit-level fact about your models: in a bf16 weight, the sign and mantissa are noise and the exponent carries under 3 of its 8 bits. So Glyd codes the exponent, holds weights and the KV cache compressed in GPU memory, and decodes them on the GPU where they are used — inside the matrix product and inside attention. The weights come back bit for bit. Nothing is quantized, pruned, or approximated, which is why the project's claims survive the one test that matters: MMLU answers match bf16's on 98.0–100% of questions, and perplexity stays within 0.06%.</p>
+
+<h2 id="what-youll-need">What you'll need</h2>
+
+<ul>
+<li><strong>For serving models:</strong> Linux (x86_64 or aarch64) with an NVIDIA GPU, Ampere or newer, and a recent driver — plus PyTorch for CUDA 12 or 13. The GPU kernels are the part under the Business Source License 1.1: free for personal, educational, research, and other non-commercial use; commercial production use needs a license.</li>
+<li><strong>For the compression CLI:</strong> any machine — macOS or Linux via Homebrew, Linux/macOS via pip, or release binaries for Linux x86_64, Linux aarch64, and macOS arm64.</li>
+<li><strong>A Hugging Face model to pack</strong> (Qwen3-8B in the examples; Qwen3, Qwen2, Llama, Mistral, and Granite families are the ones <code>glyd pack</code> understands).</li>
+<li><strong>Licenses that matter:</strong> the codec — crate, CLI, C ABI, Python and Go bindings — is BSD-3-Clause <em>or</em> GPL-2.0, the same licenses as zstd, so anything that may ship zstd may ship Glyd. The store (<code>glyd-store</code>) and the GPU weights code are BUSL-1.1.</li>
+</ul>
+
+<h2 id="1-install-glyd">1. Install Glyd</h2>
+
+<p>Pick the install that matches what you want to do:</p>
+
+<pre><code class="language-bash">pip install "glyd[gpu]"      # models on the GPU: Linux x86_64 / aarch64, a CUDA GPU (Ampere or later), PyTorch for CUDA 12 or 13
+brew install surya-koritala/glyd/glyd   # macOS / Linux: the glyd and glyd-store CLIs, glyd.h
+pip install glyd             # Python bindings: Linux x86_64 / aarch64, macOS arm64
+cargo install --git https://github.com/surya-koritala/Glyd glyd glyd-store glyd-gpu  # from source, Rust 1.80+</code></pre>
+
+<h2 id="2-load-a-packed-model-in-python">2. Load a packed model in Python</h2>
+
+<p>This is the two-line payoff. Glyd loads the model packed on the GPU as it downloads — Qwen3-8B arrives as 11.2&nbsp;GB of weights, not 16.4:</p>
+
+<pre><code class="language-python">import glyd
+model = glyd.from_pretrained("Qwen/Qwen3-8B")               # packed on the GPU as it loads
+model = glyd.from_pretrained("Qwen/Qwen3-8B", exact=True)   # logits bit for bit bf16's</code></pre>
+
+<p>One behavior to know about: <code>generate()</code> runs compiled on PyTorch 2.13.0 or later (a static cache, CUDA graphs); pass <code>compile=False</code> — or set <code>GLYD_COMPILE=0</code> — and it runs eager. If you are on an older PyTorch, expect the eager path, not an error.</p>
+
+<h2 id="3-pack-a-model-on-the-cpu">3. Pack a model on the CPU with the CLI</h2>
+
+<p>Packing does not need Python or a GPU — the <code>glyd pack</code> subcommand writes the packed bytes to disk, which is the artifact you would check into a model registry or copy to a machine without the Python stack:</p>
+
+<pre><code class="language-bash">glyd pack Qwen/Qwen3-8B qwen3-8b-glyd                    # saved packed on the CPU, no Python or GPU
+glyd pack Qwen/Qwen3-8B qwen3-8b-glyd12 --layout mma12   # the 12-bit layout: an A10, A100 or H100 loads it as saved</code></pre>
+
+<p>The <code>mma12</code> layout is the one tuned for the tensor-core path: on an H100, Qwen3-32B sits in 49.2&nbsp;GB instead of 65.5&nbsp;GB at 26.4&nbsp;ms of GPU time a token, with the packed matrix products 1.1–1.2&times; faster than cuBLAS's. The default (tiered) layout takes the more standard route and is what the savings table below is measured with.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/glyd-lossless-model-compression-tutorial/img2.webp" alt="Diagram of memory savings: a long bar of bf16 weight blocks shrinks into a bar one third shorter of packed blocks, with arrows showing the flow"><figcaption>AI-generated diagram for AI Frontier Post — bf16 weights compress to roughly two thirds of their size, bit for bit</figcaption></figure>
+
+<h2 id="4-serve-it-through-vllm">4. Serve it through vLLM</h2>
+
+<p>The fastest way into the serving path is the project's installer, which bundles Glyd with vLLM 0.30 and PyTorch as one tool (Linux, NVIDIA GPU, driver 580 or newer — on a Mac, or with no GPU, it installs the compression CLI instead):</p>
+
+<pre><code class="language-bash">curl -LsSf https://getglyd.com/install.sh | sh   # Glyd, vLLM 0.30 and PyTorch as one tool
+glyd run Qwen/Qwen3-8B                           # downloads the model, starts it packed, and opens a chat</code></pre>
+
+<p><code>glyd run</code> checks the machine, works out the memory share, the context length, and the chat parsers from the GPU it finds (a 16&nbsp;GB card included), and chats in the terminal and at <code>http://localhost:8000</code>. Two more commands round out the serving story: <code>glyd serve MODEL</code> leaves the model up as an OpenAI API, and <code>glyd doctor</code> reports what the machine has and which models fit.</p>
+
+<p>What the packed serving buys you, measured on Lambda Cloud's 4&times; RTX A6000 (48&nbsp;GB) cards on 2026-09-26 — <code>nvidia-smi</code> taken during the runs:</p>
+
+<table>
+<thead><tr><th>The same runs</th><th>bf16</th><th>Glyd</th></tr></thead>
+<tbody>
+<tr><td>Qwen3-32B: weights</td><td>65.5&nbsp;GB</td><td><strong>44.5&nbsp;GB</strong></td></tr>
+<tr><td>Qwen3-32B: 48&nbsp;GB GPUs it takes</td><td>2</td><td><strong>1</strong></td></tr>
+<tr><td>Qwen3-32B: tokens/s at 1 / 8 / 32 sequences</td><td>9.5 / 74 / 276</td><td><strong>11.8 / 95 / 290</strong></td></tr>
+<tr><td>Qwen2.5-72B: weights</td><td>145.4&nbsp;GB</td><td><strong>97.8&nbsp;GB</strong></td></tr>
+<tr><td>Qwen2.5-72B: 48&nbsp;GB GPUs it takes</td><td>4</td><td><strong>3</strong></td></tr>
+<tr><td>KV cache, Qwen2.5-7B, 16K tokens</td><td>947&nbsp;MB</td><td><strong>651&nbsp;MB</strong></td></tr>
+</tbody>
+</table>
+
+<p>At Lambda Cloud's on-demand prices ($1.09 an RTX A6000-hour), that is Qwen3-32B served around the clock for $9,548 a year instead of $19,097 — a 50% cut. And quality holds where it counts: Qwen3.8 27B moves from 15.1946 to 15.1941 perplexity and 79.7% to 80.0% MMLU; Llama 3.1 8B Instruct goes 19.5910 to 19.5909 perplexity, 71.7% to 72.0% MMLU.</p>
+
+<h2 id="5-the-same-engine-as-a-file-compressor">5. The same engine, as a file compressor</h2>
+
+<p>Glyd's model work sits on top of a general-purpose compression codec that competes with zstd, and you can use it on your own data without touching a GPU. The level you want first is <code>--max</code>, the project's designated zstd -3 slot — fewer bytes, 3–7&times; faster reads on a server:</p>
+
+<pre><code class="language-bash">glyd --max  events.json -o events.glyd            # the zstd -3 slot: fewer bytes, 3-7x faster reads
+glyd --max -r access.log -o access.glyd           # record mode: logs, dumps, CSV, JSON lines as columns
+glyd --ultra -r dump.sql -o dump.glyd             # fewest bytes from a parse; slow to write
+glyd --cold -r dump.sql -o dump.glyd              # fewest bytes of all; 1 MB/s per core each way
+glyd --base dump-mon.sql dump-tue.sql -o tue.glyd # base mode: Tuesday's dump against Monday's
+glyd -d events.glyd -o events.json                # the level and mode are in the stream
+glyd -b bigfile                                   # benchmark every level on your data</code></pre>
+
+<p>Two modes deserve a closer look. <strong>Record mode</strong> (<code>-r</code>) detects the shape of logs, SQL dumps, CSV, and JSON lines, turns each field into a typed stream (integer and date-time deltas, dictionaries with recency ranks, text), and compresses those — which is how a bf16 checkpoint becomes 33% smaller, a fine-tune against its base 44% smaller. <strong>Base mode</strong> (<code>--base</code>) compresses a version against the last one, like a delta patch for nightly dumps; decoding needs the same base, so keep it around. Not sure which level fits? <code>glyd -b</code> benchmarks every level against your data and shows you the tradeoff directly.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/glyd-lossless-model-compression-tutorial/img3.webp" alt="Diagram of the Glyd pipeline: large glowing tensor cubes enter zigzag compression waves and exit as smaller packed cubes into a softly glowing server rack"><figcaption>AI-generated diagram for AI Frontier Post — weights enter the encoder, packed weights leave, the GPU never sees the difference</figcaption></figure>
+
+<h2 id="6-the-honesty-check">6. The honesty check: what it can't do</h2>
+
+<p>The project publishes a "known gaps" section that is unusually specific, and it is the part worth reading before you commit. The short version:</p>
+
+<ul>
+<li><strong>Reads are the tax.</strong> Record-mode reads cost 2–2.7&times; zstd's CPU rebuilding the columns, which makes plain zstd -3 the cheaper choice when reads are CPU-billed and frequent. On Sapphire Rapids, one-core reads run 0.79–0.97&times; zstd's — on Graviton3 and Ryzen they beat it.</li>
+<li><strong>High concurrency is not its best shape.</strong> At 64 sequences, Glyd generates 0.82–0.86&times; bf16's tokens/s on the A6000s (1.04&times; on a 4080 SUPER), though it still costs less per token. Prompt processing takes 1.2–1.6&times; bf16's time on the A6000s.</li>
+<li><strong><code>--ultra</code> is a specialist.</strong> It runs 0.1–3.5% larger than the better of zstd -19 and -22 on plain text, executables, source, and OS trees — and up to 15% larger than xz -9e or brotli -11 there, though it reads at 500–1,600&nbsp;MB/s against their 30–125. Its territory is records and containers, where it ties or wins.</li>
+<li><strong><code>--cold</code> is symmetric.</strong> Reads cost what writes cost — 1–1.3&nbsp;MB/s per core — so it is for data read a few times in its life: archives, compliance holds. Not a tier that serves reads.</li>
+<li><strong>The ceiling is real.</strong> No lossless code takes more than about 34% off bf16 weights or KV cache (measured: 10.5–10.6 bits a value). Glyd's 10.80 bits is 32.5% off — close to the wall. Models already shipped in FP8 have about 18% to take, in NVFP4 about 7%.</li>
+<li><strong>The license has two faces.</strong> The codec is BSD-3-Clause <em>or</em> GPL-2.0 — ship it anywhere you could ship zstd. The GPU weights and the store are BUSL-1.1: fine for personal, research, and non-commercial use, but commercial production needs a license from the author. Know which one you are building on.</li>
+</ul>
+
+<h2 id="what-you-built">What you built</h2>
+
+<p>A packed model directory that loads on fewer GPUs than it was trained for, an OpenAI-compatible endpoint serving it, and a compression toolkit you can point at any log, dump, or checkpoint. The realistic production shape is this: pack once with <code>glyd pack</code>, serve packed through <code>glyd serve</code> or the vLLM path, and spend the saved memory on KV cache — vLLM gives the freed VRAM to the cache, which is why saturated requests-per-second rise (1.33&times; on an L4, 1.65&times; on an A100 40&nbsp;GB for Qwen3-14B).</p>
+
+<p>Where to go next inside the project: <code>gpu/vllm/README.md</code> in the repo covers the manual <code>vllm serve</code> setup for when the one-command path does not fit your deployment, and <code>ROADMAP.md</code> shows where the project is heading. And since the codec is the same zstd license as zstd, the CLI half of this tutorial is production-safe for anything you can already do with <code>zstd</code>.</p>
+
+<h2 id="the-takeaway">The takeaway</h2>
+
+<p>Model compression in 2026 mostly means quantization — trading accuracy for memory and hoping nobody notices. Glyd's bet is the opposite direction: the bits are redundant, not the model, so take the redundant bits and change nothing else. The measured result is 33% less GPU memory with perplexity and MMLU numbers that are, for all practical purposes, the same model. The caveats are priced in plainly: the GPU code is source-available, not fully open source; reads cost more CPU than zstd in the modes that save the most; and there is a hard ceiling on how much more any lossless code can ever take. But if your constraint is GPUs — and in 2026, whose isn't — two lines of Python that turn 16.4&nbsp;GB into 11.2&nbsp;GB, bit for bit, deserve an afternoon of your time.</p>
+
+<hr>
+<p><em>Every number in this article was measured by the Glyd project, not sketched: Qwen3-32B and Qwen2.5-72B runs on Lambda Cloud 4&times; RTX A6000 (48&nbsp;GB), 2026-09-26, with raw logs in the repo's <code>benchmarks/gpu/</code> directory; quality numbers from the popular-models harness on an H100 SXM and an A10, 2026-09-26/27. Commands verified against the README at release v0.14.3. Star count (~240) measured at time of writing; the project debuted on September 19, 2026.</em></p>
+</div>
+<div class="engage-row"><div class="reactions" data-reactions="glyd-lossless-model-compression-tutorial"><span class="reactions-label">React:</span></div><div class="comments-cta"><a class="btn-brief" href="/article/glyd-lossless-model-compression-tutorial/#comments">Join the discussion</a></div></div>
+<div class="comments" data-comments="glyd-lossless-model-compression-tutorial"></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/pageindex-vectorless-rag-tutorial/"><span class="chip">Tutorials</span><h3>PageIndex: vectorless, reasoning-based RAG you can run on your own models — hands-on</h3><div class="meta">September 29, 2026</div></a><a class="rel-card" href="/articles/speculative-decoding-llamacpp-tutorial/"><span class="chip">Tutorials</span><h3>Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</h3><div class="meta">September 29, 2026</div></a><a class="rel-card" href="/articles/colibri-run-frontier-moe-consumer-hardware/"><span class="chip">Tutorials</span><h3>Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri</h3><div class="meta">September 28, 2026</div></a><a class="rel-card" href="/articles/serve-model-vllm-tutorial/"><span class="chip">Tutorials</span><h3>Serve an open model with vLLM: a deployment tutorial</h3><div class="meta">July 14, 2026</div></a></div></section>
+</article>
+</div>
+</main>
+<footer class="site-footer"><div class="wrap footer-in"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p class="fine">Independent coverage of the AI frontier. Not affiliated with any lab.</p></div></footer>
+<script src="/assets/site.js"></script>
+</body>
+</html>
