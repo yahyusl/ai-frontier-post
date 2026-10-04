@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Is your model getting quietly worse? Build a daily LLM drift monitor — the livenerf playbook — AI Frontier Post</title>
+<meta name="description" content="livenerf (ninjahawk/livenerf, 1,200+ stars, MIT) asks whether frontier models quietly get worse after launch — and turned the argument into a 30-day experiment with a day-0 baseline. Steal the playbook: freeze a discriminating question panel, run it daily on your model with Inspect, and catch drift with statistics instead of vibes.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/llm-drift-monitor-livenerf-hands-on/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Is your model getting quietly worse? Build a daily LLM drift monitor — the livenerf playbook">
+<meta property="og:description" content="livenerf (ninjahawk/livenerf, 1,200+ stars, MIT) asks whether frontier models quietly get worse after launch — and turned the argument into a 30-day experiment with a day-0 baseline. Steal the playbook: freeze a discriminating question panel, run it daily on your model with Inspect, and catch drift with statistics instead of vibes.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/llm-drift-monitor-livenerf-hands-on/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-04">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Is your model getting quietly worse? Build a daily LLM drift monitor \u2014 the livenerf playbook", "description": "livenerf (ninjahawk/livenerf, 1,200+ stars, MIT) asks whether frontier models quietly get worse after launch \u2014 and turned the argument into a 30-day experiment with a day-0 baseline. Steal the playbook: freeze a discriminating question panel, run it daily on your model with Inspect, and catch drift with statistics instead of vibes.", "datePublished": "2026-10-04", "dateModified": "2026-10-04", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/llm-drift-monitor-livenerf-hands-on/"}, "image": "https://aifrontierpost.com/articles/llm-drift-monitor-livenerf-hands-on/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/llm-drift-monitor-livenerf-hands-on/cover.webp" alt="A declining benchmark score line over 30 days with a confidence band and a dashed day-0 baseline"><figcaption>The shape of a drift experiment: a daily score, a frozen baseline, and the band that decides whether the model moved. Illustration: AI Frontier Post.</figcaption></figure>
+<p>Every few months the same argument erupts online: the model got worse. Quieter, cheaper, dumber — "nerfed" a few weeks after launch, right after everyone locked in their subscriptions. The counterargument is always the same too: you're pattern-matching on noise, nothing changed. It's vibes versus vibes, because nobody has a day-zero baseline to check against.</p>
+<p><a href="https://github.com/ninjahawk/livenerf">livenerf</a> (ninjahawk/livenerf, 1,200+ stars, MIT) decided to stop arguing and start measuring. It's a small, append-only benchmark for exactly one question — does a frontier model get worse after it ships? — and it started the clock on launch day: September 22, 2026, the day Claude Opus 5.5 came out. One frozen panel of questions, one run a day, thirty days, with the statistics pre-registered before the first result.</p>
+<p>You don't need livenerf's specific setup to use its playbook. The method transfers to any model you depend on: an API model whose provider ships silent updates, a local model you re-quantize, a fine-tune you iterate on. Freeze the questions, pin everything else, run daily, and decide with paired statistics instead of your eyes. Here's the whole thing, hands-on.</p>
+
+<h2>What you'll need</h2>
+<ul>
+<li>Python 3.11+ and <code>pip install inspect_ai pandas</code> — <a href="https://inspect.aisi.org.uk/">Inspect</a> is the UK AI Safety Institute's open-source eval framework, and it's what livenerf itself is built on (it pins <code>inspect_ai==0.3.266</code>).</li>
+<li>A model you can call repeatedly: an API key for any Inspect-supported provider, or a local model.</li>
+<li>30–100 questions with checkable answers — your product's hard cases, a slice of a public benchmark, your support team's worst tickets. Multiple choice, integers, exact strings: anything a pure function can grade.</li>
+<li>cron (or Task Scheduler) for the daily run.</li>
+</ul>
+
+<h2>1. Freeze a panel of questions the model gets <em>sometimes</em> right</h2>
+<p>This is the core insight, and it's the opposite of what you'd guess. livenerf screened 2,336 questions — GPQA Diamond, MMLU-Pro, competition math, AIME 2025–26 — running each one four times. Opus 5.5 got about 93% right on the first try, and 97% of the questions were always right or always wrong. It kept the 78 "sometimes right" ones and threw the rest away.</p>
+<p>Why: questions the model always gets right can't detect a decline, and questions it always gets wrong can't either. Only the borderline questions move when capability moves. A panel of 50 questions your model aces is a smoke detector with the battery removed.</p>
+<p>So: assemble your candidates, run each a few times, and keep the ones with mixed results. Then <strong>freeze the list</strong> — livenerf stores its panel in <code>data/standard_panel.json</code> with a lock file, and the daily run refuses to start if the panel changed. Write the task in Inspect's task API:</p>
+<pre><code># drift/tasks.py
+import json
+from inspect_ai import Task, task
+from inspect_ai.dataset import MemoryDataset, Sample
+from inspect_ai.model import GenerateConfig
+from inspect_ai.solver import generate, system_message
+
+SYSTEM_PROMPT = "Answer each question. Put your final answer inside &lt;answer&gt;...&lt;/answer&gt;."
+PANEL_VERSION = "v1"  # bump this and your old baseline is void
+
+@task
+def drift_panel() -> Task:
+    items = json.load(open("drift/panel.json"))  # [{"id","input","target"}]
+    dataset = MemoryDataset(
+        [Sample(id=it["id"], input=it["input"], target=it["target"]) for it in items],
+        name="drift-panel",
+    )
+    return Task(
+        dataset=dataset,
+        solver=[system_message(SYSTEM_PROMPT), generate()],
+        scorer=choice_scorer(),
+        name="drift_panel",
+        config=GenerateConfig(),
+        version=f"panel-{PANEL_VERSION}/sys-v1",
+        fail_on_error=False,
+    )</code></pre>
+<p>The grader must be a pure function — no I/O, no model calls, no randomness, same input and same score forever. livenerf's multiple-choice grader is eleven lines and worth copying verbatim:</p>
+<pre><code>def choice_score(answer, target):
+    """1.0 if the answer is exactly the target letter
+    (case-insensitive, optional parentheses)."""
+    if answer is None:
+        return 0.0
+    return float(answer.strip().strip("()").strip().upper() == target)</code></pre>
+<p>Wrap it as an Inspect scorer (this mirrors <code>livenerf/scorers/__init__.py</code>, which also attaches <code>mean()</code> and item-clustered <code>stderr()</code> metrics for the error bars later):</p>
+<pre><code>from inspect_ai.scorer import Score, Target, mean, scorer, stderr
+from inspect_ai.solver import TaskState
+import re
+
+ANSWER_RE = re.compile(r"&lt;answer&gt;(.*?)&lt;/answer&gt;", re.DOTALL | re.IGNORECASE)
+
+@scorer(metrics=[mean(), stderr()])
+def choice_scorer():
+    async def score(state: TaskState, target: Target) -> Score:
+        found = ANSWER_RE.findall(state.output.completion or "")
+        answer = found[-1].strip() if found else None
+        return Score(value=choice_score(answer, target.text), answer=answer)
+    return score</code></pre>
+<figure class="inline-art"><img src="/articles/llm-drift-monitor-livenerf-hands-on/img2.webp" alt="A terminal running a nightly LLM evaluation with per-question scores"><figcaption>Illustration: the nightly run — every question in the frozen panel, asked once a day, graded by a pure function. AI-generated.</figcaption></figure>
+
+<h2>2. Pin everything except the questions</h2>
+<p>A drift monitor measures one variable: the model. Everything else must be frozen, or a score change means nothing. livenerf pins the system prompt version, the harness (it records the git hash of the harness code with every run), the grader, and the CLI version — its daily entry point checks the installed CLI against a pinned version file and refuses to run on a mismatch.</p>
+<p>Do the same in your run metadata. Record the model id, the panel version, the Inspect version, and the system prompt version with every run, and make your runner abort if the panel file changed since the baseline started. The discipline is the product: a score you can't attribute is just a number.</p>
+
+<h2>3. Run your day-zero baseline</h2>
+<p>Run the panel once to establish day zero. From the CLI, the pattern is the same one livenerf documents for its own tasks:</p>
+<pre><code>inspect eval drift/tasks.py@drift_panel --log-dir logs</code></pre>
+<p>Or from Python, following <code>livenerf/daily.py</code>'s entry point (note the <code>provider/model</code> id format and the metadata that makes each run attributable):</p>
+<pre><code>from inspect_ai import eval as inspect_eval
+from drift.tasks import drift_panel
+
+logs = inspect_eval(
+    [drift_panel()],
+    model="YOUR_PROVIDER/YOUR_MODEL",   # e.g. the model you ship against
+    log_dir="logs",
+    tags=["drift-watch", "daily"],
+    metadata={"panel_version": "v1", "baseline_day": "2026-10-04"},
+    display="none",
+    max_connections=4,
+)</code></pre>
+<p>Inspect writes <code>.eval</code> logs into <code>logs/</code>. Extract each day's per-question scores and append one line per day to <code>logs/daily.jsonl</code> — date, score per question, total output tokens per question. Tokens matter; step 6 explains why.</p>
+
+<h2>4. Schedule it, with a no-op guard</h2>
+<p>livenerf's daily run fires from cron every hour but does nothing once today's run is recorded, so a blocked or missed hour catches up at the next one instead of being lost. Steal that shape:</p>
+<pre><code># crontab: try hourly during the day; the script no-ops if today already ran
+7 6-22 * * * cd /path/to/drift-watch && bash scripts/daily.sh >> logs/daily.log 2>&1</code></pre>
+<pre><code>#!/usr/bin/env bash
+# scripts/daily.sh
+set -euo pipefail
+cd "$(dirname "$0")/.."
+python -m drift.daily   # checks panel lock + model pin, runs once, appends to logs/daily.jsonl</code></pre>
+<p>livenerf also guards on cost: its runner skips (and retries an hour later) when its usage meters are at or above caps (<code>--weekly-cap 75</code>, <code>--five-hour-cap 60</code> by default). Your version of that is a budget check before the run — a monitor that bankrupts you is worse than vibes.</p>
+
+<h2>5. Read the drift with statistics, not your eyes</h2>
+<p>One day's score is noise. livenerf's design: days 1–10 form the baseline, then two 10-day decision windows, with the first possible call around October 24. The decision uses paired day-vs-baseline deltas with item-clustered standard errors, following Anthropic's <a href="https://arxiv.org/abs/2411.00640">"Adding Error Bars to Evals"</a> — nothing homebrew to argue about. It can detect an accuracy change of about 7.5 points per 10-day window.</p>
+<p>Your minimal version: after ten baseline days, compare each new day's item-level scores against the baseline with a paired test. In pandas, roughly:</p>
+<pre><code>import json, pandas as pd
+
+days = [json.loads(l) for l in open("logs/daily.jsonl")]
+scores = pd.DataFrame([d["scores"] for d in days], index=[d["date"] for d in days])
+base = scores.iloc[:10]            # the frozen baseline window — never move it
+
+daily_mean = scores.mean(axis=1)
+base_mean = base.mean().mean()
+base_se = base.mean(axis=1).std() / (len(base) ** 0.5)
+today = daily_mean.iloc[-1]
+print(f"baseline {base_mean:.1%} ± {1.96*base_se:.1%} | today {today:.1%}")
+print("DRIFT?", abs(today - base_mean) > 1.96 * base_se)</code></pre>
+<p>That's a sketch, not the method — the rigorous version clusters standard errors by question and works on paired deltas, which is what livenerf's <code>livenerf.analysis</code> module does. But the shape is right: a fixed baseline window, a pre-chosen decision rule, and no moving the goalposts after you see the numbers. If you clone livenerf itself, <code>python -m livenerf.plot</code> redraws the daily score chart (light and dark SVG, no dependencies) straight from the <code>.eval</code> logs.</p>
+<figure class="inline-art"><img src="/articles/llm-drift-monitor-livenerf-hands-on/img3.webp" alt="A 30-day calendar where each day's quiz card is graded, forming a declining trend line"><figcaption>Illustration: thirty days, one frozen panel, one score a day — the shape of a real drift experiment. AI-generated.</figcaption></figure>
+
+<h2>6. Watch the tokens — they move first</h2>
+<p>livenerf's validation runs produced the single most useful finding for anyone building a monitor: when the model's effort drops, it shows up in token counts long before it shows up in accuracy. Forcing low effort cut output tokens by 62% while accuracy fell only 8.3 ± 4.5 points; medium effort cut tokens 26% for 4.2 ± 3.9 points of accuracy. A provider quietly routing you to a cheaper configuration looks, at first, like your model got terser — not dumber.</p>
+<p>So log output tokens per question alongside scores, and alert on token drift too. It's the canary.</p>
+
+<h2>What you built</h2>
+<p>A drift watchdog with the livenerf shape: a frozen panel of borderline questions, a pinned harness, one run a day appended to a JSONL log, and a pre-registered statistical rule that turns "the model feels worse" into a yes-or-no answer. As of October 3, the real livenerf is 10 of 30 days in with zero missed days — baseline complete, first decision window open, first possible call around October 24. Your version starts its own clock today.</p>
+
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>One day is noise; ten days is a baseline.</strong> Don't alert on a single bad day. The whole point of the pre-registered window is that you decided the rule before seeing the numbers.</li>
+<li><strong>It catches slides, not swaps.</strong> livenerf's own validation found that swapping Opus 5 in for Opus 5.5 was <em>not</em> distinguishable at 99% (−3.8 ± 6.3 points). Your monitor detects ~7-point capability slides, not surgical same-family substitutions.</li>
+<li><strong>A general panel misses targeted nerfs.</strong> If the degradation hits your use case and your panel doesn't cover it, you'll see nothing. Panels should overweight the questions your product actually depends on.</li>
+<li><strong>Panels age.</strong> Questions leak into training data; today's borderline question is next year's memorized one. Re-freeze periodically and start a new baseline — never splice new questions into an old baseline.</li>
+<li><strong>It costs money every day.</strong> livenerf runs ~90 samples a day behind a Claude Max subscription with usage caps and a budget guard that skips days when the meter runs hot. Size your panel to a daily budget you can sustain for a month, not a day.</li>
+<li><strong>Providers are nondeterministic.</strong> You can't set sampling params you don't have, and you can't turn off thinking you can't see. livenerf's answer is statistics over many samples, not determinism — which is exactly why the panel is "sometimes right" questions rather than fifty.</li>
+</ul>
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="llm-drift-monitor-livenerf-hands-on"></div><div class="comments" data-comments="llm-drift-monitor-livenerf-hands-on"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/inspect-ai-eval-framework-tutorial/"><span class="chip">Tutorials</span><h3>Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute's framework</h3><div class="meta">October 1, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/agent-evals-tutorial/"><span class="chip">Tutorials</span><h3>Testing agents: task-based evals for tool-using models</h3><div class="meta">September 19, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/prompt-compression-measured-guide/"><span class="chip">Tutorials</span><h3>Cut your prompt tokens in half: a measured guide to prompt compression</h3><div class="meta">September 27, 2026 · 10 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
