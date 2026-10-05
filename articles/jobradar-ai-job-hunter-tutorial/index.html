@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop refreshing job boards: build your own AI job hunter with JobRadar — AI Frontier Post</title>
+<meta name="description" content="JobRadar (suvamneog/jobradar, 150+ stars, MIT) watches 56 companies' job boards across seven ATS platforms, scores every posting 0–10 against your resume with an LLM, and emails the matches. Setup, scoring rules, and honest limits, hands-on.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/jobradar-ai-job-hunter-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop refreshing job boards: build your own AI job hunter with JobRadar">
+<meta property="og:description" content="JobRadar (suvamneog/jobradar, 150+ stars, MIT) watches 56 companies' job boards across seven ATS platforms, scores every posting 0–10 against your resume with an LLM, and emails the matches. Setup, scoring rules, and honest limits, hands-on.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/jobradar-ai-job-hunter-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-05">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop refreshing job boards: build your own AI job hunter with JobRadar", "description": "JobRadar (suvamneog/jobradar, 150+ stars, MIT) watches 56 companies' job boards across seven ATS platforms, scores every posting 0–10 against your resume with an LLM, and emails the matches. Setup, scoring rules, and honest limits, hands-on.", "datePublished": "2026-10-05", "dateModified": "2026-10-05", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/jobradar-ai-job-hunter-tutorial/"}, "image": "https://aifrontierpost.com/articles/jobradar-ai-job-hunter-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/jobradar-ai-job-hunter-tutorial/cover.webp" alt="A job seeker searching job listings on a laptop"><figcaption>Job hunting is a polling problem — JobRadar automates the loop. Photo: Pablo Merchan Montes / Unsplash.</figcaption></figure>
+<p>Job hunting is a polling problem. You refresh the same careers pages every morning — most of them on Greenhouse, Lever, or Ashby boards that all look identical — and the moment you stop checking, the role you wanted closes. The boards' own job alerts are keyword soup: a search for “product” emails you about product managers, product marketers, and product support, and you learn to ignore all of it.</p>
+<p><a href="https://github.com/suvamneog/jobradar">JobRadar</a> automates the whole loop properly. It watches 56 companies' job boards across seven ATS platforms — Greenhouse, Lever, Ashby, Workable, Workday, and Oracle Recruiting Cloud — gives every posting a stable id so “new” means new and disappeared ones get marked dead, then scores each one 0–10 against <em>your</em> resume with an LLM. Matches land in your inbox as a daily alert, a weekly digest arrives every Monday, and a local web UI at <code>http://localhost:8765</code> keeps the full ranked list searchable. It's MIT-licensed, picked up 150+ stars within days of launch, and its best design idea is one worth stealing: the scoring rules that matter run in code, not in the prompt.</p>
+<p>What you get at the end: a job hunter that watches the boards you care about, scores them against your actual resume, and pings you only when something clears your bar. Here's the whole thing, hands-on.</p>
+
+<h2>What you'll need</h2>
+<ul>
+<li><strong>A Mac.</strong> The automation schedules use launchd, so macOS is the supported path.</li>
+<li><strong>Python 3.11+.</strong> <code>install.sh</code> sets up the rest of the environment.</li>
+<li><strong>An LLM key.</strong> Any OpenAI-compatible endpoint works; the default is <a href="https://xkiro.com">xkiro</a> with Mistral Large 3, which has a free tier.</li>
+<li><strong>A Gmail App Password</strong> for the alerts. You need 2FA turned on first (myaccount.google.com/apppasswords).</li>
+<li><strong>Your resume as a PDF.</strong></li>
+</ul>
+
+<h2>1. Clone and install</h2>
+<pre><code>git clone https://github.com/suvamneog/jobradar.git
+cd jobradar
+./install.sh</code></pre>
+<p><code>install.sh</code> sets up the virtual environment and registers two launchd jobs: a daily alert check at 09:30 and a weekly digest every Monday at 09:00. You can run everything by hand below, but the schedules are what turn this from a script into a radar.</p>
+
+<h2>2. Point it at your resume</h2>
+<p>Drop your resume PDF into the repo folder and set <code>resume_path</code> in <code>config.yaml</code>. This is the document every posting gets scored against, so use the version you'd actually submit — the model reads the job description and your experience together, then assigns the 0–10 score with a reason.</p>
+
+<h2>3. Add your keys</h2>
+<pre><code>cp run.example.sh run.sh</code></pre>
+<p>Then fill in the two keys: your LLM key (default provider <code>xkiro</code>, model <code>mistralai/mistral-large-2512</code>, with a <code>daily_token_limit</code> of 1,000,000 in the config), and your Gmail App Password for sending mail. Now prove the plumbing works before you spend any tokens:</p>
+<pre><code>./run.sh test          # sends a test email
+./run.sh scan          # fetch, diff, score
+./run-web.sh           # web UI at http://localhost:8765</code></pre>
+
+<h2>4. Run your first scan</h2>
+<p><code>./run.sh scan</code> fetches every board, diffs against the last run, and scores everything 0–10. This is where the two hard rules kick in — and they're the reason this tool is interesting:</p>
+<ul>
+<li><strong>Seniority.</strong> A Senior/Staff/Principal title caps at 3/10 no matter how well the skills match. The README is blunt about why: without the cap, senior roles took 31 of the top 100 slots and the first junior-eligible role sat at position #67.</li>
+<li><strong>Relevance.</strong> A role weak on both skills and domain caps at 3/10. Without it, a branch-office internship scored 8/10 for a developer just for being an internship.</li>
+</ul>
+<p>Both rules are arithmetic on stored data, not prompt instructions — a model asked nicely complies inconsistently, so the enforcement lives in code. <code>./run.sh recap</code> re-applies them later for free, no tokens spent.</p>
+<figure class="inline-art"><img src="/articles/jobradar-ai-job-hunter-tutorial/img2.webp" alt="A person filling out a resume on a laptop"><figcaption>JobRadar scores each posting against your actual resume — use the version you'd submit. Photo: RDNE Stock project / Pexels.</figcaption></figure>
+
+<h2>5. Tune the companies and the bar</h2>
+<p>The default list covers 56 companies. Add your own in <code>config.yaml</code> — the board and slug come straight from the company's careers URL:</p>
+<pre><code>companies:
+  - { name: 'Adobe', board: workday, slug: 'adobe/wd5/external_experienced' }
+
+alerts:
+  companies: [Adobe, Oracle, Atlassian]   # checked daily
+  min_score: 6</code></pre>
+<p>The URL-to-board mapping, from the README:</p>
+<ul>
+<li><code>boards.greenhouse.io/figma</code> → board <code>greenhouse</code>, slug <code>figma</code></li>
+<li><code>jobs.ashbyhq.com/ramp</code> → board <code>ashby</code>, slug <code>ramp</code></li>
+<li><code>jobs.lever.co/spotify</code> → board <code>lever</code>, slug <code>spotify</code></li>
+<li><code>adobe.wd5.myworkdayjobs.com/external_experienced</code> → board <code>workday</code>, slug <code>adobe/wd5/external_experienced</code></li>
+</ul>
+<p><code>alerts.companies</code> is your daily shortlist; <code>min_score: 6</code> is the bar a posting must clear to reach your inbox. The weekly digest covers everything, ranked.</p>
+
+<h2>6. Let the schedules run it</h2>
+<p>Once <code>install.sh</code> has registered the launchd jobs, the daily rhythm is <code>./run.sh alert</code> — it checks the shortlist and fires only if something new opened. The manual kit:</p>
+<pre><code>./run.sh alert         # check the shortlist, alert if anything opened
+./run.sh digest        # send the weekly email
+./run.sh recap         # re-apply the scoring rules, no tokens
+./run.sh list          # the week's finds in the terminal</code></pre>
+<figure class="inline-art"><img src="/articles/jobradar-ai-job-hunter-tutorial/img3.webp" alt="Planning the job hunt at a desk with a laptop and notebook"><figcaption>The 09:30 daily alert and the Monday digest keep the hunt on autopilot. Photo: Matt Ragland / Unsplash.</figcaption></figure>
+
+<h2>7. Mind the token meter</h2>
+<p>Scoring thousands of postings with an LLM costs real tokens, and JobRadar is designed like someone who has paid that bill. Jobs are scored 25 per request with compact positional replies, the token budget is checked before every request and recorded per batch, and a run that hits the ceiling stops cleanly and resumes next time — it can't lock you out of your key. The README's number: a full 3,400-job first scan costs about 340K tokens. That's the expensive part, and it happens once. After that only new postings get scored, which the README puts at a few thousand tokens a week. The default provider, xkiro with Mistral Large 3, has a free tier; the <code>daily_token_limit</code> in <code>config.yaml</code> (1,000,000 by default) is the guardrail that keeps a misconfiguration from eating it in one run.</p>
+
+<h2>8. Steal the robustness ideas</h2>
+<p>Even if you never run the full radar, the repo has two patterns worth copying. First: <strong>rules in code, not in prompts.</strong> The seniority and relevance caps are arithmetic on stored fields because a model “asked nicely” complies inconsistently — and <code>recap</code> can re-apply them with zero tokens. Second: <strong>the test suite reads like an incident log.</strong> Ten suites, most written because something broke in real use: a threading crash in the live scan, an alert that would have fired 142 notifications at once, a malformed model reply that killed a 3,000-job run. Run them before you trust it:</p>
+<pre><code>for t in tests/test_*.py; do ./.venv/bin/python "$t"; done</code></pre>
+
+<h2>What you built</h2>
+<p>A personal job radar: 56 company boards diffed on a schedule, every posting scored 0–10 against your resume with the seniority and relevance guards enforced in code, daily shortlist alerts and a Monday digest in your inbox, and a searchable local web UI for the full ranked list.</p>
+
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>Mac-only scheduling.</strong> The launchd jobs are the whole point of “radar,” and they're macOS. On Linux or Windows you'd wire the <code>run.sh</code> commands into cron or Task Scheduler yourself.</li>
+<li><strong>Seven ATS platforms, not the whole web.</strong> A company on Taleo, iCIMS, or a homegrown board isn't covered until someone adds the scraper.</li>
+<li><strong>Tokens cost money or free-tier budget.</strong> Jobs are scored 25 per request with compact replies; a full 3,400-job first scan runs about 340K tokens. After that only new postings get scored — a few thousand tokens a week. The budget is checked before every request, and a run that hits the ceiling stops and resumes next time, so it can't lock you out of your key.</li>
+<li><strong>Scores are a sort order, not a verdict.</strong> The author's own note: a 4/10 is still worth a glance.</li>
+</ul>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="e2e-natural-language-testing-tutorial"></div><div class="comments" data-comments="e2e-natural-language-testing-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/llmfit-which-llm-fits-your-hardware-tutorial/"><span class="chip">Tutorials</span><h3>Stop guessing which LLM fits your machine: a hands-on guide to llmfit</h3><div class="meta">September 29, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/qwen3-8-27b-local-setup/"><span class="chip">Tutorials</span><h3>Qwen3.8-27B on your own hardware: the complete local setup guide</h3><div class="meta">September 25, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/colibri-run-frontier-moe-consumer-hardware/"><span class="chip">Tutorials</span><h3>Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri</h3><div class="meta">September 28, 2026 · 11 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
