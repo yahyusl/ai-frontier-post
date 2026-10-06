@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run your own voice studio on your own machine: hands-on with VoiceStudio — AI Frontier Post</title>
+<meta name="description" content="VoiceStudio (debpalash/VoiceStudio, 53K+ stars, AGPL-3.0) is a fully local, open-source ElevenLabs alternative: voice cloning, voice design, video dubbing, dictation, transcription and audiobook creation in 646 languages. Here’s the one-line install, the cloning workflow, the dubbing workspace, and the local API and MCP hooks for your coding agents.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/voicestudio-local-voice-studio-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run your own voice studio on your own machine: hands-on with VoiceStudio">
+<meta property="og:description" content="VoiceStudio (debpalash/VoiceStudio, 53K+ stars, AGPL-3.0) is a fully local, open-source ElevenLabs alternative: voice cloning, voice design, video dubbing, dictation, transcription and audiobook creation in 646 languages. Here’s the one-line install, the cloning workflow, the dubbing workspace, and the local API and MCP hooks for your coding agents.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/voicestudio-local-voice-studio-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-06">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run your own voice studio on your own machine: hands-on with VoiceStudio", "description": "VoiceStudio (debpalash/VoiceStudio, 53K+ stars, AGPL-3.0) is a fully local, open-source ElevenLabs alternative: voice cloning, voice design, video dubbing, dictation, transcription and audiobook creation in 646 languages. Here’s the one-line install, the cloning workflow, the dubbing workspace, and the local API and MCP hooks for your coding agents.", "datePublished": "2026-10-06", "dateModified": "2026-10-06", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/voicestudio-local-voice-studio-tutorial/"}, "image": "https://aifrontierpost.com/articles/voicestudio-local-voice-studio-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/voicestudio-local-voice-studio-tutorial/cover.webp" alt="A local voice studio illustration: a laptop rendering a teal audio waveform beside a studio microphone"><figcaption>A voice studio that lives on your machine: no API keys, no per-character billing. Illustration: AI Frontier Post.</figcaption></figure>
+
+<p>Every voice API bills you per character. The hosted voice platforms charge for synthesis the way cloud GPUs charge for compute — small amounts feel free, real workloads get expensive, and your audio runs through someone else's servers forever.</p>
+
+<p><a href="https://github.com/debpalash/VoiceStudio">VoiceStudio</a> bets that voice work shouldn't be a cloud service at all. It's a fully local, open-source voice studio: clone voices, design new ones from a text description, dub videos with timed speech, dictate, transcribe, and produce audiobooks — in 646 languages, powered by default by the k2-fsa/OmniVoice engine. It was the #1 trending repository on GitHub last week, adding more than 16,700 stars in seven days. Today it stands at 53,900+ stars and 6,000+ forks, released under AGPL-3.0.</p>
+
+<p>What you get at the end: a desktop app where generating a voice costs nothing, plus a local speech service your coding agents can call over HTTP and MCP. Here's the whole thing, hands-on.</p>
+
+<h2>What you'll need</h2>
+<ul>
+<li><strong>A Mac, Windows PC, or Linux machine.</strong> NVIDIA GPUs get CUDA acceleration and Apple Silicon uses Metal; machines with no dedicated GPU are fully usable on the CPU, just slower. The installer pulls a small CPU build of PyTorch (about 5 GB of free disk) when you have no GPU.</li>
+<li><strong>Free disk for model downloads.</strong> The app installs models on demand, the first time you use each engine.</li>
+<li><strong>No API keys.</strong> Everything runs on your hardware; remote services are optional.</li>
+</ul>
+
+<h2>1. Install with one command</h2>
+
+<p>On macOS or Linux, one command installs the Electron desktop app:</p>
+
+<pre><code>curl -fsSL https://voicestudio.sh/install | sh</code></pre>
+
+<p>On Windows, run this in PowerShell:</p>
+
+<pre><code>irm https://voicestudio.sh/install | iex</code></pre>
+
+<p>Prefer a manual download? Grab macOS <code>.dmg</code>, Windows <code>.exe</code>, or Linux <code>.AppImage</code> / <code>.deb</code> from the <a href="https://github.com/debpalash/VoiceStudio/releases/latest">Releases page</a> and follow the platform guides in <code>docs/install/</code>. The installer preserves your settings, projects, and models across upgrades. One caveat from the README: version 0.5.3 was the final Tauri release — the Electron app is now the only desktop app.</p>
+
+<p>If you live inside a coding agent, you can delegate the whole install. Paste this into Claude Code, Codex, or Cursor:</p>
+
+<pre><code>Install the VoiceStudio Electron app on this device and verify it works, following
+https://github.com/debpalash/VoiceStudio/blob/main/docs/install/agent.md</code></pre>
+
+<p>The <a href="https://github.com/debpalash/VoiceStudio/blob/main/docs/install/agent.md">agent guide</a> covers hardware detection, reusing existing data, asking before model downloads, and a test generation. Agents that support skills can also run <code>npx skills add debpalash/VoiceStudio</code> to get the <code>voicestudio</code> audio-workflow skill.</p>
+
+<h2>2. Clone your first voice</h2>
+
+<p>Open the <strong>Voice cloning</strong> workspace, pick a voice or add a clean reference recording, enter your text, and generate. The app installs the required model when prompted. That is the README's entire quick-start, and it's honest: the workflow is genuinely that short.</p>
+
+<figure class="inline-art"><img src="/articles/voicestudio-local-voice-studio-tutorial/img2.webp" alt="A human voice flowing as sound waves into a computer that renders a matching waveform"><figcaption>Clone a voice from a clean reference recording, then generate any text in it — locally. Illustration: AI Frontier Post.</figcaption></figure>
+
+<p>Two things worth knowing before you record. First, a clean reference beats a long one — a quiet room with no background noise produces a better clone than a long noisy recording. Second, the README's license section is explicit: <strong>clone voices only with permission</strong>. The same model licenses that enable cloning require you to review them before commercial use.</p>
+
+<h2>3. Design a voice from a sentence</h2>
+
+<p>No reference recording? The <strong>Voice design</strong> workspace generates a voice from a plain-language description — gender, age, pitch, style, accent — and gives it a stable identity you can reuse. This is also where the MCP tools shine: <code>describe_voice</code> tells you which attributes your description maps to (and which words it couldn't map), while <code>design_voice</code> mints a new voice profile and returns a <code>profile_id</code> you can generate with later. It refuses descriptions that map to no attribute, which is a polite way of saying "be more specific."</p>
+
+<h2>4. Transcribe and dictate</h2>
+
+<p>The transcription workspace handles audio files in 646 languages. Dictation is a floating widget with a global shortcut — the app owns microphone capture, and the Python backend keeps ASR models warm.</p>
+
+<p>Scripting transcription without the UI is one command, using the dependency-free Python bridge that ships with the app:</p>
+
+<pre><code>python -m backend.speech_client capabilities
+python -m backend.speech_client transcribe recording.wav</code></pre>
+
+<p>It targets <code>VOICESTUDIO_URL</code>, else the loopback backend on port 3900, and sends <code>OMNIVOICE_API_KEY</code> as a Bearer <redacted> when set. If you already have OpenAI-compatible tooling, hit the local speech platform directly — <code>POST :3900/v1/audio/transcriptions</code> speaks the same contract — or stream live partial text over the WebSocket at <code>:3900/v1/audio/transcriptions/stream</code>. A machine-readable capability document lives at <code>http://127.0.0.1:3900/.well-known/voicestudio-speech</code>.</p>
+
+<h2>5. Dub a video</h2>
+
+<p>The <strong>Dubbing</strong> workspace turns timed speech into translated video: upload a video, generate speech in another language, and get timed dubbing out. It's the same engine stack as cloning, aimed at the most tedious part of video localization — matching translated speech to the timeline.</p>
+
+<figure class="inline-art"><img src="/articles/voicestudio-local-voice-studio-tutorial/img3.webp" alt="A film strip where each frame shows a video frame with speech bubbles in different languages and a waveform along the strip"><figcaption>Video dubbing: timed translated speech for your footage, in up to 646 languages. Illustration: AI Frontier Post.</figcaption></figure>
+
+<p>Pair this with the audiobook and batch-job workflows if you're producing content at volume: generate hours of narration once, pay nothing, and never send the source material to a third party.</p>
+
+<h2>6. Give your coding agent a voice</h2>
+
+<p>VoiceStudio ships an MCP server so agents like Claude Code and Cursor can synthesize speech, clone voices, and transcribe — in a voice you choose per agent. The server is mounted on the running backend at <code>/mcp</code>, so there's nothing extra to start once VoiceStudio is open. For stdio-only clients, the shim is:</p>
+
+<pre><code>python -m backend.mcp_shim</code></pre>
+
+<p>The tools, from <code>docs/mcp.md</code>:</p>
+
+<ul>
+<li><code>generate_speech</code> — text to WAV by default (Opus/Ogg when ffmpeg is installed), in the agent's bound voice or any <code>profile_id</code>.</li>
+<li><code>clone_voice</code> / <code>design_voice</code> — reference audio or a text description in, a new <code>profile_id</code> out.</li>
+<li><code>describe_voice</code> — dry-run of a description: which attributes it maps to, which words it didn't understand. Saves nothing.</li>
+<li><code>transcribe</code> — audio in, text out, 646 languages.</li>
+<li><code>list_voices</code> / <code>list_personalities</code> / <code>list_languages</code> — enumerate what's available.</li>
+<li><code>check_health</code> — backend status plus the active GPU device.</li>
+</ul>
+
+<p>One practical detail: a WAV as base64 is a lot of bytes in an agent's context. Setting <code>OMNIVOICE_MCP_OUTPUT_MODE=files</code> (or <code>both</code>) makes <code>generate_speech</code> write the audio to disk and hand back an <code>audio_url</code> served at <code>/audio/&lt;audio_id&gt;.&lt;format&gt;</code> plus an <code>output_path</code> — the agent gets a file path instead of megabytes of base64.</p>
+
+<h2>What you built</h2>
+
+<p>A voice studio with no meter running: a cloned voice and a designed voice saved to your library, a transcription pipeline you can hit from shell scripts or an OpenAI-compatible endpoint, a dubbed video, and a coding agent that can narrate its own work in any voice you choose. Per character billed: zero.</p>
+
+<h2>Honest limitations</h2>
+
+<ul>
+<li><strong>AGPL-3.0.</strong> Great for personal and internal use; if you distribute the app or offer it as a hosted service, the copyleft applies. Models ship under their own licenses — review them before commercial use.</li>
+<li><strong>First-run downloads.</strong> Nothing synthesizes until the engine's models are on disk, and they're large. Budget time and disk space; the installer's agent guide at least asks before downloading.</li>
+<li><strong>CPU works, GPU flies.</strong> CUDA and Apple Silicon Metal are the fast paths; CPU-only machines are fully supported but slower.</li>
+<li><strong>Platform gaps.</strong> Intel Macs get the app UI only and need a remote backend; Windows on ARM is experimental (native ARM64 app, emulated x64 Python backend, CPU only).</li>
+<li><strong>Consent is on you.</strong> Cloning voices you don't own or have permission to clone is a misuse of the tool — the project says so explicitly in its license section.</li>
+</ul>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/llmfit-which-llm-fits-your-hardware-tutorial/"><span class="chip">Tutorials</span><h3>Stop guessing which LLM fits your machine: a hands-on guide to llmfit</h3><div class="meta">September 29, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/qwen3-8-27b-local-setup/"><span class="chip">Tutorials</span><h3>Qwen3.8-27B on your own hardware: the complete local setup guide</h3><div class="meta">September 25, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/colibri-run-frontier-moe-consumer-hardware/"><span class="chip">Tutorials</span><h3>Run a 744B-parameter model on your own machine: a hands-on tutorial for Colibri</h3><div class="meta">September 28, 2026 · 11 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
