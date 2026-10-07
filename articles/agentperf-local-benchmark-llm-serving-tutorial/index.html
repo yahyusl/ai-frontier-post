@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Benchmark how fast your machine really serves AI agents: hands-on with agentperf-local — AI Frontier Post</title>
+<meta name="description" content="agentperf-local (ArtificialAnalysis/aa-agentperf-local, Apache-2.0) replays real recorded agent conversations against your local model server — llama.cpp, vLLM, SGLang, LM Studio, or one it starts for you — and reports throughput and latency the way an agent actually experiences them. The full hands-on: install, the 6-turn quick check, the 168-turn comparable run, and the honest trade-offs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/agentperf-local-benchmark-llm-serving-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Benchmark how fast your machine really serves AI agents: hands-on with agentperf-local">
+<meta property="og:description" content="agentperf-local (ArtificialAnalysis/aa-agentperf-local, Apache-2.0) replays real recorded agent conversations against your local model server — llama.cpp, vLLM, SGLang, LM Studio, or one it starts for you — and reports throughput and latency the way an agent actually experiences them. The full hands-on: install, the 6-turn quick check, the 168-turn comparable run, and the honest trade-offs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/agentperf-local-benchmark-llm-serving-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/agentperf-local-benchmark-llm-serving-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-07">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Benchmark how fast your machine really serves AI agents: hands-on with agentperf-local", "description": "agentperf-local (ArtificialAnalysis/aa-agentperf-local, Apache-2.0) replays real recorded agent conversations against your local model server — llama.cpp, vLLM, SGLang, LM Studio, or one it starts for you — and reports throughput and latency the way an agent actually experiences them. The full hands-on: install, the 6-turn quick check, the 168-turn comparable run, and the honest trade-offs.", "datePublished": "2026-10-07", "dateModified": "2026-10-07", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/agentperf-local-benchmark-llm-serving-tutorial/"}, "image": "https://aifrontierpost.com/articles/agentperf-local-benchmark-llm-serving-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/agentperf-local-benchmark-llm-serving-tutorial/cover.webp" alt="A glowing speedometer measuring tokens per second above a GPU circuit board"><figcaption>Measure what an agent actually feels: agentperf-local replays real agent traffic against your local model server &mdash; illustration generated for this article.</figcaption></figure>
+<p class="lede">Everyone quotes a tokens-per-second number for their local model, and almost none of them mean anything for agents. A bare completion benchmark sends one short prompt and reads the tokens. An agent sends the <em>whole conversation so far</em> &mdash; every tool result, every file it opened &mdash; on every turn. agentperf-local is the open-source tool from Artificial Analysis that benchmarks how fast your machine serves an <em>agent</em>, not a prompt: it replays recorded agent conversations against your model server and reports throughput and latency per turn.</p>
+<p>agentperf-local (<a href="https://github.com/ArtificialAnalysis/aa-agentperf-local">ArtificialAnalysis/aa-agentperf-local</a>, ~85 GitHub stars at the time of writing, Apache-2.0) works two ways: point it at a server you already run (llama.cpp, LM Studio, vLLM, SGLang, Ollama), or let it download a pinned model, start the server itself, and run the replay. The default replay is eight recorded agent tasks with 168 model turns, each turn carrying the full conversation so far &mdash; the shape real agentic traffic actually takes. Here is the full hands-on.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>uv.</strong> The tool installs with <code>uv tool install agentperf-local</code>; uv fetches Python 3.12 for you if you don&rsquo;t have it. To try it without installing, <code>uvx agentperf-local</code>; <code>pipx install agentperf-local</code> works too.</li>
+<li><strong>A model server with an OpenAI-compatible API</strong> &mdash; or nothing at all: the managed runs download a pinned model and start the server for you. The bundled recipes use llama.cpp (<code>llama-server</code> on your PATH), vLLM or SGLang on NVIDIA GPUs, or Splash on Apple Silicon.</li>
+<li><strong>Serious memory for the full run.</strong> A complete comparable run needs a 65,536-token context; the default replay&rsquo;s largest turn needs about 58,000 of it. There is a lightweight six-turn check if your machine can&rsquo;t fit that.</li>
+</ul>
+<h2>1. Install and see your options</h2>
+<pre><code>uv tool install agentperf-local
+agentperf-local doctor
+agentperf-local deployment-options --profile-id qwen38-27b-q4-k-m</code></pre>
+<p><code>doctor</code> prints local hardware facts without identifiers &mdash; a sanity check that your GPU and RAM are what you think they are. <code>deployment-options</code> shows which frameworks can serve one catalog recipe on <em>this</em> machine (the default profile is <code>qwen38-27b-q4-k-m</code>; pass <code>--profile-id</code> for another). macOS, Linux, and Windows are supported &mdash; with the caveats the README is explicit about: on Windows, managed runs need an NVIDIA GPU and llama.cpp, and vLLM and SGLang run only on Linux.</p>
+<h2>2. The six-turn quick check</h2>
+<p>Before you commit to a full run, prove the plumbing works with the synthetic mini replay &mdash; <code>aa-mini-v1</code>, six turns, needs only 8,192 tokens of context:</p>
+<pre><code>agentperf-local managed-run \
+  --profile-id gemma4-12b-it-q4-0 \
+  --framework llama-cpp \
+  --replay aa-mini-v1 \
+  --context-tokens 8192 \
+  --output-dir results/gemma4-12b-mini</code></pre>
+<p><code>managed-run</code> downloads the pinned model into the Hugging Face cache, checks every file&rsquo;s SHA-256, starts the server on localhost, runs the replay, and stops the server. The tool never installs serving frameworks for you &mdash; each recipe pins the exact version it expects. Prefer the guided path? <code>agentperf-local tui --replay aa-mini-v1</code> opens the full-screen app, where you choose a smaller context on the Setup screen (arrows move, Enter continues, Escape goes back, <code>?</code> opens help, <code>q</code> quits). Two honest labels to carry forward: a run below 65,536 tokens is marked <code>reduced: true</code>, and the mini replay&rsquo;s results are explicitly not comparable with anything.</p>
+<h2>3. The full 168-turn run</h2>
+<p>The default replay, <code>agentperf-default-v1</code>, is eight recorded agent tasks with 168 model turns, and it uses the <code>exact</code> output policy &mdash; every turn generates its recorded number of tokens, which is what makes results comparable across machines and frameworks:</p>
+<pre><code>agentperf-local managed-run \
+  --profile-id qwen38-27b-q4-k-m \
+  --framework llama-cpp \
+  --output-dir results/qwen38-27b</code></pre>
+<figure class="inline-art"><img src="/articles/agentperf-local-benchmark-llm-serving-tutorial/img2.webp" alt="A dark terminal window showing a bar chart of LLM serving benchmark results"><figcaption>The number that matters is throughput under agent-shaped traffic &mdash; full conversations, every turn &mdash; illustration generated for this article.</figcaption></figure>
+<p>Why agent-shaped traffic changes the answer: each request carries the conversation <em>so far</em>, so later turns are long-context prefills, not short prompts. A server that looks fast on single-shot prompts can fall over when the 120th turn of an agent session arrives with 50,000 tokens of history. That is the difference this tool measures. On Apple Silicon, the <code>qwen38-27b-splash-dflash</code> recipe serves on <a href="https://github.com/incoai/splash">Splash</a>, Inco AI&rsquo;s Metal engine (M3 or newer, macOS 26.4 or later; install with <code>brew install incoai/tap/splash</code>) &mdash; the recipe pins Splash 1.2.1 and the model package by commit, so the server never silently resolves a newer revision.</p>
+<h2>4. Benchmark the server you already run</h2>
+<p>Already serving with llama.cpp, LM Studio, vLLM, or SGLang? Point the replay at it instead:</p>
+<pre><code>agentperf-local run \
+  --base-url http://127.0.0.1:8080/v1 \
+  --model served-model \
+  --output-dir results/my-server</code></pre>
+<table>
+<thead><tr><th>Server</th><th>Typical base URL</th></tr></thead>
+<tbody>
+<tr><td>llama.cpp</td><td><code>http://127.0.0.1:8080/v1</code></td></tr>
+<tr><td>LM Studio</td><td><code>http://127.0.0.1:1234/v1</code></td></tr>
+<tr><td>vLLM</td><td><code>http://127.0.0.1:8000/v1</code></td></tr>
+<tr><td>SGLang</td><td><code>http://127.0.0.1:30000/v1</code></td></tr>
+</tbody>
+</table>
+<p>Use the model name your server reports. Two gotchas the README is explicit about. First, the <code>exact</code> policy sends <code>ignore_eos</code>, which is not part of the OpenAI API &mdash; the tool checks that your server honors it before the replay, and if it doesn&rsquo;t, it stops and names the flag to change. Second, <strong>Ollama cannot honor <code>ignore_eos</code></strong>: the tool detects Ollama, warns you, and falls back to the <code>recorded</code> policy, which lets the model stop on its own and reports end-to-end latency as a normalized estimate. That result is not directly comparable with <code>exact</code> runs &mdash; don&rsquo;t benchmark Ollama against a llama.cpp run and read the winner as truth. If your server needs an API key, put it in an environment variable and pass the variable&rsquo;s <em>name</em> with <code>--api-key-env</code> &mdash; no flag takes a literal key.</p>
+<h2>5. Add real tool time (optional)</h2>
+<p>By default the replay skips the time between turns. Real agents spend wall-clock time <em>running tools</em>. Two modes add it back:</p>
+<pre><code>agentperf-local run \
+  --base-url http://127.0.0.1:8080/v1 \
+  --model served-model \
+  --output-dir results/live-tools \
+  --tool-mode fixed_delay</code></pre>
+<p><code>fixed_delay</code> sleeps the recorded tool time after each turn. <code>--tool-mode live</code> goes further and actually runs the recorded shell commands inside Docker containers, so tool time is measured, not slept. It is opt-in for a reason: it needs Docker plus prebuilt images (<code>scripts/build-default-containers.sh</code>, and <code>scripts/install-swebench-validation.sh</code> once on arm64 hosts; they are bash scripts, so Windows users run them from Git Bash or WSL). The README&rsquo;s security caveats are worth reading in full &mdash; the recorded commands are untrusted input, containers have no network by default (a replay manifest can ask for one; <code>--live-network none</code> forces none), and the task workspace is mounted read-write under your output directory.</p>
+<figure class="inline-art"><img src="/articles/agentperf-local-benchmark-llm-serving-tutorial/img3.webp" alt="A stopwatch hovering over a small AI agent running on a glowing circuit path"><figcaption>Time what the agent actually waits for: generation, prefill, and tool round-trips &mdash; illustration generated for this article.</figcaption></figure>
+<h2>6. Read the results</h2>
+<p>Each run writes a new directory:</p>
+<pre><code>results/qwen38-27b/
+├── turns.jsonl      # per-turn measurements
+├── tasks.json
+├── tools.json
+├── failures.json
+├── summary.json     # the headline numbers
+└── measurement.json</code></pre>
+<p><code>summary.json</code> is written last &mdash; a crashed run has no summary. It holds the headline numbers: output tokens per second, and median and p95 first-token and turn times. Managed runs also write the server log and a deployment record, so you can prove what was actually served. A note on privacy: the results are private, but they can contain paths, model labels, and errors, and a run sends the recorded prompts to the model server &mdash; point the base URL at a remote server and those prompts leave your machine.</p>
+<h2>What you built</h2>
+<p>A repeatable measurement of how your machine serves <em>agents</em>: an installed benchmark CLI, a quick-check config that proves your setup, a full 168-turn comparable run against a pinned model, and a results directory with tokens-per-second and latency percentiles you can diff against the next framework, the next quantization, or the next GPU. Submitting results to Artificial Analysis is optional &mdash; nothing is uploaded unless you ask (<code>prepare-submission</code> builds the file, <code>submit</code> sends it, <code>submission-status</code> reads it back).</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>It measures speed, not quality.</strong> The README&rsquo;s own framing is the caveat: it measures how fast your machine serves an agent &ldquo;without measuring output quality.&rdquo; A fast server serving a degraded model still wins this benchmark.</li>
+<li><strong>Comparable runs need a 65,536-token context.</strong> The default replay&rsquo;s largest turn needs about 58,000 tokens. Smaller-context runs are marked <code>reduced: true</code> and can&rsquo;t be compared with full runs &mdash; same for Ollama, which falls back to the non-comparable <code>recorded</code> policy.</li>
+<li><strong>It doesn&rsquo;t install serving frameworks.</strong> You bring llama.cpp, vLLM, SGLang, LM Studio, or Splash; the tool only starts the pinned recipes. The Splash path needs an M3 or newer and macOS 26.4 or later.</li>
+<li><strong>The live tool mode is genuinely a Docker workload.</strong> Prebuilt images, bash build scripts, untrusted recorded shell commands &mdash; fine on your own box, not something you point at a shared server.</li>
+<li><strong>It&rsquo;s early.</strong> ~85 stars, created late September, under active development &mdash; the catalog of pinned recipes is small and the revision pins will move. Docs to bookmark: the <a href="https://github.com/ArtificialAnalysis/aa-agentperf-local">GitHub repo</a> (the README is the manual), <a href="https://artificialanalysis.ai">artificialanalysis.ai</a> (the public leaderboards), and <code>docs/FORMATS.md</code> + <code>docs/SUBMITTING.md</code> in the repo for the results schemas and what an upload contains.</li>
+</ul>
+<h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/headroom-agent-context-compression-tutorial/"><span class="chip">Tutorials</span><h3>Cut your AI agent&rsquo;s token bill by 20&ndash;60%: hands-on with Headroom, the local compression layer</h3><div class="meta">October 7, 2026 &middot; 8 min read</div></a><a class="rel-card" href="/articles/strata-125b-model-gaming-pc-tutorial/"><span class="chip">Tutorials</span><h3>Run a 125-billion-parameter model on your own gaming PC: hands-on with Strata</h3><div class="meta">October 4, 2026 &middot; 8 min read</div></a><a class="rel-card" href="/articles/magpie-one-gateway-every-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Run Claude Code on DeepSeek: route every coding agent through one local gateway</h3><div class="meta">October 5, 2026 &middot; 8 min read</div></a></div></section>
+
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
