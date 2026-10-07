@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop hand-writing agent skills: let Claude Code learn its own — hands-on with AutoHarness — AI Frontier Post</title>
+<meta name="description" content="AutoHarness (tigerless-labs/autoharness, ~9.1K stars, MIT) is a self-learning skill layer for Claude Code: it watches your real sessions, distills the lessons into native skills, merges the near-duplicates, and prunes the ones you never use — no daemon, no benchmark. Here is the full hands-on walkthrough, plus the honest trade-offs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/autoharness-self-learning-skills-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop hand-writing agent skills: let Claude Code learn its own — hands-on with AutoHarness">
+<meta property="og:description" content="AutoHarness (tigerless-labs/autoharness, ~9.1K stars, MIT) is a self-learning skill layer for Claude Code: it watches your real sessions, distills the lessons into native skills, merges the near-duplicates, and prunes the ones you never use — no daemon, no benchmark. Here is the full hands-on walkthrough, plus the honest trade-offs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/autoharness-self-learning-skills-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/autoharness-self-learning-skills-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-07">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org","@type": "NewsArticle","headline": "Stop hand-writing agent skills: let Claude Code learn its own — hands-on with AutoHarness","description": "AutoHarness (tigerless-labs/autoharness, ~9.1K stars, MIT) is a self-learning skill layer for Claude Code: it watches your real sessions, distills the lessons into native skills, merges the near-duplicates, and prunes the ones you never use — no daemon, no benchmark. Here is the full hands-on walkthrough, plus the honest trade-offs.","datePublished": "2026-10-07","dateModified": "2026-10-07","author": {"@type": "Person","name": "Marcus Doyle","url": "https://aifrontierpost.com/about/"},"publisher": {"@type": "Organization","name": "AI Frontier Post","url": "https://aifrontierpost.com","logo": {"@type": "ImageObject","url": "https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage": {"@type": "WebPage","@id": "https://aifrontierpost.com/articles/autoharness-self-learning-skills-hands-on-tutorial/"},"image": "https://aifrontierpost.com/articles/autoharness-self-learning-skills-hands-on-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/autoharness-self-learning-skills-hands-on-tutorial/cover.webp" alt="AutoHarness pipeline: host, capture, reflect, promoter, skills, with sidecar components"><figcaption>The learning pipeline at a glance: host → capture → reflect → promoter → skills, with IDX, curator, MNG and LED as sidecars. Diagram adapted from the project’s docs (MIT).</figcaption></figure>
+<p class="lede">Every serious Claude Code user ends up with the same hand-maintained skill library: the deployment checklist, the repo conventions, the &ldquo;always run the linter before you commit&rdquo; note. Writing them is the easy part &mdash; the library rots. Duplicates pile up, a stale rule contradicts a new one, and nobody prunes. AutoHarness is the bet that the skill layer can maintain itself: it watches your real sessions, distills what you worked out into native skills, folds near-duplicates together, and archives the ones you stop using. Same model, different harness.</p>
+<p>AutoHarness (<a href="https://github.com/tigerless-labs/autoharness">tigerless-labs/autoharness</a>, ~9,100 GitHub stars at the time of writing, MIT license) is having a week: it is currently the fastest-rising AI-skills repo on GitHub, and its own headline number is striking &mdash; 42% &rarr; 78% on CORE-Bench, with the only change being the harness around the model. The claim is the project&rsquo;s own, but the mechanism is what matters here: a learning pipeline that runs beside Claude Code, validated not against a held-out benchmark but against whether you actually use the skills it writes. Here is the full hands-on.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>Claude Code.</strong> AutoHarness is a Claude Code plugin &mdash; hooks and an MCP server do the work, and the skill files it lands are plain native <code>SKILL.md</code> files.</li>
+<li><strong>Python 3.11+ as <code>python3</code> on your PATH.</strong> The plugin runs entirely as Python with zero third-party dependencies, and the hooks resolve a bare <code>python3</code>. The README warns explicitly: an older interpreter earlier on your PATH (Xcode ships 3.9.6 at <code>/usr/bin/python3</code>) turns every hook off for the session.</li>
+<li><strong>macOS or Linux.</strong> The plugin registers Linux and macOS as its platforms.</li>
+</ul>
+<h2>1. Install the plugin</h2>
+<p>Type these in the Claude Code input box &mdash; not your shell:</p>
+<pre><code>/plugin marketplace add tigerless-labs/autoharness
+/plugin install autoharness@autoharness</code></pre>
+<p>Then run <code>/reload-plugins</code> (or restart Claude Code). That is the entire setup: zero config. It now watches your sessions and lands learned skills into <code>.claude/skills/</code> in the background. The README is blunt about one naming subtlety if you ever test the MCP server outside the plugin: inside Claude Code the server is referenced as <code>mcp__plugin_autoharness_stage_skill__stage_skill</code>; the translation is automatic, so just install it as a plugin.</p>
+<h2>2. Speed up the loop for a demo</h2>
+<p>Learning fires on work done, counted in tool calls &mdash; the default is a reflection every 50 tool calls (<code>AUTOHARNESS_REFLECT_EVERY_N</code>), and the lifecycle knobs are tuned for hundreds of requests. For a fast-paced demo, shrink the knobs in <code>.claude/settings.json</code>, straight from the README&rsquo;s own walkthrough:</p>
+<pre><code>{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "3",
+           "AUTOHARNESS_MATURITY_PROJECT": "5",
+           "AUTOHARNESS_CAPACITY_PROJECT": "2" } }</code></pre>
+<p>Hooks read the environment on every event, so a change applies from the next session. With the reflection cadence at 3, a working stretch of a few turns ends with a background reflection &mdash; nothing blocks your session.</p>
+<h2>3. Distill on demand with <code>/learn</code></h2>
+<p>You don&rsquo;t have to wait for the background pass. After you work something out &mdash; a debugging sequence, a repo workflow, a command you kept re-deriving &mdash; type <code>/learn</code> in the input box. It distills the session you are in right now, and the lesson goes through the same proposal-and-validation chain the background pass uses. The reflector compares the episode against the existing skill index and decides: add, merge, patch, drop a support file, or delete &mdash; and it proposes only, it has no write tools of its own.</p>
+<h2>4. Inspect what landed &mdash; it&rsquo;s all plain files</h2>
+<p>A demo of AutoHarness is just opening the right files in the right order. The bookkeeping lives in the state dir:</p>
+<pre><code>ls .claude/autoharness/        # per project &mdash; ~/.claude/autoharness/ for the global layer
+  requests                     # layer request counter (the lifecycle denominator)
+  session-&lt;id&gt;                 # tool calls counted toward the next reflection
+  intents/                     # queued skill proposals awaiting the promoter
+  runs/&lt;run-id&gt;.json           # what that run proposed, landed, and rejected &mdash; with reasons
+  last_run.json                # the summary line awaiting the next session start
+  snapshots/                   # skill-tree tarballs the curator takes before merging</code></pre>
+<p>And the skills themselves are native files the host recalls exactly as if you had written them:</p>
+<pre><code>.claude/skills/&lt;name&gt;/
+  SKILL.md                     # the skill itself &mdash; nothing proprietary
+  .ledger.jsonl                # LED: why it was born / changed (append-only)
+  .sidecar.json                # lifecycle counters
+  references/evidence-*.md     # the transcript slice that justified each ledger entry</code></pre>
+<p><code>cat .ledger.jsonl</code> shows the paper trail &mdash; one JSON line per lifecycle event with <code>action</code>, <code>reason</code>, and <code>evidence</code> pointing at a redacted slice of the session that taught it. <code>cat .sidecar.json</code> shows the three counters the lifecycle keeps apart: <code>use</code> (the model actually loaded the skill), <code>view</code> (a session merely read into its directory), and <code>patch</code> (the skill was improved). Only loads count toward survival &mdash; a skill that was merely browsed can&rsquo;t masquerade as one that was followed.</p>
+<figure class="inline-art"><img src="/articles/autoharness-self-learning-skills-hands-on-tutorial/img2.webp" alt="A coding session streaming out of a terminal and distilling into skill cards that file themselves into a library"><figcaption>Distillation, not dictation: sessions flow in on the left, native skill files land in <code>.claude/skills/</code> on the right &mdash; illustration generated for this article.</figcaption></figure>
+<h2>5. Watch it consolidate instead of piling up</h2>
+<p>Hit the same scenario again with a correction (&ldquo;that&rsquo;s missing a step&rdquo;) and let the next reflection run. The layer does <em>not</em> grow a near-duplicate: the existing skill&rsquo;s <code>SKILL.md</code> changes and its ledger appends a <code>patch</code> line. The rarer whole-library pass &mdash; the curator, every 250 tool calls by default &mdash; reads the library as one thing and folds same-scenario skills under umbrellas. A fold records which skill absorbed which, so a merge is never mistaken for a death, and the curator snapshots both skill trees before merging, since a merge is the one operation an atomic rename can&rsquo;t undo.</p>
+<h2>6. Tune survival: validated in use, not on a benchmark</h2>
+<p>A skill survives by being adhered to in later turns &mdash; loads over the requests it was available for &mdash; not by a held-out score. New skills sit in probation (100 requests at the project layer, 300 global) where they&rsquo;re recalled normally but can&rsquo;t be archived. After graduation, the only death is capacity contention: the mature pool is capped (50 project, 20 global), and past it the lowest usage rates go first. Retirement is an archive, never a delete &mdash; a folder moved to <code>.claude/skills/.archive/&lt;name&gt;/</code>, ledger and evidence intact, and moving it back revives it. Your own skills are invisible to all of this: every self-authored skill carries a ledger marker, and anything without it is left completely alone.</p>
+<p>By default the plugin is quiet about its runs &mdash; the session-start summary reports one session late, counts but no names. If you want to hear about it as it happens:</p>
+<pre><code>export AUTOHARNESS_NOTIFY=desktop   # osascript on macOS, notify-send on Linux</code></pre>
+<p>That pushes a native notification per run: what landed and what was rejected, e.g. <code>create foo, patch bar &middot; rejected: baz</code>. Rejected proposals stay visible instead of vanishing silently &mdash; the next session&rsquo;s index line says so.</p>
+<figure class="inline-art"><img src="/articles/autoharness-self-learning-skills-hands-on-tutorial/img3.webp" alt="Ranked skill cards on a shelf, with the least-used ones being archived into a box by an autonomous curator"><figcaption>Capacity is the only death: ranked by usage, the least-used skills archive out &mdash; revive them by moving the folder back. Illustration generated for this article.</figcaption></figure>
+<h2>7. Update and (if you must) uninstall</h2>
+<p>Update from a terminal &mdash; refresh the catalog first, then update by the full <code>plugin@marketplace</code> id, then restart Claude Code:</p>
+<pre><code>claude plugin marketplace update autoharness
+claude plugin update autoharness@autoharness</code></pre>
+<p>The refresh is first on purpose: without it, <code>update</code> checks a stale local catalog and may report &ldquo;already at the latest version&rdquo; when a newer release shipped. Uninstalling only stops it from running &mdash; the skills it landed and its own state live outside the plugin and stay on disk. To clear those too, delete the state dir (<code>~/.claude/autoharness/</code> global, <code>&lt;repo&gt;/.claude/autoharness/</code> per project) and the self-authored skills under <code>.claude/skills/</code>.</p>
+<h2>What you built</h2>
+<p>A self-maintaining skill layer for your coding agent. The same working sessions you were already having now compound: lessons distill into native skills, near-duplicates merge instead of stacking, unused skills archive out of recall, and every decision is logged with its evidence in a per-skill ledger. The host&rsquo;s native recall runs untouched underneath &mdash; each session just opens with a grouped index of the library, so the skills are in front of the model either way.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>Claude Code only.</strong> This is a Claude Code plugin &mdash; hooks, plugin namespacing, the session-start index &mdash; and the project makes no claim about other hosts.</li>
+<li><strong>Young and fast-moving.</strong> The README calls the defaults &ldquo;deliberate placeholders pending empirical calibration,&rdquo; the repo was pushed days ago, and the 42% &rarr; 78% CORE-Bench number is the project&rsquo;s own claim &mdash; treat it as a signal about the harness idea, not a guarantee about your sessions.</li>
+<li><strong>Learning costs tokens.</strong> Reflection runs a child session (a fresh subagent, or a fork of the session that just ended) &mdash; distillation isn&rsquo;t free, and it fires on tool-call volume, not intent. A working stretch triggers; a conversation that only talks never does.</li>
+<li><strong>The index costs context.</strong> Every session opens with the grouped skill index; <code>AUTOHARNESS_INDEX_SUSPENDED=1</code> stops the injection, but then the library depends on the host happening to recall it. The per-line description budget (<code>AUTOHARNESS_INDEX_DESC_MAX_CHARS</code>, default 60) is the dial.</li>
+<li><strong>Python 3.11+ as bare <code>python3</code> is a hard requirement</strong> &mdash; an older interpreter earlier on PATH silently disables every hook, and the only symptom is the plugin quietly doing nothing.</li>
+<li><strong>Docs to bookmark:</strong> the <a href="https://github.com/tigerless-labs/autoharness">GitHub repo</a> (the README is the manual &mdash; 22KB of configuration tables and the full walkthrough), the <a href="https://arxiv.org/abs/2510.11977">HAL/CORE-Bench paper</a> behind the benchmark claim, and the <a href="https://www.youtube.com/watch?v=TM6tGpug1Hc">third-party walkthrough video</a> linked from the README (not reviewed by the project).</li>
+</ul>
+
+<h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/ponytail-lazy-senior-dev-skill-tutorial/"><span class="chip">Tutorials</span><h3>Ponytail: teach your AI coding agent to write less code — a hands-on tutorial</h3><div class="meta">September 28, 2026 &middot; 12 min read</div></a><a class="rel-card" href="/articles/mattpocock-skills-real-engineers-tutorial/"><span class="chip">Tutorials</span><h3>Skills for Real Engineers: hands-on with Matt Pocock's 274K-star agent skills</h3><div class="meta">October 2, 2026 &middot; 12 min read</div></a><a class="rel-card" href="/articles/answer-me-with-html-skill-tutorial/"><span class="chip">Tutorials</span><h3>Make your coding agent answer with pages, not walls of text: a hands-on guide to the Answer me with HTML skill</h3><div class="meta">October 6, 2026 &middot; 8 min read</div></a></div><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/paperclip-agent-org-chart-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Give your coding agents an org chart: hands-on with Paperclip, the 98K-star agent orchestrator</h3><div class="meta">October 6, 2026 &middot; 8 min read</div></a><a class="rel-card" href="/articles/answer-me-with-html-skill-tutorial/"><span class="chip">Tutorials</span><h3>Make your coding agent answer with pages, not walls of text: a hands-on guide to the Answer me with HTML skill</h3><div class="meta">October 6, 2026 &middot; 8 min read</div></a><a class="rel-card" href="/articles/voicestudio-local-voice-studio-tutorial/"><span class="chip">Tutorials</span><h3>Run your own voice studio on your own machine: hands-on with VoiceStudio</h3><div class="meta">October 6, 2026 &middot; 8 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
