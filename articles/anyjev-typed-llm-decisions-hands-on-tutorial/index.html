@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop parsing JSON from your LLM: typed decisions with real probabilities — hands-on with AnyJev — AI Frontier Post</title>
+<meta name="description" content="AnyJev (nokia-applied-research/AnyJev, ~1,100 stars, Apache-2.0) turns any open LLM into a decision engine: give it a state and a typed question — a choice, a yes/no, or a score — and read the answer as a probability distribution over the options, straight from the model&#x27;s next-token distribution. Nothing generated, nothing parsed. Here is the full hands-on walkthrough, plus the honest trade-offs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/anyjev-typed-llm-decisions-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop parsing JSON from your LLM: typed decisions with real probabilities — hands-on with AnyJev">
+<meta property="og:description" content="AnyJev (nokia-applied-research/AnyJev, ~1,100 stars, Apache-2.0) turns any open LLM into a decision engine: give it a state and a typed question — a choice, a yes/no, or a score — and read the answer as a probability distribution over the options, straight from the model&#x27;s next-token distribution. Nothing generated, nothing parsed. Here is the full hands-on walkthrough, plus the honest trade-offs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/anyjev-typed-llm-decisions-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-06">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop parsing JSON from your LLM: typed decisions with real probabilities — hands-on with AnyJev", "description": "AnyJev (nokia-applied-research/AnyJev, ~1,100 stars, Apache-2.0) turns any open LLM into a decision engine: give it a state and a typed question — a choice, a yes/no, or a score — and read the answer as a probability distribution over the options, straight from the model's next-token distribution. Nothing generated, nothing parsed. Here is the full hands-on walkthrough, plus the honest trade-offs.", "datePublished": "2026-10-06", "dateModified": "2026-10-06", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/anyjev-typed-llm-decisions-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/anyjev-typed-llm-decisions-hands-on-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/anyjev-typed-llm-decisions-hands-on-tutorial/cover.webp" alt="AnyJev banner: turn any LLM into a Jev-style decision model — typed decisions, real probabilities"><figcaption>AnyJev’s pitch: typed decisions with real probabilities, read from the model’s next-token distribution instead of generated text. Banner from the project’s repo (Apache-2.0).</figcaption></figure>
+<p class="lede">Every routing agent, triage bot, and moderation queue eventually does the same fragile dance: prompt the model to &ldquo;reply in JSON,&rdquo; regex the label out of the text, and retry when the output drifts. AnyJev takes the problem out of the generated text entirely. You hand the model a state and a typed question &mdash; a choice, a yes/no, or a score &mdash; and the answer is read as a probability distribution over the option labels, straight from the model&rsquo;s next-token distribution. Nothing is generated, nothing is parsed.</p>
+<p>AnyJev (nokia-applied-research/AnyJev, ~1,100 GitHub stars, Apache-2.0 license) comes from Nokia&rsquo;s applied research team, and its own numbers make the case. On Qwen3-8B over 300 BANKING77 20-way intent items: raw label logits flip their answer 23.0% of the time when you reverse the option order; AnyJev&rsquo;s L0 readout drops that to 7.3%, accuracy rises from 74.7% to 80.3% &mdash; and the share of decisions confident enough to automate at &le;5% error jumps from 7.7% to 46.3%, with zero labels. Here is the full walkthrough, verified against the project&rsquo;s own README and docs.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>Python 3.10 or newer.</strong> Check with <code>python3 --version</code> &mdash; the quickstart is pure Python.</li>
+<li><strong>One GPU for the Tacit path.</strong> The README&rsquo;s example runs Tacit-9B on transformers with a single GPU.</li>
+<li><strong>Any open causal LM for the training-free path.</strong> The benchmark used Qwen3-8B; checkpoints come from Hugging Face.</li>
+<li><strong>Optional: vLLM.</strong> Only if you want the server path in step 5.</li>
+</ul>
+<h2>1. Install the package</h2>
+<p>The core library is one pip install:</p>
+<pre><code>pip install anyjev</code></pre>
+<p>Two extras cover the serving paths, and you install exactly one depending on your setup &mdash; <code>anyjev[client]</code> for talking to a running <code>vllm serve</code>, or <code>anyjev[vllm]</code> to run vLLM in the same process:</p>
+<pre><code>pip install "anyjev[client]"
+# or:
+pip install "anyjev[vllm]"</code></pre>
+<h2>2. Make your first typed decision in one forward pass</h2>
+<p>The fastest route uses Tacit, AnyJev&rsquo;s self-distilled checkpoints (1.7B to 9B on Hugging Face). They were trained to give, in one forward pass, the answers the base model reaches when it reasons &mdash; no human labels, no teacher model involved:</p>
+<pre><code>from anyjev import Tacit
+
+tacit = Tacit.from_pretrained("morriszjm/Tacit-9B")          # transformers, one GPU
+d = tacit.decide(state="Customer: my package was due last Monday and it still has not arrived.",
+                 question="What does the customer want?",
+                 options=["track_order", "cancel_order", "refund", "change_address"])
+d["answer"], d["probs"], d["route"]    # an option, {option: probability}, "one_forward" or "cot"</code></pre>
+<p><code>kind</code> defaults to <code>"choice"</code>; <code>"yes_no"</code> and <code>"score"</code> (options are ordered levels, lowest first) cover the other shapes. Batching is built in: <code>decide_batch([...])</code> takes a list of such dicts. The <code>route</code> field tells you how the answer was read &mdash; <code>"one_forward"</code> or <code>"cot"</code> &mdash; so downstream code can check before it acts.</p>
+<h2>3. Go training-free on any open model</h2>
+<p>No Tacit checkpoint for your domain? The <code>Decider</code> reads the same typed decisions from any open causal LM, with no training and no labels. The default level is <code>L0</code>: the options are read in each of their rotations so every option sits at every position, the rotations are combined in log space, and the model&rsquo;s label prior is divided out &mdash; all estimated without a single label. That is what kills the 23% order-flip rate:</p>
+<pre><code>from anyjev import Decider, Question
+from anyjev.backends.hf import HFBackend          # or anyjev.backends.vllm.VLLMBackend(url, model)
+
+d = Decider(HFBackend("Qwen/Qwen3-8B"))           # level="L0" by default
+route = Question.choice("Which team should handle this?",
+                        ["billing", "technical", "sales", "other"], name="route")
+r = d.decide("My card was charged twice for one order.", [route])["route"]
+r.distribution, r.level                           # {option: probability}, "L0"</code></pre>
+<p>Enforcement comes free: <code>decide(..., require="L0")</code> raises <code>LevelError</code> when a decision lands below the asked level, so a degraded readout can&rsquo;t silently become an automated action. Every decision also records diagnostics &mdash; <code>answer_mass</code> (the probability the model put on the label tokens at all; a low value means the prompt did not land), <code>order_flip_raw</code>, <code>permutations</code>, and the prior method used.</p>
+<h2>4. Send only the hard calls to reasoning &mdash; with a cap</h2>
+<p>Reasoning helps the close calls and wastes budget on the easy ones. The adaptive mode sends a decision back through with thinking turned on only when the log-probability gap between the top two options falls below <code>tau</code>. The answer is still read as a label distribution, so it cannot fail to parse &mdash; and a hard cap bounds the cost:</p>
+<pre><code>tacit = Tacit.from_pretrained("morriszjm/Tacit-9B", adaptive=True, tau=0.5, max_cot_share=0.2, cot_window=1000)</code></pre>
+<ul>
+<li><strong><code>tau</code> (default 0.5):</strong> low confidence means the top-two gap is below this.</li>
+<li><strong><code>max_cot_share</code> (default 0.2):</strong> at most this share of the last <code>cot_window</code> decisions escalates, however hard the traffic gets. <code>None</code> removes the cap.</li>
+<li><strong><code>cot_max_tokens</code> (default 8192):</strong> the reasoning budget of one decision.</li>
+</ul>
+<p>Every escalation is reported (<code>route == "cot"</code>, with the first pass kept), and <code>tacit.stats</code> counts them. The training-free <code>Decider</code> has its own budget version: <code>Decider(adaptive_shifts=True, canonical_order=True)</code> reads rotations until the leader is far enough ahead, and <code>calibrate_adaptive</code> sets that threshold against the full-cycle answer &mdash; no labels &mdash; at a stated disagreement rate. The project reports that at a certified 1% disagreement it read 7.2 rotations instead of 18: 2.2&times; the decisions per second on vLLM, accuracy unchanged.</p>
+<figure class="inline-art"><img src="/articles/anyjev-typed-llm-decisions-hands-on-tutorial/img2.webp" alt="AnyJev demo: reversing the option order flips the raw logit answer, while the L0 readout stays put"><figcaption>Position bias, killed: reverse the option order and the raw readout flips &mdash; L0 gives the same answer both ways. Demo frames from the project&rsquo;s README (Apache-2.0).</figcaption></figure>
+<h2>5. Serve it as a decision endpoint</h2>
+<p>When one cap has to serve many clients, AnyJev ships a gateway. Point a stock <code>vllm serve</code> at a Tacit checkpoint, then run the server module in front of it:</p>
+<pre><code>pip install "anyjev[client]"
+vllm serve morriszjm/Tacit-9B --host 127.0.0.1 --port 8000</code></pre>
+<pre><code>python -m anyjev.serve --model morriszjm/Tacit-9B --upstream http://127.0.0.1:8000 --adaptive --port 8100
+curl -s 127.0.0.1:8100/v1/decide -H 'Content-Type: application/json' \
+  -d '{"state": "Customer: my package has not arrived.", "question": "What does the customer want?", "options": ["track_order", "refund"]}'</code></pre>
+<p><code>POST /v1/decide</code> takes one decision or <code>{"items": [...]}</code>; <code>GET /v1/stats</code> reports the escalation share across clients. Note the security posture stated in the README: the gateway listens on 127.0.0.1 and has no authentication of its own &mdash; keep it on loopback or put your own auth in front.</p>
+<figure class="inline-art"><img src="/articles/anyjev-typed-llm-decisions-hands-on-tutorial/img3.webp" alt="AnyJev&#x27;s order-flip demo, final frame: L0 holds the same answer while the raw readout changes"><figcaption>Every number in the demo is a model output, not a mock-up &mdash; the project&rsquo;s own words. Demo frames from the project&rsquo;s README (Apache-2.0).</figcaption></figure>
+<h2>What you built</h2>
+<p>A typed-decision service with real probabilities. Instead of prompting for JSON and parsing the reply, you ask <code>choice</code>, <code>yes_no</code>, or <code>score</code> questions and get back an option, a probability distribution, and a readout level &mdash; plus the diagnostics (<code>answer_mass</code>, rotation counts, prior method) to know when to trust it. Escalation is capped and reported, so the &ldquo;let it think harder&rdquo; path can&rsquo;t eat your budget silently.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>Open models only.</strong> The <code>Decider</code> backends are HF transformers and vLLM for open causal LMs &mdash; this is not a wrapper for API models, and Tacit checkpoints are a 1.7B&ndash;9B family on Hugging Face.</li>
+<li><strong>Young project.</strong> The technical report (arXiv 2610.00831) dates to October 2026 and the API may shift: note that the label-trained levels <code>L1</code> and <code>L2</code> were removed in 0.3.0 (they remain in <code>anyjev==0.2.0</code>), so older write-ups may reference them.</li>
+<li><strong>Benchmarks are intent-classification shaped.</strong> The headline numbers are BANKING77 20-way; your domain may behave differently &mdash; <code>answer_mass</code> tells you whether the prompt landed before you automate anything.</li>
+<li><strong>The batch prior assumes balance.</strong> The default label prior is estimated from the batch being decided; if one option dominates the batch, it costs accuracy. Switch to <code>prior="content_free"</code> or <code>prior="none"</code> when that&rsquo;s the case.</li>
+<li><strong>No auth on the gateway.</strong> Bind to 127.0.0.1 or add your own proxy &mdash; the project is explicit that authentication is yours to add.</li>
+<li><strong>Docs to bookmark:</strong> the <a href="https://github.com/nokia-applied-research/AnyJev">GitHub repo</a> (README has the full quickstart), <a href="https://github.com/nokia-applied-research/AnyJev/blob/main/docs/levels.md">docs/levels.md</a> (what each readout level promises), the <a href="https://huggingface.co/collections/morriszjm/tacit-6ac41d0b50af9e5417c5c234">Tacit checkpoint collection</a>, and the <a href="https://arxiv.org/pdf/2610.00831">technical report (PDF)</a>.</li>
+</ul>
+<h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/paperclip-agent-org-chart-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Give your coding agents an org chart: hands-on with Paperclip, the 98K-star agent orchestrator</h3><div class="meta">October 6, 2026 &middot; 8 min read</div></a><a class="rel-card" href="/articles/answer-me-with-html-skill-tutorial/"><span class="chip">Tutorials</span><h3>Make your coding agent answer with pages, not walls of text: a hands-on guide to the Answer me with HTML skill</h3><div class="meta">October 6, 2026 &middot; 8 min read</div></a><a class="rel-card" href="/articles/voicestudio-local-voice-studio-tutorial/"><span class="chip">Tutorials</span><h3>Run your own voice studio on your own machine: hands-on with VoiceStudio</h3><div class="meta">October 6, 2026 &middot; 8 min read</div></a></div></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
