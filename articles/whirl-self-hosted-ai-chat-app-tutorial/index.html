@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Host your own ChatGPT: hands-on with Whirl, the open-source AI chat app &mdash; AI Frontier Post</title>
+<meta name="description" content="Whirl (whirlchat/whirl, MIT) is the full production code behind whirl.chat — a Next.js 16 + Convex chat app that routes every top model through one conversation, keeps long-term memory, connects your tools over MCP, and edits living documents in a side panel. Roughly 500 GitHub stars in its first week. This walkthrough self-hosts it: clone, wire up Convex and Clerk, and switch on the extras.">>
+<link rel="canonical" href="https://aifrontierpost.com/articles/whirl-self-hosted-ai-chat-app-tutorial/">>
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Host your own ChatGPT: hands-on with Whirl, the open-source AI chat app">>
+<meta property="og:description" content="Whirl (whirlchat/whirl, MIT) is the full production code behind whirl.chat — a Next.js 16 + Convex chat app that routes every top model through one conversation, keeps long-term memory, connects your tools over MCP, and edits living documents in a side panel. Roughly 500 GitHub stars in its first week. This walkthrough self-hosts it: clone, wire up Convex and Clerk, and switch on the extras.">>
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/whirl-self-hosted-ai-chat-app-tutorial/">>
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/whirl-self-hosted-ai-chat-app-tutorial/cover.webp">>
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-08">>
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Host your own ChatGPT: hands-on with Whirl, the open-source AI chat app", "description": "Whirl (whirlchat/whirl, MIT) is the full production code behind whirl.chat — a Next.js 16 + Convex chat app that routes every top model through one conversation, keeps long-term memory, connects your tools over MCP, and edits living documents in a side panel. Roughly 500 GitHub stars in its first week. This walkthrough self-hosts it: clone, wire up Convex and Clerk, and switch on the extras.", "datePublished": "2026-10-08", "dateModified": "2026-10-08", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/whirl-self-hosted-ai-chat-app-tutorial/"}, "image": ["https://aifrontierpost.com/articles/whirl-self-hosted-ai-chat-app-tutorial/cover.webp"], "url": "https://aifrontierpost.com/articles/whirl-self-hosted-ai-chat-app-tutorial/"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/whirl-self-hosted-ai-chat-app-tutorial/cover.webp" alt="A sleek AI chat interface floating in dark space, message bubbles and an editable document side panel connected by swirling lines"><figcaption>Whirl is the full production code behind whirl.chat, published under the MIT license &mdash; illustration generated for this article.</figcaption></figure>
+<p class="lede">Every good AI chat app eventually asks for the same ransom: your chat history on someone else's servers, one vendor's models, and a subscription that climbs with your team. <a href="https://github.com/whirlchat/whirl">Whirl</a> (whirlchat/whirl, MIT) is a different deal &mdash; the full production code behind <a href="https://whirl.chat">whirl.chat</a>, published in the open: every top model in one conversation through OpenRouter, documents and charts that stay editable in a side panel, your own tools wired in over MCP, and long-term memory that survives between chats. This walkthrough takes it from a fresh clone to a running instance on your machine in about half an hour, then shows you how to take it to production.</p>
+<p>Under the hood it is a Bun monorepo with a Next.js 16 front end (React 19, Tailwind v4) and a Convex backend that owns the database, the functions, and the AI pipeline. Sign-in comes from Clerk; every model call goes out through OpenRouter via the AI SDK. The design you should notice is the optionality: beyond those three, everything switches on with its own key &mdash; web search, memory, billing, analytics, tracing, email &mdash; and the features each key powers hide themselves until it is set.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>Bun 1.2 or newer</strong>, plus git. Whirl is a Bun workspace; npm, yarn, and pnpm will not install it correctly, so do not try to be clever.</li>
+<li>A free <strong>Convex</strong> account (database, backend functions, streaming, crons).</li>
+<li>A <strong>Clerk</strong> application for sign-in.</li>
+<li>An <strong>OpenRouter</strong> API key &mdash; the only one of the three that is pay-as-you-go.</li>
+<li>About 30 minutes, per the self-hosting guide.</li>
+</ul>
+<h2>Step 1 &mdash; clone and install</h2>
+<pre><code>git clone https://github.com/whirlchat/whirl.git
+cd whirl
+bun install</code></pre>
+<p>That pulls the whole monorepo: the web app in <code>apps/v2</code>, the admin console in <code>apps/console</code>, an Expo mobile app, the Convex backend in <code>packages/backend</code>, and docs. Take a minute in <code>docs/self-hosting.md</code> &mdash; it is the source of truth if anything here drifts.</p>
+<h2>Step 2 &mdash; set up Clerk</h2>
+<ol>
+<li>Create an application in the Clerk dashboard and turn on the sign-in methods you want (email, Google, and so on).</li>
+<li>Open <strong>Configure &rarr; JWT templates</strong>, choose <strong>New template &rarr; Convex</strong>, and keep the name exactly <code>convex</code>. The backend only accepts tokens from a template with exactly that name &mdash; this is the single most common self-hosting failure, so double-check the spelling.</li>
+<li>Note three values: the <strong>Frontend API URL</strong> (looks like <code>https://your-instance.clerk.accounts.dev</code>), the <strong>publishable key</strong> (<code>pk_test_...</code>), and the <strong>secret key</strong> (<code>sk_test_...</code>).</li>
+</ol>
+<h2>Step 3 &mdash; push the backend to Convex</h2>
+<pre><code>cd packages/backend
+bunx convex dev</code></pre>
+<p>The first run logs you in and creates a new project plus a personal dev deployment. Then the first push stops with an error about <code>CLERK_JWT_ISSUER_DOMAIN</code>. That is expected: the backend cannot verify sign-ins until it knows your Clerk instance. Leave that terminal open, and in a second one set the required variables:</p>
+<pre><code>cd packages/backend
+bunx convex env set CLERK_JWT_ISSUER_DOMAIN https://your-instance.clerk.accounts.dev
+bunx convex env set OPENROUTER_API_KEY sk-or-v1-...
+bunx convex env set SITE_URL http://localhost:3000</code></pre>
+<p>If you plan to connect integrations over MCP later, also set an encryption key for their stored credentials now:</p>
+<pre><code>bunx convex env set MCP_ENCRYPTION_KEY "$(openssl rand -base64 32)"</code></pre>
+<p>Then restart <code>bunx convex dev</code> in the first terminal. It pushes the backend and keeps watching <code>packages/backend/convex</code> for changes &mdash; leave it running. It also writes your deployment URLs to <code>packages/backend/.env.local</code>; you will need both in the next step:</p>
+<ul>
+<li><code>https://&lt;name&gt;.convex.cloud</code></li>
+<li><code>https://&lt;name&gt;.convex.site</code></li>
+</ul>
+<h2>Step 4 &mdash; configure the web app</h2>
+<pre><code>cd apps/v2
+cp .env.example .env.local</code></pre>
+<p>Fill in the required block:</p>
+<pre><code>NEXT_PUBLIC_CONVEX_URL=https://&lt;name&gt;.convex.cloud
+NEXT_PUBLIC_CONVEX_SITE_URL=https://&lt;name&gt;.convex.site
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...</code></pre>
+<h2>Step 5 &mdash; run everything</h2>
+<p>From the repository root:</p>
+<pre><code>bun run dev</code></pre>
+<p>That starts three things side by side: the web app on <a href="http://localhost:3000">localhost:3000</a>, the admin console on localhost:3001, and the Convex watcher pushing your backend. Prefer separate terminals? Use <code>bun run dev:v2</code>, <code>bun run dev:console</code>, and <code>bun run dev:backend</code>. Sign in, send a message, and you are up.</p>
+<figure class="inline-art"><img src="/articles/whirl-self-hosted-ai-chat-app-tutorial/img2.webp" alt="Three glowing service nodes &mdash; a database, an identity key, and a model router &mdash; linked to a home server"><figcaption>Three managed services power it: Convex for the backend, Clerk for sign-in, OpenRouter for every model call. Illustration generated for this article.</figcaption></figure>
+<h2>Step 6 &mdash; switch on the extras</h2>
+<p>Each optional service activates as soon as its key is set, and its features stay hidden until then:</p>
+<pre><code># on Convex
+bunx convex env set EXA_API_KEY ...          # live web search + page reading
+bunx convex env set SUPERMEMORY_API_KEY ... # long-term memory
+bunx convex env set AUTUMN_SECRET_KEY ...   # plans and billing</code></pre>
+<p>The billing one deserves a pause. <strong>Without <code>AUTUMN_SECRET_KEY</code>, every signed-in user gets every feature and nothing is metered.</strong> For a personal or team instance that is exactly what you want &mdash; and every turn still records its provider cost, so the usage tab in settings stays accurate. But do not expose the instance to the open internet in that state unless you are comfortable buying tokens for strangers.</p>
+<figure class="inline-art"><img src="/articles/whirl-self-hosted-ai-chat-app-tutorial/img3.webp" alt="Modular glowing blocks &mdash; a wrench, a memory chip, a lock &mdash; snapping into a luminous AI pipeline"><figcaption>Optional extras &mdash; web search, memory, MCP integrations, billing &mdash; switch on with one key each and hide until then. Illustration generated for this article.</figcaption></figure>
+<h2>Step 7 &mdash; make yourself admin</h2>
+<p>Admins manage the model catalog, integrations, and skills from the console (<code>apps/console</code>):</p>
+<ol>
+<li>Make sure your Clerk <code>convex</code> JWT template includes the <code>role</code> claim from step 2: <code>{ "role": "{{user.public_metadata.role}}" }</code>.</li>
+<li>In the Clerk dashboard, open your user and set public metadata to <code>{ "role": "admin" }</code>.</li>
+<li>Sign out and back in so your token picks up the claim.</li>
+<li>Set up the console environment (<code>cd apps/console &amp;&amp; cp .env.example .env.local</code> &mdash; same Convex URL and Clerk key as the web app) and open <a href="http://localhost:3001">localhost:3001</a>.</li>
+</ol>
+<h2>Step 8 &mdash; deploy to production</h2>
+<p>Backend first &mdash; create a production deployment and give it the same variables as dev, with the <code>--prod</code> flag:</p>
+<pre><code>cd packages/backend
+bunx convex deploy
+bunx convex env set --prod CLERK_JWT_ISSUER_DOMAIN https://clerk.your-domain
+bunx convex env set --prod OPENROUTER_API_KEY sk-or-v1-...
+bunx convex env set --prod SITE_URL https://your-domain</code></pre>
+<p>Use your Clerk <strong>production</strong> instance here (a different URL from dev) and add the same <code>convex</code> JWT template to it. For deploys on every push to <code>main</code>, add a <code>CONVEX_DEPLOY_KEY</code> (Convex dashboard &rarr; Settings &rarr; Deploy keys) to your GitHub repo &mdash; the included workflow <code>.github/workflows/deploy-convex.yml</code> picks it up automatically. The web app runs on any Next.js host: on Vercel, import the repo with the root directory set to <code>apps/v2</code> and add the variables from <code>apps/v2/.env.example</code> with your production values.</p>
+<h2>What you built</h2>
+<p>Your own AI chat app, with a feature set that reads like a paid product&rsquo;s changelog: every top model in one conversation with adjustable thinking levels; living artifacts &mdash; documents, charts, full interactive pages &mdash; that stay editable in a side panel and can be shared by link; MCP integrations with OAuth plus installable skills that teach the app new tricks; long-term memory that carries preferences and projects across chats; live web search for answers grounded in today&rsquo;s web; and locked chats, encrypted on your device with a password the server never sees, answered only by zero-retention models. Incognito mode, message queueing, voice input, image generation, and file attachments are all in the box, and branding lives in one file &mdash; <code>apps/v2/lib/site.ts</code> &mdash; plus <code>APP_NAME</code> in the backend, which is the name OpenRouter shows for your traffic.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>It is three managed services, not one binary.</strong> Convex and Clerk have free tiers; OpenRouter is pay-as-you-go. The software is free, the inference is metered &mdash; budget it like a utility, not a license.</li>
+<li><strong>Unmetered-by-default cuts both ways.</strong> Without billing keys everyone gets everything. Perfect for personal use; a liability if you publish the URL. Autumn (or your own throttling) before you share it widely.</li>
+<li><strong>Locked chats only get zero-retention models.</strong> That is the privacy guarantee working as designed, but it means the strongest models on the catalog may be unavailable in a locked chat.</li>
+<li><strong>It is young.</strong> Roughly 500 stars in its first week means flags, env vars, and docs will move. Verify every command against <code>docs/self-hosting.md</code> before running it.</li>
+<li><strong>Self-hosting has known tripwires.</strong> &ldquo;The server is missing part of its configuration&rdquo; on every reply means <code>OPENROUTER_API_KEY</code> is not set; a signed-in-but-unauthenticated state means the JWT template is not named exactly <code>convex</code>; locked chats failing to start means <code>NEXT_PUBLIC_CONVEX_SITE_URL</code> is missing from the web app.</li>
+</ul>
+<p>Still: there is a real gap between a ChatGPT subscription and a chat app you can read, fork, and run on your own terms &mdash; with your tools, your memory, and your models. Whirl closes it in an afternoon, and the code stays yours either way. That is worth the half hour.</p>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
