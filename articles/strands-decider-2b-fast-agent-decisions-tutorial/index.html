@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Route tickets, pick tools, and score outputs in 115ms: hands-on with Strands Decider &mdash; AI Frontier Post</title>
+<meta name="description" content="Strands Decider (strands-labs/strands-decider, 503 stars, Apache-2.0) is a 1.9B-parameter decision model for agents: it picks between options, answers yes/no, or rates on a scale in about 115 milliseconds — with a calibrated confidence on every answer. Install it, route a support ticket, batch three question types, and serve it over HTTP.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/strands-decider-2b-fast-agent-decisions-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Route tickets, pick tools, and score outputs in 115ms: hands-on with Strands Decider">
+<meta property="og:description" content="Strands Decider (strands-labs/strands-decider, 503 stars, Apache-2.0) is a 1.9B-parameter decision model for agents: it picks between options, answers yes/no, or rates on a scale in about 115 milliseconds — with a calibrated confidence on every answer. Install it, route a support ticket, batch three question types, and serve it over HTTP.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/strands-decider-2b-fast-agent-decisions-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/strands-decider-2b-fast-agent-decisions-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-07">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Route tickets, pick tools, and score outputs in 115ms: hands-on with Strands Decider", "description": "Strands Decider (strands-labs/strands-decider, 503 stars, Apache-2.0) is a 1.9B-parameter decision model for agents: it picks between options, answers yes/no, or rates on a scale in about 115 milliseconds — with a calibrated confidence on every answer. Install it, route a support ticket, batch three question types, and serve it over HTTP.", "datePublished": "2026-10-07", "dateModified": "2026-10-07", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/strands-decider-2b-fast-agent-decisions-tutorial/"}, "image": ["https://aifrontierpost.com/articles/strands-decider-2b-fast-agent-decisions-tutorial/cover.webp"], "url": "https://aifrontierpost.com/articles/strands-decider-2b-fast-agent-decisions-tutorial/"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/strands-decider-2b-fast-agent-decisions-tutorial/cover.webp" alt="A small decision model routing support tickets into labeled bins faster than a giant LLM"><figcaption>A 1.9B-parameter decision model answers in 115 milliseconds &mdash; illustration generated for this article.</figcaption></figure>
+<p class="lede">Most agent decisions don't need an essay &mdash; they need a choice. Which team owns this ticket? Should the agent call the refund tool? Is this message urgent? Today those questions go through a full-size LLM with JSON parsing on the other side: slow, expensive, and brittle the moment the model gets chatty. Strands Decider (<a href="https://github.com/strands-labs/strands-decider">strands-labs/strands-decider</a>, 503 GitHub stars, Apache-2.0) is a 1.9B-parameter decision model built for exactly this: it picks between options, answers yes/no, or rates on a scale &mdash; no text generation at all &mdash; with a calibrated confidence on every answer. Median answer time on an RTX 3090 is 115 milliseconds.</p>
+<p>It comes from <strong>Strands Labs</strong>, the experimental arm of Strands Agents, and rides the current wave of "system one" decision models: small models that answer the fast, rote questions so your big LLM can spend its tokens on the hard ones. Under the hood it's a Qwen3.5-2B-Base torso with the language-modeling head thrown away, replaced by a ~1-million-parameter pointer head that scores each option against the model's answer position. One forward pass, no decoding loop; the torso is adapted with a rank-16 LoRA adapter and the head runs in fp32. Because the head carries no per-option parameters, your label sets are defined by the request &mdash; never baked into the weights.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>Python 3 and pip.</strong> <code>pip install strands-decider</code> is the whole install. The 1.9B checkpoint runs on an Apple-silicon Mac (MPS, or <code>--device mlx</code> for 1.4&ndash;1.6&times; faster than MPS), on CPU, or on a CUDA GPU &mdash; the 115&nbsp;ms figure is the RTX 3090 reference.</li>
+<li><strong>A few GB of disk</strong> for the 1.9B-parameter checkpoint, pulled from Hugging Face on first use.</li>
+<li><strong>No training, no labels.</strong> You ask questions in plain text; the model answers them. That is the entire point.</li>
+</ul>
+<h2>1. Install and ask your first choice question</h2>
+<p>Install the CLI and triage a support ticket &mdash; a classic choice question, straight from the project's README:</p>
+<pre><code>pip install strands-decider
+strands-decider ask StrandsAgents/strands-decider-2B-hobson-v21 \
+  --state "Help! My payouts have been failing for 3 days! " \
+  --choice "Which team should handle this?=billing,sales,retail"</code></pre>
+<p>Example output from the project:</p>
+<pre><code>choice_0 -&gt; billing (confidence 0.835)
+
+  billing                  0.890
+  sales                    0.056
+  retail                   0.054</code></pre>
+<p>You get the pick, a confidence number, and a distribution over every option. That confidence is the feature: on short classification tasks it has never seen, answers at a confidence of 0.9 or more are right about 95% of the time (<code>evaluation/results.md</code> in the repo). Below that, the README says to confirm or ask a person. In an agent, this maps directly to a policy: act above your threshold, escalate below it.</p>
+<h2>2. Ask a yes/no question with noul</h2>
+<p>The second question type is a yes/no &mdash; called <code>noul</code>, measuring how strongly the model leans "yes":</p>
+<pre><code>strands-decider ask StrandsAgents/strands-decider-2B-hobson-v21 \
+  --state "Help! My payouts have been failing for 3 days! " \
+  --noul "Does this convey urgency?"</code></pre>
+<pre><code>noul_0 noul = 0.875</code></pre>
+<p>Closer to 1 leans more toward yes. This is your guardrail primitive: policy classification, grounding checks, "should a human see this before it goes out."</p>
+<h2>3. Score on an ordered rubric</h2>
+<p>The third type rates things on a scale &mdash; useful for evaluations and prioritization:</p>
+<pre><code>strands-decider ask StrandsAgents/strands-decider-2B-hobson-v21 \
+  --state "Help! My payouts have been failing for 3 days! " \
+  --score "How frustrated is the writer?=calm,frustrated,depressed"</code></pre>
+<pre><code>score_0 score = 1.07 (confidence 0.602)
+
+  0: calm                                     0.140
+  1: frustrated                               0.648
+  2: depressed                                0.212</code></pre>
+<h2>4. Batch all three in one call</h2>
+<p>The state is read once and each question adds only its own tokens, so combining questions is cheap:</p>
+<pre><code>strands-decider ask StrandsAgents/strands-decider-2B-hobson-v21 \
+  --state "Help! My payouts have been failing for 3 days! " \
+  --choice "Which team should handle this?=billing,sales,retail" \
+  --noul "Does this convey urgency?" \
+  --score "How frustrated is the writer?=calm,frustrated,depressed"</code></pre>
+<p>You now have routing, urgency, and frustration in a single batched call &mdash; the three things a triage loop needs before it decides what to do.</p>
+<figure class="inline-art"><img src="/articles/strands-decider-2b-fast-agent-decisions-tutorial/img2.webp" alt="Terminal showing a decision model's probability bars with a calibrated confidence score"><figcaption>A decision with a confidence you can act on: the distribution over options plus a calibrated score. Illustration generated for this article.</figcaption></figure>
+<h2>5. Serve it over HTTP for your agent</h2>
+<p>For real wiring, run it as a server &mdash; the README's own pattern for putting decisions inside agentic workflows:</p>
+<pre><code>strands-decider serve StrandsAgents/strands-decider-2B-hobson-v21 --port 8000</code></pre>
+<pre><code>curl -s localhost:8000/v1/systemone \
+  -H 'content-type: application/json' \
+  -d '{
+    "state": "Help! My payouts have been failing for 3 days!",
+    "questions": {
+      "is_urgent": {"type": "noul", "instructions": "Does this convey urgency?"}
+    }
+  }'</code></pre>
+<p>The response carries the model name, the typed answers, token usage (note: one output token &mdash; nothing was generated), and the latency in milliseconds. From here the README's suggested uses read like an agentic-systems checklist: <strong>model routing</strong> (pick the right LLM for a task), <strong>tool selection</strong> (which tool the agent should call next), <strong>argument checking</strong> (verify a tool call before it runs), <strong>triage</strong>, <strong>guardrails</strong>, <strong>evaluations</strong>, and <strong>hybrid agents</strong> &mdash; the big LLM makes the hard decisions, the decider makes the rote ones. The repo ships a worked <code>examples/strands/</code> example that gates a tool call with a <code>before_tool_call</code> intervention.</p>
+<figure class="inline-art"><img src="/articles/strands-decider-2b-fast-agent-decisions-tutorial/img3.webp" alt="A tiny fast neural network racing ahead of a huge slow language model with a stopwatch"><figcaption>One forward pass, no decoding loop: the decider answers while the LLM is still warming up. Illustration generated for this article.</figcaption></figure>
+<h2>What you built</h2>
+<p>A ticket-triage decision pipeline with five moving parts: an install, a choice question that routes a ticket to billing with 0.89 of the distribution mass, a yes/no urgency check, a frustration score, all three batched into one call, and an HTTP endpoint your agent can query at ~115&nbsp;ms a question. No JSON parsing, no prompt-format fragility, and a confidence number you can turn into an escalation policy.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>It cannot explain itself.</strong> A decision model never generates text, so you get the pick and the confidence but no rationale. If a decision needs a paper trail, pair it with an LLM &mdash; the hybrid-agents pattern is in the README for exactly this reason.</li>
+<li><strong>Calibration holds where it was measured.</strong> The 95%-at-0.9 figure is for short classification tasks the model has never seen; on long, messy, or domain-specific input, recalibrate before trusting the number. On JevBench v1 the current v21 scores 0.762 accuracy (176 of 231) with expected calibration error 0.064 &mdash; and the hard tier sits at 0.550. Hard questions still beat it.</li>
+<li><strong>Read the README's own caveats.</strong> The v19/v21 comparison columns are two single runs, not a measured gain; run-to-run standard deviation is 3.2 tasks, so treat any gap under about 10 tasks as unresolved.</li>
+<li><strong>It's early.</strong> Sixteen commits from an experimental lab (Strands Labs, created September 29, 2026) &mdash; expect the API to move. The vision variant (<code>--vision</code>) needs the <code>[vision]</code> extra and transformers 5.18 or later; I left it out of this walkthrough deliberately.</li>
+</ul>
+<p>Still: for the rote decisions inside every agent &mdash; routing, tool selection, guardrails &mdash; a 2B model that answers in 115&nbsp;ms with a confidence you can budget against is the cheapest upgrade on the board.</p>
+</main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
