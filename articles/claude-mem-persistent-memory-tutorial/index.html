@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop re-explaining your project to Claude Code: hands-on with claude-mem &mdash; AI Frontier Post</title>
+<meta name="description" content="claude-mem (thedotmack/claude-mem, Apache-2.0) gives Claude Code persistent memory: lifecycle hooks capture every session into a local SQLite and vector store, and the next session wakes up already briefed. Install it, build some history, then query that memory when you need it.">>
+<link rel="canonical" href="https://aifrontierpost.com/articles/claude-mem-persistent-memory-tutorial/">>
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop re-explaining your project to Claude Code: hands-on with claude-mem">>
+<meta property="og:description" content="claude-mem (thedotmack/claude-mem, Apache-2.0) gives Claude Code persistent memory: lifecycle hooks capture every session into a local SQLite and vector store, and the next session wakes up already briefed. Install it, build some history, then query that memory when you need it.">>
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/claude-mem-persistent-memory-tutorial/">>
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/claude-mem-persistent-memory-tutorial/cover.webp">>
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-08">>
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop re-explaining your project to Claude Code: hands-on with claude-mem", "description": "claude-mem (thedotmack/claude-mem, Apache-2.0) gives Claude Code persistent memory: lifecycle hooks capture every session into a local SQLite and vector store, and the next session wakes up already briefed. Install it, build some history, then query that memory when you need it.", "datePublished": "2026-10-08", "dateModified": "2026-10-08", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/claude-mem-persistent-memory-tutorial/"}, "image": ["https://aifrontierpost.com/articles/claude-mem-persistent-memory-tutorial/cover.webp"], "url": "https://aifrontierpost.com/articles/claude-mem-persistent-memory-tutorial/"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/claude-mem-persistent-memory-tutorial/cover.webp" alt="A luminous brain-shaped neural archive hovering over a terminal, memory fragments connecting into it"><figcaption>claude-mem captures every Claude Code session into a local memory store so the next session starts briefed &mdash; illustration generated for this article.</figcaption></figure>
+<p class="lede">Every Claude Code session starts from zero. You explain the repo layout, the naming conventions, the bug you already fixed twice &mdash; and next week you explain it all again. <a href="https://github.com/thedotmack/claude-mem">claude-mem</a> (thedotmack/claude-mem, ~98k GitHub stars, Apache-2.0) fixes that with hooks instead of discipline: five lifecycle hooks capture what happens in every session into a local SQLite database and vector store, and the next session wakes up already briefed. This walkthrough installs it, builds a few days of history in an afternoon, and shows you how to query that memory when you need it.</p>
+<p>How it works, briefly: a SessionStart hook injects a summary of past sessions into the new session's context. While you work, PostToolUse captures tool observations. On SessionEnd the worker writes semantic summaries. Retrieval is hybrid &mdash; keyword plus vector search over a Chroma store &mdash; exposed through a <code>mem-search</code> skill and four MCP tools that follow a 3-layer pattern: <code>search</code> returns a compact index (~50&ndash;100 tokens per result), <code>timeline</code> adds chronological context, and <code>get_observations</code> fetches full details only for the IDs you picked. The README claims roughly 10x token savings from filtering before fetching, which matches the shape of the design.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>Claude Code</strong>, latest version with plugin support.</li>
+<li><strong>Node.js 20 or later.</strong> Bun and <code>uv</code> are auto-installed if missing; SQLite ships bundled.</li>
+<li>An hour of real work to feed it &mdash; memory is only as good as the history you build.</li>
+</ul>
+<h2>1. Install with one command</h2>
+<p>Run the installer. It registers the plugin hooks and starts the worker service &mdash; the local HTTP API that stores and serves memory:</p>
+<pre><code>npx claude-mem install</code></pre>
+<p>The installer sets everything up first, then asks you to sign in in your browser with an email magic link (no card). That provisions a memory key and starts a 30-day free trial of the hosted observer &mdash; memory runs off-plan during the trial, so it doesn't burn your Anthropic usage. When the trial ends it falls back to your Anthropic plan automatically. Want no account at all? Pass an explicit <code>--provider</code> flag, set <code>CLAUDE_MEM_ONLINE_OPTIN=false</code>, or run in a non-interactive shell, and the installer finishes without any sign-in.</p>
+<p>Two traps worth knowing: <code>npm install -g claude-mem</code> installs the SDK only &mdash; it does not register hooks or set up the worker. And if you prefer the plugin marketplace route, this is the documented equivalent:</p>
+<pre><code>/plugin marketplace add thedotmack/claude-mem
+
+/plugin install claude-mem</code></pre>
+<p>Restart Claude Code after either path. Then confirm the hooks are live &mdash; <code>/hooks</code> inside Claude Code should list SessionStart, UserPromptSubmit, PostToolUse, Stop, and SessionEnd entries from claude-mem.</p>
+<h2>2. Build some history on purpose</h2>
+<p>Memory with nothing in it is a party trick. Make a scratch project and do real work &mdash; the kind you'd want to recall later:</p>
+<pre><code>mkdir ~/cmem-demo && cd ~/cmem-demo
+git init -q && echo "# demo" > README.md</code></pre>
+<p>In Claude Code, ask for something with decisions in it: a small CLI with a config file, a caching approach, an error-handling convention. When it proposes options, <em>decide out loud</em> &mdash; "go with the file-based cache, we don't need Redis yet" &mdash; because decisions are exactly what SessionEnd summaries preserve. Fix one bug deliberately and narrate the cause. The PostToolUse hook captures observations as you go; the summaries land when the session ends.</p>
+<figure class="inline-art"><img src="/articles/claude-mem-persistent-memory-tutorial/img2.webp" alt="Five glowing lifecycle hook nodes feeding captured observations into a local database"><figcaption>Lifecycle hooks (SessionStart, UserPromptSubmit, PostToolUse, Stop, SessionEnd) capture observations into a local store automatically. Illustration generated for this article.</figcaption></figure>
+<h2>3. Start a fresh session and test the recall</h2>
+<p>Close Claude Code completely and open a new session in the same directory. Before asking anything, watch the context: the SessionStart hook injects a compact summary of your earlier sessions. Now ask something only history could answer:</p>
+<pre><code>What did we decide about caching in this project, and why?</code></pre>
+<p>If the summaries landed, the answer comes back with the reasoning, not a guess &mdash; no re-explanation needed. This is the whole product in one prompt. Try a second one with a time anchor ("what was the bug I fixed last session?") to feel where the boundary is: summaries compress, so exact code lines fade while decisions and causes survive.</p>
+<h2>4. Search memory directly when you need the details</h2>
+<p>SessionStart injection is automatic, but for deep recall use the search tools. Ask Claude in plain language &mdash; the <code>mem-search</code> skill handles the query, and under the hood the MCP tools run the 3-layer workflow the README documents:</p>
+<pre><code>// 1. search returns a compact index with IDs (~50-100 tokens/result)
+search(query="caching decision", limit=10)
+
+// 2. timeline adds chronological context around a hit
+// 3. get_observations fetches full details only for the IDs you picked
+get_observations(ids=[123, 456])</code></pre>
+<p>The discipline is the point: filter on the cheap index, fetch full text only for what survives. That is where the ~10x token saving comes from. You can also open the web viewer &mdash; the worker prints its URL at startup &mdash; to browse the raw memory stream and see every observation with its citation ID.</p>
+<figure class="inline-art"><img src="/articles/claude-mem-persistent-memory-tutorial/img3.webp" alt="Progressive disclosure: a compact index of IDs expanding through a timeline into a full document"><figcaption>Progressive disclosure in three layers &mdash; index, timeline, full detail &mdash; keeps token cost visible and low. Illustration generated for this article.</figcaption></figure>
+<h2>5. Keep secrets out and tune what gets injected</h2>
+<p>Memory that records everything will eventually record something it shouldn't. Wrap sensitive content in <code>&lt;private&gt;</code> tags in your prompts to exclude it from storage. For broader control, edit <code>~/.claude-mem/settings.json</code> (auto-created with defaults on first run):</p>
+<pre><code>{
+  "CLAUDE_MEM_MODE": "code",
+  "CLAUDE_MEM_SESSION_START_INCLUDE_ALL_SOURCES": "false"
+}</code></pre>
+<p>Modes control workflow behavior and the language of generated observations &mdash; <code>code</code> is the default English mode, <code>code--zh</code> and <code>code--ja</code> are built in (pattern: <code>code--[lang]</code>). The session-start flag decides whether a new session sees observations from every harness or only the current one; keep it <code>false</code> unless you want cross-tool memory. Restart Claude Code after changes.</p>
+<h2>What you built</h2>
+<p>A coding setup with continuity: lifecycle hooks that capture every session into a local SQLite database and Chroma vector store, automatic context injection at session start, a searchable memory stream in the web viewer, and a 3-layer retrieval pattern that keeps recall cheap in tokens. The working pattern generalizes beyond Claude Code too &mdash; the same installer supports OpenCode, T3 Code, Antigravity, and an OpenClaw gateway plugin, all writing to the same memory model.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>Summaries compress; details fade.</strong> Decisions and causes survive, exact code lines don't. For anything you must reproduce verbatim, commit it to the repo &mdash; memory is an index, not a backup.</li>
+<li><strong>The hosted trial is a funnel, not a gift.</strong> Sign-in is an email magic link and the 30-day trial is genuinely free, but afterwards you're on your Anthropic plan (or a paid tier) for the memory traffic. Self-hosting the provider is the documented opt-out.</li>
+<li><strong>Privacy is opt-out per message.</strong> Nothing is excluded by default; <code>&lt;private&gt;</code> tags only help if you remember to use them. Assume anything you type in-session could be summarized.</li>
+<li><strong>Capture is invisible by design.</strong> Automatic operation means you rarely notice what's being recorded until you browse the web viewer. Check it after your first week and prune anything you don't want kept.</li>
+<li><strong>It moves fast.</strong> ~98k stars in a short climb means the README you read today may describe flags that change next week. Verify install commands against the repo before running them.</li>
+</ul>
+<p>Still: the re-explanation tax is real, and it's paid in your most expensive resource &mdash; attention at the start of every session. A hook that quietly writes down what you decided, and a session that wakes up already briefed, is one of the few agent upgrades that compounds. Install it on a Friday, and Monday's first prompt is already shorter.</p>
+
+</main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
