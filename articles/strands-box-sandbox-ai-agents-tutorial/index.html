@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Confine an AI agent to one folder and one API: hands-on with Strands Box &mdash; AI Frontier Post</title>
+<meta name="description" content="Strands Box (strands-agents/box, Apache-2.0) is an open-source sandbox engine for AI agents: operating-system isolation plus deny-by-default policies written in Dogwood. Install it, box the Strands CLI, watch it refuse a file write, then grant exactly that one permission.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/strands-box-sandbox-ai-agents-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Confine an AI agent to one folder and one API: hands-on with Strands Box">
+<meta property="og:description" content="Strands Box (strands-agents/box, Apache-2.0) is an open-source sandbox engine for AI agents: operating-system isolation plus deny-by-default policies written in Dogwood. Install it, box the Strands CLI, watch it refuse a file write, then grant exactly that one permission.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/strands-box-sandbox-ai-agents-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/strands-box-sandbox-ai-agents-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-08">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Confine an AI agent to one folder and one API: hands-on with Strands Box", "description": "Strands Box (strands-agents/box, Apache-2.0) is an open-source sandbox engine for AI agents: operating-system isolation plus deny-by-default policies written in Dogwood. Install it, box the Strands CLI, watch it refuse a file write, then grant exactly that one permission.", "datePublished": "2026-10-08", "dateModified": "2026-10-08", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/strands-box-sandbox-ai-agents-tutorial/"}, "image": ["https://aifrontierpost.com/articles/strands-box-sandbox-ai-agents-tutorial/cover.webp"], "url": "https://aifrontierpost.com/articles/strands-box-sandbox-ai-agents-tutorial/"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/strands-box-sandbox-ai-agents-tutorial/cover.webp" alt="A small AI agent figure inside a translucent glass sandbox cube, code drifting past outside the glass walls"><figcaption>Strands Box runs an agent in an OS sandbox under a policy: everything not explicitly permitted is refused &mdash; illustration generated for this article.</figcaption></figure>
+<p class="lede">The moment you give a coding agent a shell, you have a containment problem. It can read your dotfiles, phone home to any host, and &mdash; if a prompt injection lands right &mdash; do all of it at an attacker's request. Permission prompts help, but they fatigue: after the fortieth "allow this command?" you stop reading them. <a href="https://github.com/strands-agents/box">Strands Box</a> (strands-agents/box, 137 GitHub stars, Apache-2.0, first commit October 2) is the official sandbox engine from the Strands Agents team, and it takes the opposite approach: run the agent in operating-system isolation under a policy file, and deny by default. Nothing reaches the filesystem or the network unless a rule you wrote permits it.</p>
+<p>Two ideas combine in Box. The first is classic sandboxing: the host OS restricts what the agent's process can touch, directly and without asking. The second is semantic policy: a policy engine evaluates every operation the agent routes through Box's shell, Python interpreter, egress gateway, or MCP broker against rules you write in <a href="https://dogwood-policy.github.io/dogwood/">Dogwood</a> &mdash; <code>permit</code> and <code>forbid</code> rules that can depend on the operation, its arguments, earlier actions, and elapsed time. A file read through the shell can cause the gateway to deny a later HTTP request, because the interpreters share one event history. And because the policy engine runs in Box's own trusted process &mdash; outside the agent's sandbox &mdash; the agent can't tamper with its own verdicts.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>A Mac with Apple silicon, macOS 15 or later.</strong> Box is a preview; local execution currently supports only macOS with Apple silicon. No Linux, no Windows yet.</li>
+<li><strong>Node.js 22.21 or later from Homebrew.</strong> <code>brew install node</code> if you don't have it.</li>
+<li><strong>An AWS account with access to Claude Opus 5 on Amazon Bedrock in <code>us-west-2</code>.</strong> This walkthrough boxes the Strands CLI, which talks to the model through Bedrock &mdash; the key lasts up to 12 hours and only works in the region you made it in.</li>
+<li><strong><code>jq</code></strong> for reading the decision log. That's it.</li>
+</ul>
+<h2>1. Download Box</h2>
+<p>Make a workspace and fetch the binaries. The download script checks the release checksum and unpacks everything into <code>./box-core</code>; it doesn't touch your <code>PATH</code>:</p>
+<pre><code>mkdir ~/box-tutorial
+cd ~/box-tutorial
+curl -fsSL https://raw.githubusercontent.com/strands-agents/box/main/download.sh | sh
+./box-core/box --version</code></pre>
+<p>Keep the downloaded binaries together in <code>./box-core</code> &mdash; <code>box</code> needs the helper files beside it. Prefer to build it yourself? It's a Cargo workspace: <code>cargo build --release -p strands-box -p strands-box-containment</code> and copy the binaries into <code>./box-core</code>.</p>
+<h2>2. Install the Strands CLI</h2>
+<p>Install the CLI with Homebrew's <code>npm</code> so it lands where the box config will expect it, and make a small project for it to work on:</p>
+<pre><code>/opt/homebrew/bin/npm install -g @strands-agents/cli
+mkdir my-project
+echo "# My project" &gt; my-project/README.md</code></pre>
+<figure class="inline-art"><img src="/articles/strands-box-sandbox-ai-agents-tutorial/img2.webp" alt="A policy document feeding into a glowing gate, green permit checks on one side and red deny marks on the other"><figcaption>Permit and forbid rules decide every operation; anything no permit matches is refused. Illustration generated for this article.</figcaption></figure>
+<h2>3. Send the AWS SDK through the egress gateway</h2>
+<p>Box routes all of the agent's network traffic through its egress gateway and sets <code>HTTPS_PROXY</code> to the gateway's address. The AWS SDK for JavaScript opens its own connections and ignores <code>HTTPS_PROXY</code>, and its Bedrock calls use HTTP/2, which no proxy setting reaches &mdash; the guide is upfront that "not every agent runs in a box unchanged." The fix is a Node preload file that forces the SDK's connections through the proxy and downgrades HTTP/2 to HTTP/1.1. Save this as <code>proxy-preload.mjs</code>:</p>
+<pre><code>// Send the AWS SDK's requests through the box's egress gateway. Load with `node --import`.
+import { createRequire } from "node:module";
+
+// Find modules the way the CLI does, from the CLI's own script.
+const require = createRequire(process.argv[1]);
+
+if (process.env.HTTPS_PROXY) {
+  // Make every Node connection use the proxy settings from the environment.
+  const http = require("node:http");
+  const https = require("node:https");
+  const proxyEnv = process.env;
+  const HttpAgent = http.Agent;
+  const HttpsAgent = https.Agent;
+  http.Agent = class extends HttpAgent {
+    constructor(options) {
+      super({ proxyEnv, ...options });
+    }
+  };
+  https.Agent = class extends HttpsAgent {
+    constructor(options) {
+      super({ proxyEnv, ...options });
+    }
+  };
+
+  // Bedrock calls use HTTP/2, which ignores these proxy settings. Use HTTP/1.1.
+  const handlers = require("@smithy/node-http-handler");
+  handlers.NodeHttp2Handler = handlers.NodeHttpHandler;
+}</code></pre>
+<p>This one is Node-specific, not Box-specific &mdash; any Node program behind a proxy has the same problem. But it's the reason the next two files look the way they do.</p>
+<h2>4. Configure the Strands CLI</h2>
+<p>The CLI reads settings from <code>~/.strands/cli/config.json</code>; the box will set the CLI's <code>HOME</code> to <code>./strands-home</code>, so create the settings there:</p>
+<pre><code>mkdir -p strands-home/.strands/cli</code></pre>
+<p>Save this as <code>strands-home/.strands/cli/config.json</code>:</p>
+<pre><code>{
+  "onboarding": { "version": 1 },
+  "providers": { "enabled": ["bedrock"] },
+  "profile": { "model": "bedrock/global.anthropic.claude-opus-5" },
+  "permissions": { "mode": "bypassPermissions" },
+  "settings": { "setupOnLaunch": false }
+}</code></pre>
+<p>This makes the CLI use Claude Opus 5 on Bedrock, open straight into chat, and skip its setup screens. Note <code>bypassPermissions</code>: the CLI will no longer ask you to approve each tool call &mdash; <em>the box's policy decides each command instead</em>. That's the trade you're making, and it only works because the policy is about to be airtight.</p>
+<h2>5. Write the box</h2>
+<p>Make the box directory and save this as <code>my-box/box.toml</code> &mdash; the file that says what to run and what it may reach:</p>
+<pre><code># The box's name, and where it keeps its own state. The agent can't reach box_dir.
+name = "strands"
+box_dir = "&lt;HOME&gt;/box-tutorial/my-box/state"
+# The policy file, next to this one.
+policy = "policy.dw"
+
+[agent]
+# The program the box starts. Node loads the preload file first, then runs the CLI.
+command = [
+  "/opt/homebrew/bin/node",
+  "--import=&lt;HOME&gt;/box-tutorial/proxy-preload.mjs",
+  "/opt/homebrew/lib/node_modules/@strands-agents/cli/bin/strands.js",
+  # Give the agent its shell and web fetch, and no file tools, so the policy decides each file it works on.
+  "--set", 'builtinTools={"*":false,"shell":true,"web_fetch":{"transport":"direct"}}',
+  # Keep sessions and memory out of the project.
+  "--set", 'session.dir="&lt;HOME&gt;/box-tutorial/strands-home/sessions"',
+  "--set", 'memory.dir="&lt;HOME&gt;/box-tutorial/strands-home/memory"',
+]
+# The directory the agent starts in. This alone grants nothing.
+workspace = "&lt;HOME&gt;/box-tutorial/my-project"
+# The agent gets these variables, plus the ones the box adds. Nothing comes from your shell.
+env = { AWS_REGION = "us-west-2", HOME = "&lt;HOME&gt;/box-tutorial/strands-home", PATH = "/usr/bin:/bin", TERM = "xterm-256color" }
+
+# What the agent's own process can touch without asking the policy.
+[agent.filesystem]
+# Node loads the CLI, and the CLI reads its settings.
+read = ["/opt/homebrew/lib/node_modules/@strands-agents/cli", "~/box-tutorial/strands-home"]
+# Node loads the preload file, and reads Homebrew's OpenSSL settings when it starts.
+read_file = ["~/box-tutorial/proxy-preload.mjs", "/opt/homebrew/etc/openssl@3/openssl.cnf"]
+# The CLI writes its sessions and memory.
+write = ["~/box-tutorial/strands-home"]
+# The CLI lists the names in its working directory. It can't open the files itself.
+list = ["~/box-tutorial/my-project"]
+
+# The box adds your Bedrock API key to each request to Bedrock. The agent, and every tool or MCP
+# server in the box, gets a stand-in value.
+# "model" is a name you choose.
+[egress.model]
+destinations = ["bedrock-runtime.us-west-2.amazonaws.com"]
+secret.ref = "env://AWS_BEARER_TOKEN_BEDROCK"</code></pre>
+<p>Read the shape of it: <code>box_dir</code>, <code>command</code>, <code>workspace</code>, and <code>env</code> describe the agent; <code>[agent.filesystem]</code> is what its own process may touch without a policy decision &mdash; enforced by the OS; <code>[egress.model]</code> declares the one network destination, with your API key injected by the gateway so <em>the agent never sees the real secret</em> &mdash; it gets a stand-in value. The paths with <code>&lt;HOME&gt;</code> need your home directory (the filesystem lists can start with <code>~</code>, which Box expands):</p>
+<pre><code>sed -i '' "s|&lt;HOME&gt;|$HOME|g" my-box/box.toml</code></pre>
+<h2>6. Write the policy</h2>
+<p>Now save this as <code>my-box/policy.dw</code> &mdash; the Dogwood rules that decide each request the agent makes:</p>
+<pre><code>// Connect to Bedrock, and send it requests.
+@id("model_connect")
+permit (principal, action == Box::Action::"net:connect", resource)
+when { context.input.host == "bedrock-runtime.us-west-2.amazonaws.com" &amp;&amp; context.input.port == 443 };
+
+@id("model_request")
+permit (principal, action == Box::Action::"http:request", resource)
+when { context.input.host == "bedrock-runtime.us-west-2.amazonaws.com" };
+
+// Run any command in the box's shell. Each file a command touches is still its own decision.
+@id("shell_commands")
+permit (principal, action == Box::Action::"shell:exec", resource);
+
+// Read anything in the project. A path under your home starts with "~" here.
+@id("project_read")
+permit (principal, action == Box::Action::"fs:read", resource)
+when {
+  context.input.path == "~/box-tutorial/my-project" ||
+  context.input.path like "~/box-tutorial/my-project/*"
+};
+
+// Use /dev/null, which agents redirect output to all the time.
+@id("dev_null")
+permit (principal, action in [Box::Action::"fs:read", Box::Action::"fs:write"], resource)
+when { context.input.path == "/dev/null" };</code></pre>
+<p>The semantics are the whole point: operations the engine checks are <strong>denied by default</strong>. A matching <code>permit</code> must allow the operation, and a matching <code>forbid</code> overrides that permission. The box refuses any request that no <code>permit</code> matches &mdash; which right now includes writing a single file anywhere.</p>
+<h2>7. Get a Bedrock API key</h2>
+<p>In the <a href="https://console.aws.amazon.com/bedrock">Amazon Bedrock console</a>, pick <code>us-west-2</code>, open <strong>API keys</strong>, and on the <strong>Short-term API keys</strong> tab choose <strong>Generate short-term API keys</strong>. Put the key in your shell &mdash; the guide's own caution applies: don't paste it into a coding agent, export it yourself in your own terminal:</p>
+<pre><code>export AWS_BEARER_TOKEN_BEDROCK="your-key"</code></pre>
+<p>A key lasts up to 12 hours and works only in the region you made it in. Run the box from the same shell.</p>
+<figure class="inline-art"><img src="/articles/strands-box-sandbox-ai-agents-tutorial/img3.webp" alt="A glowing terminal showing policy verdict lines, some green permit and some red deny"><figcaption>Every decision lands in an OTLP JSON decision log: what the agent did on its own shows up next to what you asked for. Illustration generated for this article.</figcaption></figure>
+<h2>8. Run the box &mdash; and watch it say no</h2>
+<pre><code>./box-core/box run --config my-box/box.toml</code></pre>
+<p>The box prints what the agent can touch, then the CLI opens a chat:</p>
+<pre><code>strands-box: box box-4a4cdb2b114ab6ce created &middot; config my-box/box.toml
+strands-box: starting workload
+strands-box: [agent] runs /opt/homebrew/Cellar/node/26.5.0/bin/node with no policy decision over these paths:
+  read        /opt/homebrew/lib/node_modules/@strands-agents/cli
+  read        /Users/you/box-tutorial/strands-home
+  write       /Users/you/box-tutorial/strands-home
+  read_file   /Users/you/box-tutorial/proxy-preload.mjs
+  read_file   /opt/homebrew/etc/openssl@3/openssl.cnf
+  list        /Users/you/box-tutorial/my-project</code></pre>
+<p>Now ask the agent:</p>
+<pre><code>Read README.md, then add a line to it that says hello.</code></pre>
+<p>The agent reads <code>README.md</code> &mdash; permitted &mdash; then tries the write, and the box refuses it. The agent tells you the write was denied. Type <code>/exit</code> to leave the chat, which stops the box. You asked for something reasonable and got told no. That is the feature working.</p>
+<h2>9. Read the decision log</h2>
+<p>Box writes every decision to <code>my-box/state/private/telemetry/records.jsonl</code> in OTLP JSON. This prints one line per decision &mdash; the guide's own <code>jq</code> incantation:</p>
+<pre><code>jq -r '.resourceLogs[]?.scopeLogs[].logRecords[]
+  | (.attributes | map({(.key): .value}) | add) as $a
+  | select($a["strands.box.policy.verdict"])
+  | [$a["strands.box.policy.verdict"].stringValue, $a["strands.box.policy.action"].stringValue,
+     ($a["file.path"].stringValue // $a["server.address"].stringValue
+      // ($a["process.command_args"].arrayValue.values | map(.stringValue) | join(" ")))]
+  | @tsv' my-box/state/private/telemetry/records.jsonl</code></pre>
+<p>The output shows every verdict &mdash; permits and denies. The guide's example run includes lines like these:</p>
+<pre><code>deny    net:connect   telemetry.strandsagents.com
+deny    shell:spawn   /usr/bin/uname -s
+permit  shell:exec    pwd
+permit  net:connect   bedrock-runtime.us-west-2.amazonaws.com
+permit  shell:exec    cat /Users/you/box-tutorial/my-project/README.md
+permit  fs:read       ~/box-tutorial/my-project/README.md
+deny    fs:write      ~/box-tutorial/my-project/README.md</code></pre>
+<p>Notice the two denies you never asked for: the CLI tried to phone home for a version check (<code>telemetry.strandsagents.com</code> &mdash; no host but Bedrock is named in the policy) and probed the machine with <code>uname</code> at startup (the policy allows <code>shell:exec</code> but not <code>shell:spawn</code>). The log holds what the agent did on its own as well as what you asked for. That quiet telemetry ping, refused silently, is the difference between this and a permission prompt you'd have waved through.</p>
+<h2>10. Allow the write &mdash; exactly that, nothing more</h2>
+<p>The loop with any agent is: run it, read what the box refused, and allow only what it needs. Append this permit to <code>my-box/policy.dw</code>:</p>
+<pre><code>// Write anything in the project.
+@id("project_write")
+permit (principal, action == Box::Action::"fs:write", resource)
+when { context.input.path like "~/box-tutorial/my-project/*" };</code></pre>
+<p>Run the box again and ask the same thing. Box reads <code>policy.dw</code> each time it starts, so the new rule applies immediately &mdash; and the decision log now shows <code>permit fs:write ~/box-tutorial/my-project/README.md</code>. The agent can write in its one folder. It still can't read your home directory, still can't spawn binaries, still can't reach any host but Bedrock. Clean up when you're done:</p>
+<pre><code>rm -rf ~/box-tutorial</code></pre>
+<h2>What you built</h2>
+<p>A boxed coding agent: a sandbox that limits the agent's direct file, program, and network access at the OS level, plus a deny-by-default Dogwood policy that decides every shell command, file operation, and HTTP request &mdash; with credential injection so the agent authenticates to Bedrock without ever holding your API key, and a complete decision log of everything it tried. The working pattern generalizes: box the program you don't fully trust, read what it gets refused, and extend the policy one permit at a time.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>macOS with Apple silicon only.</strong> It's an early preview &mdash; local execution doesn't run on Linux or Windows yet, and the API will move.</li>
+<li><strong>The model costs real money.</strong> This walkthrough needs Claude Opus 5 on Bedrock in <code>us-west-2</code>; short-term keys expire in 12 hours, and there's no free tier. You're paying AWS for every run.</li>
+<li><strong>Deny-by-default means deny-first-everything.</strong> The first run will refuse things you consider normal &mdash; <code>uname</code>, version pings, output redirection. Budget time for the policy loop; there is a <a href="https://raw.githubusercontent.com/strands-agents/box/main/.agents/skills/authoring-box-policy/SKILL.md">policy-authoring skill</a> in the repo that teaches Dogwood syntax and Box's action vocabulary, and it's worth pointing your coding agent at it.</li>
+<li><strong>Node programs need hand-holding.</strong> The AWS SDK ignores <code>HTTPS_PROXY</code> and Bedrock uses HTTP/2, which is why the walkthrough carries <code>proxy-preload.mjs</code> &mdash; any other Node agent you box will need the same treatment until its SDK learns to respect the proxy.</li>
+<li><strong>It's days old.</strong> About 137 stars, first commit October 2, still being pushed daily as of this writing &mdash; treat anything not in the current docs as subject to change.</li>
+</ul>
+<p>Still: the idea is right. A permission prompt is a judgment call made under time pressure by a tired human. A policy file is a judgment call made once, while calm, that every run has to pass. For agents you hand a shell to, that's the containment model worth learning first.</p>
+</main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
