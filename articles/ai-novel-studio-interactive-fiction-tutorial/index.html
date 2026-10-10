@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Write an interactive novel with an AI that can't rewrite its own characters: hands-on with AI Novel Studio | AI Frontier Post</title>
+<meta name="description" content="AI Novel Studio (weike-zhang/ai-novel-studio, MIT) is an AI interactive-fiction app in Next.js + Go where the model proposes each turn's prose and state changes, but the server validates and commits them — so an LLM can't silently rename your characters. Roughly 225 stars in its first week.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/ai-novel-studio-interactive-fiction-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Write an interactive novel with an AI that can't rewrite its own characters: hands-on with AI Novel Studio">
+<meta property="og:description" content="AI Novel Studio (weike-zhang/ai-novel-studio, MIT) is an AI interactive-fiction app in Next.js + Go where the model proposes each turn's prose and state changes, but the server validates and commits them — so an LLM can't silently rename your characters. Roughly 225 stars in its first week.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/ai-novel-studio-interactive-fiction-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/ai-novel-studio-interactive-fiction-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-10">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{
+ "@context": "https://schema.org",
+ "@type": "NewsArticle",
+ "headline": "Write an interactive novel with an AI that can't rewrite its own characters: hands-on with AI Novel Studio",
+ "description": "AI Novel Studio (weike-zhang/ai-novel-studio, MIT) is an AI interactive-fiction app in Next.js + Go where the model proposes each turn's prose and state changes, but the server validates and commits them — so an LLM can't silently rename your characters. Roughly 225 stars in its first week.",
+ "datePublished": "2026-10-10",
+ "dateModified": "2026-10-10",
+ "author": {
+  "@type": "Person",
+  "name": "Marcus Doyle",
+  "url": "https://aifrontierpost.com/about/"
+ },
+ "publisher": {
+  "@type": "Organization",
+  "name": "AI Frontier Post",
+  "url": "https://aifrontierpost.com",
+  "logo": {
+   "@type": "ImageObject",
+   "url": "https://aifrontierpost.com/assets/og-card.png"
+  }
+ },
+ "mainEntityOfPage": {
+  "@type": "WebPage",
+  "@id": "https://aifrontierpost.com/articles/ai-novel-studio-interactive-fiction-tutorial/"
+ },
+ "image": [
+  "https://aifrontierpost.com/articles/ai-novel-studio-interactive-fiction-tutorial/cover.webp"
+ ],
+ "url": "https://aifrontierpost.com/articles/ai-novel-studio-interactive-fiction-tutorial/"
+}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+
+<figure class="hero-art"><img class="story-image" src="/articles/ai-novel-studio-interactive-fiction-tutorial/cover.webp" alt="An open manuscript glowing on a dark desk, its pages showing a branching interactive story map, with a quill and inkwell beside it"><figcaption>An open manuscript glowing on a dark desk, its pages showing a branching interactive story map. Illustration generated for AI Frontier Post.</figcaption></figure>
+<p class="lede">Large language models are wonderful narrators and terrible bookkeepers. Start an interactive story with one, play for twenty turns, and your grizzled sea captain has quietly become a different person with a different name — and the model will insist it was always so. <a href="https://github.com/weike-zhang/ai-novel-studio">AI Novel Studio</a> (MIT licensed, around 225 stars in its first week) attacks exactly this: it&rsquo;s an AI interactive-fiction app in Next.js and Go where the model proposes each turn&rsquo;s prose and state changes, but a server-side engine validates and commits them. The narrator can&rsquo;t rewrite its own facts.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>Go 1.26 or newer</strong> and <strong>git</strong> — that&rsquo;s everything for the quick demo. The story engine runs in-memory with a deterministic fake provider: no API key, no database, no Docker.</li>
+<li>For the full web app: <strong>Node.js 22+</strong>, Go 1.26+, and Docker (MySQL 8.4, Redis and RabbitMQ come via the dev Compose file, plus your own external MinIO bucket).</li>
+</ul>
+<h2>Step 1 &mdash; run the in-memory demo</h2>
+<p>The docs&rsquo; smallest runnable example needs nothing but Go. Clone the repo and run the demo straight from the repository root:</p>
+<pre><code>git clone https://github.com/weike-zhang/ai-novel-studio.git
+cd ai-novel-studio/services/server
+go run ./cmd/demo</code></pre>
+<p>You should see three lines of behavior, exactly as the architecture guide documents:</p>
+<pre><code>COMMITTED turn=1 status=committed
+REJECTED code=identity_mutation field=characterPatches.0.current.name
+PRESERVED turn=1 version=2 name=Keeper</code></pre>
+<p>Here&rsquo;s what happened: the engine committed a harbor scene as turn 1, the fake model then proposed renaming an established character, and the validator refused the patch &mdash; <code>identity_mutation</code> &mdash; leaving the stored version (<code>Keeper</code>, version 2) intact. The demo also prints a fixed Chinese narrative alongside it, to show prose and state flowing through the same turn. This is the whole thesis in one command: a model may propose, but it may not mutate identity.</p>
+<h2>Step 2 &mdash; run the engine&rsquo;s own tests</h2>
+<p>From the same <code>services/server</code> directory:</p>
+<pre><code>go test ./internal/storyengine -v</code></pre>
+<p>These tests draw the boundary lines: continuity context rejects uncommitted turns, mismatched snapshots and duplicate sequence numbers. They&rsquo;re worth skimming before you touch the full stack, because they&rsquo;re the executable spec for what the engine promises &mdash; and, just as importantly, what it doesn&rsquo;t.</p>
+<h2>Step 3 &mdash; read the boundary: proposals vs committed state</h2>
+<p>The design the docs describe is a clean split. Each turn, the model produces a <code>TurnProposal</code> &mdash; proposed prose, choices, events, scenes and character patches. The server then decides whether those patches can become part of the journey, running them through a validator that checks identity protection, version or previous-value preconditions, event requirements and scene constraints. An authorization layer further limits what can change between authorized and later proposals.</p>
+<p>Starting a journey captures a frozen snapshot of the world, so later edits to the public world can&rsquo;t retroactively rewrite your premise. The continuity context fed to the model is the snapshot plus committed simulation, a committed summary, and a bounded tail of committed turns &mdash; eight recent turns by default. And the durable machinery is unglamorous in the best way: credit reservations and turn jobs inside a MySQL transaction, idempotency keys, row locks on the simulation and wallet, an outbox into RabbitMQ.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/ai-novel-studio-interactive-fiction-tutorial/img2.webp" alt="An AI storyteller handing a draft page to a glowing validation gate guarding locked character records"><figcaption>Proposals in, facts out: the engine&rsquo;s validation gate. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2>Step 4 &mdash; bring up the full web app</h2>
+<p>When you want the actual product &mdash; world discovery, authoring, private journeys, account flows &mdash; follow the development guide from the repository root. Copy the example config, install, and start the dev services:</p>
+<pre><code>cp .env.example .env
+npm ci
+docker compose -f deploy/compose/compose.yaml up -d</code></pre>
+<p>Fill in your own MinIO details in <code>.env</code> &mdash; <code>MINIO_ENDPOINT</code>, <code>MINIO_PUBLIC_URL</code>, <code>MINIO_ACCESS_KEY</code>, <code>MINIO_SECRET_KEY</code>. Note the docs&rsquo; warning: the API rejects loopback MinIO endpoints, so this needs a real external MinIO server, not localhost. Then migrate, seed the synthetic development content, and start the three processes in three terminals:</p>
+<pre><code>node --env-file=.env scripts/run-server.mjs migrate up
+docker compose -f deploy/compose/compose.yaml exec -T mysql \
+  mysql -unovelstudio -pnovelstudio novelstudio &lt; services/server/db/seeds/development.sql</code></pre>
+<pre><code>node --env-file=.env scripts/run-server.mjs api
+node --env-file=.env scripts/run-server.mjs worker
+node --env-file=.env --run dev:web</code></pre>
+<p>Open <code>http://localhost:3000</code>. The local sample uses a synthetic development identity for requests &mdash; fine for exploration, explicitly not for anything you expose.</p>
+<h2>Step 5 &mdash; point it at a real model endpoint</h2>
+<p>The fake provider only carries fake worker turns; real authoring assistance and cover generation need configured endpoints. Set an OpenAI-compatible provider:</p>
+<pre><code>MODEL_PROVIDER=openai_compatible
+TEST_MODEL_BASE_URL=https://your-provider.example/v1
+TEST_MODEL_API_KEY=your-key
+TEST_MODEL_NAME=your-model</code></pre>
+<p>The docs define the accepted provider names in <code>services/server/cmd/worker/main.go</code> and warn that the variable names are legacy but real &mdash; don&rsquo;t put a production key in shared examples. Cover generation takes its own trio with fallback handling:</p>
+<pre><code>COVER_BASE_URL=https://your-provider.example/v1
+COVER_API_KEY=your-key
+COVER_MODEL=your-image-model</code></pre>
+<h2>What you built</h2>
+<p>A working interactive-fiction loop with an unusual property: the AI is the narrator, not the librarian. Prose, choices and events are generated; facts are validated and committed in transactions. If you want to extend it, the honest entry point the docs suggest is the validator &mdash; decide what counts as an illegal state mutation, and the rest of the pipeline (snapshots, proposals, outbox, settlement) already holds the line.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/ai-novel-studio-interactive-fiction-tutorial/img3.webp" alt="A branching story tree where one rejected plot branch is struck through"><figcaption>A rejected branch never enters canon. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>Typed patches are not narrative truth.</strong> The docs say it plainly: model prose can still contradict the story semantically even when a typed patch is valid. The checks enforce the database&rsquo;s invariants, not long-run narrative consistency. A character can stay correctly named while acting completely out of character.</li>
+<li><strong>Strict validation rejects plausible continuations.</strong> Frozen snapshots keep journeys stable but cut them off from later world edits; a rejected proposal needs a recoverable user experience, not a silent failure.</li>
+<li><strong>The demo flatters the engineering, not the storytelling.</strong> The deterministic fake provider demonstrates validation behavior; it measures nothing about a real model&rsquo;s prose quality or cost. The docs are careful that eight recent turns is a bounded context, not a memory guarantee.</li>
+<li><strong>The public edition is a starting point, not the hosted product.</strong> It ships synthetic development data and excludes the hosted catalog, original cover artwork, user data and production configuration. Payment-related code does not establish a live payment integration, and the dev notes remind you to test the full container stack on your own environment &mdash; their initial review didn&rsquo;t have Docker available.</li>
+</ul>
+<p>The uncomfortable truth AI Novel Studio bets on: in agentic storytelling, the hard problem was never generating the next paragraph &mdash; it&rsquo;s deciding which paragraphs are allowed to become true. Roughly 225 developers starred that distinction in the project&rsquo;s first week.</p>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
