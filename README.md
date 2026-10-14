@@ -8,5 +8,6 @@ Static site. `index.html` is the homepage shell (143 articles indexed in `posts.
 Deploys: push to `main` (or connect Cloudflare Pages to this repo for auto-deploys).
 
 Generators live in `tools/`: `build_feed.py` (feed.xml + news-sitemap.xml from posts.json)
-and `check_consistency.py` (CI drift check: posts.json, category pages, sitemap, feeds).
+`check_consistency.py` (CI drift check: posts.json, category pages, sitemap, feeds),
+and `repair_article_shell.py` (re-wraps article pages published without the standard shell).
 Publishing runbook: `~/workspace/ai-news-pipeline/PIPELINE.md`.

@@ -22,7 +22,8 @@ static URLs (`/articles/<slug>/`, `/category/<name>/`, `/about/`).
    Benchmark numbers must be re-checked against the primary leaderboards before every
    update — no automatic sync exists. Last source-sync: 2026-09-22.
 2. **Top stories of the day** — hero lead + 3-card side stack, chosen by `topPicks()`.
-3. **The latest** — remaining articles newest-first (picks excluded, no duplicates).
+3. **The latest** — remaining articles newest-first (picks excluded, no duplicates), 12 at a time
+   with a "More stories" button (`PAGE` in `index.html`) — never render the whole archive at once.
 4. **Trending** sidebar — follows the picks order, then newest.
 
 ## Editing the top stories
@@ -54,7 +55,15 @@ them in the DOM for accessibility/licensing.
 Generate catchy cover images only for articles visible on the homepage (hero + top
 stories), max ~10 at a time — keep the article selection deliberate.
 
+## Article page shell
+
+Every `articles/<slug>/index.html` must use the standard shell: `<main><div class="wrap">` →
+crumb → `<article class="post">` with `<header class="post-header">` (chip, `<h1>`, lede, byline) →
+`figure.hero-art` → `div.article-body`. Pages emitted as bare body content render edge to edge
+with no headline; `python3 tools/repair_article_shell.py` re-wraps them from `posts.json`
+(`--check` lists any that need it).
+
 ## Deploy
 
 Cloudflare Pages auto-deploys from `git push` (live within ~1 min).
-Verify at https://aifrontierpost.com on desktop and 390px phone width after changes.
+Verify at https://aifrontierpost.com on desktop, ~820px tablet and 390px phone width after changes.
