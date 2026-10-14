@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run a 744-billion-parameter model on your own machine: a hands-on guide to Colibri | AI Frontier Post</title>
+<meta name="description" content="Colibri (JustVugg/colibri, past 41,000 GitHub stars, Apache-2.0) keeps a mixture-of-experts model&#x27;s dense part in RAM and streams its routed experts from disk, so GLM-5.2&#x27;s 744 billion parameters run on 16 GB of RAM with no GPU. This tutorial installs it, surveys the model catalog, chats, and serves it behind an OpenAI-compatible API.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/colibri-744b-moe-model-own-machine-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run a 744-billion-parameter model on your own machine: a hands-on guide to Colibri">
+<meta property="og:description" content="Colibri (JustVugg/colibri, past 41,000 GitHub stars, Apache-2.0) keeps a mixture-of-experts model&#x27;s dense part in RAM and streams its routed experts from disk, so GLM-5.2&#x27;s 744 billion parameters run on 16 GB of RAM with no GPU. This tutorial installs it, surveys the model catalog, chats, and serves it behind an OpenAI-compatible API.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/colibri-744b-moe-model-own-machine-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/colibri-744b-moe-model-own-machine-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-14">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "NewsArticle",
+  "headline": "Run a 744-billion-parameter model on your own machine: a hands-on guide to Colibri",
+  "description": "Colibri (JustVugg/colibri, past 41,000 GitHub stars, Apache-2.0) keeps a mixture-of-experts model's dense part in RAM and streams its routed experts from disk, so GLM-5.2's 744 billion parameters run on 16 GB of RAM with no GPU. This tutorial installs it, surveys the model catalog, chats, and serves it behind an OpenAI-compatible API.",
+  "datePublished": "2026-10-14",
+  "dateModified": "2026-10-14",
+  "author": {
+    "@type": "Person",
+    "name": "Marcus Doyle",
+    "url": "https://aifrontierpost.com/about/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI Frontier Post",
+    "url": "https://aifrontierpost.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://aifrontierpost.com/assets/og-card.png"
+    }
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://aifrontierpost.com/articles/colibri-744b-moe-model-own-machine-tutorial/"
+  },
+  "image": [
+    "https://aifrontierpost.com/articles/colibri-744b-moe-model-own-machine-tutorial/cover.webp"
+  ],
+  "url": "https://aifrontierpost.com/articles/colibri-744b-moe-model-own-machine-tutorial/"
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<figure class="hero-art"><img class="story-image" src="/articles/colibri-744b-moe-model-own-machine-tutorial/cover.webp" alt="A hummingbird perched on a branch — colibri means hummingbird: tiny engine, immense model"><figcaption>The namesake: a hummingbird — tiny engine, immense model. Photo: Pexels (free stock photo).</figcaption></figure>
+<p class="lede">Frontier open models have outgrown ordinary hardware. GLM-5.2 has 744 billion parameters &mdash; hundreds of gigabytes on disk &mdash; so running it sounds like a cluster problem. <a href="https://github.com/JustVugg/colibri">Colibri</a> (JustVugg/colibri, past 41,000 GitHub stars, Apache-2.0) observes that a mixture-of-experts model uses only a small slice of itself for each token: about 5.4% of parameters are active per token, and for GLM-5.2 only around 11 GB of routed experts change from one token to the next. So colibri keeps the dense part (attention, shared experts, embeddings) in RAM and streams the routed experts from disk through a cache that learns which experts your work uses. A pure-C engine, zero dependencies, no GPU required. This tutorial installs it, surveys the model catalog, chats with a model, and serves it behind an OpenAI-compatible API.</p>
+
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><strong>A computer</strong> &mdash; 8 GB of RAM at the very least (16 GB or more is better), 22 GB of free disk for the smallest model, and an internet connection. Linux, macOS, or Windows. A graphics card is optional.</li>
+<li><strong>A fast disk if you want the big models.</strong> For the streaming models the disk sets the speed &mdash; an NVMe drive helps most.</li>
+<li><strong>Bandwidth for the download.</strong> 23 GB for the smallest chat model; 429 GB for GLM-5.2; 1.56 TB for Kimi K3. Downloads resume where they stopped.</li>
+<li><strong>git and python3</strong> (plus <code>build-essential</code> on Linux). The setup prints the exact install command if anything is missing.</li>
+</ul>
+
+<h2>Step 1 &mdash; run the one-step setup</h2>
+<pre><code># Debian / Ubuntu first:
+sudo apt install git python3 build-essential
+
+git clone https://github.com/JustVugg/colibri && cd colibri
+./start-here.sh</code></pre>
+<p>On macOS: <code>xcode-select --install</code> and <code>brew install libomp git python</code>, then the same two lines. On Windows, download the ZIP and double-click <code>START-HERE.bat</code> (it offers to install Python if it's missing). The setup does five things: it surveys your machine (RAM, free disk, CPU, GPUs), recommends the most capable model that fits &mdash; the always-resident part plus a minimum cache of experts must fit in your RAM, the download on your disk &mdash;, builds the engine for your machine (or downloads a prebuilt one: CPU always, Vulkan or CUDA for a GPU), downloads the model with progress and resume, then starts colibri and opens the dashboard. Run it again later and it just starts &mdash; no rebuild, no re-download. If you use an AI coding assistant, you can also have it do all of this: the repo ships <code>docs/AI_SETUP.md</code> with every step as a command, plus an MCP server (<code>coli mcp</code>) that can detect hardware, recommend, install, start, and stop.</p>
+
+<h2>Step 2 &mdash; survey the model catalog</h2>
+<pre><code>./start-here.sh --list</code></pre>
+<p>This shows every supported model against your machine. RAM is two numbers: below the first the model does not start, from the second it runs as measured. Some highlights from the project's own benchmark table:</p>
+<ul>
+<li><strong>Qwen3.6-35B-A3B</strong> (<code>--model qwen36-35b</code>): 23 GB download, 10/20 GB RAM, ~6 tok/s on the CPU &mdash; the sane first model.</li>
+<li><strong>DeepSeek V4 Flash, 284B</strong> (<code>--model deepseek-v4-flash</code>): 167 GB, 16/32 GB, 0.93 tok/s on a Ryzen 7 5800X.</li>
+<li><strong>GLM-5.2, 744B</strong> (<code>--model glm-5.2</code>): 429 GB, 16/24 GB, 0.05&ndash;0.1 tok/s cold on a 25 GB laptop &mdash; a demo at that speed, not a chatbot.</li>
+<li><strong>Kimi K3, 2.8T</strong> (<code>--model kimi-k3</code>): 1.56 TB, 32/64 GB, about 9.4 s per token.</li>
+</ul>
+<p>Install one with <code>./start-here.sh --model qwen36-35b</code>, or pass <code>--yes</code> to take the recommendation with no questions. Other useful options: <code>--dir DIR</code> to put the models on another disk, <code>--backend cpu</code> to skip the GPU entirely, <code>--reconfigure</code> to switch models later.</p>
+
+<h2>Step 3 &mdash; chat in the terminal</h2>
+<pre><code>./coli chat</code></pre>
+<p>The banner tells you the whole story, e.g. <code>colibri v2.0.0 &middot; GLM-5.2 &middot; 744B MoE &middot; int4 &middot; streaming CPU / &radic; ready in 32s &middot; resident 9.9 GB</code>. That last number is the point: the entire 744B model lives on disk, under 10 GB sits in RAM. <code>c/coli status</code> shows what's installed and whether it runs; <code>c/coli stop</code> stops it. Handy extras on the same launcher: <code>./coli plan --model /nvme/qwen36</code> previews where the model will live (VRAM, RAM, disk), <code>./coli doctor</code> is a read-only readiness check, and <code>./coli tune</code> measures and saves this machine's fastest safe settings.</p>
+
+<figure class="inline-art"><img src="/articles/colibri-744b-moe-model-own-machine-tutorial/img2.webp" alt="A hummingbird feeding at a flower, wings a blur — only the experts the router asks for leave the disk" loading="lazy"><figcaption>Only the routed experts leave the disk — the cache learns which ones your conversations use. Photo: Pexels (free stock photo).</figcaption></figure>
+
+<h2>Step 4 &mdash; serve it to your other apps</h2>
+<pre><code>./coli serve            # API + dashboard, no browser</code></pre>
+<p>The setup already starts this server for you; it prints the addresses other apps can use. It is one server with several APIs: OpenAI-compatible (<code>/v1/chat/completions</code>, <code>/v1/completions</code>, <code>/v1/models</code> &mdash; with streaming, JSON replies, stop sequences, and logprobs), Anthropic-compatible (<code>/v1/messages</code>, so Claude Code and the Anthropic SDKs work against it), tool calling on every chat engine except Inkling and OLMoE, and image input on the vision-capable models. Try it:</p>
+<pre><code>curl http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "&lt;the id `coli status` prints&gt;",
+       "messages": [{"role": "user", "content": "In one sentence: why can a mixture-of-experts model stream its experts from disk?"}]}'</code></pre>
+<p>Coding CLIs and editors connect as to any OpenAI-compatible provider: base URL <code>http://127.0.0.1:8000/v1</code>, the model id <code>coli status</code> prints, any non-empty key.</p>
+
+<h2>Step 5 &mdash; watch the router work in the dashboard</h2>
+<pre><code>./coli web              # API + dashboard, opens a browser</code></pre>
+<p>The dashboard also lives at <code>http://127.0.0.1:8000/</code>. Beyond chat, it has the System One page (give the model a document and the only answers it may pick &mdash; you get a probability per allowed answer), the Profiling page (where each turn spends its time, phase by phase), and the Brain: the measured expert atlas of GLM-5.2, 13,260 characterized experts in ten regions, with live routing that flashes every expert your turn actually fired. It's the clearest visual explanation of why the model is small per token.</p>
+
+<figure class="inline-art"><img src="/articles/colibri-744b-moe-model-own-machine-tutorial/img3.webp" alt="A hummingbird hovering in mid-air — on the Brain page, one cell per expert flashes as the router fires" loading="lazy"><figcaption>The Brain page: one cell per expert, colored by storage tier, flashing as the router fires. Photo: Pexels (free stock photo).</figcaption></figure>
+
+<h2>What you built</h2>
+<p>A local inference stack for frontier mixture-of-experts models: one-command install, terminal chat, an OpenAI- and Anthropic-compatible API on <code>127.0.0.1:8000</code>, and a dashboard that shows the MoE router working in real time &mdash; all on hardware you already own.</p>
+
+<h2>Honest limitations</h2>
+<ul>
+<li><strong>The 744B headline is a demo at laptop scale.</strong> 0.05&ndash;0.1 tokens per second on a 25 GB laptop means 10&ndash;20 seconds <em>per token</em>. The everyday-usable models are the smaller ones: Qwen3.6-35B at ~6 tok/s on CPU (~9.9 with Vulkan on integrated graphics).</li>
+<li><strong>The disk is the speed limit.</strong> For streaming models, how fast experts arrive from the disk sets the pace &mdash; an NVMe helps most, an ordinary disk is slower, and RAM still matters for the resident dense part plus the expert cache.</li>
+<li><strong>The downloads are enormous.</strong> 429 GB for GLM-5.2, 1.56 TB for Kimi K3 &mdash; resumable, but plan the bandwidth and the free space.</li>
+<li><strong>Only MoE architectures benefit.</strong> Dense models have no experts to stream; the trick works because each token activates ~5.4% of the model. The engine covers thirteen families &mdash; ten chat, one image model, and decision models.</li>
+<li><strong>GPU builds can fall back.</strong> If a build fails (e.g. the installed CUDA toolkit no longer supports the card), the setup picks the next backend itself &mdash; Vulkan, then CPU &mdash; and <code>./start-here.sh --backend cpu</code> forces CPU from the start.</li>
+</ul>
+
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
