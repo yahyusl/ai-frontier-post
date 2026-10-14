@@ -55,13 +55,38 @@ them in the DOM for accessibility/licensing.
 Generate catchy cover images only for articles visible on the homepage (hero + top
 stories), max ~10 at a time — keep the article selection deliberate.
 
+## Category pages
+
+`category/<slug>/index.html` are generated from posts.json by `python3 tools/build_category_pages.py`
+(`--check` reports stale pages). Their masthead is a `<div class="masthead" role="banner">`, so the
+first `</header>` on the page is the archive's own page-head: the desks' "insert the new story after
+the first `</header>`" step then lands at the top of the list instead of above `<main>` (that bug had
+put 310 AI News stories above the page title and erased Tutorials' `<main>`). Keep the count copy
+formats — "All N <Cat> stories" and "(N stories)" — the pipelines and the CI check rewrite/read them.
+With JavaScript, `assets/site.js` replaces the static list with the interactive archive (search,
+topic filters, sort, month groups, load more) rendered from posts.json; the static list stays for
+crawlers and no-JS readers.
+
 ## Article page shell
 
 Every `articles/<slug>/index.html` must use the standard shell: `<main><div class="wrap">` →
 crumb → `<article class="post">` with `<header class="post-header">` (chip, `<h1>`, lede, byline) →
 `figure.hero-art` → `div.article-body`. Pages emitted as bare body content render edge to edge
 with no headline; `python3 tools/repair_article_shell.py` re-wraps them from `posts.json`
-(`--check` lists any that need it).
+(`--check` lists any that need it). It also repairs the other defects the desks have emitted:
+a `<head>` cut off after the JSON-LD (no stylesheet — 172 pages rendered unstyled), pages
+truncated mid-article (no footer), copy left loose in `<article>` (no `.article-body`), unclosed
+post-headers, `...placeholder...` in place of tag closers, doubled `>>` in the head, and mangled
+theme-toggle scripts (215 pages had a dead dark-mode button). Every page also gets `site.js`.
+
+## Site behaviour (assets/site.js)
+
+Reading progress, back-to-top ring, scroll reveal, card spotlight, a contents rail on wide
+screens (articles with 3+ sections), drop caps, scoreboard count-up, cross-page view transitions.
+All motion is skipped under prefers-reduced-motion. Easter eggs, for the curious: `?` shortcuts
+panel, `/` search, `j`/`k`, `g`+letter navigation, Konami code (tokenizer vision), typing `agi`,
+seven quick clicks on the theme button (terminal mode), five clicks on the homepage wordmark,
+the console greeting, and the 404 page.
 
 ## Deploy
 

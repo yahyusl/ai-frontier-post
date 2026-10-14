@@ -106,6 +106,7 @@ def render(data):
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css">
 <script>try{{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}}catch(e){{}}</script>
+<script src="/assets/site.js" defer></script>
 </head>
 <body>
 <header class="masthead"><div class="wrap masthead-in">
