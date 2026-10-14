@@ -9,5 +9,6 @@ Deploys: push to `main` (or connect Cloudflare Pages to this repo for auto-deplo
 
 Generators live in `tools/`: `build_feed.py` (feed.xml + news-sitemap.xml from posts.json)
 `check_consistency.py` (CI drift check: posts.json, category pages, sitemap, feeds),
-and `repair_article_shell.py` (re-wraps article pages published without the standard shell).
+`build_category_pages.py` (the five category archives from posts.json),
+and `repair_article_shell.py` (repairs article pages the desks publish broken; `--check` audits).
 Publishing runbook: `~/workspace/ai-news-pipeline/PIPELINE.md`.
