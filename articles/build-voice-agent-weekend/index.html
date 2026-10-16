@@ -25,6 +25,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css">
 <script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What are the pieces of a voice agent pipeline?", "acceptedAnswer": {"@type": "Answer", "text": "Microphone → voice activity detection (VAD) → streaming speech-to-text → streaming LLM → streaming text-to-speech → speaker, with turn logic (endpointing, merge windows) and barge-in layered on top. Silero VAD is the free standard choice, running on CPU in tens of milliseconds."}}, {"@type": "Question", "name": "What latency should a voice agent target?", "acceptedAnswer": {"@type": "Answer", "text": "Under a second from the moment someone stops talking to the first sound of the answer. The measured Salesforce build hit ~750ms end-to-end: ~337ms Deepgram STT + ~337ms LLM time-to-first-token (self-hosted Qwen 7B) + ~219ms ElevenLabs TTS time-to-first-audio, overlapping via streaming. Without streaming, the same cascade takes ~2 seconds."}}, {"@type": "Question", "name": "How do you handle interruptions (barge-in)?", "acceptedAnswer": {"@type": "Answer", "text": "The moment VAD detects user speech while the agent is talking: flush the TTS audio queue, stop playback, cancel the LLM stream — but keep recording, never drop mic frames. Small TTS frames (~30ms) let the audio queue flush instantly so interruption feels human."}}]}</script>
 </head>
 <body>
 <header class="masthead"><div class="wrap masthead-in">
@@ -40,6 +41,14 @@
 <h1>Build a voice agent in a weekend: STT, LLM, TTS</h1>
 <p class="lede">Speech in, speech out. A weekend plan for wiring a streaming voice agent — picking STT, LLM, and TTS services, cutting latency below a second, and handling interruptions like a human would.</p>
 <div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · August 24, 2026 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> A voice agent is an LLM with voice I/O; the whole trick is feeling conversational — under a second from speech end to first answer sound, plus human-like interruption handling. This weekend plan covers the STT→LLM→TTS stack, streaming pipelining that cuts ~2s down to ~750ms, and the turn-taking logic (endpointing, barge-in) that separates an agent from an IVR.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem">
+    <li>A voice agent pipeline: mic/phone → VAD → streaming STT → LLM (streaming) → streaming TTS → speaker/phone, with turn logic and barge-in.</li>
+    <li>Conversational feel target: under a second from the speaker stopping to the first sound of the answer, plus interruption handling.</li>
+    <li>The Salesforce AI Research build measured ~337ms Deepgram STT, ~337ms LLM time-to-first-token (self-hosted Qwen 7B), ~219ms ElevenLabs TTS time-to-first-audio — ~750ms end-to-end with overlapped streaming.</li>
+    <li>Endpointing: usually 150-250ms of trailing silence; TTS frames as small as ~30ms make barge-in feel instant.</li>
+    <li>Recommended frameworks: Pipecat (Python, open source, quickstart CLI scaffolds Deepgram + OpenAI + Cartesia) and LiveKit Agents (WebRTC audio leg, ships Silero VAD plugin).</li>
+</ul>
 </header>
 <div class="article-body"><p>A voice agent is an LLM agent with voice I/O. The whole trick is making it feel conversational: under a second from the moment someone stops talking to the first sound of your answer, and the ability to be interrupted mid-sentence like a person. Everything else is plumbing.</p>
 <p>This is a realistic weekend plan: Saturday, a working pipeline in the browser or on a phone line. Sunday, make it feel human — streaming, latency budgets, interruption handling. No custom training, no telephony contracts. Just code and a few API keys.</p>
@@ -93,6 +102,15 @@ WITH streaming (overlapping):
 </article>
 <div class="post-engage"><div class="reactions" data-reactions="build-voice-agent-weekend"></div><div class="comments" data-comments="build-voice-agent-weekend"></div></div>
 <section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/agent-evals-tutorial/"><span class="chip">Tutorials</span><h3>Testing agents: task-based evals for tool-using models</h3><div class="meta">September 19, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/ai-workflow-automation-n8n/"><span class="chip">Tutorials</span><h3>Automate your marketing with AI workflows: an n8n starter</h3><div class="meta">August 30, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/build-mcp-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build your first MCP-powered agent: tools, servers, and safety rails</h3><div class="meta">August 24, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/chatbot-memory-tutorial/"><span class="chip">Tutorials</span><h3>Give your chatbot a memory: session state that actually works</h3><div class="meta">August 23, 2026 · 7 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions">
+<h2>Frequently asked questions</h2>
+<h3>What are the pieces of a voice agent pipeline?</h3>
+<p>Microphone → voice activity detection (VAD) → streaming speech-to-text → streaming LLM → streaming text-to-speech → speaker, with turn logic (endpointing, merge windows) and barge-in layered on top. Silero VAD is the free standard choice, running on CPU in tens of milliseconds.</p>
+<h3>What latency should a voice agent target?</h3>
+<p>Under a second from the moment someone stops talking to the first sound of the answer. The measured Salesforce build hit ~750ms end-to-end: ~337ms Deepgram STT + ~337ms LLM time-to-first-token (self-hosted Qwen 7B) + ~219ms ElevenLabs TTS time-to-first-audio, overlapping via streaming. Without streaming, the same cascade takes ~2 seconds.</p>
+<h3>How do you handle interruptions (barge-in)?</h3>
+<p>The moment VAD detects user speech while the agent is talking: flush the TTS audio queue, stop playback, cancel the LLM stream — but keep recording, never drop mic frames. Small TTS frames (~30ms) let the audio queue flush instantly so interruption feels human.</p>
+</section>
 <section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li><li><a href="/articles/openviking-agent-context-database-tutorial/">Give your coding agent a memory that survives the session: hands-on with OpenViking</a></li><li><a href="/articles/alibaba-open-code-review-ai-reviewer-tutorial/">Review your own code like Alibaba does: a hands-on guide to OpenCodeReview</a></li><li><a href="/articles/crawl4ai-llm-ready-web-scraper-tutorial/">Turn any website into LLM-ready Markdown: a hands-on guide to Crawl4AI</a></li></ul></section></div></main>
 <footer class="footer"><div class="wrap">
 <div class="foot-grid">
