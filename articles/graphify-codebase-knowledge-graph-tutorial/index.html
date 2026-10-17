@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Query your codebase instead of grepping it: a hands-on guide to Graphify | AI Frontier Post</title>
+<meta name="description" content="Graphify (Graphify-Labs/graphify, Apache-2.0, past 127,000 GitHub stars) turns your code, docs, SQL schemas, and PDFs into a knowledge graph your AI assistant can query — parsed locally with tree-sitter, no LLM, nothing leaves your machine. This guide installs it, builds your first graph, wires it into your coding assistant, and keeps it fresh.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/graphify-codebase-knowledge-graph-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Query your codebase instead of grepping it: a hands-on guide to Graphify">
+<meta property="og:description" content="Graphify (Graphify-Labs/graphify, Apache-2.0, past 127,000 GitHub stars) turns your code, docs, SQL schemas, and PDFs into a knowledge graph your AI assistant can query — parsed locally with tree-sitter, no LLM, nothing leaves your machine. This guide installs it, builds your first graph, wires it into your coding assistant, and keeps it fresh.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/graphify-codebase-knowledge-graph-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/graphify-codebase-knowledge-graph-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-15">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Query your codebase instead of grepping it: a hands-on guide to Graphify", "description": "Graphify (Graphify-Labs/graphify, Apache-2.0, past 127,000 GitHub stars) turns your code, docs, SQL schemas, and PDFs into a knowledge graph your AI assistant can query — parsed locally with tree-sitter, no LLM, nothing leaves your machine. This guide installs it, builds your first graph, wires it into your coding assistant, and keeps it fresh.", "datePublished": "2026-10-17", "dateModified": "2026-10-17", "author": {"@type": "Person", "name": "Marcus Doyle"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com/"}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/graphify-codebase-knowledge-graph-tutorial/"}, "image": ["https://aifrontierpost.com/articles/graphify-codebase-knowledge-graph-tutorial/cover.webp"], "url": "https://aifrontierpost.com/articles/graphify-codebase-knowledge-graph-tutorial/"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Query your codebase instead of grepping it: a hands-on guide to Graphify", "description": "Graphify (Graphify-Labs/graphify, Apache-2.0, past 127,000 GitHub stars) turns your code, docs, SQL schemas, and PDFs into a knowledge graph your AI assistant can query — parsed locally with tree-sitter, no LLM, nothing leaves your machine. This guide installs it, builds your first graph, wires it into your coding assistant, and keeps it fresh.", "step": [{"@type": "HowToStep", "name": "Install the CLI", "text": "Install the graphifyy PyPI package (double-y) with uv tool install graphifyy or pipx install graphifyy on Python 3.10+."}, {"@type": "HowToStep", "name": "Register the skill", "text": "Run graphify install once so your AI coding assistant gets the /graphify skill for its platform."}, {"@type": "HowToStep", "name": "Build your first graph", "text": "Run /graphify . in your assistant; it writes graphify-out/ with graph.html, GRAPH_REPORT.md, and graph.json."}, {"@type": "HowToStep", "name": "Read the report", "text": "Open GRAPH_REPORT.md to review the god nodes, Leiden communities, and key paths before letting an agent loose."}, {"@type": "HowToStep", "name": "Query instead of grepping", "text": "Use /graphify query, /graphify path, and /graphify explain against graph.json; edges are tagged EXTRACTED or INFERRED."}, {"@type": "HowToStep", "name": "Keep the graph fresh", "text": "Re-extract changed files with /graphify ./docs --update, or install commit hooks with graphify hook install."}, {"@type": "HowToStep", "name": "Wire always-on integration", "text": "Run graphify claude install (or codex / install --platform <name>) so the assistant queries the graph by default."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does Graphify send my code to the cloud?", "acceptedAnswer": {"@type": "Answer", "text": "No. Code files are parsed locally with tree-sitter and nothing leaves your machine; a code-only corpus runs fully offline with no API key (use --code-only or GRAPHIFY_BACKEND=none for mixed repos). Docs, PDFs, and images go through a semantic pass that uses your configured backend, but video and audio stay local, transcribed with faster-whisper. Graphify collects no telemetry, and queries are logged locally to ~/.cache/graphify-queries.log unless you set GRAPHIFY_QUERY_LOG_DISABLE=1."}}, {"@type": "Question", "name": "Do I need a specific AI assistant to use it?", "acceptedAnswer": {"@type": "Answer", "text": "No. graphify install supports 20+ platforms — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot and more — and you can also connect through the MCP server. Hook platforms (Claude Code, Gemini CLI) get a hook that fires before search-style tool calls; instruction-file platforms (Codex, OpenCode, Cursor) get persistent guidance in files like AGENTS.md. You can also query the graph directly from the CLI without any assistant at all."}}, {"@type": "Question", "name": "What happens when a symbol matches several nodes?", "acceptedAnswer": {"@type": "Answer", "text": "The query is refused with the candidate list rather than guessed, so the assistant never silently picks the wrong RateLimiter. Scripts can read the outcome from the exit code: 0 means an answer, 3 means an ambiguous name, 4 means no matching node."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Query your codebase instead of grepping it: a hands-on guide to Graphify</h1>
+<p class="lede">Every serious coding assistant has the same blind spot: it reads files one at a time. Ask it where authentication meets the database and it greps its way there &mdash; slow, token-hungry, and blind to architecture. <a href="https://github.com/Graphify-Labs/graphify">Graphify</a> takes a different route: it turns your whole project &mdash; code, docs, SQL schemas, configs, PDFs &mdash; into a knowledge graph your assistant can query instead of reading. It has struck a nerve: as of October 17, 2026 the open-source repo (Apache-2.0) is past <b>127,000 GitHub stars</b>, and an October 1 trend digest estimated about 1,200 new stars in a single day.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 17, 2026 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Graphify (Graphify-Labs/graphify, Apache-2.0, past 127,000 GitHub stars) maps your project &mdash; code, docs, SQL schemas, configs, PDFs &mdash; into a queryable knowledge graph. Install the CLI with <code>uv tool install graphifyy</code> (the PyPI package has a double-y; the command is <code>graphify</code>), run <code>graphify install</code>, then <code>/graphify .</code> in your assistant. You get <code>graph.html</code>, <code>GRAPH_REPORT.md</code>, and <code>graph.json</code>. Query with <code>/graphify query</code>, <code>/graphify path</code>, and <code>/graphify explain</code> instead of grepping; code parses locally with tree-sitter for zero LLM cost, and <code>graphify hook install</code> keeps the graph current on every commit.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Graphify</b> (Graphify-Labs/graphify, <b>Apache-2.0</b>, by Graphify Labs) has <b>past 127,000 GitHub stars</b> and roughly 12,300 forks as of October 17, 2026; created 2026-04-03 and still actively updated.</li><li>Install: the PyPI package is <code>graphifyy</code> <b>(double-y</b>; other graphify* packages are unaffiliated), but the CLI command is <code>graphify</code>. Needs <b>Python 3.10+</b> and <b>uv</b> (or pipx).</li><li>One install, any assistant: Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot and <b>20+ more</b>, on macOS, Linux, and Windows &mdash; or connect via the MCP server.</li><li>Build with <code>/graphify .</code> &rarr; <code>graphify-out/</code> holds <code>graph.html</code> (clickable), <code>GRAPH_REPORT.md</code> (god nodes, communities, key paths), <code>graph.json</code> (queryable). Roughly <b>40 languages</b> parse locally with tree-sitter; a code-only graph needs <b>no API key</b> and runs fully offline.</li><li>Every edge is tagged <code>EXTRACTED</code> (stated in the source) or <code>INFERRED</code> (resolved by graphify). Ambiguous symbol names are <b>refused with the candidate list</b> rather than guessed; script exit codes are <code>0</code> answered, <code>3</code> ambiguous, <code>4</code> no match.</li><li>Keep it fresh: <code>/graphify ./docs --update</code> re-extracts only changed files; <code>graphify hook install</code> auto-rebuilds on commit and branch checkout; <code>.graphifyrc</code> holds project settings; <code>.gitignore</code> is honored. Vendor benchmarks: <b>0.497 recall@10</b> on LOCOMO (vs 0.048 mem0, 0.149 supermemory) with <b>0 LLM credits</b> spent building the graph.</li></ul>
+
+<p>Every serious coding assistant has the same blind spot: it reads files one at a time. Ask it where authentication meets the database and it greps its way there &mdash; slow, token-hungry, and blind to architecture. <a href="https://github.com/Graphify-Labs/graphify">Graphify</a> takes a different route: it turns your whole project &mdash; code, docs, SQL schemas, configs, PDFs &mdash; into a knowledge graph your assistant can query instead of reading. And it has struck a nerve: as of October 17, 2026 the open-source repo (Apache-2.0) is past <b>127,000 GitHub stars</b>, after an October 1 trend digest estimated about 1,200 new stars in a single day.</p>
+
+<p>The idea is deliberately unglamorous. No embeddings, no vector store: Graphify parses roughly 40 languages locally with tree-sitter AST &mdash; deterministic, no LLM, nothing leaves your machine &mdash; and writes three files you can open, read, and query. Every edge is tagged <code>EXTRACTED</code> (it was stated in the source) or <code>INFERRED</code> (Graphify resolved it), so your agent can tell what was read from what was guessed.</p>
+
+<p>This guide installs the CLI, builds your first graph, wires it into your coding assistant, and sets up the habits that keep it current. Everything here comes from the project's README and docs, verified today.</p>
+<h2>What you'll need</h2>
+<ul>
+<li><b>Python 3.10+</b> and <b>uv</b> (or pipx). macOS: <code>brew install python@3.12 uv</code>. Windows: <code>winget install astral-sh.uv</code>.</li>
+<li><b>A project to map</b> &mdash; any repo in one of the ~40 supported languages, on macOS, Linux, or Windows.</li>
+<li><b>An AI coding assistant</b> (optional but the point): Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, or 20+ others. Headless use works too &mdash; a code-only graph needs no API key at all.</li>
+<li><b>No LLM credits</b> for the code graph: <code>graphify extract</code> on a code-only corpus runs fully offline.</li>
+</ul>
+<h2>Step 1: Install the CLI</h2>
+<p>The PyPI package is <code>graphifyy</code> &mdash; with a double-y. The README is explicit that other <code>graphify*</code> packages on PyPI are not affiliated, so type it carefully. The CLI command itself is plain <code>graphify</code>:</p>
+<pre><code class="language-bash">uv tool install graphifyy      # recommended, isolated env
+# alternatives:
+pipx install graphifyy
+pip install graphifyy          # may need PATH setup
+</code></pre>
+<p>Verify it:</p>
+<pre><code class="language-bash">graphify --help
+</code></pre>
+<h2>Step 2: Register the skill with your assistant</h2>
+<p>Run this once:</p>
+<pre><code class="language-bash">graphify install               # detects your assistant and registers the skill
+</code></pre>
+<p>It installs a <code>/graphify</code> skill for your platform &mdash; Claude Code, Cursor, Codex, Gemini CLI, and the rest &mdash; so you can build and query graphs from inside your normal session.</p>
+<h2>Step 3: Build your first graph</h2>
+<p>In your assistant, in the project root:</p>
+<pre><code>/graphify .</code></pre>
+<p>On a small repo it takes about thirty seconds. You get three files in <code>graphify-out/</code>:</p>
+<pre><code>graphify-out/
+├── graph.html       open in any browser: click nodes, filter, search
+├── GRAPH_REPORT.md  the highlights: key concepts, surprising connections, suggested questions
+└── graph.json       the full graph: query it anytime without re-reading your files
+</code></pre>
+<figure class="inline-art">
+<img src="/articles/graphify-codebase-knowledge-graph-tutorial/img2.webp" alt="Interactive knowledge graph of a codebase rendered as a force-directed network with detected communities" loading="lazy">
+<figcaption>Image: Graphify's interactive graph.html showing a codebase mapped as a force-directed knowledge graph, colored by detected communities (Graphify-Labs/graphify, Apache-2.0).</figcaption>
+</figure>
+<h2>Step 4: Read the report, not the files</h2>
+<p><code>GRAPH_REPORT.md</code> summarizes the graph for broad architecture review: the <b>god nodes</b> (the most-connected concepts &mdash; what everything flows through), the <b>communities</b> (the graph split into subsystems with Leiden clustering, labeled without an LLM), and the key paths between them. Start here before you let an agent loose on the repo: it is the cheapest architecture review you will ever get.</p>
+<h2>Step 5: Query, trace, explain</h2>
+<p>This is the payoff. Instead of grepping, ask the graph:</p>
+<pre><code>/graphify query "what connects auth to the database?"
+/graphify path "UserService" "DatabasePool"
+/graphify explain "RateLimiter"
+</code></pre>
+<p><code>query</code> answers a question against <code>graph.json</code>; <code>path</code> traces the connection between two things; <code>explain</code> unpacks one concept. Edges carry their provenance &mdash; <code>EXTRACTED</code> vs <code>INFERRED</code> &mdash; so when your assistant reasons over the answer it can weigh evidence properly. Two behaviors worth knowing: a name that matches several nodes is <b>refused with the candidate list</b> rather than guessed, and scripts can read the outcome from the exit code (<code>0</code> answered, <code>3</code> ambiguous, <code>4</code> no matching node).</p>
+<p>You can also query the graph straight from the CLI, without the assistant: <code>graphify query</code>, <code>graphify path</code>, and <code>graphify explain</code> work against the local graph.</p>
+<h2>Step 6: Keep the graph fresh</h2>
+<p>A stale graph is worse than none. Three habits:</p>
+<pre><code class="language-bash">/graphify ./docs --update          # re-extract only changed files
+/graphify . --cluster-only         # rerun clustering without re-extracting
+graphify hook install              # auto-rebuild on commit + branch checkout
+</code></pre>
+<p>The hook auto-rebuilds on commit and branch checkout (run <code>graphify update .</code> after <code>git pull</code>, per the README's recommended workflow). For settings that belong to the project rather than one run, drop a <code>.graphifyrc</code> in the scan root &mdash; one <code>key=value</code> per line, <code>#</code> comments. Graphify honors <code>.gitignore</code> and supports <code>--exclude</code> patterns and a project <code>.graphifyignore</code>, so vendored code and build output never pollute the graph.</p>
+<h2>Step 7: Make your assistant always use the graph</h2>
+<p>Run once per project:</p>
+<pre><code class="language-bash">graphify claude install        # or: graphify codex install
+# or, for any other platform:
+graphify install --platform &lt;name&gt;
+</code></pre>
+<p>This writes a small config that tells your assistant to consult the knowledge graph for codebase questions &mdash; preferring scoped queries like <code>graphify query "&lt;question&gt;"</code> over reading the full report or grepping raw files. On hook platforms (Claude Code, Gemini CLI) a hook fires before search-style tool calls and nudges the assistant toward the graph path; on instruction-file platforms (Codex, OpenCode, Cursor) persistent files like <code>AGENTS.md</code> or <code>.cursor/rules/</code> provide the same guidance. To remove it everywhere: <code>graphify uninstall</code> (add <code>--purge</code> to also delete <code>graphify-out/</code>).</p>
+<h2>What you built</h2>
+<figure class="inline-art">
+<img src="/articles/graphify-codebase-knowledge-graph-tutorial/img3.webp" alt="Graphify logo" loading="lazy">
+<figcaption>Image: Graphify logo (Graphify-Labs/graphify, Apache-2.0). One install covers 20+ assistants on macOS, Linux, and Windows.</figcaption>
+</figure>
+<p>A local, deterministic map of your project that your coding assistant can traverse instead of re-reading files: god nodes showing what everything flows through, communities splitting the system into subsystems, provenance-tagged edges, and a query path your assistant prefers over grepping. On the project's own benchmarks this structure-first approach scores <b>0.497 recall@10</b> on LOCOMO (against 0.048 for mem0 and 0.149 for supermemory) with <b>zero LLM credits</b> spent building the graph &mdash; measured on the project's own harness with a blind-validated judge.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><b>The "no LLM" promise covers code.</b> Docs, PDFs, images, and video go through a semantic pass that needs a configured backend (Gemini, Kimi, Claude, OpenAI, DeepSeek, Ollama, Bedrock, or the <code>claude</code> CLI). For a pure code graph use <code>--code-only</code> or <code>GRAPHIFY_BACKEND=none</code>. Video and audio at least stay local &mdash; transcribed with faster-whisper, nothing leaves your machine.</li>
+<li><b>Ambiguity is refused, not resolved.</b> A symbol matching several nodes fails with the candidate list instead of being guessed. Good for correctness; your scripts need to handle exit code 3.</li>
+<li><b>Big repos take real time.</b> AST parsing is deterministic but a monorepo build is not instant &mdash; which is why the incremental <code>--update</code> and commit hooks exist.</li>
+<li><b>The benchmark numbers are the vendor's.</b> The 0.497 recall@10 was measured on their own harness with a blind-validated judge (90.6% agreement, Cohen's kappa 0.81); treat it as directional, not gospel.</li>
+<li><b>Assistant coverage is wide, not universal.</b> 20+ platforms, with hooks on some and instruction files on others &mdash; check the always-on docs for yours rather than assuming the hook fires.</li>
+</ul>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Does Graphify send my code to the cloud?</h3><p>No. Code files are parsed locally with tree-sitter and nothing leaves your machine; a code-only corpus runs fully offline with no API key (use --code-only or GRAPHIFY_BACKEND=none for mixed repos). Docs, PDFs, and images go through a semantic pass that uses your configured backend, but video and audio stay local, transcribed with faster-whisper. Graphify collects no telemetry, and queries are logged locally to ~/.cache/graphify-queries.log unless you set GRAPHIFY_QUERY_LOG_DISABLE=1.</p><h3>Do I need a specific AI assistant to use it?</h3><p>No. graphify install supports 20+ platforms — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot and more — and you can also connect through the MCP server. Hook platforms (Claude Code, Gemini CLI) get a hook that fires before search-style tool calls; instruction-file platforms (Codex, OpenCode, Cursor) get persistent guidance in files like AGENTS.md. You can also query the graph directly from the CLI without any assistant at all.</p><h3>What happens when a symbol matches several nodes?</h3><p>The query is refused with the candidate list rather than guessed, so the assistant never silently picks the wrong RateLimiter. Scripts can read the outcome from the exit code: 0 means an answer, 3 means an ambiguous name, 4 means no matching node.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/openmontage-agentic-video-studio-tutorial/">Turn your coding assistant into a full video studio: hands-on with OpenMontage</a></li><li><a href="/articles/invisible-playwright-mcp-stealth-browser-tutorial/">Give your coding agent an invisible browser: hands-on with invisible-playwright-mcp</a></li><li><a href="/articles/tencent-weknora-knowledge-platform-tutorial/">Tencent&#x27;s WeKnora: turn your documents into a RAG knowledge base, agent, and wiki — hands-on</a></li><li><a href="/articles/artex-autonomous-ai-pentest-lab-tutorial/">Run an autonomous AI pentest in your own lab: a hands-on guide to ARTEX</a></li></ul></section>
+
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
