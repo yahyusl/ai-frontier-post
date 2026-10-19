@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Render text-perfect images on your own GPU: a hands-on guide to MOSS-Image | AI Frontier Post</title>
+<meta name="description" content="OpenMOSS/MOSS-Image (867 stars on 2026-10-19, Apache-2.0) is a 5B-parameter open image model that renders legible text in pictures — posters, whiteboards, sticky notes — and pins text and objects to exact positions with JSON layouts. Released 2026-10-16 with Base and SFT weights, it runs on your own GPU via diffusers, Gradio, ComfyUI, SGLang or vLLM-Omni. Hands-on: the install, your first generation, the recommended sampling settings, layout-controlled posters, and the prompt-enhancer skill.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/moss-image-text-rendering-layout-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Render text-perfect images on your own GPU: a hands-on guide to MOSS-Image">
+<meta property="og:description" content="OpenMOSS/MOSS-Image (867 stars on 2026-10-19, Apache-2.0) is a 5B-parameter open image model that renders legible text in pictures — posters, whiteboards, sticky notes — and pins text and objects to exact positions with JSON layouts. Released 2026-10-16 with Base and SFT weights, it runs on your own GPU via diffusers, Gradio, ComfyUI, SGLang or vLLM-Omni. Hands-on: the install, your first generation, the recommended sampling settings, layout-controlled posters, and the prompt-enhancer skill.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/moss-image-text-rendering-layout-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/moss-image-text-rendering-layout-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-19">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Render text-perfect images on your own GPU: a hands-on guide to MOSS-Image", "description": "OpenMOSS/MOSS-Image (867 stars on 2026-10-19, Apache-2.0) is a 5B-parameter open image model that renders legible text in pictures — posters, whiteboards, sticky notes — and pins text and objects to exact positions with JSON layouts. Released 2026-10-16 with Base and SFT weights, it runs on your own GPU via diffusers, Gradio, ComfyUI, SGLang or vLLM-Omni. Hands-on: the install, your first generation, the recommended sampling settings, layout-controlled posters, and the prompt-enhancer skill.", "image": ["https://aifrontierpost.com/articles/moss-image-text-rendering-layout-hands-on-tutorial/cover.webp"], "datePublished": "2026-10-19", "dateModified": "2026-10-19", "author": {"@type": "Person", "name": "Marcus Doyle"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/favicon.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/moss-image-text-rendering-layout-hands-on-tutorial/"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Render text-perfect images on your own GPU: a hands-on guide to MOSS-Image", "description": "OpenMOSS/MOSS-Image (867 stars on 2026-10-19, Apache-2.0) is a 5B-parameter open image model that renders legible text in pictures — posters, whiteboards, sticky notes — and pins text and objects to exact positions with JSON layouts. Released 2026-10-16 with Base and SFT weights, it runs on your own GPU via diffusers, Gradio, ComfyUI, SGLang or vLLM-Omni. Hands-on: the install, your first generation, the recommended sampling settings, layout-controlled posters, and the prompt-enhancer skill.", "step": [{"@type": "HowToStep", "name": "Clone the repo and install", "text": "Clones OpenMOSS/MOSS-Image, creates a virtualenv and installs requirements.txt; weights pull from Hugging Face on first run."}, {"@type": "HowToStep", "name": "Generate your first image with the Python API", "text": "Runs the diffusers custom pipeline with bfloat16 backbone, float32 VAE, 50 steps, CFG 3.0 and skip layer 22 to render a text-heavy poster on your own GPU."}, {"@type": "HowToStep", "name": "Dial in the sampling settings", "text": "Applies the user guide’s recommended dials — Euler sampler, 50+ steps, CFG 3.0–6.0, shift 5.0, SLG layer 22, negative prompts, and multiples-of-16 resolutions."}, {"@type": "HowToStep", "name": "Run the Gradio UI", "text": "Serves the model in a browser with pip install -e ‘.[ui]’ and gradio_app.py, with GPU-resident, Component and Sequential memory modes for tight VRAM."}, {"@type": "HowToStep", "name": "Control the layout with JSON", "text": "Pins the poster title and illustration with a summary/items layout using centered pixel coordinates and yxyx bounding boxes, passed as a JSON string."}, {"@type": "HowToStep", "name": "Plug it into your stack", "text": "Installs the native ComfyUI plugin, points serving at the SGLang or vLLM-Omni recipes, or drives prompts through the bundled prompt-enhancer skill."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Should I use the Base or the SFT weights?", "acceptedAnswer": {"@type": "Answer", "text": "For most people, the SFT weights: they are fine-tuned from the Base model on curated data and produce clearer text grouping and more organized layouts. The Base model keeps the full training signal untouched (no post-training of inference parameters), which makes it the cleaner target if you plan to train your own LoRA — just keep the text encoder frozen."}}, {"@type": "Question", "name": "What GPU do I actually need?", "acceptedAnswer": {"@type": "Answer", "text": "The docs don’t publish a minimum VRAM number. You get three memory modes in the Gradio app: GPU resident keeps the whole model on the card, Component shuttles pieces between CPU and GPU, and Sequential trades the most speed for the least memory. If you still run out, drop the image size — valid outputs range from 512×512 up to about 2K total pixels."}}, {"@type": "Question", "name": "Why are the layout coordinates negative?", "acceptedAnswer": {"@type": "Answer", "text": "The layout system uses absolute pixel coordinates centered on the canvas, so on a 1024×1024 canvas each axis runs from −512 to +512. Convert ordinary top-left coordinates by subtracting half the width and half the height. The box order is yxyx — [y_min, x_min, y_max, x_max] — and the feature is still experimental, so expect rough edges."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Render text-perfect images on your own GPU: a hands-on guide to MOSS-Image</h1>
+<p class="lede">OpenMOSS/MOSS-Image (867 stars on 2026-10-19, Apache-2.0) is a 5B-parameter open image model that renders legible text in pictures — posters, whiteboards, sticky notes — and pins text and objects to exact positions with JSON layouts. Released 2026-10-16 with Base and SFT weights, it runs on your own GPU via diffusers, Gradio, ComfyUI, SGLang or vLLM-Omni. Hands-on: the install, your first generation, the recommended sampling settings, layout-controlled posters, and the prompt-enhancer skill.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-19 · 7 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> <b>OpenMOSS/MOSS-Image</b> is an open (Apache-2.0), 5B-parameter image model that renders legible text inside generated images &mdash; the thing every image model fumbles. This guide installs it on your own GPU, generates a poster with correct typography, tunes the sampling settings the docs recommend, drives layout with JSON bounding boxes, and wires it into ComfyUI and serving stacks.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem">
+<li><b>Repo:</b> OpenMOSS/MOSS-Image &mdash; &ldquo;a 5B-parameter base DiT model&rdquo;, launched 2026-10-16, <b>867 GitHub stars</b> by 2026-10-19; license Apache-2.0</li>
+<li><b>Two weights:</b> MOSS-Image-Base (base text-to-image) and MOSS-Image-SFT (fine-tuned on curated data; clearer text grouping and more organized layouts); mirrors on Hugging Face (OpenMOSS-Team) and ModelScope</li>
+<li><b>Recommended sampling:</b> Flow-matching Euler, <b>50 steps</b>, <b>CFG 3.0</b>, shift 5.0, Skip-Layer-Guidance layer <b>22</b>; resolutions at <b>1M/1.5M/2M</b> pixels, dimensions in multiples of 16</li>
+<li><b>Layout control (experimental):</b> JSON <code>summary</code>/<code>items</code> format; <code>bbox_format</code> yxyx ([y_min, x_min, y_max, x_max]); coordinates centered on the canvas</li>
+<li><b>Ecosystem:</b> day-0 support in SGLang, vLLM-Omni and ComfyUI (ComfyUI Manager plugin); native Gradio app; prompt-enhancer agent skill; technical report on arXiv 2026-10-19 (2610.23374)</li>
+</ul>
+
+<p>Ask an image model for a poster and you get a beautiful layout with beautiful gibberish where the words should be. For years, legible rendered text was the reliable tell that separated a real graphic from an AI one. <b>MOSS-Image</b>, released by OpenMOSS on 2026-10-16, attacks exactly that weakness: a 5B-parameter open (Apache-2.0) diffusion model built to render accurate text, hold a layout you specify in JSON, and chew through prompts up to 4K tokens &mdash; all on your own GPU.</p>
+<p>It picked up 867 GitHub stars in three days, and the ecosystem moved fast: day-0 support landed in SGLang, vLLM-Omni and ComfyUI, with a technical report on arXiv the same week. Here is how to run it yourself, from a bare checkout to a layout-controlled poster.</p>
+
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li>Linux or macOS with a CUDA-capable GPU and Python 3 (the README ships a <code>requirements.txt</code>)</li>
+<li><code>git</code>, and enough disk for the model weights (two variants on Hugging Face: <code>OpenMOSS-Team/MOSS-Image-Base</code> and <code>OpenMOSS-Team/MOSS-Image-SFT</code>)</li>
+<li>Roughly fifteen minutes, most of it the first model download</li>
+</ul>
+
+<h2>Step 1 &mdash; Clone the repo and install</h2>
+<pre><code>git clone https://github.com/OpenMOSS/MOSS-Image.git
+cd MOSS-Image
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt</code></pre>
+<p>That is the entire install: a checkout, a virtualenv, and one <code>pip install</code>. No compiled extensions, no Docker image, no API key &mdash; the weights are pulled from Hugging Face on first run. There are mirrors on ModelScope too if Hugging Face is slow from your region.</p>
+
+<h2>Step 2 &mdash; Generate your first image with the Python API</h2>
+<p>MOSS-Image ships a diffusers-compatible custom pipeline. This is the README&rsquo;s quickstart, pointed at a text-heavy poster &mdash; the thing this model exists to do:</p>
+<pre><code>import torch
+from diffusers import DiffusionPipeline
+
+pipe = DiffusionPipeline.from_pretrained(
+    "OpenMOSS-Team/MOSS-Image-Base",
+    custom_pipeline="pipeline_moss_image",
+    trust_remote_code=True,
+    torch_dtype={"default": torch.bfloat16, "vae": torch.float32},
+)
+pipe.scheduler = type(pipe.scheduler).from_config(pipe.scheduler.config)
+pipe.to("cuda")
+
+prompt = (
+    "A minimalist travel poster, cream background. "
+    "A flat blue mountain illustration in the lower half. "
+    'Large dark-blue uppercase title at the top: "EXPLORE"'
+)
+
+image = pipe(
+    prompt,
+    height=1024,
+    width=1024,
+    num_inference_steps=50,
+    guidance_scale=3.0,
+    uncond_skip_layers=[22],
+    generator=torch.Generator("cpu").manual_seed(42),
+).images[0]
+image.save("explore_poster.png")</code></pre>
+<p>Three details worth noticing. First, <code>trust_remote_code=True</code> and the <code>custom_pipeline</code> are required &mdash; this is not a stock Stable Diffusion pipeline. Second, <code>torch_dtype</code> keeps the VAE in float32 while the diffusion backbone runs in bfloat16. Third, the seed is fixed with a CPU generator, so you can re-run the exact same image while you tune settings in the next step.</p>
+<figure class="inline-art"><img src="/articles/moss-image-text-rendering-layout-hands-on-tutorial/img2.webp" alt="Example of MOSS-Image rendering legible rendered text inside a generated image" loading="lazy"><figcaption>Credit: OpenMOSS/MOSS-Image (Apache-2.0), used with credit.</figcaption></figure>
+
+<h2>Step 3 &mdash; Dial in the sampling settings</h2>
+<p>Unlike the SFT weights, MOSS-Image-Base deliberately ships without any post-training of the inference parameters &mdash; the team kept the full training signal intact so the community can train LoRAs cleanly. The trade-off: you have to set the dials yourself. The user guide gives exact recommendations:</p>
+<pre><code># resolution: 1M, 1.5M or 2M pixels; dimensions must be multiples of 16
+height, width = 1024, 1024      # 1M pixels
+
+num_inference_steps = 50        # >= 50 for best results
+guidance_scale = 3.0            # recommended range 3.0-6.0; 3.0 suits long prompts
+# shift = 5.0                   # flow-matching shift, default
+# sampler: Flow-matching Euler (default)
+uncond_skip_layers = [22]       # Skip-Layer Guidance; layers 22, 24, 26 all help</code></pre>
+<p>Two more levers from the guide: a negative prompt like <code>nsfw, worst quality, bad anatomy, watermark, jpeg artifact</code> still helps, and for short prompts you may want CFG a touch above 3.0. English prompts have the most training data, though Chinese is supported &mdash; and if the model renders your line breaks in the wrong place, write <code>\n</code> or real newlines straight into the prompt to pin them down.</p>
+
+<h2>Step 4 &mdash; Run the Gradio UI</h2>
+<pre><code>pip install -e '.[ui]'
+python gradio_app.py --model OpenMOSS-Team/MOSS-Image-Base</code></pre>
+<p>The app exposes the same settings in a browser, plus three memory modes in Advanced settings when your GPU runs short: <b>GPU resident</b> keeps everything on the card, <b>Component</b> shuttles pieces between CPU and GPU, and <b>Sequential</b> trades the most speed for the least memory. Two gotchas from the docs: turn down the image size if you still run out of memory, and Compile DiT is disabled by default and unavailable in Sequential mode.</p>
+
+<h2>Step 5 &mdash; Control the layout with JSON</h2>
+<p>This is the experimental superpower: instead of begging the model to put the title at the top, you pin it there. Save this as <code>layout.json</code> (the README&rsquo;s own example, on a 1024&times;1024 canvas):</p>
+<pre><code>{
+  "summary": {
+    "meta": ["poster"],
+    "canvas": "single",
+    "caption": "A minimalist travel poster with a cream background, a blue mountain illustration, and the title EXPLORE at the top."
+  },
+  "items": [
+    {
+      "label": "text",
+      "caption": "Large dark-blue uppercase title centered at the top.",
+      "text": "EXPLORE",
+      "bbox": [-416, -384, -288, 384]
+    },
+    {
+      "label": "object",
+      "caption": "A flat blue mountain illustration in the lower center.",
+      "bbox": [-192, -288, 384, 288]
+    }
+  ],
+  "bbox_coord_space": "abs_centralized",
+  "bbox_format": "yxyx"
+}</code></pre>
+<p>The coordinate system takes a moment to internalize: it is absolute pixels <b>centered on the canvas</b>, so a 1024&times;1024 canvas runs from &minus;512 to +512 on each axis (subtract W/2 and H/2 from ordinary top-left coordinates to convert). The <code>bbox_format</code> is <code>yxyx</code> &mdash; <code>[y_min, x_min, y_max, x_max]</code>. Paste the JSON into the prompt field of the Gradio app with matching dimensions, or pass it through the Python API as a string:</p>
+<pre><code>import json
+
+layout = json.load(open("layout.json"))
+image = pipe(
+    json.dumps(layout, ensure_ascii=False),
+    height=1024,
+    width=1024,
+    num_inference_steps=50,
+    guidance_scale=3.0,
+    uncond_skip_layers=[22],
+).images[0]
+image.save("explore_layout.png")</code></pre>
+<p>You can mix natural language and structured input, and the model even supports controlled editing: change the <code>text</code>, the element descriptions, or the bounding boxes to adjust content and composition directly.</p>
+<figure class="inline-art"><img src="/articles/moss-image-text-rendering-layout-hands-on-tutorial/img3.webp" alt="Layout-controlled generation in MOSS-Image with bounding boxes pinning text and objects to exact positions" loading="lazy"><figcaption>Credit: OpenMOSS/MOSS-Image (Apache-2.0), used with credit.</figcaption></figure>
+
+<h2>Step 6 &mdash; Plug it into your stack</h2>
+<p>Three integrations cover the common shapes of use. For interactive noodling, search for <b>MOSS-Image</b> in <b>ComfyUI Manager</b> and install the native plugin (the repo ships an example workflow under <code>comfyui/</code>). For serving, the model had day-0 recipes in <b>SGLang</b> and <b>vLLM-Omni</b>. And if writing layout JSON by hand feels like CAD work, the repo ships a <b>prompt-enhancer skill</b>: copy the <code>skills/moss-image-prompt-enhancer</code> folder into your agent&rsquo;s skills directory, invoke <code>$moss-image-prompt-enhancer</code> with your idea and canvas size, and paste the compiled result into the positive prompt &mdash; with the same generation dimensions when it produced a layout.</p>
+
+<h2>What you built &mdash; and the honest limitations</h2>
+<p>You built a local, open-weights image pipeline that does the one thing most models fumble: text you can actually read, positioned where you said. The README&rsquo;s own highlights are the 5B backbone (compact for an image model), up to 4K-token prompts, anime and photorealistic styles, and easy fine-tuning &mdash; if you train a LoRA on the Base weights, keep the text encoder frozen.</p>
+<p>The limitations, straight from the project&rsquo;s docs: MOSS-Image-Base is deliberately un-distilled, so you must bring your own sampling settings &mdash; bad settings give bad images. Layout control is explicitly <b>experimental</b>. The docs publish no minimum VRAM number; the three memory modes exist precisely because GPUs vary, so budget time for the Component/Sequential trade-off on smaller cards. Some announced directions (reference-based generation, GIF generation via simple SFT) are still &ldquo;stay tuned,&rdquo; not shipped. And the model was trained on alternative GPU platforms &mdash; you run it on yours, with diffusers, and your mileage on fp16 vs bf16 behavior may vary. Test typography carefully before you ship a client poster.</p>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Should I use the Base or the SFT weights?</h3><p>For most people, the SFT weights: they are fine-tuned from the Base model on curated data and produce clearer text grouping and more organized layouts. The Base model keeps the full training signal untouched (no post-training of inference parameters), which makes it the cleaner target if you plan to train your own LoRA — just keep the text encoder frozen.</p><h3>What GPU do I actually need?</h3><p>The docs don’t publish a minimum VRAM number. You get three memory modes in the Gradio app: GPU resident keeps the whole model on the card, Component shuttles pieces between CPU and GPU, and Sequential trades the most speed for the least memory. If you still run out, drop the image size — valid outputs range from 512×512 up to about 2K total pixels.</p><h3>Why are the layout coordinates negative?</h3><p>The layout system uses absolute pixel coordinates centered on the canvas, so on a 1024×1024 canvas each axis runs from −512 to +512. Convert ordinary top-left coordinates by subtracting half the width and half the height. The box order is yxyx — [y_min, x_min, y_max, x_max] — and the feature is still experimental, so expect rough edges.</p></section>
+
+
+
+
+
+
+
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/gitai-git-for-ai-agents-hands-on-tutorial/">Stop queueing your agents’ commits: a hands-on guide to gitai, Git rebuilt for AI agents</a></li><li><a href="/articles/diagram-design-hands-on-guide/">Make your agent draw diagrams worth publishing: a hands-on guide to diagram-design</a></li><li><a href="/articles/open-intelligent-ui-generative-ui-hands-on-tutorial/">Turn chatbot answers into working apps: a hands-on guide to Open Intelligent UI</a></li><li><a href="/articles/claude-code-plugins-official-directory-tutorial/">Turn Claude Code into a plugin-powered teammate: a hands-on guide to Anthropic’s official plugin directory</a></li></ul></section>
+
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
