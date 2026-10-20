@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Turn your agent&#x27;s production failures into regression tests: a hands-on guide to Tracely</title>
+<meta name="description" content="Tracely (jwuthri-cloud, MIT, ~1,150 stars) is trace-native CI/CD for AI agents: it grades every production trace as it lands, freezes the failing runs into hermetic regression cases, and blocks the pull request that would ship the failure again — replayed for $0, with no API keys."/>
+<link rel="canonical" href="https://aifrontierpost.com/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Turn your agent&#x27;s production failures into regression tests: a hands-on guide to Tracely">
+<meta property="og:description" content="Tracely (jwuthri-cloud, MIT, ~1,150 stars) is trace-native CI/CD for AI agents: it grades every production trace as it lands, freezes the failing runs into hermetic regression cases, and blocks the pull request that would ship the failure again — replayed for $0, with no API keys.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Turn your agent's production failures into regression tests: a hands-on guide to Tracely", "description": "Tracely (jwuthri-cloud, MIT, ~1,150 stars) is trace-native CI/CD for AI agents: it grades every production trace as it lands, freezes the failing runs into hermetic regression cases, and blocks the pull request that would ship the failure again — replayed for $0, with no API keys.", "url": "https://aifrontierpost.com/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/", "image": "https://aifrontierpost.com/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/cover.webp", "datePublished": "2026-10-20", "dateModified": "2026-10-20", "author": {"@type": "Person", "name": "Marcus Doyle"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com/"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Turn your agent's production failures into regression tests: a hands-on guide to Tracely", "description": "Tracely (jwuthri-cloud, MIT, ~1,150 stars) is trace-native CI/CD for AI agents: it grades every production trace as it lands, freezes the failing runs into hermetic regression cases, and blocks the pull request that would ship the failure again — replayed for $0, with no API keys.", "step": [{"@type": "HowToStep", "name": "Boot the whole stack in demo mode", "text": "Clone the repo and bring up ClickHouse, Postgres, Redis, MinIO plus the app with docker compose --profile demo up -d --build --wait, then open the UI on port 3001."}, {"@type": "HowToStep", "name": "Instrument your agent with the Python SDK", "text": "Install tracelyai-sdk, call tracely.init() with your endpoint and ingest key, and wrap a run in tracely.trace() so provider calls are captured automatically."}, {"@type": "HowToStep", "name": "Let the judges grade your traces", "text": "Evaluators grade each run as columns on the trace table, and failures cluster into issues instead of flat rows."}, {"@type": "HowToStep", "name": "Freeze a failing trace into a regression case", "text": "Promote the exact failing run, with recorded fixtures and a fail-to-pass contract, into a hermetic test."}, {"@type": "HowToStep", "name": "Make the CI gate block the PR", "text": "Replay the promoted cases in CI with the tracely-gate GitHub Action; a failing gate exits non-zero, posts a commit status, and comments on the PR."}, {"@type": "HowToStep", "name": "Drive Tracely from your coding agent", "text": "Connect the /mcp endpoint and install the tracely skill so a coding agent can read traces and write evaluators."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How is Tracely different from eval tools that use hand-written datasets?", "acceptedAnswer": {"@type": "Answer", "text": "Dataset tools ask you to invent questions and ideal answers — a guess about what might break. Tracely promotes the exact failing production trace (input, tool calls, model responses) into a hermetic regression case with a fail-to-pass contract, so the test is the real failure, byte for byte, and replaying it in CI costs $0 in recorded fixtures."}}, {"@type": "Question", "name": "What do I need to run it?", "acceptedAnswer": {"@type": "Answer", "text": "Docker + Docker Compose and Python 3.10+ for the SDK. The docker compose --profile demo up profile seeds a populated workspace (default ingest key tracely_dev_key), so you can explore without an LLM key — though judges, failure intelligence and meta-analysis degrade without one (server-wide OPENROUTER_API_KEY or a per-workspace key)."}}, {"@type": "Question", "name": "How does the CI gate actually block a regression?", "acceptedAnswer": {"@type": "Answer", "text": "The promoted suite replays in CI against recorded fixtures — deterministic, offline, no API keys, no model spend. tracely gate (or the tracely-gate GitHub Action) exits non-zero, posts a commit status, and upserts a PR comment, so the pull request that reintroduces the failure cannot merge."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Turn your agent&#x27;s production failures into regression tests: a hands-on guide to Tracely</h1>
+<p class="lede">Tracely (jwuthri-cloud, MIT, ~1,150 stars) is trace-native CI/CD for AI agents: it grades every production trace as it lands, freezes the failing runs into hermetic regression cases, and blocks the pull request that would ship the failure again — replayed for $0, with no API keys.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-20 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> <b>Tracely</b> (jwuthri-cloud/Tracely-ai, MIT, ~1,150 GitHub stars) is trace-native CI/CD for AI agents: it grades every production trace as it lands, clusters failures into issues, freezes the bad runs into hermetic regression cases, and blocks the pull request that would ship them again — replayed in CI for $0, with no live model calls and no API keys.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> Tracely — trace-native CI/CD for AI agents (jwuthri-cloud/Tracely-ai), MIT license, by Julien Wuthrich.</li><li><b>Traction:</b> ~1,150 GitHub stars and 146 forks since Oct 11, 2026; Python, self-hostable in one click.</li><li><b>The loop:</b> production trace → failure detection → regression test → CI gate → alert — tests are promoted from real failing traces, never hand-authored datasets.</li><li><b>Stack:</b> FastAPI backend, Celery/Redis workers, ClickHouse traces, Postgres/pgvector registry, MinIO blobs, Next.js 15 UI — one <code>docker compose</code> file; web on :3001, API on :8000.</li><li><b>Replay cost:</b> $0 in CI — recorded tool/LLM fixtures, deterministic and offline; <code>tracely gate</code> exits non-zero, posts a commit status, and upserts a PR comment.</li><li><b>Demo seed:</b> <code>docker compose --profile demo up -d --build --wait</code> opens a populated workspace (traces, clusters, cases, gates) with the default ingest key <code>tracely_dev_key</code>.</li></ul>
+<p>Every eval tool for AI agents asks you to <b>hand-author a dataset</b>: sit down, invent questions, write ideal answers, keep them current as the product changes. That dataset is a guess about what might break. Meanwhile production already handed you the real thing — a trace of the exact run that failed, with the exact input, the exact tool calls, the exact model responses. <b>Tracely</b> (jwuthri-cloud/Tracely-ai, MIT, ~1,150 stars, created Oct 11, 2026) starts from that trace: it grades every agent run as it lands, clusters the failures into issues, freezes the bad runs into hermetic replayable cases, and blocks the pull request that would ship them again. In this guide you will boot the full stack in Docker, instrument an agent, turn one of its failures into a regression test, and wire the CI gate that refuses the bad PR.</p>
+<h2>What you&apos;ll need</h2>
+<ul>
+<li><b>Docker + Docker Compose</b> — the entire product (API, worker, UI, ClickHouse, Postgres, Redis, MinIO) ships as one compose file.</li>
+<li><b>Python 3.10+</b> for the <code>tracelyai-sdk</code> (the CI gate CLI ships in the same package).</li>
+<li>An <b>OpenAI / Anthropic / Google / Mistral / LangChain</b> key for <i>your own</i> agent — optional for the demo, which ships pre-populated with traces.</li>
+<li>A few GB of disk for the container images, and about 15 minutes.</li>
+</ul>
+<h2>Step 1 — Boot the whole stack in demo mode</h2>
+<p>The fastest way in is the demo profile: it starts ClickHouse, Postgres, Redis and MinIO, runs every migration, seeds the default project and ingest key (<code>tracely_dev_key</code>), then populates traces, clusters, cases and gates — so the app opens with the product&apos;s real screens instead of an empty shell.</p>
+<pre><code>git clone https://github.com/jwuthri-cloud/Tracely-ai &amp;&amp; cd Tracely
+docker compose --profile demo up -d --build --wait
+open http://localhost:3001</code></pre>
+<p>The web UI lands on <code>:3001</code>, the backend API on <code>:8000</code> (remap with <code>TRACELY_WEB_PORT</code> / <code>TRACELY_BACKEND_PORT</code>). The default auth mode is <code>dev</code> (open, no login); self-hosted teams switch to <code>local</code> (email/password) via the <code>AUTH_MODE</code> variable. When you&apos;re done, <code>docker compose down</code> stops it (add <code>-v</code> to wipe data).</p>
+<h2>Step 2 — Instrument your agent with the SDK</h2>
+<p>Install the SDK with the extra for your provider — <code>[openai]</code>, <code>[anthropic]</code>, <code>[langchain]</code> or <code>[all]</code> — initialize once at startup, then wrap a run. Your normal provider calls are captured automatically, with no span code:</p>
+<pre><code>pip install "tracelyai-sdk[openai]"</code></pre>
+<pre><code>import tracely_sdk as tracely
+
+tracely.init(
+    endpoint="http://localhost:8000",   # your Tracely API
+    api_key="tracely_dev_key",          # an ingest key
+    service_name="support-agent",
+    env="prod",                         # prod | staging | ci | dev — the gating axis
+    instrument="auto",                  # auto-detect openai / anthropic / google / mistral / langchain
+)
+
+with tracely.trace(agent="support-agent", conversation="conv-1", user="u_42"):
+    client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "Where is order ORD-4471?"}],
+    )</code></pre>
+<p>That produces a <b>GENERATION</b> span with model, messages, tokens, latency, tool calls and cost. For your own logic there are <code>@observe</code> and the manual <code>agent</code> / <code>tool</code> / <code>llm</code> / <code>retriever</code> / <code>guardrail</code> context managers. Non-Python services can skip the SDK entirely: any OTLP/HTTP exporter works if you point it at <code>POST {endpoint}/v1/traces</code> with <code>Authorization: Bearer tracely_dev_key</code>. One gotcha from the project&apos;s own skill: a missing <code>conversation</code> id turns one thread into orphan rows, and no <code>flush()</code> loses a script&apos;s last spans.</p>
+<h2>Step 3 — Let the judges grade your traces</h2>
+<p>Open the trace explorer. Agent semantics (<code>agent.id</code>, <code>conversation.id</code>, <code>turn</code>, <code>step</code>) are first-class indexed columns, so runs group into conversation threads instead of a flat span soup, and the waterfall shows agent → thinking → skill → generation → hand-off with the failing span in red and its I/O beside it.</p>
+<p>Evaluators are <b>columns on the trace table</b>, not a separate tab: LLM-as-judge at conversation, run or span level, plus structural checks that need no model at all. Scores stream in live over SSE as judges finish, so you watch a run get graded in place. Failures then <b>cluster</b> — structurally and semantically — so 31 broken runs become one issue with a count, not 31 rows to read, and each cluster can suggest the evaluator that would have caught it. There is also a calibration screen where you label judge verdicts against human review, so you catch an over-flagging judge <i>before</i> you let it gate a release.</p>
+<figure class="inline-art"><img src="/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/img2.webp" alt="A waterfall trace timeline of an AI agent session with one failing span glowing red" loading="lazy"><figcaption>Credit: illustration by AI Frontier Post</figcaption></figure>
+<h2>Step 4 — Freeze a failing trace into a regression case</h2>
+<p>This is the heart of the product. One click promotes a failing trace into a <b>hermetic case</b>: recorded input, tool and LLM outputs bundled as fixtures, with a <b>fail-to-pass contract</b> attached — the case must fail on the old code and pass on the fix, or the promotion isn&apos;t trusted. The recorded run <i>is</i> the test: no hand-authored dataset, no guess about what might break. Multi-turn behaviour gets <b>scenarios</b> instead: a scripted conversation, or an adversarial goal a red-team model improvises against (goal achieved = FAIL — the scenario is inverted by design).</p>
+<h2>Step 5 — Make the CI gate block the PR</h2>
+<p>The promoted suite replays in CI against recorded fixtures: deterministic, offline, <b>no API keys and no model spend</b>. Three wiring options, depending on how your CI can reach your agent. The hermetic one — re-running your agent on each case&apos;s <i>recorded input</i> with recorded outputs as fixtures — looks like this:</p>
+<pre><code>- uses: jwuthri-cloud/Tracely-ai/.github/actions/tracely-gate@master
+  with:
+    api: https://tracely.your-co.dev
+    key: ${{ secrets.TRACELY_KEY }}</code></pre>
+<pre><code>- run: pip install tracelyai-sdk
+- run: tracely replay planner --entrypoint my_pkg.agent:run    # a Python agent
+  # …or any language:  tracely replay planner --cmd "node run.js"  (reads $TRACELY_INPUT)
+  env:
+    TRACELY_API: https://tracely.your-co.dev
+    TRACELY_KEY: ${{ secrets.TRACELY_KEY }}</code></pre>
+<p><code>tracely gate</code> exits non-zero, posts a commit status, and upserts a PR comment — the PR that reintroduces the failure is blocked. Hermetic replay needs your agent to route tool/model calls through the SDK&apos;s <code>call_tool</code> / <code>call_llm</code> seam; add <code>--live</code> to make real calls instead (real calls, real cost). If you&apos;d rather Tracely drove your agent itself, register your agent&apos;s HTTP endpoint and author scenarios — <i>nothing to install, import or shim</i> — and the same Action gates any-language services. All you ever hand CI is your ingest key: it identifies your workspace.</p>
+<figure class="inline-art"><img src="/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/img3.webp" alt="A pull request merge gate with test cases feeding in from a failing trace" loading="lazy"><figcaption>Credit: illustration by AI Frontier Post</figcaption></figure>
+<h2>Step 6 — Drive Tracely from your coding agent</h2>
+<p>Every backend serves an MCP endpoint at <code>/mcp</code>, so a coding agent reads your traces and writes your evaluators with no glue code:</p>
+<pre><code>claude mcp add --transport http tracely http://localhost:8000/mcp   --header "Authorization: Bearer tracely_dev_key"</code></pre>
+<p>Then MCP gives your agent your <i>data</i>; the <b>Tracely skill</b> gives it the <i>know-how</i> — how to instrument, what to evaluate, how to wire the gate — so &quot;add Tracely to this agent&quot; becomes one sentence:</p>
+<pre><code>npx skills add https://github.com/jwuthri-cloud/Tracely-ai --skill tracely</code></pre>
+<p>It works with Claude Code, Cursor, Copilot, Antigravity and anything else the <code>skills</code> CLI supports. Alerts get the same treatment: a rule is a <i>when</i> (a gate fails, a live conversation breaks on a judge, a failure mode appears that nobody has seen before, a rate crosses a line) plus a drawn flow — Slack, email, a webhook with your own headers, an LLM step, a Python expression — and the project ships an in-app assistant that draws the flow for you from a sentence.</p>
+<h2>What you built</h2>
+<p>A closed observability→regression→CI loop for an AI agent: the full stack running locally in Docker, your agent instrumented with three extra lines, its traces graded by judges and clustered into issues, one real production-style failure frozen into a hermetic case, and a PR gate that replays that case for $0 and refuses the regression — plus an MCP endpoint and a skill so a coding agent can operate the whole workspace on your behalf.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><b>It is nine days old.</b> Created Oct 11, 2026, it is moving fast — expect breaking changes in the SDK, the skill and the gate Action while the API settles.</li>
+<li><b>The demo stack is heavy.</b> ClickHouse, Postgres, Redis and MinIO just to try an idea; there is no hosted trial beyond the one-click Railway deploy, and judges degrade without an LLM key (server-wide <code>OPENROUTER_API_KEY</code> or a per-workspace key) rather than telling you loudly.</li>
+<li><b>Hermetic replay has a seam requirement.</b> Your agent must route tool/model calls through the SDK&apos;s <code>call_tool</code> / <code>call_llm</code> for fixtures to work; otherwise you replay <code>--live</code> and pay for the model calls.</li>
+<li><b>Judges are still judges.</b> LLM-as-judge verdicts can over-flag; use the calibration screen before you let one block releases, and test every alert flow before trusting it to page you.</li>
+</ul>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>How is Tracely different from eval tools that use hand-written datasets?</h3><p>Dataset tools ask you to invent questions and ideal answers — a guess about what might break. Tracely promotes the exact failing production trace (input, tool calls, model responses) into a hermetic regression case with a fail-to-pass contract, so the test is the real failure, byte for byte, and replaying it in CI costs $0 in recorded fixtures.</p><h3>What do I need to run it?</h3><p>Docker + Docker Compose and Python 3.10+ for the SDK. The <code>docker compose --profile demo up</code> profile seeds a populated workspace (default ingest key <code>tracely_dev_key</code>), so you can explore without an LLM key — though judges, failure intelligence and meta-analysis degrade without one (server-wide <code>OPENROUTER_API_KEY</code> or a per-workspace key).</p><h3>How does the CI gate actually block a regression?</h3><p>The promoted suite replays in CI against recorded fixtures — deterministic, offline, no API keys, no model spend. <code>tracely gate</code> (or the <code>tracely-gate</code> GitHub Action) exits non-zero, posts a commit status, and upserts a PR comment, so the pull request that reintroduces the failure cannot merge.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/lemo-opuscar-ai-short-film-code-hands-on-tutorial/">Direct a short film with an AI agent — no video model required: a hands-on guide to lemo-opuscar</a></li><li><a href="/articles/rag-techniques-42-notebooks-hands-on-tutorial/">Stop your RAG from guessing: a hands-on tour of 42 battle-tested retrieval techniques</a></li><li><a href="/articles/supervisor-skills-ai-research-co-advisor-tutorial/">Give your AI agent a PhD supervisor: a hands-on guide to Supervisor-Skills</a></li><li><a href="/articles/harness2-recursive-agent-harnessing-hands-on-tutorial/">Teach your agent to rewire itself: a hands-on guide to Google&#x27;s Harness²</a></li></ul></section>
+
+
+
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
