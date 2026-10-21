@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Escape the subscriber tax: self-host MailCheap and send your newsletter for pennies</title>
+<meta name="description" content="MailCheap (marclou/mailcheap, AGPL-3.0, ~1,275 GitHub stars) is a self-hostable newsletter app that swaps per-subscriber pricing for pay-per-email on your own Amazon SES account: 10,000 readers and 4 issues a month costs about $4 to $6. This guide deploys it, wires SES and background sending, and turns on sending behind a 5%-slice warm-up — then drives it from an AI agent over MCP."/>
+<link rel="canonical" href="https://aifrontierpost.com/articles/mailcheap-self-hosted-newsletter-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Escape the subscriber tax: self-host MailCheap and send your newsletter for pennies">
+<meta property="og:description" content="MailCheap (marclou/mailcheap, AGPL-3.0, ~1,275 GitHub stars) is a self-hostable newsletter app that swaps per-subscriber pricing for pay-per-email on your own Amazon SES account: 10,000 readers and 4 issues a month costs about $4 to $6. This guide deploys it, wires SES and background sending, and turns on sending behind a 5%-slice warm-up — then drives it from an AI agent over MCP.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mailcheap-self-hosted-newsletter-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/mailcheap-self-hosted-newsletter-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Escape the subscriber tax: self-host MailCheap and send your newsletter for pennies", "description": "MailCheap (marclou/mailcheap, AGPL-3.0, ~1,275 GitHub stars) is a self-hostable newsletter app that swaps per-subscriber pricing for pay-per-email on your own Amazon SES account: 10,000 readers and 4 issues a month costs about $4 to $6. This guide deploys it, wires SES and background sending, and turns on sending behind a 5%-slice warm-up \u2014 then drives it from an AI agent over MCP.", "url": "https://aifrontierpost.com/articles/mailcheap-self-hosted-newsletter-hands-on-tutorial/", "image": "https://aifrontierpost.com/articles/mailcheap-self-hosted-newsletter-hands-on-tutorial/cover.webp", "datePublished": "2026-10-20", "dateModified": "2026-10-20", "author": {"@type": "Person", "name": "Marcus Doyle"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com/"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Escape the subscriber tax: self-host MailCheap and send your newsletter for pennies", "description": "MailCheap (marclou/mailcheap, AGPL-3.0, ~1,275 GitHub stars) is a self-hostable newsletter app that swaps per-subscriber pricing for pay-per-email on your own Amazon SES account: 10,000 readers and 4 issues a month costs about $4 to $6. This guide deploys it, wires SES and background sending, and turns on sending behind a 5%-slice warm-up \u2014 then drives it from an AI agent over MCP.", "step": [{"@type": "HowToStep", "name": "Create the database on MongoDB Atlas", "text": "Create a free Atlas cluster, a database user with read/write access, open network access to 0.0.0.0/0, and build the MONGODB_URI connection string."}, {"@type": "HowToStep", "name": "Deploy the app on Vercel or any Node 22+ host", "text": "Deploy with the one-click Vercel button or npm ci && npm run build && npm start, supplying the secrets and admin emails, then check /api/health."}, {"@type": "HowToStep", "name": "Wire Amazon SES as the email provider", "text": "Request SES production access, create an SNS event topic with signature version 2 subscribed to the app's SES webhook, and add the SES credentials."}, {"@type": "HowToStep", "name": "Add background sending with Upstash QStash", "text": "Copy the QStash token and signing keys into the environment so campaign batches send and schedule in the background."}, {"@type": "HowToStep", "name": "Turn sending on and send your first campaign", "text": "Verify a sending subdomain, create the newsletter, enable SENDING_ENABLED, write a campaign, test-send, then send behind the 5%-slice warm-up."}, {"@type": "HowToStep", "name": "Drive the newsletter from your AI agent", "text": "Create a full-access API key, add contacts over REST, and connect the /mcp endpoint so an agent can write, review, and send campaigns."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How is MailCheap cheaper than beehiiv or Mailchimp?", "acceptedAnswer": {"@type": "Answer", "text": "Newsletter platforms price per subscriber, including dormant readers who never open. MailCheap self-hosted costs nothing per subscriber: you pay your email provider per email sent \u2014 $0.10 to $0.16 per 1,000 on Amazon SES, so 10,000 readers and 4 issues a month is 40,000 emails, about $4 to $6. (MailCheap Cloud starts at $19 a month for 20,000 emails.)"}}, {"@type": "Question", "name": "What do I need to self-host it?", "acceptedAnswer": {"@type": "Answer", "text": "A free MongoDB Atlas cluster, an Amazon SES account, a free Upstash QStash project, and any Node.js 22+ host behind HTTPS (the one-click Vercel deploy works). Plan for about an hour, most of it waiting for DNS records and SES production access; /api/health answers 200 when healthy or 503 telling you what to fix."}}, {"@type": "Question", "name": "Can my AI agent really run the newsletter?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Everything the dashboard does also works over REST and the MCP server at /mcp with an API key \u2014 300 requests a minute. Connect Claude Code with one command, and the agent can write, review, and send campaigns; sends are flagged as actions that can't be undone, so the agent asks you first."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Escape the subscriber tax: self-host MailCheap and send your newsletter for pennies</h1>
+<p class="lede">MailCheap (marclou/mailcheap, AGPL-3.0, ~1,275 GitHub stars) is a self-hostable newsletter app that swaps per-subscriber pricing for pay-per-email on your own Amazon SES account: 10,000 readers and 4 issues a month costs about $4 to $6. This guide deploys it, wires SES and background sending, and turns on sending behind a 5%-slice warm-up — then drives it from an AI agent over MCP.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-20 · 8 min read</span></span></div>
+
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> <b>MailCheap</b> (marclou/mailcheap, AGPL-3.0, ~1,275 GitHub stars) is a self-hostable newsletter app that replaces per-subscriber pricing with pay-per-email sending on your own Amazon SES account: 10,000 readers and 4 issues a month costs about $4 to $6. This guide deploys it on Vercel with MongoDB Atlas and Upstash QStash, wires SES with bounce and complaint webhooks, turns sending on behind a 5%-slice warm-up, then drives campaigns from an AI agent over MCP.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> MailCheap — a self-hostable newsletter app (marclou/mailcheap), AGPL-3.0, created Oct 10, 2026, ~1,275 GitHub stars.</li><li><b>The pricing flip:</b> self-hosted costs nothing per subscriber; you pay the email provider per email — Amazon SES $0.10–$0.16 per 1,000 emails. 10,000 readers × 4 issues = 40,000 emails, about $4–$6 a month. MailCheap Cloud starts at $19/month for 20,000 emails.</li><li><b>Stack:</b> Next.js app (Node.js 22+), MongoDB, Amazon SES or PostShiba for sending, Upstash QStash for background batches (one message sends 50 emails). Signing secrets must be 32+ characters or the server refuses to start.</li><li><b>Capacity:</b> up to 3 newsletters per account, each with its own contacts, campaigns and website; API keys get 300 requests a minute.</li><li><b>Deliverability guardrails:</b> warm-up sends a 5% slice first and the rest 3 hours later; a send pauses past 2% hard bounces or 0.08% complaints and the account is blocked past 5% or 0.3%; imports skip invalid, misspelled, spam-trap, role and throwaway addresses.</li><li><b>Agent control:</b> everything works over MCP and REST; CSV imports from beehiiv, Substack, Mailchimp, Kit, MailerLite, Buttondown, Ghost and EmailOctopus import as-is with each reader's status and signup date.</li></ul>
+<p>Newsletter platforms charge <b>per subscriber</b> — including the dormant ones who never open a single issue. A list of 10,000 readers on beehiiv or Mailchimp costs you every month whether they read or not. <b>MailCheap</b> (marclou/mailcheap, AGPL-3.0, created Oct 10, 2026, ~1,275 GitHub stars in its first ten days) flips the model: a full newsletter app — editor, pre-send review, per-newsletter websites, signup forms, analytics — where <b>you pay your email provider per email sent</b>, and nothing per subscriber. Self-hosted, 10,000 readers and 4 issues a month is 40,000 emails, about $4 to $6 on Amazon SES. In this guide you will deploy it, wire SES and background sending, turn sending on behind its warm-up, and connect your AI agent so it can write and send campaigns for you.</p>
+<h2>What you&apos;ll need</h2>
+<ul>
+<li><b>MongoDB Atlas</b> — free tier works; stores contacts, campaigns and stats.</li>
+<li><b>Amazon SES</b> — the email provider: $0.10 to $0.16 per 1,000 emails. (PostShiba is the alternative, invite-only for now.)</li>
+<li><b>Upstash QStash</b> — background sending and scheduling; free tier to start.</li>
+<li><b>Vercel</b> (one-click) or any <b>Node.js 22+ host</b> behind HTTPS.</li>
+<li><b>Resend</b> (optional, free plan) for sign-in codes and alerts — without it, codes go through SES once it is wired.</li>
+<li>A <b>domain you control</b> for the sending address.</li>
+<li>About an hour — most of it waiting for DNS records and SES production access.</li>
+</ul>
+<h2>Step 1 — Create the database on MongoDB Atlas</h2>
+<p>MailCheap keeps contacts, campaigns and stats in MongoDB. On a free Atlas cluster:</p>
+<ol>
+<li><b>Database Access:</b> add a user with a password and the &quot;Read and write to any database&quot; role.</li>
+<li><b>Network Access:</b> allow <code>0.0.0.0/0</code> — Vercel has no fixed IP addresses.</li>
+<li><b>Connect &gt; Drivers:</b> copy the connection string and add a database name before the <code>?</code>, e.g. <code>...mongodb.net/mailcheap?retryWrites=true</code>.</li>
+</ol>
+<p>That string is your <code>MONGODB_URI</code>.</p>
+<h2>Step 2 — Deploy the app on Vercel or any Node 22+ host</h2>
+<p>Click the <b>Deploy</b> button in the repo README and fill in the environment variables. The two secrets need 32+ random characters each — generate them with <code>openssl rand -base64 48</code> — or the server refuses to start, and the logs say why:</p>
+<pre><code>openssl rand -base64 48   # BETTER_AUTH_SECRET (signs sessions and every link)
+openssl rand -base64 48   # SUPPRESSION_HASH_KEY (keys the shared never-email list)</code></pre>
+<p>The rest of the deploy-time set: <code>MONGODB_URI</code>, <code>ADMIN_EMAILS</code> (who can sign in and open <code>/admin</code>), <code>ALLOWED_EMAILS</code> (who else can sign in — addresses and <code>@domain</code> entries), and <code>EMAIL_FROM</code> (the sign-in codes&apos; from address, on a domain your provider verified). On any other host the same variables work with:</p>
+<pre><code>npm ci &amp;&amp; npm run build &amp;&amp; npm start</code></pre>
+<p>Sending stays off until you finish the next steps, so nothing goes to readers by mistake. <code>/api/health</code> answers 200 when healthy, or 503 telling you exactly what to fix.</p>
+<figure class="inline-art"><img src="/articles/mailcheap-self-hosted-newsletter-hands-on-tutorial/img2.webp" alt="The MailCheap campaign editor with Write, Review and Send steps" loading="lazy"><figcaption>Credit: marclou/mailcheap — the campaign editor&apos;s Write, Review and Send flow</figcaption></figure>
+<h2>Step 3 — Wire Amazon SES as the email provider</h2>
+<p>Use one AWS region for everything (the examples use <code>us-east-1</code>), and a dedicated AWS account if you can — SES reputation and limits are per account.</p>
+<ol>
+<li><b>Request production access.</b> New accounts are in the sandbox: 200 emails a day, verified recipients only. In Account dashboard &gt; Request production access, explain that readers opt in, that bounces and complaints are suppressed automatically, and that every email carries one-click unsubscribe. AWS usually answers within a day.</li>
+<li><b>Create an SNS topic</b> for events (e.g. <code>mailcheap-ses-events</code>) and switch it to signature version 2, then subscribe the app&apos;s webhook with raw message delivery off:</li>
+</ol>
+<pre><code>aws sns set-topic-attributes --topic-arn &lt;topic-arn&gt; \
+  --attribute-name SignatureVersion --attribute-value 2
+# subscribe protocol HTTPS, endpoint https://&lt;your-app&gt;/api/webhooks/ses</code></pre>
+<p>MailCheap confirms the subscription by itself once deployed. Then <b>create an IAM user</b> for MailCheap with the repo&apos;s policy (notably <code>ses:SendEmail</code>, <code>ses:CreateTenant</code>, <code>ses:CreateConfigurationSet</code>, <code>ses:CreateEmailIdentity</code>) and add the variables: <code>SES_REGION</code>, <code>SES_ACCESS_KEY_ID</code>, <code>SES_SECRET_ACCESS_KEY</code>, <code>SES_AWS_ACCOUNT_ID</code> (the 12-digit account ID) and <code>SES_SNS_TOPIC_ARN</code>. Without Resend, sign-in codes go out through SES from <code>EMAIL_FROM</code>, so verify that domain in the AWS account first (<b>Identities &gt; Create identity &gt; Domain</b>, with Easy DKIM).</p>
+<h2>Step 4 — Add background sending with Upstash QStash</h2>
+<p>Campaigns send in batches through QStash. In the Upstash console open QStash and copy <code>QSTASH_TOKEN</code>, <code>QSTASH_CURRENT_SIGNING_KEY</code> and <code>QSTASH_NEXT_SIGNING_KEY</code> into the environment and redeploy. Two things to know: the app must be reachable on the internet — QStash calls <code>APP_URL/api/jobs/...</code> — and one QStash message sends 50 emails, so batch costs stay predictable.</p>
+<h2>Step 5 — Turn sending on and send your first campaign</h2>
+<ol>
+<li>In MailCheap open <b>Domains</b> and add the domain your newsletter sends from — use a subdomain like <code>mail.example.com</code> so a bad week never touches your main domain&apos;s email. Add the DNS records it lists (DKIM, return path, and DMARC if your root domain has none), then click <b>Check now</b>.</li>
+<li>Create your newsletter. The from address must be on that domain, and the postal address shows in every email&apos;s footer — anti-spam laws require one.</li>
+<li>Set <code>SENDING_ENABLED=true</code> and redeploy.</li>
+<li>Write a campaign, send yourself a test, then send.</li>
+</ol>
+<p>The pre-send <b>Review</b> step is the part most platforms make you do by hand: it flags the subject, preview text, unsubscribe link, Gmail&apos;s 100&nbsp;KB clip, and the postal address before anything leaves. A first send to new contacts goes out in steps by itself — a <b>5% slice first, the rest 3 hours later</b> if that slice&apos;s bounces and complaints stay low. For a new domain, MailCheap&apos;s own advice: start with your most engaged readers, then use <b>Send to more</b> on the report once the first step looks healthy. Past 2% hard bounces or 0.08% complaints a send pauses; past 5% or 0.3% the account is blocked — so keep list cleanup on, which re-asks readers who ignored several issues and then stops emailing them. Migrating? CSV exports from beehiiv, Substack and Mailchimp import as-is, with each reader&apos;s status and signup date — Kit, MailerLite, Buttondown, Ghost and EmailOctopus too — and imports skip invalid, misspelled (gmial.com), spam-trap, role and throwaway addresses automatically.</p>
+<figure class="inline-art"><img src="/articles/mailcheap-self-hosted-newsletter-hands-on-tutorial/img3.webp" alt="A newsletter website built by MailCheap with signup form and issue archive" loading="lazy"><figcaption>Credit: marclou/mailcheap — every newsletter gets a public website with signup form and archive</figcaption></figure>
+<h2>Step 6 — Drive the newsletter from your AI agent</h2>
+<p>Everything the dashboard does also works from an AI agent through the <b>MCP server</b> and from code through the REST API, with the same checks and limits. Create a key on the <b>API keys</b> page (300 requests a minute; a full-access key does everything, a signups-only key just adds contacts):</p>
+<pre><code>curl -X POST https://&lt;your-app&gt;/api/v1/contacts \
+  -H &quot;Authorization: Bearer $MAILCHEAP_API_KEY&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &apos;{&quot;email&quot;:&quot;jane@example.com&quot;,&quot;source&quot;:&quot;website&quot;,&quot;ip&quot;:&quot;203.0.113.7&quot;}&apos;</code></pre>
+<p>Then connect Claude Code with one command:</p>
+<pre><code>claude mcp add --transport http --scope user mailcheap https://&lt;your-app&gt;/mcp \
+  --header &quot;Authorization: Bearer $MAILCHEAP_API_KEY&quot;</code></pre>
+<p>ChatGPT, Claude and Grok Bot connect <code>https://&lt;your-app&gt;/mcp</code> as a connector with OAuth instead. Two safety properties worth knowing: MCP marks sending as an action that can&apos;t be undone, so the agent asks you first, and the whole stack needs HTTPS reachable from the internet — <code>/docs</code> on your server has every endpoint and the OpenAPI document at <code>/api/v1/openapi.json</code>.</p>
+<h2>What you built</h2>
+<p>A self-hosted newsletter platform on your own domain: the write/review/send editor with its pre-send checklist, per-newsletter public websites with sitemaps and signup forms, warm-up and list-cleanup guardrails that protect your domain reputation, and the whole thing drivable from an AI agent over MCP and REST — for the cost of the emails you actually send, about $4–$6 a month for 10,000 readers and 4 issues.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><b>Self-hosting means no support.</b> Issues are off and setup questions go unanswered — you are the ops team.</li>
+<li><b>SES starts in the sandbox</b> (200 emails a day, verified recipients only) until AWS grants production access; plan for roughly a day of waiting, and about an hour of real work.</li>
+<li><b>Rotating <code>BETTER_AUTH_SECRET</code> signs everyone out and breaks links in emails already sent</b> — set it once and guard it.</li>
+<li><b>Keep emails under 100&nbsp;KB</b>, or Gmail clips them and hides the unsubscribe link.</li>
+<li><b>It is ten days old.</b> Created Oct 10, 2026, it is moving fast — expect the API, the MCP surface and the setup steps to shift while it settles. PostShiba as a provider is invite-only for now.</li>
+</ul>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>How is MailCheap cheaper than beehiiv or Mailchimp?</h3><p>Newsletter platforms price per subscriber, including dormant readers who never open. MailCheap self-hosted costs nothing per subscriber: you pay your email provider per email sent — $0.10 to $0.16 per 1,000 on Amazon SES, so 10,000 readers and 4 issues a month is 40,000 emails, about $4 to $6. (MailCheap Cloud starts at $19 a month for 20,000 emails.)</p><h3>What do I need to self-host it?</h3><p>A free MongoDB Atlas cluster, an Amazon SES account, a free Upstash QStash project, and any Node.js 22+ host behind HTTPS (the one-click Vercel deploy works). Plan for about an hour, most of it waiting for DNS records and SES production access; /api/health answers 200 when healthy or 503 telling you what to fix.</p><h3>Can my AI agent really run the newsletter?</h3><p>Yes. Everything the dashboard does also works over REST and the MCP server at /mcp with an API key — 300 requests a minute. Connect Claude Code with one command, and the agent can write, review, and send campaigns; sends are flagged as actions that can&#x27;t be undone, so the agent asks you first.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/">Turn your agent&#x27;s production failures into regression tests: a hands-on guide to Tracely</a></li><li><a href="/articles/lemo-opuscar-ai-short-film-code-hands-on-tutorial/">Direct a short film with an AI agent — no video model required: a hands-on guide to lemo-opuscar</a></li><li><a href="/articles/rag-techniques-42-notebooks-hands-on-tutorial/">Stop your RAG from guessing: a hands-on tour of 42 battle-tested retrieval techniques</a></li><li><a href="/articles/supervisor-skills-ai-research-co-advisor-tutorial/">Give your AI agent a PhD supervisor: a hands-on guide to Supervisor-Skills</a></li></ul></section>
+
+
+
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
