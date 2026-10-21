@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Sandbox your AI agent in a branchable microVM: a hands-on guide to smolvm</title>
+<meta name="description" content="smolvm (smol-machines/smolvm, Apache-2.0, 6,700+ GitHub stars) runs untrusted code in hardware-isolated microVMs that boot in under a second — and lets you checkpoint, branch, and rewind a running machine the way git branches code. This guide installs it, builds a locked-down sandbox for your coding agent, and packs the whole thing into a single portable file.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/smolvm-branchable-microvm-agent-sandbox-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Sandbox your AI agent in a branchable microVM: a hands-on guide to smolvm">
+<meta property="og:description" content="smolvm (smol-machines/smolvm, Apache-2.0, 6,700+ GitHub stars) runs untrusted code in hardware-isolated microVMs that boot in under a second — and lets you checkpoint, branch, and rewind a running machine the way git branches code. This guide installs it, builds a locked-down sandbox for your coding agent, and packs the whole thing into a single portable file.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/smolvm-branchable-microvm-agent-sandbox-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/smolvm-branchable-microvm-agent-sandbox-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-21">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Sandbox your AI agent in a branchable microVM: a hands-on guide to smolvm", "description": "smolvm (smol-machines/smolvm, Apache-2.0, 6,700+ GitHub stars) runs untrusted code in hardware-isolated microVMs that boot in under a second — and lets you checkpoint, branch, and rewind a running machine the way git branches code. This guide installs it, builds a locked-down sandbox for your coding agent, and packs the whole thing into a single portable file.", "url": "https://aifrontierpost.com/articles/smolvm-branchable-microvm-agent-sandbox-tutorial/", "image": "https://aifrontierpost.com/articles/smolvm-branchable-microvm-agent-sandbox-tutorial/cover.webp", "datePublished": "2026-10-21", "dateModified": "2026-10-21", "author": {"@type": "Person", "name": "Marcus Doyle"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com/"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Sandbox your AI agent in a branchable microVM: a hands-on guide to smolvm", "description": "smolvm (smol-machines/smolvm, Apache-2.0, 6,700+ GitHub stars) runs untrusted code in hardware-isolated microVMs that boot in under a second — and lets you checkpoint, branch, and rewind a running machine the way git branches code. This guide installs it, builds a locked-down sandbox for your coding agent, and packs the whole thing into a single portable file.", "step": [{"@type": "HowToStep", "name": "Install smolvm", "text": "Install the smolvm CLI via Homebrew on macOS or the official install script on macOS and Linux."}, {"@type": "HowToStep", "name": "Boot a one-off microVM", "text": "Run a single command inside a disposable Alpine microVM that is removed on exit."}, {"@type": "HowToStep", "name": "Build a persistent agent sandbox", "text": "Create and start a named machine, install tools inside it, and drive it with machine exec."}, {"@type": "HowToStep", "name": "Checkpoint, branch, and rewind", "text": "Save live machine state, fork copy-on-write branches, and rewind to earlier checkpoint generations."}, {"@type": "HowToStep", "name": "Lock down the network", "text": "Restrict egress to a named-host allow-list and pass secrets through credential substitution."}, {"@type": "HowToStep", "name": "Pack a portable file", "text": "Pack the finished machine into a single .smolmachine file or a self-contained executable."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How is smolvm different from Docker?", "acceptedAnswer": {"@type": "Answer", "text": "Docker isolates workloads with namespaces on a shared host kernel; smolvm gives every workload its own virtual machine and guest kernel (libkrun as the VMM, libkrunfw supplying the kernel) — true hardware isolation. The project’s comparison table puts boot time under 200 ms to agent-ready versus about 100 ms for containers, and there is no daemon to run: images are plain OCI and boot directly."}}, {"@type": "Question", "name": "Can I drive machines from my own code instead of the CLI?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The SDKs — npm install smolmachines, pip install smolmachines, cargo add smolmachines, and a Go module — expose one Machine API that runs in your process with no daemon, locally or on smol cloud. You can create a machine, exec commands, and delete it from a few lines of code."}}, {"@type": "Question", "name": "Can I move a running machine to another host?", "acceptedAnswer": {"@type": "Answer", "text": "Yes — checkpoints are portable. Save one with smolvm machine checkpoint, then restore it on another host or on smol cloud; the project documents resuming an arm64 Mac checkpoint on arm64 Linux. You can also rewind a machine to an earlier checkpoint generation with --from <checkpoint> --at '~N'."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Sandbox your AI agent in a branchable microVM: a hands-on guide to smolvm</h1>
+<p class="lede">Giving your coding agent a shell on your own laptop is how you get your home directory wiped by a bad command. smolvm gives that same agent its own hardware-isolated microVM — its own kernel, a locked-down network, and the ability to checkpoint, branch, and rewind mid-run like a git repo. Here is how to set one up.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-21 · 8 min read</span></span></div>
+
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> <b>smolvm</b> (smol-machines/smolvm, Apache-2.0, 6,700+ GitHub stars) runs each AI agent workload in its own hardware-isolated microVM — own guest kernel, sub-second boots, no Docker daemon — and lets you checkpoint, branch, and rewind a running machine like a git repo. This guide installs v1.30.1, builds a persistent agent sandbox with a network allow-list, and packs it into a single portable <code>.smolmachine</code> file.
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem">
+<li><b>What:</b> smolvm (smol-machines/smolvm) — branchable microVMs for AI agents, Apache-2.0 licensed.</li>
+<li><b>Traction:</b> 6,700+ GitHub stars and 333 forks as of Oct 21, 2026; latest release v1.30.1 (Oct 17, 2026).</li>
+<li><b>Speed:</b> boots in under a second; the project’s own comparison table puts it under 200 ms to agent-ready.</li>
+<li><b>Defaults:</b> 4 vCPUs and 8 GiB RAM per machine, elastic via virtio balloon — the host only commits what the guest uses.</li>
+<li><b>Isolation:</b> networking is off by default; egress can be restricted to named hosts with <code>--allow-host</code>.</li>
+<li><b>Runs on:</b> macOS 11+ on Apple Silicon, Linux x86_64/aarch64 with KVM (<code>/dev/kvm</code>), Windows x86_64 with Windows Hypervisor Platform.</li>
+</ul>
+<p>Every coding agent eventually asks for the same thing: a shell. Run its commands on your laptop and you are one hallucinated <code>rm -rf ~</code> away from a very bad afternoon. Put it in a container and you are safer — until you remember the container shares your host kernel. That is the gap <b>smolvm</b> was built for: every workload gets a <b>real virtual machine with its own guest kernel</b>, booting in under a second, with no Docker daemon involved. And then it does the thing containers never could: <b>checkpoint, branch, and rewind a running machine</b> the way git branches code.</p>
+<p>The project is <b>smol-machines/smolvm</b> — Apache-2.0, 6,700+ GitHub stars, actively released (v1.30.1 landed Oct 17, 2026). Under the hood it uses <b>libkrun</b> as the VMM and <b>libkrunfw</b> for the guest kernel, on Hypervisor.framework (macOS), KVM (Linux), or the Windows Hypervisor Platform. Images are plain OCI, so anything on Docker Hub boots as a microVM directly. The README even ships one documentation folder per task, each with a <code>SKILL.md</code> your agent can follow — this tool was designed to be driven by agents, not just humans.</p>
+
+<h2>What you&apos;ll need</h2>
+<ul>
+<li>A host smolvm supports: <b>macOS 11+ on Apple Silicon</b>, <b>Linux x86_64 or aarch64 with KVM</b> (<code>/dev/kvm</code> must exist), or <b>Windows x86_64 with the Windows Hypervisor Platform enabled</b>. macOS Intel has no published release build and is untested.</li>
+<li><code>curl</code> or <code>wget</code> plus <code>tar</code> for the installer — on Linux the installer itself checks for <code>/dev/kvm</code> before downloading anything.</li>
+<li>Internet access for the install and the first image pull (we use Alpine and <code>python:3.12-alpine</code>).</li>
+<li>Roughly 8 GiB of free RAM. Defaults are 4 vCPUs / 8 GiB per machine, but memory is elastic via virtio balloon, so the host only commits what the guest actually uses.</li>
+</ul>
+
+<h2>Step 1 — Install smolvm</h2>
+<p>Two official paths, straight from the README:</p>
+<pre><code>brew install smol-machines/tap/smolvm                  # macOS (Homebrew)
+curl -sSL https://smolmachines.com/install.sh | bash   # macOS + Linux</code></pre>
+<p>On Windows, unzip the <code>windows-x86_64</code> asset from the releases page and run <code>smolvm.exe</code> (it needs the Windows Hypervisor Platform). Then confirm the install — the README&apos;s advice is blunt: run <code>smolvm --help</code> after installing to discover every command, and it is genuinely the fastest way to learn the CLI.</p>
+
+<h2>Step 2 — Boot your first one-off microVM</h2>
+<p>The quickest possible run — a single command inside a fresh Alpine VM that is removed when it exits:</p>
+<pre><code>smolvm machine run --net --image alpine -- uname -a          # one-off VM, removed on exit</code></pre>
+<p>Note the <code>--net</code>: networking is <b>off by default</b>, so you opt in explicitly. The first boot pulls the Alpine OCI image; subsequent boots reuse it. Want a shell instead of a single command?</p>
+<pre><code>smolvm machine run --net -it --image alpine -- /bin/sh       # interactive shell</code></pre>
+<p>That <code>-it</code> shell is running on its own kernel inside a VM — not in a namespace on yours. Type <code>exit</code> and the machine is gone.</p>
+
+<h2>Step 3 — Build a persistent sandbox for your agent</h2>
+<p>One-off VMs are for experiments. For an agent you want a machine that sticks around:</p>
+<pre><code>smolvm machine create --net --name agent-box --image python:3.12-alpine
+smolvm machine start --name agent-box
+smolvm machine exec --name agent-box -- apk add git</code></pre>
+<p>Machines <b>persist across restarts</b>, and any OCI image works — including one you built locally, with no registry in the loop:</p>
+<pre><code>docker save myapp | smolvm machine run --image - -- ./app    # local image, no registry</code></pre>
+<p>This is the operational pattern: stop handing your coding agent raw host commands and hand it <code>smolvm machine exec --name agent-box -- &lt;cmd&gt;</code> instead. Everything the agent does — installing packages, cloning repos, running test suites — happens inside the VM. Your laptop never sees it.</p>
+
+<h2>Step 4 — Checkpoint, branch, and rewind a running machine</h2>
+<p>This is smolvm&apos;s superpower, and the reason it beats containers for agent work. Containers give you image layers; smolvm gives you <b>live state</b>:</p>
+<pre><code>smolvm machine create --net --name agent --image alpine
+smolvm machine start --name agent --branchable
+smolvm machine branch --from agent --name try-1                   # live copy-on-write child
+smolvm machine checkpoint --name agent -o agent.checkpoint        # save it, processes and all
+smolvm machine create --name agent2 --from agent.checkpoint       # resume later or elsewhere</code></pre>
+<figure class="inline-art"><img src="/articles/smolvm-branchable-microvm-agent-sandbox-tutorial/img2.webp" alt="A checkpoint node on a timeline splitting into two parallel branch lines inside a virtual machine" loading="lazy"><figcaption>Credit: AI Frontier Post — checkpoint, then branch: copy-on-write children of a live machine</figcaption></figure>
+<p>What each piece does, per the docs:</p>
+<ul>
+<li><code>--branchable</code> on <code>start</code> enables branching for that machine.</li>
+<li><code>branch</code> forks a <b>live, copy-on-write child</b> that keeps running from the same point — run two agent experiments in parallel from identical state instead of serializing them.</li>
+<li><code>checkpoint</code> captures <b>RAM, CPU state, and disks</b> to a file. Rewind to an earlier generation with <code>--from &lt;checkpoint&gt; --at &apos;~N&apos;</code> (generations are listed by <code>machine checkpoint-log</code>).</li>
+<li>Checkpoints are <b>portable</b>: restore one on another host or on smol cloud — the project documents resuming an arm64 Mac checkpoint on arm64 Linux. And <code>pause and resume</code> lets you stop a machine without losing execution at all.</li>
+</ul>
+<p>The workflow this unlocks: <b>checkpoint right before the risky step</b>. If the agent wrecks the environment, you rewind in seconds instead of rebuilding for twenty minutes.</p>
+
+<h2>Step 5 — Lock down the network to an allow-list</h2>
+<p>Isolation is only as good as its egress policy. smolvm&apos;s default-deny model is simple: no network unless you pass <code>--net</code>, and then you narrow it with <code>--allow-host</code>. The README&apos;s own demo allows only the npm registry and proves the rest is blocked:</p>
+<pre><code>smolvm machine run --net --image alpine --allow-host registry.npmjs.org -- wget -qO- https://google.com   # blocked</code></pre>
+<figure class="inline-art"><img src="/articles/smolvm-branchable-microvm-agent-sandbox-tutorial/img3.webp" alt="A terminal sealed inside a locked glass dome, representing a sandboxed network" loading="lazy"><figcaption>Credit: AI Frontier Post — default-deny networking: nothing leaves the VM unless you allow it</figcaption></figure>
+<p>The matching rules are precise: <code>--allow-host example.com</code> allows the apex <b>and</b> its subdomains, while <code>--allow-host-pattern &apos;*.example.com&apos;</code> allows subdomains only. Grants can be added or removed on a running machine with <code>smolvm machine update</code> (<code>--remove-allow-host</code> and friends).</p>
+<p>For secrets, use <b>credential substitution</b> — the workload can <i>use</i> an API key without ever <i>reading</i> it:</p>
+<pre><code>NOTION_API_KEY=secret_… smolvm machine run --net --image alpine \
+  --credential notion=NOTION_API_KEY@api.notion.com -- sh -c &#x27;echo $NOTION_API_KEY&#x27;   # a placeholder</code></pre>
+<p>One honest caveat from the security docs, worth internalizing: smolvm provides the boundary, but <b>safety is a shared responsibility</b>. Every folder you mount, port you open, host you allow, and secret or SSH agent you forward becomes something the workload can use — so give an untrusted workload only what it needs.</p>
+
+<h2>Step 6 — Pack the machine into a single portable file</h2>
+<p>When the sandbox is exactly how you want it — dependencies installed, tools configured, checkpoint taken — pack it:</p>
+<pre><code>smolvm machine stop --name agent-box
+smolvm pack create --from-vm agent-box -o agent-box
+smolvm pack push --file agent-box.smolmachine ghcr.io/you/agent-box:v1</code></pre>
+<p>The <code>.smolmachine</code> file pushes to any OCI registry. Or skip the registry entirely and ship a <b>self-contained executable</b> that boots in under 200 ms with nothing to install:</p>
+<pre><code>smolvm pack create --image python:3.12-alpine -o ./python312
+./python312 run -- python3 --version</code></pre>
+<p>That last trick is the whole pitch in miniature: a complete, isolated, bootable environment as one file. Teammates run your exact agent sandbox with one command.</p>
+
+<h2>What you built</h2>
+<p>A hardware-isolated sandbox for AI agent work: a persistent microVM your agent drives through <code>smolvm machine exec</code>, checkpointed before risky steps, branched per experiment, fenced to a network allow-list, with secrets it can use but never read — and the whole thing packable into a single portable file. If you want to drive machines from your own code instead of the CLI, the SDKs (<code>npm install smolmachines</code>, <code>pip install smolmachines</code>, plus Rust and Go) expose one <code>Machine</code> API that runs in your process with no daemon, locally or on smol cloud:</p>
+<pre><code>import { Machine } from &#x27;smolmachines&#x27;;
+
+const m = await Machine.create({ image: &#x27;python:3.12-alpine&#x27;, network: true });
+const r = await m.exec([&#x27;python3&#x27;, &#x27;-c&#x27;, &#x27;print(2 ** 10)&#x27;]);
+console.log(r.stdout); // 1024
+await m.delete();</code></pre>
+
+<h2>Honest limitations</h2>
+<ul>
+<li><b>No GPU.</b> GPU and CUDA acceleration remain unavailable; the docs describe experimental API remoting, but GPU-heavy agent workloads need another path.</li>
+<li><b>macOS Intel is out.</b> No release build is published for it and it is untested — Apple Silicon or Linux it is.</li>
+<li><b>Linux needs KVM.</b> Without <code>/dev/kvm</code> (common on locked-down cloud VMs without nested virtualization), machines will not boot. The installer warns you up front.</li>
+<li><b>Checkpoints are heavy.</b> They capture RAM, CPU state, and disks — checkpoint your lean base state, not a machine that has ballooned to gigabytes of RAM.</li>
+<li><b>Branching needs intent.</b> Start with <code>--branchable</code>, and on Windows branches need <code>--freeze-source</code>.</li>
+<li>smolvm is the open-source runtime behind the commercial <b>smol machines</b> cloud — local use is free and Apache-2.0, which is all this guide needs.</li>
+</ul>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>How is smolvm different from Docker?</h3><p>Docker isolates workloads with namespaces on a shared host kernel; smolvm gives every workload its own virtual machine and guest kernel (libkrun as the VMM, libkrunfw supplying the kernel) — true hardware isolation. The project’s comparison table puts boot time under 200 ms to agent-ready versus about 100 ms for containers, and there is no daemon to run: images are plain OCI and boot directly.</p><h3>Can I drive machines from my own code instead of the CLI?</h3><p>Yes. The SDKs — npm install smolmachines, pip install smolmachines, cargo add smolmachines, and a Go module — expose one Machine API that runs in your process with no daemon, locally or on smol cloud. You can create a machine, exec commands, and delete it from a few lines of code.</p><h3>Can I move a running machine to another host?</h3><p>Yes — checkpoints are portable. Save one with smolvm machine checkpoint, then restore it on another host or on smol cloud; the project documents resuming an arm64 Mac checkpoint on arm64 Linux. You can also rewind a machine to an earlier checkpoint generation with --from &lt;checkpoint&gt; --at &#x27;~N&#x27;.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/graphify-codebase-knowledge-graph-tutorial/">Query your codebase instead of grepping it: a hands-on guide to Graphify</a></li><li><a href="/articles/openmontage-agentic-video-studio-tutorial/">Turn your coding assistant into a full video studio: hands-on with OpenMontage</a></li><li><a href="/articles/invisible-playwright-mcp-stealth-browser-tutorial/">Give your coding agent an invisible browser: hands-on with invisible-playwright-mcp</a></li><li><a href="/articles/rag-techniques-42-notebooks-hands-on-tutorial/">Stop your RAG from guessing: a hands-on tour of 42 battle-tested retrieval techniques</a></li></ul></section>
+
+
+
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
