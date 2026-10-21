@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop burning tokens on grep: give your coding agent a local search engine with XERJ</title>
+<meta name="description" content="XERJ (xerj-org/xerj, Apache-2.0, 12,600+ GitHub stars) is a single static Rust binary that indexes code, docs, logs, and PDFs for BM25, vector, and hybrid search — served to your coding agent over MCP. Its case study shows 2.7× fewer output tokens at the same solve rate. This guide installs it, wires it into Claude Code, and measures what it saves.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/xerj-local-search-engine-coding-agents/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop burning tokens on grep: give your coding agent a local search engine with XERJ">
+<meta property="og:description" content="XERJ (xerj-org/xerj, Apache-2.0, 12,600+ GitHub stars) is a single static Rust binary that indexes code, docs, logs, and PDFs for BM25, vector, and hybrid search — served to your coding agent over MCP. Its case study shows 2.7× fewer output tokens at the same solve rate. This guide installs it, wires it into Claude Code, and measures what it saves.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/xerj-local-search-engine-coding-agents/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/xerj-local-search-engine-coding-agents/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-21">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop burning tokens on grep: give your coding agent a local search engine with XERJ", "description": "XERJ (xerj-org/xerj, Apache-2.0, 12,600+ GitHub stars) is a single static Rust binary that indexes code, docs, logs, and PDFs for BM25, vector, and hybrid search \u2014 served to your coding agent over MCP. Its case study shows 2.7\u00d7 fewer output tokens at the same solve rate. This guide installs it, wires it into Claude Code, and measures what it saves.", "url": "https://aifrontierpost.com/articles/xerj-local-search-engine-coding-agents/", "image": "https://aifrontierpost.com/articles/xerj-local-search-engine-coding-agents/cover.webp", "datePublished": "2026-10-21", "dateModified": "2026-10-21", "author": {"@type": "Person", "name": "Marcus Doyle"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com/"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Stop burning tokens on grep: give your coding agent a local search engine with XERJ", "description": "XERJ (xerj-org/xerj, Apache-2.0, 12,600+ GitHub stars) is a single static Rust binary that indexes code, docs, logs, and PDFs for BM25, vector, and hybrid search \u2014 served to your coding agent over MCP. Its case study shows 2.7\u00d7 fewer output tokens at the same solve rate. This guide installs it, wires it into Claude Code, and measures what it saves.", "step": [{"@type": "HowToStep", "name": "Install XERJ", "text": "Install the single static Rust binary with the official install script on macOS and Linux, or the PowerShell one-liner on Windows."}, {"@type": "HowToStep", "name": "Start the engine and index a project", "text": "Start the node with xerj --insecure --data-dir, keeping the data directory outside any folder you autoindex, then point xerj autoindex at your code."}, {"@type": "HowToStep", "name": "Search and jump to definitions from the CLI", "text": "Use xerj search for ranked passages with file:line locations and xerj def for go-to-definition with signatures."}, {"@type": "HowToStep", "name": "Wire it into your coding agent as an MCP server", "text": "Run xerj init to install the MCP server and skill into Claude Code or Cursor so the agent queries the index itself."}, {"@type": "HowToStep", "name": "Try reference coding and measure the savings", "text": "Have the agent index the open-source repos closest to your task and search them before writing code, then run xerj gain to see the counted token savings."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What does the --insecure flag actually do?", "acceptedAnswer": {"@type": "Answer", "text": "It disables TLS and API-key authentication, so every caller that can reach the port is a superuser who can read and delete every index, including every /_memory namespace. The project treats it as a trust boundary, not a formality: it is meant for one user on a dev machine, a fresh node binds 127.0.0.1 only, and a cleartext bind on any other interface refuses to start unless you explicitly allow it."}}, {"@type": "Question", "name": "Do I need a GPU or model downloads to run XERJ?", "acceptedAnswer": {"@type": "Answer", "text": "No. The default embedder is lexical and runs fully offline \u2014 nothing to download and no GPU. A neural embedder is available opt-in and pulls about 90MB. The whole engine ships as one static Rust binary with no JVM and no dependencies."}}, {"@type": "Question", "name": "Where does XERJ help most \u2014 and where doesn't it?", "acceptedAnswer": {"@type": "Answer", "text": "In the project's own words, the value is gated by memorization: it wins on private, internal, niche, or post-cutoff code, and is neutral to harmful on popular public libraries the model already knows. Reference coding \u2014 indexing the open-source repos closest to your task so the agent reuses how they solved the problem before writing its own code \u2014 is the clearest win."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop burning tokens on grep: give your coding agent a local search engine with XERJ</h1>
+<p class="lede">Your coding agent burns thousands of tokens reading whole files just to find three lines of code. XERJ indexes your project once — BM25, vector, and hybrid search behind an Elasticsearch-compatible API — and hands your agent exactly the passages it needs over MCP. Here is how to install it, wire it in, and measure the savings.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-21 · 8 min read</span></span></div>
+
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> <b>XERJ</b> (xerj-org/xerj, Apache-2.0, 12,600+ GitHub stars) is a single static Rust binary that indexes your code, docs, and logs for BM25 full-text, vector, and hybrid search — and serves them to your coding agent over MCP. In the project's case study, agents using it cut output tokens 2.7× at the same 16/16 solve rate. This guide installs it, indexes a project, wires it into Claude Code, and measures the savings.<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem">
+<li><b>What:</b> XERJ (xerj-org/xerj) — a local-first search engine and MCP server for AI agents, Apache-2.0 licensed.</li>
+<li><b>Traction:</b> 12,600+ GitHub stars and 777 forks as of Oct 21, 2026; the project dates to June 2026.</li>
+<li><b>Payload:</b> one static Rust binary, no JVM, no dependencies — prebuilt for Linux, macOS, and Windows on x86-64 and arm64.</li>
+<li><b>Retrieval:</b> BM25 full-text + kNN vector + hybrid search, tree-sitter code search with go-to-definition, a <code>/_memory</code> namespace for agent memory, and an Elasticsearch-compatible API.</li>
+<li><b>Measured savings:</b> 2.7× fewer output tokens at the same 16/16 solve rate in the project's controlled case study (8 tasks, 4 languages); users report roughly 5× in everyday work.</li>
+<li><b>Defaults:</b> the lexical embedder runs fully offline with no downloads; the neural embedder is opt-in (~90MB). A fresh node binds 127.0.0.1 and serves on port 9200.</li>
+</ul>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li>A Mac, Linux, or Windows machine (x86-64 or arm64) — no GPU required.</li>
+<li>A code folder to index. Your own project is ideal; the wins are biggest on private, niche, or post-cutoff code.</li>
+<li>A coding agent with MCP support: Claude Code, Cursor, or any MCP client.</li>
+<li>About two minutes.</li>
+</ul>
+
+<h2>Step 1 — Install XERJ</h2>
+<p>One command on macOS or Linux:</p>
+<pre><code class="language-sh">curl -fsSL https://xerj.org/get | sh</code></pre>
+<p>On Windows PowerShell:</p>
+<pre><code class="language-powershell">irm https://xerj.org/get.ps1 | iex</code></pre>
+<p>That&rsquo;s the whole install: one static Rust binary, no JVM, no dependencies. The installer prints where <code>xerj</code> landed — add it to your <code>PATH</code> if needed. You can also build from source; the README documents it.</p>
+
+<h2>Step 2 — Start the engine and index a project</h2>
+<pre><code class="language-sh">xerj --insecure --data-dir ~/xerj-data &amp;</code></pre>
+<p>Wait until <code>http://localhost:9200</code> responds, then index any folder:</p>
+<pre><code class="language-sh">xerj autoindex ~/my-project</code></pre>
+<p>Two things to know before you run it. First, keep that data directory <em>outside</em> any folder you will autoindex — <code>data/</code> is not in the built-in ignore list, so <code>--data-dir ./data</code> inside a tree you then index makes the node index its own storage. Second, that <code>--insecure</code> flag is a trust boundary, not a formality: it turns off TLS and API-key auth, so every caller that can reach the port is a superuser who can read and delete every index. It is meant for one user on a dev machine — a fresh node binds <code>127.0.0.1</code> only, and a cleartext bind on any other interface refuses to start unless you explicitly allow it.</p>
+
+<h2>Step 3 — Search and jump to definitions from the CLI</h2>
+<pre><code class="language-sh">xerj search "how do we rotate the WAL segment"   # ranked passages, file:line
+xerj def "euler_to_rotationmatrix"               # go-to-definition: file:line + signature</code></pre>
+<p>Under the hood you get BM25 full-text, kNN vector, and hybrid search, tree-sitter-powered code search, and a <code>/_memory</code> namespace for agent memory. It speaks the Elasticsearch API, so existing clients, dashboards, and tooling work against it unchanged. The default embedder is lexical and fully offline — nothing to download; a neural embedder is opt-in at about 90MB.</p>
+
+<figure class="inline-art"><img src="/articles/xerj-local-search-engine-coding-agents/img2.webp" alt="A coding agent pulling ranked code snippets from an indexed folder into a chat panel" loading="lazy"><figcaption>Credit: AI Frontier Post — xerj init wires the engine into Claude Code or Cursor as an MCP server, so the agent queries the index instead of reading files one by one</figcaption></figure>
+
+<h2>Step 4 — Wire it into Claude Code or Cursor as an MCP server</h2>
+<pre><code class="language-sh">xerj init   # wire XERJ into Claude Code/Cursor (MCP + skill), one command</code></pre>
+<p>One command installs the MCP server and the skill. From then on your agent queries the index itself — no more reading whole files to find three lines of code.</p>
+
+<h2>Step 5 — Try &ldquo;reference coding&rdquo; and measure the savings</h2>
+<p>Reference coding is XERJ&rsquo;s headline use case: the agent clones the open-source repos closest to your task, indexes them, and searches how they solved the problem before writing its own code. In the project&rsquo;s controlled case study (8 tasks, 4 languages, real token counts), agents using XERJ cut output tokens 2.7× at the same 16/16 solve rate; field reports from everyday users land around 5×.</p>
+<p>After a session, ask what it did for you:</p>
+<pre><code class="language-sh">xerj gain   # what it did for you — counted, not estimated</code></pre>
+<p>The number is counted from your actual usage, not estimated.</p>
+
+<figure class="inline-art"><img src="/articles/xerj-local-search-engine-coding-agents/img3.webp" alt="A gauge measuring saved tokens as code flows through a funnel into a small tidy stack" loading="lazy"><figcaption>Credit: AI Frontier Post — xerj gain reports your token savings: counted from real usage, not estimated</figcaption></figure>
+
+<h2>What you built</h2>
+<p>A local-first search engine on your own machine: your code, docs, and logs indexed for BM25, vector, and hybrid retrieval; a go-to-definition CLI; an MCP server your coding agent queries itself; and a running counter of the tokens it saved you.</p>
+
+<h2>Honest limitations</h2>
+<ul>
+<li><b>Value is gated by memorization.</b> The project says it plainly: XERJ wins on private, internal, niche, or post-cutoff code, and is neutral to harmful on popular public libraries the model already knows. Point it at your own codebase, not at React.</li>
+<li><b><code>--insecure</code> is the price of zero-config.</b> No TLS, no auth. Fine on 127.0.0.1 on your own machine — never expose the port to a network.</li>
+<li><b>It&rsquo;s a single-user dev tool, not a server.</b> A cleartext bind on any interface other than localhost refuses to start unless you explicitly allow it. Plan multi-user deployments accordingly.</li>
+</ul>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>What does the --insecure flag actually do?</h3><p>It disables TLS and API-key authentication, so every caller that can reach the port is a superuser who can read and delete every index, including every /_memory namespace. The project treats it as a trust boundary, not a formality: it is meant for one user on a dev machine, a fresh node binds 127.0.0.1 only, and a cleartext bind on any other interface refuses to start unless you explicitly allow it.</p><h3>Do I need a GPU or model downloads to run XERJ?</h3><p>No. The default embedder is lexical and runs fully offline — nothing to download and no GPU. A neural embedder is available opt-in and pulls about 90MB. The whole engine ships as one static Rust binary with no JVM and no dependencies.</p><h3>Where does XERJ help most — and where doesn't it?</h3><p>In the project's own words, the value is gated by memorization: it wins on private, internal, niche, or post-cutoff code, and is neutral to harmful on popular public libraries the model already knows. Reference coding — indexing the open-source repos closest to your task so the agent reuses how they solved the problem before writing its own code — is the clearest win.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/answer-me-with-html-skill-tutorial/">Make your coding agent answer with pages, not walls of text: a hands-on guide to the Answer me with HTML skill</a></li><li><a href="/articles/seiso-lint-ai-written-docs-tutorial/">Stop your coding agent trusting stale docs: a hands-on guide to seiso</a></li><li><a href="/articles/mattpocock-skills-real-engineers-tutorial/">Skills for Real Engineers: hands-on with Matt Pocock&#x27;s 274K-star agent skills</a></li><li><a href="/articles/codegraph-code-knowledge-graph-tutorial/">Stop letting your coding agent grep: hands-on with CodeGraph, the 72K-star pre-indexed code knowledge graph</a></li></ul></section>
+
+
+
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
