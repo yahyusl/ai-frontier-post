@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>One gateway for every AI provider: a hands-on guide to Antirion</title>
+<meta name="description" content="Antirion (Apache-2.0, 198 GitHub stars in its first week) is a single Rust binary that sits between your apps and every model provider — OpenAI, Anthropic, Gemini and 13 more — behind one OpenAI-compatible API. This hands-on guide takes you from one Docker command to your first routed request, with per-request cost and latency in the built-in console.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/antirion-ai-gateway-docker-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="One gateway for every AI provider: a hands-on guide to Antirion">
+<meta property="og:description" content="Antirion (Apache-2.0, 198 GitHub stars in its first week) is a single Rust binary that sits between your apps and every model provider — OpenAI, Anthropic, Gemini and 13 more — behind one OpenAI-compatible API. This hands-on guide takes you from one Docker command to your first routed request, with per-request cost and latency in the built-in console.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/antirion-ai-gateway-docker-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/antirion-ai-gateway-docker-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-24">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="One gateway for every AI provider: a hands-on guide to Antirion">
+<meta name="twitter:description" content="Antirion (Apache-2.0, 198 GitHub stars in its first week) is a single Rust binary that sits between your apps and every model provider — OpenAI, Anthropic, Gemini and 13 more — behind one OpenAI-compatible API. This hands-on guide takes you from one Docker command to your first routed request, with per-request cost and latency in the built-in console.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/antirion-ai-gateway-docker-hands-on-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "One gateway for every AI provider: a hands-on guide to Antirion", "description": "Antirion (Apache-2.0, 198 GitHub stars in its first week) is a single Rust binary that sits between your apps and every model provider \u2014 OpenAI, Anthropic, Gemini and 13 more \u2014 behind one OpenAI-compatible API. This hands-on guide takes you from one Docker command to your first routed request, with per-request cost and latency in the built-in console.", "image": "https://aifrontierpost.com/articles/antirion-ai-gateway-docker-hands-on-tutorial/cover.webp", "author": {"@type": "Person", "name": "Marcus Doyle"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/logo.png"}}, "datePublished": "2026-10-24", "dateModified": "2026-10-24", "mainEntityOfPage": "https://aifrontierpost.com/articles/antirion-ai-gateway-docker-hands-on-tutorial/"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "One gateway for every AI provider: a hands-on guide to Antirion", "description": "Antirion (Apache-2.0, 198 GitHub stars in its first week) is a single Rust binary that sits between your apps and every model provider \u2014 OpenAI, Anthropic, Gemini and 13 more \u2014 behind one OpenAI-compatible API. This hands-on guide takes you from one Docker command to your first routed request, with per-request cost and latency in the built-in console.", "step": [{"@type": "HowToStep", "name": "Start the gateway", "text": "Run one Docker command that maps ports 8080 and 8081 and persists data in the antirion-data volume, then copy the admin token it prints on first start."}, {"@type": "HowToStep", "name": "Sign in to the console", "text": "Open http://localhost:8081/ui/ and paste the admin token to reach the console."}, {"@type": "HowToStep", "name": "Add a provider", "text": "Add an OpenAI or Anthropic provider key, which the gateway tests by asking the provider for its models before saving it."}, {"@type": "HowToStep", "name": "Add a model named chat", "text": "Register a model from the provider\u2019s list, such as gpt-4.1-mini or claude-haiku-4-5, under the name your apps will send."}, {"@type": "HowToStep", "name": "Create an API key", "text": "Create a key named my-app in the default project and copy it, since it is shown only once."}, {"@type": "HowToStep", "name": "Send a request", "text": "Call http://localhost:8080/v1/chat/completions with the Antirion key and model chat, or point any OpenAI SDK at http://localhost:8080/v1."}, {"@type": "HowToStep", "name": "Watch it in the Request log", "text": "Open the Request log to see the request\u2019s status, model, key, tokens, latency and cost, or send test requests from the Playground."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I still need provider API keys?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Antirion sits between your apps and the providers, so you add at least one provider key \u2014 OpenAI, Anthropic, or any of the others \u2014 and the gateway tests it by asking the provider for its models, saving it only once the test passes. It does not make models free: it routes requests and records what each one costs."}}, {"@type": "Question", "name": "Can my existing code use it without rewrites?", "acceptedAnswer": {"@type": "Answer", "text": "If it speaks OpenAI, yes: point its base URL at http://localhost:8080/v1, send the Antirion key, and ask for the model name you registered \u2014 chat in this guide. Anthropic SDKs point at http://localhost:8080 instead, and the gateway translates between the client protocols."}}, {"@type": "Question", "name": "What if I lose the admin token?", "acceptedAnswer": {"@type": "Answer", "text": "It is kept in the gateway\u2019s data volume at /var/lib/antirion/data/bootstrap-token; recover it with docker cp &lt;container&gt;:/var/lib/antirion/data/bootstrap-token - | tar -xO. Your providers, models, keys and history live in the antirion-data volume, so they survive a container restart."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>One gateway for every AI provider: a hands-on guide to Antirion</h1>
+<p class="lede">Every app you build wants its own provider key. Keys sprawl across .env files, spend stays invisible until the invoice, and switching models means rewiring code. Antirion fixes that by putting one gateway in front of all of them: your apps talk to one OpenAI-compatible API, and the gateway routes, logs and budgets every request. Here is how to run it in about fifteen minutes.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-24 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> <b>Antirion</b> (<b>eliasbiondo/antirion</b>, Apache-2.0) is a single Rust binary that puts one OpenAI-compatible door in front of every model provider. One Docker command starts it — data plane on port 8080, console on 8081 — then you add a provider key, register a model as <code>chat</code>, create an app key, and send requests that show up in the Request log with tokens, latency and cost.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> Antirion — an open-source AI gateway: one Rust binary, console built in, sitting between your apps and every model provider, translating between OpenAI, Anthropic, Gemini and Bedrock client protocols.</li><li><b>Project:</b> <b>eliasbiondo/antirion</b>, Apache-2.0 license, launched 2026-10-17, 198 stars and 7 forks (verified 2026-10-24).</li><li><b>Run:</b> <code>docker run -p 8080:8080 -p 8081:8081 -v antirion-data:/var/lib/antirion eliasbiondo/antirion</code> — no config file needed. Data plane at <code>http://localhost:8080/v1</code>, console at <code>http://localhost:8081/ui/</code>.</li><li><b>Providers:</b> OpenAI, Azure OpenAI, Anthropic, Amazon Bedrock, Google Vertex AI, Gemini, Mistral, Cohere, Groq, Together, Fireworks, DeepSeek, xAI, Cerebras, DeepInfra, Perplexity, plus any OpenAI- or Anthropic-compatible server such as vLLM.</li><li><b>Performance (the project’s own benchmark, AWS c7i.xlarge with 4 vCPUs):</b> 0.53 ms median overhead at 5,000 requests per second; 21,512 requests per second over 64 connections; 215 MiB peak memory.</li><li><b>Control:</b> fallback chains, weighted splits, and least-cost / least-latency routing; rate limits and budgets in dollars or tokens per organization, team, project and key.</li></ul>
+<p>Every app you build wants its own provider key. One for OpenAI in the chatbot, one for Anthropic in the summarizer, another for the cheap model that classifies tickets. The keys sprawl across <code>.env</code> files, nobody can say what last month cost per feature, and swapping a model means touching code in every service that calls it.</p>
+<p>A gateway puts one door in front of all of that. Your apps send every request to the same address with the same key format, and the gateway decides which provider and model actually answers, records what it cost, and lets you cap spend per key or project. <b>Antirion</b> is a new open-source gateway in that lane, and its pitch is speed and simplicity: a single Rust binary with the admin console built in, no sidecars, no separate UI deployment, nothing else to install.</p>
+<p>It is <b>eliasbiondo/antirion</b>, Apache-2.0 licensed, launched on 2026-10-17, and it collected 198 GitHub stars in its first week. The project positions itself against LiteLLM and Bifrost and publishes its own benchmark to back the speed claim — 0.53 ms median overhead at 5,000 requests per second on a 4-vCPU AWS c7i.xlarge, against 19.7 ms for Bifrost 2.2.4 in the same harness, with LiteLLM failing at that rate. Treat those as the project’s own numbers, not independent ones: the harness is in the repo under <code>bench/</code> if you want to reproduce them.</p>
+<h2>What you&#x27;ll need</h2>
+<ul>
+<li>Docker installed and running</li>
+<li>An API key from OpenAI or Anthropic (or any of the other supported providers)</li>
+<li>A terminal and about 15 minutes</li>
+<li>Optional: a second provider key, to try fallback routing later</li>
+</ul>
+<h2>Run your own AI gateway</h2>
+<h3>1. Start the gateway</h3>
+<p>One command, no config file:</p>
+<pre><code>docker run -p 8080:8080 -p 8081:8081 -v antirion-data:/var/lib/antirion eliasbiondo/antirion
+</code></pre>
+<p>Two ports matter. Port <b>8080</b> is the data plane — the <code>/v1</code> API your apps call. Port <b>8081</b> is the admin plane — the Admin API and the web console. The <code>antirion-data</code> volume holds everything the gateway learns: providers, models, keys and history, so a restart keeps them all.</p>
+<p>On the first start the log prints the console address and an admin token, shown that once:</p>
+<pre><code>  Console      http://localhost:8081/ui/
+  Admin token  ak-antirion-…
+               Shown on this first start only; it is kept in
+               /var/lib/antirion/data/bootstrap-token
+</code></pre>
+<p>Copy the token now. If you lose it, it is recoverable from the volume (step 3 of the FAQ below). <code>docker run --rm eliasbiondo/antirion serve --help</code> lists the ports, the data directory and the other settings.</p>
+<h3>2. Sign in to the console</h3>
+<p>Open <b>http://localhost:8081/ui/</b> and paste the admin token into <b>Admin token</b>. From the console you can invite your team, so everyone signs in with their own account instead of sharing the token.</p>
+<figure class="inline-art"><img src="img2.webp" alt="The Antirion console overview with spend, requests, latency and top models" loading="lazy"><figcaption>The Antirion console overview: spend, requests, latency and top models at a glance. Source: eliasbiondo/antirion (Apache-2.0).</figcaption></figure>
+<h3>3. Add a provider</h3>
+<p>Go to <b>Providers → Add provider</b>, choose <b>OpenAI</b> or <b>Anthropic</b>, and paste its API key. Hit <b>Test</b>: the gateway asks the provider for its models, and the provider is saved only once the test passes, so a wrong key fails here instead of at request time. Then <b>Add provider</b>.</p>
+<p>The full provider list is long: OpenAI, Azure OpenAI, Anthropic, Amazon Bedrock, Google Vertex AI, Gemini, Mistral, Cohere, Groq, Together, Fireworks, DeepSeek, xAI, Cerebras, DeepInfra, Perplexity — plus any OpenAI- or Anthropic-compatible server such as vLLM, which is how a local model joins the same gateway.</p>
+<h3>4. Add a model named <code>chat</code></h3>
+<p>Go to <b>Models → Add model</b>, pick the provider, then a model from the list the provider returned — the README’s examples are <code>gpt-4.1-mini</code> and <code>claude-haiku-4-5</code>. The list shows each model’s list price, which applies when you leave the price fields blank. Name it <code>chat</code> — that is the name your apps will send — and <b>Add model</b>.</p>
+<p>This indirection is the whole point. Your code asks for <code>chat</code> forever; when you want a different model behind that name, you change it in the console, not in every app.</p>
+<h3>5. Create an API key</h3>
+<p>Go to <b>API keys → Create key</b>, name it <code>my-app</code> (the project <code>default</code> is already chosen), then <b>Copy</b>: the key is shown once.</p>
+<pre><code>export ANTIRION_API_KEY=&lt;your-antirion-key&gt;
+</code></pre>
+<h3>6. Send a request</h3>
+<pre><code>curl -s http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer $ANTIRION_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"model": "chat", "messages": [{"role": "user", "content": "Hello"}]}'
+</code></pre>
+<p>Any OpenAI SDK works the same way: point its base URL at <code>http://localhost:8080/v1</code>. Anthropic SDKs point at <code>http://localhost:8080</code> instead. The gateway translates between client protocols, so an Anthropic-shaped client can talk to an OpenAI-shaped provider and vice versa.</p>
+<h3>7. Watch it in the Request log</h3>
+<p>Open <b>Request log</b>. Your request is there with its status, model, key, tokens, latency and cost; select it for the details, from the route taken to the cost ledger. The <b>Playground</b> in the console sends test requests without writing any code.</p>
+<figure class="inline-art"><img src="img3.webp" alt="The Antirion Request log listing requests with status, model, tokens, latency and cost" loading="lazy"><figcaption>The Request log records each request’s status, model, key, tokens, latency and cost. Source: eliasbiondo/antirion (Apache-2.0).</figcaption></figure>
+<h2>What you built</h2>
+<p>One address your apps call for every model, with one key format, a console that shows spend, requests, latency and errors, and a per-request ledger of tokens and cost. Swap the model behind <code>chat</code> in the console and every app follows. Add a second provider and you have the raw material for fallback chains and least-cost routing — the gateway decides per request and records the route it took. Rate limits and budgets in dollars or tokens, per organization, team, project and key, are built in for when one app starts spending like it owns the place.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><b>You still pay the provider.</b> The gateway does not make models free — it makes spend visible and capped. Your provider bill is still your provider bill; the Request log just tells you exactly which key and model ran it up.</li>
+<li><b>Docker is the easy path.</b> Release binaries exist for Linux (amd64 and arm64) at the project’s releases page; on macOS and Windows the documented route is the container image or a build from source.</li>
+<li><b>One node by default.</b> The zero-config setup runs a standalone node with an embedded store. A cluster that shares PostgreSQL and Valkey is documented, but that is a deployment project, not a one-liner.</li>
+<li><b>It is one week old.</b> Launched 2026-10-17 with 198 stars; expect rough edges and fast-moving docs. The benchmark figures above are the project’s own, measured against Bifrost 2.2.4 and LiteLLM 1.103.1 in its own harness.</li>
+<li><b>The admin token is shown once.</b> Lose it and you are recovering it from the volume (see the FAQ) — keep it in a password manager the moment the first start prints it.</li>
+<li><b>No provider key, no hosted models.</b> You need at least one provider key for hosted models; the docs describe a way to try Antirion without one, and any OpenAI-compatible local server (vLLM and friends) works as a provider.</li>
+</ul>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I still need provider API keys?</h3><p>Yes. Antirion sits between your apps and the providers, so you add at least one provider key — OpenAI, Anthropic, or any of the others — and the gateway tests it by asking the provider for its models, saving it only once the test passes. It does not make models free: it routes requests and records what each one costs.</p><h3>Can my existing code use it without rewrites?</h3><p>If it speaks OpenAI, yes: point its base URL at http://localhost:8080/v1, send the Antirion key, and ask for the model name you registered — chat in this guide. Anthropic SDKs point at http://localhost:8080 instead, and the gateway translates between the client protocols.</p><h3>What if I lose the admin token?</h3><p>It is kept in the gateway’s data volume at /var/lib/antirion/data/bootstrap-token; recover it with docker cp &lt;container&gt;:/var/lib/antirion/data/bootstrap-token - | tar -xO. Your providers, models, keys and history live in the antirion-data volume, so they survive a container restart.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/xiryn-open-source-personal-agent-hands-on-tutorial/">Your own AI personal agent, on your own machine: a hands-on guide to Xiryn</a></li><li><a href="/articles/ifixai-audit-ai-agent-120-seconds-tutorial/">Audit your AI agent in two minutes: a hands-on guide to iFixAi</a></li><li><a href="/articles/polystra-large-ai-models-own-pc-hands-on-tutorial/">Run huge open models on your own PC: a hands-on guide to PolyStrata</a></li><li><a href="/articles/frametell-ai-explainer-videos-director-agent-tutorial/">Turn one sentence into an explainer video: a hands-on guide to Frametell’s director agent</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
