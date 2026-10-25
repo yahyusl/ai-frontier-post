@@ -115,6 +115,7 @@ def fetch_tbscience():
 HLE_NAMES = {
     "GPT 6 Astra": "GPT-6 Astra",
     "Fable 5.1 (xhigh)": "Claude Fable 5.1",
+    "Sonnet 5.5 (xhigh)": "Claude Sonnet 5.5",
     "gemini-3.1-pro-preview (thinking high)": "Gemini 3.1 Pro Preview",
     "Gemini 3.8 Flash": "Gemini 3.8 Flash",
     "gpt-5.4-pro-2026-03-05": "GPT-5.4 Pro",
