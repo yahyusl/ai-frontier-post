@@ -206,36 +206,41 @@ def fetch_frontiercode():
     return [(n, o, s) for _, n, o, s in rows[:10]]
 
 
-# ------------------------------------------------- AutomationBench (GH README)
+# ------------------------------------------------- AutomationBench (live board)
+# NOTE (2026-10-25): the GitHub README table is STALE — frozen at the Oct 1
+# snapshot (Opus 5 / Kimi K3 era). The live board is zapier.com/benchmarks,
+# which lists runs per effort variant; take best-per-model from its table.
 AB_ORGS = {
-    "Claude Opus 5": "Anthropic",
-    "Kimi K3": "Moonshot AI",
-    "Claude Fable 5": "Anthropic",
-    "GPT-5.6 Sol": "OpenAI",
-    "Gemini 3.6 Flash": "Google",
-    "Claude Opus 4.8": "Anthropic",
-    "Gemini 3.5 Flash": "Google",
-    "GPT-5.6 Terra": "OpenAI",
-    "Claude Sonnet 5": "Anthropic",
-    "GLM 5.2": "Z AI",
+    "Gemini 4 Argon": "Google",
+    "Claude Sonnet 5.5": "Anthropic",
+    "Claude Opus 5.5": "Anthropic",
+    "Claude Haiku 5.5": "Anthropic",
+    "GPT-6 Astra": "OpenAI",
 }
 
 
 def fetch_automationbench():
-    md = http_get(
-        "https://raw.githubusercontent.com/zapier/AutomationBench/main/README.md"
-    ).decode("utf-8", "replace")
-    rows = []
-    for m in re.finditer(r"\|\s*([^|]+?)\s*\|\s*(?:max|high|medium|low)\s*\|\s*([0-9.]+)%\s*\|", md):
-        name, score = m.group(1).strip(), round(float(m.group(2)), 1)
+    html = http_get("https://zapier.com/benchmarks").decode("utf-8", "replace")
+    best = {}
+    n_runs = 0
+    for block in re.findall(r'<div class="abp-row"[^>]*>(.*?)</div>\s*</div>', html, re.S):
+        txt = re.sub(r"<[^>]+>", " ", block)
+        txt = re.sub(r"\s+", " ", txt).strip()
+        # Run rows start with a rank number; category rows ("Sales ...") don't.
+        m = re.match(r"(\d+)\s+(.+?)\s+\((?:[^)]*,\s*)?(High|Medium|Max|XHigh|Low)\)\s+([0-9.]+)%", txt)
+        if not m:
+            continue
+        n_runs += 1
+        name, score = m.group(2).strip(), round(float(m.group(4)), 1)
         org = AB_ORGS.get(name)
         if org is None:
             raise RuntimeError(f"AutomationBench: unknown org for model '{name}' — update AB_ORGS")
-        rows.append((name, org, score))
-    rows.sort(key=lambda r: -r[2])
-    if len(rows) < 8:
-        raise RuntimeError(f"AutomationBench README yielded only {len(rows)} rows")
-    return rows[:10]
+        if name not in best or score > best[name][1]:
+            best[name] = (org, score)
+    rows = sorted(best.items(), key=lambda kv: -kv[1][1])
+    if n_runs < 6 or len(rows) < 3:
+        raise RuntimeError(f"AutomationBench live board yielded only {n_runs} runs / {len(rows)} models")
+    return [(m, o, s) for m, (o, s) in rows[:10]]
 
 
 FETCHERS = {
