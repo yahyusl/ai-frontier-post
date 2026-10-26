@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Give your chatbot a memory that outlives the chat: hands-on with MemT-1.0</title>
+<meta name="description" content="MemT-1.0 (MemTensor/MemT-1.0, 416 GitHub stars) builds memory into the model itself: a Native Memory Block that stores conversation in a constant-size latent state instead of a growing transcript. This guide serves the 36B-parameter Nano model with SGLang on two GPUs, commits a fact to memory, clears the transcript, and gets the fact back — then saves and restores the memory as a snapshot file.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/memt-1-0-memory-native-model-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Give your chatbot a memory that outlives the chat: hands-on with MemT-1.0">
+<meta property="og:description" content="MemT-1.0 (MemTensor/MemT-1.0, 416 GitHub stars) builds memory into the model itself: a Native Memory Block that stores conversation in a constant-size latent state instead of a growing transcript. This guide serves the 36B-parameter Nano model with SGLang on two GPUs, commits a fact to memory, clears the transcript, and gets the fact back — then saves and restores the memory as a snapshot file.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/memt-1-0-memory-native-model-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/memt-1-0-memory-native-model-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Give your chatbot a memory that outlives the chat: hands-on with MemT-1.0">
+<meta name="twitter:description" content="MemT-1.0 (MemTensor/MemT-1.0, 416 GitHub stars) builds memory into the model itself: a Native Memory Block that stores conversation in a constant-size latent state instead of a growing transcript. This guide serves the 36B-parameter Nano model with SGLang on two GPUs, commits a fact to memory, clears the transcript, and gets the fact back — then saves and restores the memory as a snapshot file.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/memt-1-0-memory-native-model-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Give your chatbot a memory that outlives the chat: hands-on with MemT-1.0", "description": "MemT-1.0 (MemTensor/MemT-1.0, 416 GitHub stars) builds memory into the model itself: a Native Memory Block that stores conversation in a constant-size latent state instead of a growing transcript. This guide serves the 36B-parameter Nano model with SGLang on two GPUs, commits a fact to memory, clears the transcript, and gets the fact back \u2014 then saves and restores the memory as a snapshot file.", "datePublished": "2026-10-26", "author": {"@type": "Person", "name": "Marcus Doyle"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Give your chatbot a memory that outlives the chat: hands-on with MemT-1.0", "description": "MemT-1.0 (MemTensor/MemT-1.0, 416 GitHub stars) builds memory into the model itself: a Native Memory Block that stores conversation in a constant-size latent state instead of a growing transcript. This guide serves the 36B-parameter Nano model with SGLang on two GPUs, commits a fact to memory, clears the transcript, and gets the fact back \u2014 then saves and restores the memory as a snapshot file.", "step": [{"@type": "HowToStep", "name": "Check your hardware", "text": "Confirm a Linux machine with NVIDIA CUDA, Python 3.11 or newer, and two GPUs for the Nano model."}, {"@type": "HowToStep", "name": "Install the server and client", "text": "Install the memt-sglang server and client packages from the repository's inference directory."}, {"@type": "HowToStep", "name": "Download the Nano checkpoint", "text": "Fetch the MemT-1.0-Nano weights and tokenizer assets from Hugging Face."}, {"@type": "HowToStep", "name": "Start the SGLang server", "text": "Launch the Nano model on port 30000 with snapshots stored in the local memt-state directory."}, {"@type": "HowToStep", "name": "Commit a fact to memory", "text": "Chat with the model, then save a turn to latent memory and clear its plaintext transcript."}, {"@type": "HowToStep", "name": "Save, restore, and verify", "text": "Save the memory as a snapshot, restore it in a fresh session with an empty transcript, and recall the fact."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need eight GPUs to try MemT-1.0?", "acceptedAnswer": {"@type": "Answer", "text": "No. The Nano model, built on the Qwen3.6-35B-A3B backbone, serves on two GPUs; only the larger Flash model, built on DeepSeek-V4-Flash, needs eight."}}, {"@type": "Question", "name": "How is this different from just keeping the chat transcript?", "acceptedAnswer": {"@type": "Answer", "text": "A transcript grows with every turn and must be re-read in full. MemT-1.0 stores the conversation in a constant-size latent memory state, which the project says cuts storage about 66-fold versus a full-context KV cache at 128K history \u2014 and the transcript itself can be cleared."}}, {"@type": "Question", "name": "Can I use MemT-1.0 in a commercial product?", "acceptedAnswer": {"@type": "Answer", "text": "Not under the repository's default terms: the code is under the PolyForm Noncommercial License 1.0.0, which does not permit commercial use. Contact the authors for a commercial licence."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Give your chatbot a memory that outlives the chat: hands-on with MemT-1.0</h1>
+<p class="lede">Every chatbot forgets: close the session and the conversation is gone, or it comes back only as a transcript the model must re-read in full. MemT-1.0 takes a different route — memory lives inside the model as a compact latent state, so a fact you committed last week can be recalled without the original words. Here is how to run it yourself, and how to prove the memory is real.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-26 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MemT-1.0 stores conversation in the model itself, as a constant-size latent memory, instead of a transcript that grows forever. Serve the Nano model with SGLang, commit a fact with <code>enable_memory=True</code>, clear the transcript — and the model still recalls the fact, or restores it later from a snapshot file.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>Who: MemTensor, the team behind the MemT-1.0 memory foundation models.</li><li>What: MemT-1.0, a model family whose Native Memory Block keeps a dynamic local memory and a trainable hyper memory alongside backbone attention.</li><li>When: the repository was created on 19 October 2026 and had 416 GitHub stars at the time of writing.</li><li>Nano: 36B total parameters, 3B activated, 451M trainable memory parameters, 10M dynamic memory state — served on 2 GPUs.</li><li>Flash: 288B total parameters, 17B activated, 3.61B trainable memory parameters — served on 8 GPUs.</li><li>Storage: the persistent memory state stays constant in size, about 66× smaller than a full-context KV cache at 128K history length.</li><li>Serving: SGLang 0.5.16 on Linux with NVIDIA CUDA and Python 3.11 or newer; the Nano server listens on port 30000 and stores snapshots in ./memt-state.</li><li>Licence: repository software under the PolyForm Noncommercial License 1.0.0 — commercial use is not permitted by default.</li></ul>
+
+<h2>Why this matters</h2>
+<p>Today's chatbots have two bad options for remembering you. Either they keep the whole transcript and pay for it on every reply, or they summarise it into text and lose the detail. MemT-1.0 is a research attempt at a third option: memory as part of the weights' working state. A <b>Local Memory Block</b> maintains a dynamic memory matrix that evolves across turns, and a <b>Hyper Memory Block</b> adds trainable query, key and value projections plus erase, write and forget gates. During generation, memory attention reads that state and adds it to the backbone attention output. At the end of a turn, the state updates — and the plaintext can go away.</p>
+<p>The honest caveat comes from the project itself: across 11 memory benchmarks, the Flash and Nano models rank first and second among the <i>evaluated parametric-memory methods</i>, but strong textual-memory systems remain ahead overall, especially on long histories that need detailed evidence retrieval. This is a promising direction, not a solved problem. That is exactly why it is worth running: you can measure the difference yourself instead of taking anyone's word for it.</p>
+
+<h2>What you'll need</h2>
+<ul>
+<li>A Linux server with NVIDIA CUDA and Python 3.11 or newer — this is a server deployment, not a laptop demo</li>
+<li>Two GPUs for MemT-1.0-Nano (eight for the larger Flash model)</li>
+<li>Enough disk for the Nano checkpoint: a 36B-parameter model in BF16, downloaded from Hugging Face</li>
+<li><code>uv</code> for the installs below, as the project's own instructions use it</li>
+<li>About an hour, most of it download and first-load time</li>
+</ul>
+
+<h2>1. Check your hardware</h2>
+<p>Nano's backbone is Qwen3.6-35B-A3B: 36B parameters in total, 3B activated per token. The project's example deployment runs it with tensor parallelism 2 across two GPUs, and the launcher defaults to port 30000. Flash, built on DeepSeek-V4-Flash at 288B total parameters, needs eight GPUs and is a different afternoon. Start with Nano.</p>
+<pre><code>nvidia-smi
+python3 --version  # 3.11 or newer</code></pre>
+
+<h2>2. Install the server and client</h2>
+<p>Clone the repository and install from its <code>inference</code> directory. The <code>server</code> extra pins PyTorch 2.11.0, SGLang 0.5.16, Transformers 5.12.1 and the matching kernels; the <code>client</code> extra skips PyTorch, so install it in a second environment if your client runs on a different machine.</p>
+<pre><code>git clone https://github.com/MemTensor/MemT-1.0.git
+cd MemT-1.0/inference
+uv pip install '.[server]'</code></pre>
+<p>For a client-only machine, from the same directory:</p>
+<pre><code>uv pip install '.[client]'</code></pre>
+
+<h2>3. Download the Nano checkpoint</h2>
+<p>Weights and tokenizer assets live on Hugging Face as <code>MemTensor/MemT-1.0-Nano</code>. Download the complete checkpoint — matching BF16 safetensors, configuration and tokenizer — into a local directory. The rest of this guide calls that directory <code>/models/MemT-1.0-Nano</code>; substitute your real path everywhere it appears.</p>
+<pre><code>huggingface-cli download MemTensor/MemT-1.0-Nano --local-dir /models/MemT-1.0-Nano</code></pre>
+
+<h2>4. Start the SGLang server</h2>
+<p>The repository ships a launcher script per model. Nano's sets two GPUs, tensor parallelism 2, and a static memory fraction of 0.60, and stores memory snapshots in <code>./memt-state</code>:</p>
+<pre><code>sh start_memt_nano.sh /models/MemT-1.0-Nano</code></pre>
+<p>Wait for the server to report ready on <code>http://127.0.0.1:30000</code>. First load takes a while: 36B parameters of BF16 weights plus the memory machinery. Keep this terminal running and open a second one for the client. The project is upfront that these scripts are one runnable starting configuration, not deeply optimised — adjust parallelism and token budgets for your hardware once it works.</p>
+<figure class="inline-art"><img src="img2.webp" alt="A server with two GPUs and a terminal showing a chat session recalling an earlier fact after the transcript was cleared" loading="lazy"><figcaption>Serving MemT-1.0-Nano: two GPUs, one SGLang server on port 30000, and a client that talks to it. Illustration: AI Frontier Post.</figcaption></figure>
+
+<h2>5. Commit a fact to memory</h2>
+<p>Now the part that makes this more than another model server. Connect with the <code>memt_sglang</code> client, using the <i>same</i> local checkpoint directory for the tokenizer, and tell the model something specific:</p>
+<pre><code>import os
+from transformers import AutoTokenizer
+from memt_sglang.client import MemTSession, NativeClient, load_chat_format
+
+model_path = "/models/MemT-1.0-Nano"
+tokenizer = AutoTokenizer.from_pretrained(
+    model_path,
+    local_files_only=True,
+    trust_remote_code=False,
+)
+chat_format, parser = load_chat_format(
+    model_path,
+    tokenizer=tokenizer,
+    chat_template_kwargs={"enable_thinking": False},
+)
+client = NativeClient(
+    "http://127.0.0.1:30000",
+    api_key=os.environ.get("MEMT_API_KEY"),
+)</code></pre>
+<p>Then run a session where the second turn is saved to memory and its plaintext cleared:</p>
+<pre><code>session = MemTSession(client, chat_format, parser)
+
+answer = session.chat(
+    "My team is building a delivery-routing app called Atlas, "
+    "and we ship every Friday."
+)
+print(answer)
+
+# Save this turn to latent local memory and clear its plaintext context.
+answer = session.chat(
+    "What day does the Atlas team ship?",
+    enable_memory=True,
+)
+print(answer)</code></pre>
+<p>The key move is <code>enable_memory=True</code>: after the reply completes, the turn is committed to latent local memory and its plaintext conversation context is cleared. Memory reading is on by default, so committed memory is used automatically on later turns. Ask the question again in a new turn — without re-stating the fact — and the answer should come from memory, not from a transcript the model is re-reading, because there is no transcript left to re-read.</p>
+
+<h2>6. Save, restore, and verify</h2>
+<p>A memory you cannot carry across sessions is a party trick. Save it, close the session, and restore it into a fresh one:</p>
+<pre><code># Save local memory, including any unsaved conversation turns.
+snapshot = session.save_state("atlas_memory.safetensors")
+session.close()
+
+# Restore memory without the previous conversation transcript.
+with MemTSession(client, chat_format, parser, state=snapshot["path"]) as restored:
+    print(len(restored.messages))
+    # 0 — the transcript is empty, by design
+
+    answer = restored.chat("What is the Atlas team building, and when do they ship?")
+    print(answer)</code></pre>
+<p>That <code>0</code> is the whole test. If the restored session answers correctly with zero messages in its transcript, the knowledge came from the saved memory state — a file in the server's <code>./memt-state</code> directory — and not from context you forgot to clear. If it cannot answer, check that the turn was actually committed with <code>enable_memory=True</code> before the save, and that you passed the snapshot's <code>path</code> back as <code>state</code>. A standard chat session, by contrast, is just <code>set_memory_read(False)</code> with <code>enable_memory=False</code>: previous turns stay in the transcript, and nothing is remembered once it scrolls away.</p>
+<figure class="inline-art"><img src="img3.webp" alt="A glowing memory snapshot file being handed from one chat session to a fresh empty session that then answers a question about the past" loading="lazy"><figcaption>Snapshots make memory portable: save the state, restore it into a session with an empty transcript, and the knowledge survives. Illustration: AI Frontier Post.</figcaption></figure>
+
+<h2>What you built</h2>
+<p>A chatbot whose memory is a file, not a scrollback buffer: a SGLang server running MemT-1.0-Nano, a client that commits turns to latent memory, and a snapshot you can restore into a session with zero transcript messages. The same pattern extends to the project's other headline use — experience-guided coding agents, where procedural experience from past tasks is retrieved from native memory during a new task without pasting that experience into the context.</p>
+
+<h2>Honest limitations</h2>
+<ul>
+<li><b>It is research software on serious hardware.</b> Two GPUs for Nano, eight for Flash, and launcher scripts the authors say have not been deeply optimised. Do not expect a one-click install.</li>
+<li><b>Parametric memory is not always better.</b> The project's own evaluation says textual-memory systems still win overall, particularly where long histories need detailed evidence retrieval. Test it on your workload before trusting it.</li>
+<li><b>The licence blocks commercial use by default.</b> Repository software is under the PolyForm Noncommercial License 1.0.0; the paper is CC BY-NC-SA 4.0. Anything commercial needs a conversation with the authors first.</li>
+<li><b>Illustrative outputs.</b> The example answers in this guide follow the project's documented API and the shape of its own examples; your model's exact wording will differ run to run.</li>
+</ul>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need eight GPUs to try MemT-1.0?</h3><p>No. The Nano model, built on the Qwen3.6-35B-A3B backbone, serves on two GPUs; only the larger Flash model, built on DeepSeek-V4-Flash, needs eight.</p><h3>How is this different from just keeping the chat transcript?</h3><p>A transcript grows with every turn and must be re-read in full. MemT-1.0 stores the conversation in a constant-size latent memory state, which the project says cuts storage about 66-fold versus a full-context KV cache at 128K history — and the transcript itself can be cleared.</p><h3>Can I use MemT-1.0 in a commercial product?</h3><p>Not under the repository&#x27;s default terms: the code is under the PolyForm Noncommercial License 1.0.0, which does not permit commercial use. Contact the authors for a commercial licence.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/polystra-large-ai-models-own-pc-hands-on-tutorial/">Run huge open models on your own PC: a hands-on guide to PolyStrata</a></li><li><a href="/articles/frametell-ai-explainer-videos-director-agent-tutorial/">Turn one sentence into an explainer video: a hands-on guide to Frametell&#x27;s director agent</a></li><li><a href="/articles/fieldcraft-claude-finite-element-analysis-tutorial/">Let Claude run a finite-element analysis: a hands-on guide to FieldCraft</a></li><li><a href="/articles/tokenbar-all-ai-quotas-one-glance-tutorial/">Every AI quota in one glance: a hands-on guide to TokenBar</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
