@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Lock your AI agent in a sandbox it can&#x27;t talk its way out of: a hands-on guide to NVIDIA OpenShell</title>
+<meta name="description" content="NVIDIA OpenShell (NVIDIA/OpenShell, Apache-2.0, 19,936 GitHub stars) is a Rust runtime that puts each AI agent in a kernel-enforced sandbox with a declarative policy: no network, no files, no credentials unless the policy says so. This guide installs it, watches default-deny block a request, then opens exactly one read-only door to the GitHub API.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/nvidia-openshell-agent-sandbox-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Lock your AI agent in a sandbox it can&#x27;t talk its way out of: a hands-on guide to NVIDIA OpenShell">
+<meta property="og:description" content="NVIDIA OpenShell (NVIDIA/OpenShell, Apache-2.0, 19,936 GitHub stars) is a Rust runtime that puts each AI agent in a kernel-enforced sandbox with a declarative policy: no network, no files, no credentials unless the policy says so. This guide installs it, watches default-deny block a request, then opens exactly one read-only door to the GitHub API.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/nvidia-openshell-agent-sandbox-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/nvidia-openshell-agent-sandbox-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lock your AI agent in a sandbox it can&#x27;t talk its way out of: a hands-on guide to NVIDIA OpenShell">
+<meta name="twitter:description" content="NVIDIA OpenShell (NVIDIA/OpenShell, Apache-2.0, 19,936 GitHub stars) is a Rust runtime that puts each AI agent in a kernel-enforced sandbox with a declarative policy: no network, no files, no credentials unless the policy says so. This guide installs it, watches default-deny block a request, then opens exactly one read-only door to the GitHub API.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/nvidia-openshell-agent-sandbox-tutorial/cover.webp">
+<script type="application/ld+json">{
+ "@context": "https://schema.org",
+ "@type": "NewsArticle",
+ "headline": "Lock your AI agent in a sandbox it can't talk its way out of: a hands-on guide to NVIDIA OpenShell",
+ "description": "NVIDIA OpenShell (NVIDIA/OpenShell, Apache-2.0, 19,936 GitHub stars) is a Rust runtime that puts each AI agent in a kernel-enforced sandbox with a declarative policy: no network, no files, no credentials unless the policy says so. This guide installs it, watches default-deny block a request, then opens exactly one read-only door to the GitHub API.",
+ "image": "https://aifrontierpost.com/articles/nvidia-openshell-agent-sandbox-tutorial/cover.webp",
+ "datePublished": "2026-10-26",
+ "dateModified": "2026-10-26",
+ "author": {
+  "@type": "Person",
+  "name": "Marcus Doyle"
+ },
+ "publisher": {
+  "@type": "Organization",
+  "name": "AI Frontier Post"
+ },
+ "mainEntityOfPage": "https://aifrontierpost.com/articles/nvidia-openshell-agent-sandbox-tutorial/"
+}</script>
+<script type="application/ld+json">{
+ "@context": "https://schema.org",
+ "@type": "HowTo",
+ "name": "Lock your AI agent in a sandbox it can't talk its way out of: a hands-on guide to NVIDIA OpenShell",
+ "description": "NVIDIA OpenShell (NVIDIA/OpenShell, Apache-2.0, 19,936 GitHub stars) is a Rust runtime that puts each AI agent in a kernel-enforced sandbox with a declarative policy: no network, no files, no credentials unless the policy says so. This guide installs it, watches default-deny block a request, then opens exactly one read-only door to the GitHub API.",
+ "step": [
+  {
+   "@type": "HowToStep",
+   "name": "Install the CLI and start the gateway",
+   "text": "Install the OpenShell CLI with the official installer and confirm the local gateway is up."
+  },
+  {
+   "@type": "HowToStep",
+   "name": "Create the demo sandbox",
+   "text": "Create a sandbox named demo without auto-providers, since this walkthrough uses curl instead of an agent."
+  },
+  {
+   "@type": "HowToStep",
+   "name": "Watch default-deny block a request",
+   "text": "Try the unauthenticated GitHub zen endpoint from inside the sandbox and watch the proxy refuse it."
+  },
+  {
+   "@type": "HowToStep",
+   "name": "Read the deny log",
+   "text": "Check the sandbox logs on the host to confirm the denial and its reason."
+  },
+  {
+   "@type": "HowToStep",
+   "name": "Open one read-only door to the GitHub API",
+   "text": "Apply a policy rule that lets only curl reach api.github.com, read-only, under enforcement, without restarting anything."
+  },
+  {
+   "@type": "HowToStep",
+   "name": "Prove reads work and writes don't",
+   "text": "Retry the GET to confirm it passes, then send a POST and confirm it is refused with a 403 policy_denied."
+  },
+  {
+   "@type": "HowToStep",
+   "name": "Clean up and run a real agent next",
+   "text": "Delete the demo sandbox, then follow the Run Your First Agent guide or install the OpenShell skills for a real agent."
+  }
+ ]
+}</script>
+<script type="application/ld+json">{
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "Do I need Docker to run OpenShell?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "You need Linux, macOS on Apple Silicon, or Windows with WSL 2 (experimental), plus Docker, Podman or host virtualization running. The sandbox itself is a minimal Ubuntu image by default, and the installer sets up the CLI and a local gateway."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Does the agent ever see my API keys?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. OpenShell's rule is that agents never see real credentials: it adds them only to requests bound for approved endpoints, and deleting a sandbox purges any injected credentials. Before a policy change is applied, formal verification flags risky new access — such as reaching a new host with credentials — so those changes wait for human review."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "What happens if I close the sandbox shell?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Exiting the sandbox shell stops the sandbox's main process, and with the default restart policy the sandbox is not reconnectable afterwards. Keep the sandbox shell open for the whole walkthrough, and add --no-keep at creation time if you want the sandbox deleted automatically when you exit."
+   }
+  }
+ ]
+}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Lock your AI agent in a sandbox it can&#x27;t talk its way out of: a hands-on guide to NVIDIA OpenShell</h1>
+<p class="lede">Your coding agent can read files, install packages, call APIs and spend your API keys — which is exactly why giving it your whole machine is a bad idea. NVIDIA OpenShell puts each agent in its own sandbox, governed by a policy you write, and enforced at the kernel: no network, no files, no credentials unless the policy explicitly allows them. In under an hour you will install it, watch it block a request by default, and open exactly one read-only door.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · 2026-10-26 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> NVIDIA OpenShell is a Rust runtime, licensed Apache-2.0, that runs each AI agent in a kernel-enforced sandbox governed by a declarative policy. This guide installs the CLI, creates a demo sandbox, watches the default-deny policy block a GitHub API request, then applies one read-only rule for curl — and proves the rule works by showing a GET succeed and a POST get a 403 policy_denied, before deleting the sandbox.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>Who: <b>NVIDIA</b> — OpenShell is its open-source runtime for autonomous AI agents.</li><li>What: <b>OpenShell</b>, a sandbox runtime that enforces a declarative policy at the kernel on every file access, system call and network connection.</li><li>Language and licence: written in <b>Rust</b>, licensed <b>Apache-2.0</b>.</li><li>Popularity: <b>19,936 GitHub stars and 1,972 forks</b> for NVIDIA/OpenShell, fetched October 26, 2026.</li><li>Platforms: <b>Linux, macOS on Apple Silicon, and Windows with WSL 2 (experimental)</b>, plus Docker, Podman or host virtualization.</li><li>Default posture: <b>default-deny</b> — with no network policy, every outbound connection is blocked; the read-only rule in this guide permits only GET, HEAD and OPTIONS for one binary to one host.</li><li>Credentials: agents <b>never see real credentials</b> — OpenShell adds them only to requests bound for approved endpoints.</li><li>Telemetry: OpenShell collects anonymous telemetry by default; disable it with <b>OPENSHELL_TELEMETRY_ENABLED=false</b> on the gateway.</li></ul>
+
+<p>An autonomous agent is only useful if it can <i>do</i> things: read your files, run commands, call APIs, spend credentials. That is also what makes it dangerous. A prompt injection, a poisoned dependency or one careless instruction can turn "fix the bug" into "exfiltrate the keys". The usual answer — run the agent in a container and hope — is a wrapper the agent can often talk its way around. OpenShell's answer is different: the policy is enforced by the kernel, not by asking the agent nicely.</p>
+
+<p>OpenShell is NVIDIA's open-source runtime for fleets of autonomous AI agents. It has three pieces: a <b>gateway</b> (the control plane), a <b>supervisor</b>, and <b>sandboxes</b> — isolated environments, minimal Ubuntu by default, where each agent runs. You declare what an agent can touch in a policy, and OpenShell enforces it on every file access, system call and network connection. Before a policy change is applied, formal verification flags risky new access it would grant — reaching a new host with credentials, calling a new API method — so those changes wait for human review. And agents never see real credentials: OpenShell adds them only to requests bound for approved endpoints.</p>
+
+<p>What follows is NVIDIA's own first-network-policy walkthrough, rebuilt end to end: install, default-deny, one read-only rule, proof in both directions, cleanup. You need no API key and no paid model — the whole demo runs against GitHub's unauthenticated zen endpoint.</p>
+
+<h2>What you'll need</h2>
+
+<p><b>Linux, macOS on Apple Silicon, or Windows with WSL 2 (experimental)</b> — those are the platforms the README lists — plus <b>Docker, Podman or host virtualization</b> running. You will use two terminals: one inside the sandbox, one on your host. Keep the sandbox shell open for the whole walkthrough: exiting it stops the sandbox's main process, and with the default restart policy the sandbox is not reconnectable afterwards.</p>
+
+<h2>A sandbox with one door</h2>
+
+<h3>1. Install the CLI and start the gateway</h3>
+
+<p>Install the binary with the official installer. As with any <code>curl | sh</code> installer, read the script first on a machine you care about:</p>
+
+<pre><code>curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh</code></pre>
+
+<p>The installer sets up the <code>openshell</code> CLI and a local gateway. The default sandbox image is minimal Ubuntu with no agent installed — you bring your own agent later. That emptiness is the point: the first thing you test is what the box refuses to do.</p>
+
+<h3>2. Create the demo sandbox</h3>
+
+<p>Create a sandbox called <code>demo</code>. The <code>--no-auto-providers</code> flag skips the provider setup prompt, since this walkthrough uses <code>curl</code> instead of an AI agent:</p>
+
+<pre><code>openshell sandbox create --name demo --no-auto-providers</code></pre>
+
+<p>You land in an interactive shell inside the sandbox, with a prompt like <code>sandbox@demo:~$</code>. Leave this shell open and open a second terminal on your host for the log and policy commands, which run outside the sandbox.</p>
+
+<h3>3. Watch default-deny block a request</h3>
+
+<p>From inside the sandbox, try GitHub's zen endpoint — a lightweight, unauthenticated endpoint that returns a short aphorism, chosen here precisely because it needs no token:</p>
+
+<pre><code>curl -s https://api.github.com/zen</code></pre>
+
+<p>The request fails. By default, all outbound network traffic is denied: the sandbox proxy intercepts the HTTPS CONNECT to <code>api.github.com:443</code> and rejects it because no network policy authorizes <code>curl</code> to reach that host:</p>
+
+<pre><code>curl: (56) Received HTTP code 403 from proxy after CONNECT</code></pre>
+
+<p>Nothing has been configured yet, and that is the test passing. A sandbox that needs a rule for its very first request is a sandbox whose default is safe.</p>
+
+<figure class="inline-art">
+<img src="img2.webp" alt="A terminal window showing a network request stopped at a security gate, illustrating OpenShell's default-deny sandbox" loading="lazy">
+<figcaption>Default-deny in action: with no network policy, the sandbox proxy refuses the connection before it leaves. Illustration: AI Frontier Post.</figcaption>
+</figure>
+
+<h3>4. Read the deny log</h3>
+
+<p>Switch to your host terminal and query the sandbox logs for the last five minutes:</p>
+
+<pre><code>openshell logs demo --since 5m --source sandbox</code></pre>
+
+<p>You see a line like this (the timestamp will differ):</p>
+
+<pre><code>[1775014132.690] [sandbox] [OCSF ] [ocsf] NET:OPEN [MED] DENIED /usr/bin/curl(64) -&gt; api.github.com:443 [policy:- engine:opa] [reason:network connections not allowed by policy]</code></pre>
+
+<p>Every denied connection is logged with the destination, the binary that attempted it and the reason. Nothing gets out silently — and that audit trail is what makes the next step safe to reason about.</p>
+
+<h3>5. Open one read-only door to the GitHub API</h3>
+
+<p>Now add a network rule that grants <code>curl</code> read-only access to the GitHub API. Run this from your host terminal:</p>
+
+<pre><code>openshell policy update demo \
+  --rule-name github_api \
+  --binary /usr/bin/curl \
+  --add-endpoint api.github.com:443:read-only:rest:enforce \
+  --wait</code></pre>
+
+<p>The endpoint specification lists host, port, access preset, protocol and enforcement mode. <code>rest</code> tells the proxy to terminate TLS and inspect each HTTP request; <code>read-only</code> permits <code>GET</code>, <code>HEAD</code> and <code>OPTIONS</code>; <code>enforce</code> blocks everything else. <code>--wait</code> waits until the sandbox reports a result for the new policy revision. No restart is required: network rules reload while the sandbox runs. The rule is equivalent to this YAML in the policy's <code>network_policies</code> section:</p>
+
+<pre><code>network_policies:
+  github_api:
+    endpoints:
+      - host: api.github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+    binaries:
+      - path: /usr/bin/curl</code></pre>
+
+<p>Notice how narrow this is: one host, one port, one binary, three HTTP methods. To scope a rule to an agent instead of <code>curl</code>, you would use the agent's binary — for example <code>/usr/local/bin/claude</code> — in the same position. That per-binary binding is the whole trick: a rule never becomes a blanket permission for everything in the box.</p>
+
+<h3>6. Prove reads work and writes don't</h3>
+
+<p>Back in the sandbox shell, retry the same request:</p>
+
+<pre><code>curl -s https://api.github.com/zen</code></pre>
+
+<p>This time it works: the <code>read-only</code> preset lets the GET through, and you get a one-line aphorism back. Now test the other side of the rule — a write:</p>
+
+<pre><code>curl -s -X POST https://api.github.com/repos/octocat/hello-world/issues \
+    -H "Content-Type: application/json" \
+    -d '{"title":"oops"}'</code></pre>
+
+<p>The proxy returns a <code>403</code> with a JSON body including fields like these:</p>
+
+<pre><code>{...,"error":"policy_denied",...,"policy":"github_api",...,"rule":"POST /repos/octocat/hello-world/issues",...}</code></pre>
+
+<p>The connection itself was allowed — <code>api.github.com</code> is on the list — but the proxy inspected the HTTP method and refused it, because POST is not in the <code>read-only</code> preset. An agent with this policy can read code from GitHub but cannot create issues, push commits or modify anything. Check the host logs once more and you will find the request-level denial recorded separately, with the exact method and path that was rejected. If you want to build a policy iteratively instead, set <code>enforcement: audit</code> rather than <code>enforce</code>: violations are logged without blocking, and you switch to enforce when the rules are right.</p>
+
+<figure class="inline-art">
+<img src="img3.webp" alt="A checklist approving one read-only door while other doors stay locked, illustrating an OpenShell policy rule" loading="lazy">
+<figcaption>One door, read-only: the policy names the host, the binary and the methods — everything else stays shut. Illustration: AI Frontier Post.</figcaption>
+</figure>
+
+<h3>7. Clean up and run a real agent next</h3>
+
+<p>Delete the sandbox to free resources. This stops all processes and purges any injected credentials:</p>
+
+<pre><code>openshell sandbox delete demo</code></pre>
+
+<p>From here, the real test is a real agent. NVIDIA's <i>Run Your First Agent</i> guide runs OpenCode against a free OpenRouter model inside a sandbox and shows how to approve new access as the agent asks for it — the policy loop you just rehearsed with <code>curl</code>, with a model doing the asking. If your coding agent supports skills, install OpenShell's public skills, which teach the agent to drive the CLI, write policies and debug gateways:</p>
+
+<pre><code>npx skills add NVIDIA/OpenShell</code></pre>
+
+<p>For fleet-sized deployments the gateway also deploys on Kubernetes with Helm, with the caveat that your CNI must enforce <code>NetworkPolicy</code>. But start with one sandbox, one rule and one denied POST. That is the whole security model, at a size you can hold in your head.</p>
+
+<h2>Honest limitations</h2>
+
+<p>OpenShell is at version 0.1.x: the README advertises a stable release cadence, but this is early software, not a finished appliance — expect rough edges and read the support matrix before depending on it. Windows support through WSL 2 is explicitly experimental, and the default sandbox ships with no agent at all, so the first-agent walkthrough is a separate step, not something the installer hands you. The policy you write is only as good as its bindings: a rule for <code>curl</code> does nothing for your agent's binary, and a rule that names a host does not vet what the agent does with the data it reads. Telemetry is on by default — anonymous, limited to operational categories and counts, with no sandbox names, prompts, credentials or user content, but on until you switch it off with <code>OPENSHELL_TELEMETRY_ENABLED=false</code> on the gateway. And the audit trail only helps if someone reads it: in production, export the policy events to your SIEM rather than letting them scroll past in a terminal.</p>
+
+<p>None of that diminishes the core idea, which this walkthrough proves in about ten commands: the agent's freedom should be a policy you can read, a log you can audit, and a default of no — not a hope and a container.</p>
+
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need Docker to run OpenShell?</h3><p>You need Linux, macOS on Apple Silicon, or Windows with WSL 2 (experimental), plus Docker, Podman or host virtualization running. The sandbox itself is a minimal Ubuntu image by default, and the installer sets up the CLI and a local gateway.</p><h3>Does the agent ever see my API keys?</h3><p>No. OpenShell&#x27;s rule is that agents never see real credentials: it adds them only to requests bound for approved endpoints, and deleting a sandbox purges any injected credentials. Before a policy change is applied, formal verification flags risky new access — such as reaching a new host with credentials — so those changes wait for human review.</p><h3>What happens if I close the sandbox shell?</h3><p>Exiting the sandbox shell stops the sandbox&#x27;s main process, and with the default restart policy the sandbox is not reconnectable afterwards. Keep the sandbox shell open for the whole walkthrough, and add --no-keep at creation time if you want the sandbox deleted automatically when you exit.</p></section>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/artex-autonomous-ai-pentest-lab-tutorial/">Run an autonomous AI pentest in your own lab: a hands-on guide to ARTEX</a></li><li><a href="/articles/new-term-radar-catch-rising-ai-terms-hands-on-tutorial/">Spot rising AI terms days before keyword tools do: a hands-on guide to new-term-radar</a></li><li><a href="/articles/hermes-official-plugins-hands-on-tutorial/">From bare terminal to agentic workstation: a hands-on guide to Hermes Agent&#x27;s official plugins</a></li><li><a href="/articles/nanomuse-personal-agent-every-device-tutorial/">One AI agent across your phone, desktop and browser: a hands-on guide to nanoMuse</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
