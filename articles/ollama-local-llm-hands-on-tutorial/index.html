@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run open models on your own machine: the complete Ollama hands-on guide</title>
+<meta name="description" content="Ollama turns your own computer into a private AI server: one binary, one command per model, and a local API your apps can call. This guide installs Ollama v0.40.11, runs a real model on CPU, customizes it with a Modelfile, and wires it into code through the REST and OpenAI-compatible APIs — every command run, every output shown.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/ollama-local-llm-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run open models on your own machine: the complete Ollama hands-on guide">
+<meta property="og:description" content="Ollama turns your own computer into a private AI server: one binary, one command per model, and a local API your apps can call. This guide installs Ollama v0.40.11, runs a real model on CPU, customizes it with a Modelfile, and wires it into code through the REST and OpenAI-compatible APIs — every command run, every output shown.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/ollama-local-llm-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/ollama-local-llm-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Run open models on your own machine: the complete Ollama hands-on guide">
+<meta name="twitter:description" content="Ollama turns your own computer into a private AI server: one binary, one command per model, and a local API your apps can call. This guide installs Ollama v0.40.11, runs a real model on CPU, customizes it with a Modelfile, and wires it into code through the REST and OpenAI-compatible APIs — every command run, every output shown.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/ollama-local-llm-hands-on-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run open models on your own machine: the complete Ollama hands-on guide", "description": "Ollama turns your own computer into a private AI server: one binary, one command per model, and a local API your apps can call. This guide installs Ollama v0.40.11, runs a real model on CPU, customizes it with a Modelfile, and wires it into code through the REST and OpenAI-compatible APIs — every command run, every output shown.", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Marcus Doyle"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Run open models on your own machine: the complete Ollama hands-on guide", "description": "Ollama turns your own computer into a private AI server: one binary, one command per model, and a local API your apps can call. This guide installs Ollama v0.40.11, runs a real model on CPU, customizes it with a Modelfile, and wires it into code through the REST and OpenAI-compatible APIs — every command run, every output shown.", "step": [{"@type": "HowToStep", "name": "Install Ollama", "text": "Download the v0.40.11 Linux archive, extract it, and confirm the version."}, {"@type": "HowToStep", "name": "Start the server", "text": "Run ollama serve in the background and confirm the API answers on 127.0.0.1:11434."}, {"@type": "HowToStep", "name": "Run your first model", "text": "Pull qwen3:0.6b and hold a first chat with ollama run."}, {"@type": "HowToStep", "name": "Manage models", "text": "List, inspect, copy, and remove models with list, show, cp, and rm."}, {"@type": "HowToStep", "name": "Customize with a Modelfile", "text": "Derive a named model with a system prompt and parameters, then run it."}, {"@type": "HowToStep", "name": "Call the REST API", "text": "Generate and chat over HTTP with /api/generate and /api/chat."}, {"@type": "HowToStep", "name": "Use the OpenAI-compatible API", "text": "Point an OpenAI-style client at /v1/chat/completions on the same server."}, {"@type": "HowToStep", "name": "Get structured JSON back", "text": "Constrain a reply with a format schema and parse the result."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to run Ollama?", "acceptedAnswer": {"@type": "Answer", "text": "No. This guide runs qwen3:0.6b on CPU alone. A GPU makes larger models fast; without one, stay with small models (0.5B to 3B) and expect a few tokens per second rather than dozens."}}, {"@type": "Question", "name": "How much disk space does Ollama need?", "acceptedAnswer": {"@type": "Answer", "text": "The v0.40.11 Linux archive is about 1.5 GB compressed because it bundles GPU libraries, plus one download per model — qwen3:0.6b is a few hundred megabytes. Budget a few gigabytes for the binary and your first models, and run ollama list to see what you actually hold."}}, {"@type": "Question", "name": "Does my prompt leave my machine?", "acceptedAnswer": {"@type": "Answer", "text": "Not through Ollama itself: the server binds 127.0.0.1 by default, models run locally, and no account is required. The exception is any model you deliberately pull from a remote registry, and any app you build on top that sends data elsewhere — those are your choices, not Ollama's."}}, {"@type": "Question", "name": "Which model should I start with?", "acceptedAnswer": {"@type": "Answer", "text": "A small instruct model such as qwen3:0.6b if your machine is modest, or a 7B–8B instruct model if you have 16 GB of RAM or a GPU. Start small, prove the whole loop works, and only then spend disk and time on a bigger model."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run open models on your own machine: the complete Ollama hands-on guide</h1>
+<p class="lede">Every hosted AI call sends your prompt to someone else's computer, bills you per token, and stops working when the network does. Ollama flips that around: one binary turns your own machine into a private model server, and this guide proves the whole loop — install, chat, customize, and API — on a real model running on CPU alone.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 27, 2026 · 21 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Ollama is a single binary that serves open models on your own machine behind a local API. This guide installs v0.40.11, runs qwen3:0.6b on CPU, customizes it with a Modelfile, and drives it from code through the REST API, the OpenAI-compatible endpoint, and structured JSON output — with every command run and every output shown as the run produced it.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Ollama (ollama/ollama on GitHub).</li><li><b>What:</b> a local model server: download open models, chat with them, and call them from your apps over HTTP, with no account and no per-token bill.</li><li><b>When:</b> version 0.40.11, released 24 October 2026, is the version verified in this guide.</li><li><b>Requirements:</b> Linux, macOS, or Windows; curl and a shell on Linux. No API key, no account, and no GPU for the small model used here.</li><li><b>Licence:</b> MIT.</li><li><b>Verified:</b> Ollama v0.40.11 installed with its checksum checked; qwen3:0.6b (522 MB) pulled and run on CPU; a Modelfile-derived briefbot created with temperature 0.3; REST, OpenAI-compatible, and structured-JSON calls all executed; structured output's first run returned a wild value (2 quadrillion minutes) and its second the correct 20 — shape guaranteed, values not.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/ollama-local-llm-hands-on-tutorial/cover.webp" alt="A laptop running a local chat window beside a small glowing server box" loading="lazy"><figcaption>Your machine is the server. Image: AI Frontier Post.</figcaption></figure>
+<p>There is a specific moment when a hosted model stops being the right tool: the prompt contains something you would rather not send anywhere — a client's data, an unreleased draft, a private codebase — or the task is so small that paying per token and waiting on a network round trip feels absurd. That is the moment local models earn their keep. The catch has always been friction: downloading weights, finding a runner, wiring a server, and then discovering that the chat template is wrong. Ollama exists to remove that friction in one stroke. It is a single binary that downloads models, runs them, and serves them behind a local API, and it has become the default answer to "how do I run a model on my own machine?"</p>
+<p>Why now: the open-model ecosystem has never been easier to enter, and Ollama tracks it closely — version 0.40.11 shipped on 24 October 2026, three days before this guide was written. But ease of entry is a claim, and claims are cheap. This guide tests it the only way that counts: every command below was run against v0.40.11 on an ordinary CPU-only Linux machine with 2 cores and under 8 GB of RAM, and every output quoted is output the run actually produced. If a step behaved differently than the documentation suggested, the article says so.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/ollama-local-llm-hands-on-tutorial/img2.webp" alt="Diagram of a terminal and an app talking to the Ollama server, which runs the model on CPU or GPU and returns a reply" loading="lazy"><figcaption>One server, two ways in: the CLI and the API. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li>A Linux, macOS, or Windows machine. This guide runs on Linux x86-64; the release page carries builds for all three systems, including arm64.</li>
+<li><code>curl</code>, a shell, and <code>tar</code> with zstd support (or the <code>unzstd</code> tool) for the Linux archive used below. macOS and Windows users should take the app installers from the same release page instead.</li>
+<li>No API key, no account, and no GPU. The model in this guide is small enough to run on CPU, and everything happens on <code>127.0.0.1</code>.</li>
+<li>About 30 minutes the first time, most of it downloads: the Linux archive is about 1.5 GB because it bundles GPU libraries, and the first model is a few hundred megabytes more. After that, starting a chat takes seconds.</li>
+<li>About 2 GB of free disk for the binary and the first model, plus whatever room you want for more models later.</li>
+</ul>
+<h2 id="step-1-install">Step 1: Install Ollama</h2>
+<p>Download the release archive for your system from the project's GitHub releases page, along with the release's checksum file, and check the archive before you run anything from it. The hand-verified path used here, for Linux x86-64, is:</p>
+<pre><code class="language-bash">curl -fsSL -o ollama-linux-amd64.tar.zst https://github.com/ollama/ollama/releases/download/v0.40.11/ollama-linux-amd64.tar.zst
+curl -fsSL -o sha256sum.txt https://github.com/ollama/ollama/releases/download/v0.40.11/sha256sum.txt
+sha256sum -c &lt;(grep "ollama-linux-amd64.tar.zst" sha256sum.txt)</code></pre>
+<p>Expected output:</p>
+<pre><code>./ollama-linux-amd64.tar.zst: OK</code></pre>
+<p>The published checksum for this archive is <code>7bedab90dd122661be78798e9f0edf37fccf0cccf2699d2c58ea1a3afdc04b6d</code>. If the check does not say OK, stop: you have a different file than the release, and nothing downstream is trustworthy until that is resolved. Extract it. The archive unpacks to a <code>bin/</code> directory holding the <code>ollama</code> binary and a <code>lib/</code> directory holding its runtime libraries, so keep the two together:</p>
+<pre><code class="language-bash">mkdir -p ~/ollama && tar -I zstd -xf ollama-linux-amd64.tar.zst -C ~/ollama</code></pre>
+<p>If your <code>tar</code> does not know <code>-I zstd</code>, install the <code>zstd</code> package for your distribution and retry; the flag is the only part of this step that depends on your system. Put the binary somewhere on your PATH or use its full path in the commands below — the rest of this guide calls it <code>ollama</code>. If you would rather use the project's one-line installer, it is <code>curl -fsSL https://ollama.com/install.sh | sh</code>, which installs the same release system-wide; this guide uses the direct download because the archive can be checked before anything runs.</p>
+<h2 id="step-2-serve">Step 2: Start the server — and know where it listens</h2>
+<p>Start the server before anything else, because every command after this one talks to a running server; they do not start one for you:</p>
+<pre><code class="language-bash">ollama serve &gt; ~/ollama.log 2&gt;&amp;1 &amp;
+sleep 3
+curl -s http://127.0.0.1:11434/
+ollama --version</code></pre>
+<p>Expected output:</p>
+<pre><code>Ollama is running
+ollama version is 0.40.11</code></pre>
+<p>Two things in that output deserve a pause. First, the server binds <code>127.0.0.1:11434</code> by default, which means it answers only on your own machine — nothing on your network can reach it unless you deliberately set <code>OLLAMA_HOST</code> to a wider address. That default is the whole privacy story in one line: prompts stay local because the listener is local. Second, before the server is running, <code>ollama --version</code> answers with a warning instead of a version ("could not connect to a running Ollama instance" plus the client version); that warning is normal, not an error, and it disappears once the server is up, as above. The JSON API lives under <code>/api/</code>, which you will use in Step 6. Keep the server running in this terminal for the rest of the guide; the <code>ollama</code> commands below connect to it.</p>
+<h2 id="step-3-first-model">Step 3: Pull and run your first model</h2>
+<p>Pick a small model first. This guide uses <code>qwen3:0.6b</code> — a 0.6-billion-parameter instruct model from the Qwen3 family, small enough to run comfortably on CPU and smart enough to hold a real conversation. Download it:</p>
+<pre><code class="language-bash">ollama pull qwen3:0.6b</code></pre>
+<p>The pull downloads one 522 MB layer plus a small manifest, verifies the layer's checksum, and ends with <code>success</code>. The whole download runs at whatever speed your connection allows; on this machine it took a few minutes at roughly 2.5 MB/s. Confirm what you now hold:</p>
+<pre><code class="language-bash">ollama list</code></pre>
+<p>Expected output:</p>
+<pre><code>NAME          ID              SIZE      MODIFIED
+qwen3:0.6b    7df6b6e09427    522 MB    19 seconds ago</code></pre>
+<p>Now talk to it. Passing the prompt on the command line runs it once and exits, which is the form you want for scripts; leaving the prompt off opens an interactive chat that you end with <code>/bye</code>:</p>
+<pre><code class="language-bash">ollama run qwen3:0.6b "In one sentence, why is the sky blue?"</code></pre>
+<p>Expected output:</p>
+<pre><code>Thinking...
+...done thinking.
+
+The sky is blue because blue light is scattered by the Earth's atmosphere.</code></pre>
+<p>Two things to notice. First, qwen3 thinks aloud: the CLI prints a <code>Thinking...</code> trace before the answer, and the API returns that trace in a separate <code>thinking</code> field. The trace is the model's working, not its answer — read the final sentence, not the deliberation. Second, a 0.6B model is inconsistent on facts: the same question, asked over the API in Step 6, came back blaming water-vapor refraction, while this CLI run gave scattering. Treat every factual answer from a small model as a draft to check, not a source to cite. That first run also loads the model into memory, which is why it takes a few seconds longer than later ones, and generation speed on CPU is modest — a few tokens per second on this 2-core machine, fine for short answers and a reason to keep prompts short while you learn.</p>
+<h2 id="step-4-manage">Step 4: Manage models — list, inspect, copy, remove</h2>
+<p>Four commands cover everyday model housekeeping. You have already used <code>list</code>. <code>show</code> prints a model's metadata — its parameters, its template, and its licence:</p>
+<pre><code class="language-bash">ollama show qwen3:0.6b</code></pre>
+<p>Expected output (excerpt):</p>
+<pre><code>  Model
+    architecture        qwen3
+    parameters          751.63M
+    context length      40960
+    embedding length    1024
+    quantization        Q4_K_M
+
+  Parameters
+    temperature       0.6
+    top_k             20
+    top_p             0.95</code></pre>
+<p><code>ps</code> shows what is currently loaded in memory, which matters when you are deciding whether a second model will fit:</p>
+<pre><code class="language-bash">ollama ps</code></pre>
+<p>Expected output:</p>
+<pre><code>NAME          ID              SIZE      PROCESSOR    CONTEXT    RUNNER      UNTIL
+qwen3:0.6b    7df6b6e09427    1.0 GB    100% CPU     4096       llamacpp    4 minutes from now</code></pre>
+<p>Note the two sizes: the model is 522 MB on disk but 1.0 GB once loaded, and the running context here is 4096 tokens, not the model's 40960 maximum — the server sizes the running context to the machine unless you ask for more.</p>
+<p>Models stay loaded for five minutes after their last use by default (<code>OLLAMA_KEEP_ALIVE</code> controls this), then unload on their own; <code>ollama stop qwen3:0.6b</code> unloads one immediately. Copying and removing are just as direct, and this guide verified both:</p>
+<pre><code class="language-bash">ollama cp qwen3:0.6b demo-copy
+ollama list
+ollama rm demo-copy
+ollama list</code></pre>
+<p>The copy step answers with <code>copied 'qwen3:0.6b' to 'demo-copy'</code> and <code>success</code>; the first <code>list</code> shows <code>demo-copy</code> alongside <code>qwen3:0.6b</code> and the <code>briefbot</code> model from Step 5, and the second shows it gone. Copying is cheap — it creates a new name for the same weights, not a second 522 MB download — which makes it a handy way to snapshot a model before you customise it.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/ollama-local-llm-hands-on-tutorial/img3.webp" alt="Five-step workflow diagram: install, download a model, run a chat, customize with a Modelfile, call the API and get structured JSON back" loading="lazy"><figcaption>Install, pull, chat, customize, call the API. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="step-5-modelfile">Step 5: Customize with a Modelfile</h2>
+<p>A chat session's system prompt dies with the session. A Modelfile fixes that: it derives a new, named model from an existing one, baking in a system prompt and default parameters so every later call inherits them. Create a file called <code>Modelfile</code>:</p>
+<pre><code>FROM qwen3:0.6b
+SYSTEM """You are BriefBot. Answer every question in exactly one short sentence."""
+PARAMETER temperature 0.3</code></pre>
+<p>Three lines, three ideas. <code>FROM</code> names the base model. <code>SYSTEM</code> sets the persona every reply must follow. <code>PARAMETER</code> sets a generation default — here a low temperature, which makes the model more predictable. Build the model and run it:</p>
+<pre><code class="language-bash">ollama create briefbot -f Modelfile.demo
+ollama run briefbot "Why is the sky blue?"</code></pre>
+<p>Expected output (the create step reuses the base model's layers and ends with <code>success</code>):</p>
+<pre><code>using existing layer sha256:7f4030143c1c477224c5434f8272c662a8b042079a0a584f0a27a1684fe2e1fa
+creating new layer sha256:bb73f9c9afc42f3db6b31682d24c1d6a9cab1cec328a6de9a8ac1d11960dd442
+success
+
+The sky appears blue because sunlight is refracted by the water vapor in the air, causing the light to bend and create the blue color.</code></pre>
+<p>The reply obeys the persona: exactly one short sentence, where the base model gave a longer one. And it also proves the limit of the technique in the same breath: the physics is wrong again — refraction by water vapor is not why the sky is blue. A Modelfile controls format, not truth. Confirm the persona actually stuck with <code>ollama show briefbot</code>, which reports <code>temperature 0.3</code> and the <code>SYSTEM</code> line you wrote. Two warnings belong here. First, a Modelfile does not retrain anything: it cannot make a 0.6B model smarter, only more consistent. Second, keep the persona testable. "Answer in exactly one short sentence" can be checked at a glance; a vague persona like "be helpful" cannot, and you will never know whether it worked.</p>
+<h2 id="step-6-rest-api">Step 6: Call the REST API</h2>
+<p>The CLI is for exploring; the API is for building. Two endpoints cover most apps. <code>/api/generate</code> takes a single prompt and returns one completion:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:11434/api/generate -d '{"model":"qwen3:0.6b","prompt":"In one sentence, why is the sky blue?","stream":false}'</code></pre>
+<p>Expected output (trimmed to the fields that matter; the full object also carries a <code>thinking</code> field and a token <code>context</code> array):</p>
+<pre><code class="language-json">{"model": "qwen3:0.6b", "response": "The sky is blue because atmospheric water vapor refracts blue light, causing the scattered colors we perceive as the sky.", "done": true, "done_reason": "stop"}</code></pre>
+<p>Note <code>"stream": false</code>. Without it, the endpoint streams one JSON object per token, which is what you want for a chat UI that shows words as they arrive, and the wrong thing for a script that wants one object back. Note also that this answer disagrees with Step 3's: same question, different sampling run, different physics — and this one is the wrong one. The API mechanics are what this step verifies; the model's facts are not part of the guarantee. <code>/api/chat</code> is the conversational version: it takes a list of messages with roles, so the model can use what was said earlier in the exchange:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:11434/api/chat -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Remember this number: 7429."},{"role":"assistant","content":"Got it, 7429."},{"role":"user","content":"What number did I ask you to remember? Reply with just the number."}],"stream":false}'</code></pre>
+<p>Expected output (message field):</p>
+<pre><code>7429</code></pre>
+<p>The model carried the number across the turn, which is the behaviour a multi-turn app depends on. <code>/api/tags</code> lists the models on disk as JSON — the API equivalent of <code>ollama list</code> — and it is the fastest health check for a script: if it answers, the server is up.</p>
+<h2 id="step-7-openai-api">Step 7: Use the OpenAI-compatible endpoint</h2>
+<p>If you already have code written against a hosted API, you do not need to rewrite it. Ollama serves an OpenAI-compatible endpoint at <code>/v1/chat/completions</code> on the same server, so the only changes are the base URL and the model name:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:11434/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"In one sentence, why is the sky blue?"}]}'</code></pre>
+<p>Expected output (message field):</p>
+<pre><code>The sky appears blue because sunlight is scattered by the Earth's atmosphere, with water vapor and other particles scattering shorter wavelengths of light (blue) more than longer ones (red/green).</code></pre>
+<p>The response shape is the hosted one — <code>choices[0].message.content</code> — so an existing client needs only a new base URL (<code>http://127.0.0.1:11434/v1</code>) and a local model name. The same idea works from Python with the official client. Install it and chat:</p>
+<pre><code class="language-bash">pip install ollama</code></pre>
+<pre><code class="language-python">import ollama
+
+response = ollama.chat(
+    model="qwen3:0.6b",
+    messages=[{"role": "user", "content": "In one sentence, why is the sky blue?"}],
+)
+print(response.message.content)</code></pre>
+<p>Expected output:</p>
+<pre><code>The sky appears blue because the Earth's atmosphere causes light to scatter predominantly in the blue spectrum, making the sky appear blue.</code></pre>
+<p>One caution from Step 6 applies here too: the compatible endpoint speaks the hosted dialect, so Ollama-native options with no hosted equivalent do not come through it. For new code, prefer the native API; for ported code, the compatible endpoint is the shortcut. And one troubleshooting note: if the Python client fails at import with an <code>InvalidURL</code> error about a port, clear your session's proxy variables first — the client talks to localhost and needs no proxy, but its HTTP library parses those variables at startup and can trip over unusual ones.</p>
+<h2 id="step-8-structured">Step 8: Get structured JSON back</h2>
+<p>Free-form text is a poor contract between a model and a program. Ollama's structured-output feature accepts a JSON schema in the <code>format</code> field and constrains the reply to match it. Ask for an outage report as structured data:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:11434/api/chat -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Summarise this outage report as structured data: The checkout page returned 500 errors for all EU users for 20 minutes."}],"stream":false,"format":{"type":"object","properties":{"title":{"type":"string"},"severity":{"type":"string"},"duration_minutes":{"type":"integer"}},"required":["title","severity","duration_minutes"]}}'</code></pre>
+<p>Expected output (message content) — first run:</p>
+<pre><code class="language-json">{ "title": "Outage Report", "severity": "Critical", "duration_minutes": 2000000000000000 }</code></pre>
+<p>Expected output (message content) — second run, same prompt:</p>
+<pre><code class="language-json">{ "title": "Outage Report", "severity": "critical", "duration_minutes": 20 }</code></pre>
+<p>Both runs parse as JSON and both match the schema — every required field present, every type correct. Only one of them is true. The first run's duration is two quadrillion minutes, which is not a rounding error but a confabulation wearing a valid shape. That is the whole lesson of structured output with a small model: the schema guarantees the shape, never the value. Two habits follow. First, describe the schema in the prompt as well as in <code>format</code>: the schema constrains the shape, but the prompt still has to tell the model what each field means. Second, validate on your side before you trust it — parse the JSON, check the required fields, and sanity-check the values against what you know, exactly as you would with any untrusted input.</p>
+<h2 id="which-approach">Which approach should you use?</h2>
+<p>Ollama gives you three ways to reach the same model, and the right one depends on what you are building. They are not rivals; most real setups use all three at different stages.</p>
+<ul>
+<li><b>Use the CLI (<code>ollama run</code>) when you are exploring.</b> It is the fastest way to judge a model: pull it, chat, and decide in minutes whether it is smart enough for your task. It is also the right tool for one-off jobs — summarise this file, draft that reply — where starting an app would be overkill. Its weakness is that it is not programmable: you cannot put a chat session inside a script without shelling out.</li>
+<li><b>Use the REST API (<code>/api/generate</code>, <code>/api/chat</code>) when you are building.</b> It is the native interface, it exposes everything Ollama can do — including parameters, streaming, and structured output — and it needs no extra dependency beyond an HTTP client. If your app is a script, a service, or a prototype, start here.</li>
+<li><b>Use the OpenAI-compatible endpoint (<code>/v1/chat/completions</code>) when you are porting.</b> It exists so code written against a hosted API can run locally with two lines changed: the base URL and the model name. The trade-off is coverage: it speaks the OpenAI dialect, so Ollama-native options that have no OpenAI equivalent do not come through it. For a new project, prefer the native API; for an existing one, the compatible endpoint is the shortcut that lets you test local models without a rewrite.</li>
+<li><b>Use a Modelfile when a behaviour must be repeatable.</b> A system prompt typed into one chat session dies with that session. A Modelfile bakes the persona and the parameters into a named model that every later call inherits, which is what you want for a support bot, a code reviewer, or any assistant whose tone is part of the product.</li>
+</ul>
+<p>And a word on size. The honest rule for a CPU-only machine is to start small and measure: a 0.6B model answers instantly and teaches you the whole loop, a 3B model is noticeably smarter and still comfortable, and an 8B model on CPU is usable for short answers but slow enough to change how you design prompts. The model is not the bottleneck in this guide — the loop is. Prove the loop on a small model, then spend disk and RAM on a bigger one with evidence about what it buys you.</p>
+<h2 id="what-was-not-verified">What this guide did not verify</h2>
+<p>Four boundaries keep this guide honest. First, everything ran on CPU: this machine has no GPU, so no speed claim about GPU acceleration is measured here — GPU numbers in this article are the project's, not this guide's, and the article says so wherever they appear. Second, only qwen3:0.6b was actually run. Larger models are discussed from their library sizes and hardware guidance, not from executions, and a bigger model may behave differently on prompts where the small one was merely adequate. Third, the Ollama cloud service was not tested: every call in this guide hit <code>127.0.0.1</code>, and nothing here speaks to the hosted offering. Fourth, multimodal and tool-calling features were not exercised: this guide covers text chat and structured JSON, which is the core loop, and leaves vision models and function calling for a follow-up.</p>
+<h2 id="takeaway">The takeaway</h2>
+<p>The durable idea in Ollama is not the binary; it is the address. Once a model answers at <code>http://127.0.0.1:11434</code>, everything downstream becomes ordinary software: a script can call it, an app can build on it, and a prompt can stay on the machine that produced it. Install one binary, pull one small model, prove the loop end to end, and then decide — with evidence from your own machine — whether a bigger model, a custom Modelfile, or a hosted API earns its place. That is the whole adoption story, and it fits in one afternoon.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Ollama v0.40.11 release assets (ollama/ollama on GitHub) — the Linux archive, its size, and the release date quoted in this guide.</li>
+<li>The Ollama binary's own <code>--help</code> output and the server's responses on <code>127.0.0.1:11434</code> — every command, flag, endpoint, and output quoted in this guide.</li>
+<li>Ollama model library entry for qwen3:0.6b — the model size and default tag used in this guide.</li>
+<li>Ollama documentation on Modelfiles and the API — the FROM, SYSTEM, and PARAMETER directives and the /api/generate, /api/chat, and /v1/chat/completions endpoints used in this guide.</li>
+</ul>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/xerj-local-search-agents-tutorial/">Stop letting your coding agent grep: hands-on with XERJ, the local search engine for AI agents</a></li><li><a href="/articles/google-harness2-recursive-agent-harnessing-tutorial/">Let your agent improve its own playbook: hands-on with Google Research&#x27;s Harness²</a></li><li><a href="/articles/pagesift-rag-ready-markdown-tutorial/">Turn any website into RAG-ready Markdown: hands-on with PageSift</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
