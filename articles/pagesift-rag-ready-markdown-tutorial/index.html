@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Turn any website into RAG-ready Markdown: hands-on with PageSift — AI Frontier Post</title>
+<meta name="description" content="PageSift (YOLOW92/pagesift, AGPL-3.0, 111 GitHub stars) is a Rust web-crawling and extraction engine that turns websites, PDFs and Office files into clean Markdown for LLM pipelines, with Firecrawl- and Jina-compatible APIs. This guide runs it in Docker, scrapes a page two ways, crawls a small site, and wires it into Python and Claude Code — no hosted account required.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/pagesift-rag-ready-markdown-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Turn any website into RAG-ready Markdown: hands-on with PageSift">
+<meta property="og:description" content="PageSift (YOLOW92/pagesift, AGPL-3.0, 111 GitHub stars) is a Rust web-crawling and extraction engine that turns websites, PDFs and Office files into clean Markdown for LLM pipelines, with Firecrawl- and Jina-compatible APIs. This guide runs it in Docker, scrapes a page two ways, crawls a small site, and wires it into Python and Claude Code — no hosted account required.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/pagesift-rag-ready-markdown-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/pagesift-rag-ready-markdown-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Turn any website into RAG-ready Markdown: hands-on with PageSift">
+<meta name="twitter:description" content="PageSift (YOLOW92/pagesift, AGPL-3.0, 111 GitHub stars) is a Rust web-crawling and extraction engine that turns websites, PDFs and Office files into clean Markdown for LLM pipelines, with Firecrawl- and Jina-compatible APIs. This guide runs it in Docker, scrapes a page two ways, crawls a small site, and wires it into Python and Claude Code — no hosted account required.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/pagesift-rag-ready-markdown-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Turn any website into RAG-ready Markdown: hands-on with PageSift", "description": "PageSift (YOLOW92/pagesift, AGPL-3.0, 111 GitHub stars) is a Rust web-crawling and extraction engine that turns websites, PDFs and Office files into clean Markdown for LLM pipelines, with Firecrawl- and Jina-compatible APIs. This guide runs it in Docker, scrapes a page two ways, crawls a small site, and wires it into Python and Claude Code — no hosted account required.", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Marcus Doyle"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Turn any website into RAG-ready Markdown: hands-on with PageSift", "description": "PageSift (YOLOW92/pagesift, AGPL-3.0, 111 GitHub stars) is a Rust web-crawling and extraction engine that turns websites, PDFs and Office files into clean Markdown for LLM pipelines, with Firecrawl- and Jina-compatible APIs. This guide runs it in Docker, scrapes a page two ways, crawls a small site, and wires it into Python and Claude Code — no hosted account required.", "step": [{"@type": "HowToStep", "name": "Start the server with Docker", "text": "Start PageSift as a Docker container on port 3002 with a local API key."}, {"@type": "HowToStep", "name": "Scrape one page two ways", "text": "Fetch a page as Markdown through the reader endpoint and through the Firecrawl-compatible API."}, {"@type": "HowToStep", "name": "Crawl a small site with the CLI", "text": "Install the CLI, check it with doctor, and crawl a small site to a local folder."}, {"@type": "HowToStep", "name": "Use it from Python", "text": "Install the Python package and scrape pages one at a time and in batches."}, {"@type": "HowToStep", "name": "Convert a local file", "text": "Send a local PDF or Office file to the parse endpoint and get Markdown back."}, {"@type": "HowToStep", "name": "Hand it to your coding agent", "text": "Run PageSift as a shared MCP server and add it to Claude Code."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a hosted account or API key to run PageSift?", "acceptedAnswer": {"@type": "Answer", "text": "No. PageSift runs as a container or binary on your own machine; the guide uses a local key, sk-test, only for the local server, and you should replace it before sharing the server with anyone."}}, {"@type": "Question", "name": "What can PageSift turn into Markdown?", "acceptedAnswer": {"@type": "Answer", "text": "Websites through its scrape and crawl commands, and PDF, HTML, Word, Excel, PowerPoint, EPUB and CSV files through the parse endpoint and the scrape command on a local file."}}, {"@type": "Question", "name": "Can my coding agent use PageSift directly?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Run pagesift mcp http on port 3003 and add it to Claude Code with claude mcp add, and the agent gets the same tools with an audit line per fetch."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Turn any website into RAG-ready Markdown: hands-on with PageSift</h1>
+<p class="lede">Your RAG pipeline is only as good as the text you feed it, and most of the web does not arrive as text. It arrives as navigation chrome, cookie banners, scripts and layout tables — all of which become noise in an embedding. PageSift is a Rust engine built to strip that away: one binary that turns a website, a PDF or a spreadsheet into clean Markdown your models can actually use, behind APIs that drop into tools you may already run. This guide puts it to work end to end.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 27, 2026 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> PageSift 0.80.0 is a Rust web-crawling and extraction engine: run it in Docker, scrape a page to clean Markdown with one curl command, crawl a small site with the CLI, convert local PDFs and Office files through its Firecrawl-compatible parse endpoint, and hand the same engine to your coding agent over MCP — with no hosted account and no per-page fee.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> PageSift, a Rust web-crawling and extraction engine for AI agents and LLM pipelines.</li><li><b>Version and licence:</b> 0.80.0, AGPL-3.0, with a commercial licence available.</li><li><b>Project:</b> YOLOW92/pagesift on GitHub, created 20 October 2026, 111 stars at the time of writing.</li><li><b>Local server:</b> one Docker container on port 3002, with a Firecrawl-compatible API and a Jina-style reader endpoint.</li><li><b>Inputs:</b> websites, plus PDF, HTML, Word, Excel, PowerPoint, EPUB and CSV files up to 50 MB through the parse endpoint.</li><li><b>Cost:</b> no hosted account and no per-page fee; the container runs on your own machine.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/pagesift-rag-ready-markdown-tutorial/cover.webp" alt="A tangled web page funnelled through orange gears into a clean, tidy document" loading="lazy"><figcaption>A messy page in, clean Markdown out. Image: AI Frontier Post.</figcaption></figure>
+<p>PageSift comes from a simple observation: extraction is the unglamorous half of every RAG system, and the hosted services that do it well charge per page and keep your documents on someone else's server. PageSift does the same job locally. It is written in Rust, ships as one container or binary, and speaks two APIs that existing tools already understand: Firecrawl's scrape and parse endpoints, and Jina Reader's <code>/r/</code> style URLs. That compatibility is the whole trick of this guide — you do not have to rewrite your pipeline to try it; you point the client you already have at <code>localhost</code> instead.</p>
+<p>What you will build in this guide is a working local extraction service: a server you can curl, a CLI you can script, a Python client you can drop into a pipeline, and an MCP server your coding agent can call. By the end you will have turned a real public page and a small crawl into Markdown files on disk, and you will know exactly where PageSift's limits are before you bet a production pipeline on it.</p>
+<h2>What you'll need</h2>
+<p>Docker for the server, plus curl and Python 3 for the clients. The CLI route needs Rust's Cargo. Nothing here needs a hosted account, a model API key, or a GPU. The example key in this guide, <code>sk-test</code>, is for a server on your own machine only — replace it with a real secret before you let anyone else reach port 3002.</p>
+<h2>Step 1: Start the server with Docker</h2>
+<p>One container runs the whole service, including the headless browser renderer for pages that need JavaScript. Start it in the background, with a named volume for its data:</p>
+<pre><code>docker run -d -p 3002:3002 -v pagesift-data:/data \
+  -e PAGESIFT_API_KEYS=sk-test ghcr.io/yolow92/pagesift:0.80.0</code></pre>
+<p>The image tag pins version 0.80.0, the version this guide follows. Port 3002 is where every API in this guide lives. If the container exits immediately, check <code>docker ps -a</code> and <code>docker logs</code> for the container name Docker printed — a port already in use on 3002 is the usual culprit.</p>
+<h2>Step 2: Scrape one page two ways</h2>
+<p>First, the Jina-style reader endpoint. Put the target URL straight after <code>/r/</code> and you get Markdown back, with no JSON to unwrap:</p>
+<pre><code>curl -s http://localhost:3002/r/https://en.wikipedia.org/wiki/Rust_(programming_language)</code></pre>
+<p>Second, the Firecrawl-compatible route. If you already have Firecrawl client code, this is the drop-in: point it at the local server instead of the hosted API, with the same key you set on the container:</p>
+<pre><code>from firecrawl import FirecrawlApp
+
+app = FirecrawlApp(api_url="http://localhost:3002", api_key="sk-test")
+res = app.scrape_url("https://example.com", params={"formats": ["markdown"]})
+print(res["markdown"])</code></pre>
+<p>Try both on the same page and compare. The reader endpoint is the fastest way to eyeball a result; the Firecrawl route is the one you keep when you already have code written against that API, because nothing in the client changes except the base URL and the key.</p>
+<h2>Step 3: Crawl a small site with the CLI</h2>
+<p>For scripted work, install the standalone binary with Cargo and check the install before you crawl anything:</p>
+<pre><code>cargo install pagesift --locked
+pagesift doctor</code></pre>
+<p><code>doctor</code> checks the install, models, data files and CPU settings, so run it first rather than debugging a crawl that was never going to start. Then scrape a single page to Markdown:</p>
+<pre><code>pagesift scrape "https://news.ycombinator.com" --format markdown</code></pre>
+<p>Now a crawl. The README's example crawls docs.rs with a limit of 5000 pages; start far smaller while you learn what the output looks like, and raise the limit once you trust it:</p>
+<pre><code>pagesift crawl "https://docs.rs" --limit 50 --tuning-mode adaptive --out ./data/</code></pre>
+<p>The adaptive tuning mode is the one to notice: PageSift sizes its own concurrency from the machine it runs on instead of you guessing a thread count, and its queues are bounded so memory does not grow with crawl depth. Per-host token buckets and robots.txt compliance are built in, so a polite crawl is the default, not something you have to configure — but politeness is not permission: only crawl sites whose terms allow it, and keep your limits small on other people's servers.</p>
+<figure class="inline-art"><img src="img2.webp" alt="A server box with arrows from a browser, a document and a spreadsheet feeding into it and one clean document coming out" loading="lazy"><figcaption>One engine, many inputs: pages, PDFs and spreadsheets all come out as Markdown. Image: AI Frontier Post.</figcaption></figure>
+<h2>Step 4: Use it from Python</h2>
+<p>The Python package wraps the same engine. Install it, scrape one page, then scrape a batch:</p>
+<pre><code>pip install pagesift</code></pre>
+<pre><code>import pagesift
+
+page = pagesift.scrape("https://example.com", formats=["markdown", "metadata"])
+print(page.markdown)
+print(page.metadata.title, page.metadata.published_date)
+
+results = pagesift.scrape_many(
+    ["https://example.com", "https://news.ycombinator.com"],
+    concurrency=8,
+)</code></pre>
+<p>Two details matter for pipelines. Extraction itself takes about 1–2 milliseconds per page at the median, network excluded, according to the project's own documentation — so if your pipeline is slow, the bottleneck is almost certainly the network or the target site, not PageSift. And batch scraping is memory-bounded by design: the <code>concurrency</code> parameter controls how many pages fly at once, and the engine sizes itself to the machine rather than letting a big batch eat all your RAM.</p>
+<h2>Step 5: Convert a local file</h2>
+<p>Not everything you need to index lives at a URL. PageSift 0.80.0 added a parse endpoint that accepts an uploaded file — PDF, HTML, Word, Excel, PowerPoint, EPUB or CSV, up to 50 MB — and returns the same shape of response as a scrape:</p>
+<pre><code>curl -s http://localhost:3002/v2/parse -H 'Authorization: Bearer sk-test' \
+  -F file=@report.pdf -F 'options={"formats":["markdown"]}'</code></pre>
+<p>Replace <code>report.pdf</code> with your own file. The same conversion is available on the command line as <code>pagesift scrape report.docx</code>, which is the faster route when you are already in a terminal. The 0.80.0 release put real work into PDFs specifically: its own PDF layer reads heading levels from the document's structure tree and bookmarks first, and the project reports heading recall on its 13-PDF test set rising from 0.595 to 0.945, with false tables falling from 196 to 18. Treat those as the project's own measurements on its own test set, not as a promise about your PDFs — run your own worst document through it before you trust it with a whole archive.</p>
+<h2>Step 6: Hand it to your coding agent</h2>
+<p>PageSift also runs as a shared MCP server, bound to localhost, so every agent on the machine uses one service with one cache and one audit trail:</p>
+<pre><code>pagesift mcp http --port 3003 --audit-log ~/.local/state/pagesift/audit.jsonl
+claude mcp add --scope user --transport http pagesift http://127.0.0.1:3003/mcp</code></pre>
+<p>Every fetch gets an audit line, and suspicious results get an HTML snapshot, which is the right shape for agent work: when your agent cites a page, you can check what it actually fetched. Keep this server on localhost. The MCP route is for your machine's agents, not for the open internet.</p>
+<figure class="inline-art"><img src="img3.webp" alt="A web of connected site nodes with one glowing node being visited, like a polite crawl working through a site" loading="lazy"><figcaption>A crawl is a queue, not a flood: bounded, per-host, and robots-aware. Image: AI Frontier Post.</figcaption></figure>
+<h2>What you built</h2>
+<p>A local extraction service with four front doors: a reader URL for quick checks, a Firecrawl-compatible API for existing code, a CLI for scripts and crawls, and an MCP server for agents — all backed by the same Rust engine, all running on your machine, all producing Markdown you can feed straight into embeddings, a search index, or a notebook. A realistic next step is small: point the Python client at the ten pages your RAG demo actually needs, chunk the Markdown, and measure retrieval quality before you scale the crawl to thousands of pages.</p>
+<h2>Honest limitations</h2>
+<p>First, the licence. PageSift is AGPL-3.0, not MIT or Apache: if you run it as a network service for others, the AGPL's source-sharing obligations apply, and the project sells a commercial licence for deployments that cannot accept them. Read that before you put it behind your product's API. Second, the headline numbers need care. The project's 0.80.0 comparison tables are explicitly empty pending a final measurement run — the README says no number is written before it is measured — and the eye-catching 200-million-request, 947,611-pages-per-second figure comes from version 0.70.0 against a synthetic local origin, which the README itself says is not a real-internet speed. Third, resumable crawl checkpoints are still on the roadmap, not shipped: a killed crawl restarts from scratch. Finally, the hosted API is in closed beta and not open, so self-hosting is currently the only route — which is also the point of this guide.</p>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a hosted account or API key to run PageSift?</h3><p>No. PageSift runs as a container or binary on your own machine; the guide uses a local key, sk-test, only for the local server, and you should replace it before sharing the server with anyone.</p><h3>What can PageSift turn into Markdown?</h3><p>Websites through its scrape and crawl commands, and PDF, HTML, Word, Excel, PowerPoint, EPUB and CSV files through the parse endpoint and the scrape command on a local file.</p><h3>Can my coding agent use PageSift directly?</h3><p>Yes. Run pagesift mcp http on port 3003 and add it to Claude Code with claude mcp add, and the agent gets the same tools with an audit line per fetch.</p></section>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/crawl4ai-llm-ready-web-scraper-tutorial/">Turn any website into LLM-ready Markdown: a hands-on guide to Crawl4AI</a></li><li><a href="/articles/rag-techniques-42-notebooks-hands-on-tutorial/">Stop your RAG from guessing: a hands-on tour of 42 battle-tested retrieval techniques</a></li><li><a href="/articles/indra-ocr-cpu-document-markdown-tutorial/">Turn any scan or PDF into Markdown on your own CPU: a hands-on guide to Indra OCR</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
