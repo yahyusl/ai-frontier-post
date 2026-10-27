@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a real MCP server in Python: the complete FastMCP guide — AI Frontier Post</title>
+<meta name="description" content="FastMCP turns plain Python functions into a Model Context Protocol server: this guide builds a complete SQLite-backed reading-list server with tools, resources, and a prompt, tests it with an in-memory client, and serves it over HTTP — no API key required.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/fastmcp-python-mcp-server-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a real MCP server in Python: the complete FastMCP guide">
+<meta property="og:description" content="FastMCP turns plain Python functions into a Model Context Protocol server: this guide builds a complete SQLite-backed reading-list server with tools, resources, and a prompt, tests it with an in-memory client, and serves it over HTTP — no API key required.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/fastmcp-python-mcp-server-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/fastmcp-python-mcp-server-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Build a real MCP server in Python: the complete FastMCP guide">
+<meta name="twitter:description" content="FastMCP turns plain Python functions into a Model Context Protocol server: this guide builds a complete SQLite-backed reading-list server with tools, resources, and a prompt, tests it with an in-memory client, and serves it over HTTP — no API key required.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/fastmcp-python-mcp-server-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a real MCP server in Python: the complete FastMCP guide", "description": "FastMCP turns plain Python functions into a Model Context Protocol server: this guide builds a complete SQLite-backed reading-list server with tools, resources, and a prompt, tests it with an in-memory client, and serves it over HTTP — no API key required.", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Marcus Doyle"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build a real MCP server in Python: the complete FastMCP guide", "description": "FastMCP turns plain Python functions into a Model Context Protocol server: this guide builds a complete SQLite-backed reading-list server with tools, resources, and a prompt, tests it with an in-memory client, and serves it over HTTP — no API key required.", "step": [{"@type": "HowToStep", "name": "Install FastMCP", "text": "Install FastMCP 4.1.4 into a virtual environment with pip and confirm the version."}, {"@type": "HowToStep", "name": "Build the server storage and first tools", "text": "Write server.py with a SQLite reading-list store, a URL validator, and the add_article and list_articles tools."}, {"@type": "HowToStep", "name": "Finish the tools", "text": "Add mark_read and search_articles, keeping every query parameterized."}, {"@type": "HowToStep", "name": "Add resources and a prompt", "text": "Add the reading://stats resource, the reading://article/{article_id} template, and the triage_inbox prompt."}, {"@type": "HowToStep", "name": "Run and test the server", "text": "Start the server over stdio, then exercise it with FastMCP's in-memory test client and the inspect command."}, {"@type": "HowToStep", "name": "Serve it over HTTP", "text": "Run the server with fastmcp run --transport http and connect a client to the /mcp route."}, {"@type": "HowToStep", "name": "Plug it into a host", "text": "Install the server into Claude Code or another host with fastmcp install."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What do I need to build a FastMCP server?", "acceptedAnswer": {"@type": "Answer", "text": "Python 3.10 or newer and pip or uv. This guide needs no API key, model account, or GPU."}}, {"@type": "Question", "name": "When should I use a tool, a resource, or a prompt?", "acceptedAnswer": {"@type": "Answer", "text": "Tools change state, resources expose read-only data, and prompts package reusable workflows with judgment calls."}}, {"@type": "Question", "name": "Can I expose my FastMCP server over the internet?", "acceptedAnswer": {"@type": "Answer", "text": "Only with authentication configured: FastMCP supports auth providers and per-component auth checks. Keep HTTP servers on localhost until a real provider is in place."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a real MCP server in Python: the complete FastMCP guide</h1>
+<p class="lede">Your agent is smart but it cannot touch anything — until you give it tools. FastMCP turns plain Python functions into a standard MCP server any agent host can use, and this guide builds one completely: a reading-list server with tools, resources, and a prompt, verified end to end with no API key.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 27, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> FastMCP 4.1.4 turns decorated Python functions into an MCP server: tools change state, resources expose read-only data, prompts package workflows. Build the SQLite reading-list server in this guide, test it with the in-memory client, inspect it over stdio, and serve it over HTTP — keeping auth in front of anything you expose.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> FastMCP, the Python framework for building Model Context Protocol servers and clients.</li><li><b>Version:</b> 4.1.4 (MCP protocol 2.3.0), verified in this guide.</li><li><b>Requirements:</b> Python 3.10 or newer and pip or uv; no API key, model account, or GPU.</li><li><b>Licence:</b> Apache-2.0.</li><li><b>Verified end to end:</b> 4 tools, 1 resource, 1 resource template, 1 prompt — over the in-memory client, stdio via inspect, and HTTP on port 8123.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/fastmcp-python-mcp-server-tutorial/cover.webp" alt="A Python code editor connected to a server box offering tools, resources, and prompts, connected to an AI assistant" loading="lazy"><figcaption>One file, three kinds of capability. Image: AI Frontier Post.</figcaption></figure>
+<p>Every agent demo eventually hits the same wall: the model is smart, but it cannot touch anything. It cannot save the article you just asked it to file, check what is already on your reading list, or follow a workflow you wrote down once and want reused. The usual fix is a pile of glue code — a custom API here, a prompt pasted there, a one-off script that only works in one app. The Model Context Protocol (MCP) replaces that pile with a standard plug: a server exposes tools, data, and prompts, and any MCP host — Claude Code, Cursor, Gemini CLI, Goose, and others — can use them the same way.</p>
+<p>FastMCP is the fastest way to build such a server in Python. You write plain functions with type hints, decorate them, and the framework handles the protocol: schemas, routing, transports, and errors. This guide builds a complete, working server — a reading-list manager backed by SQLite — and verifies every step: tools that change state, resources that expose read-only views, a reusable prompt, an in-memory test client, and a real HTTP deployment. Nothing here needs an API key, a GPU, or a cloud account.</p>
+<p>Why now: MCP has become the default way to give agents capabilities, and the Python side of that ecosystem has consolidated around FastMCP, now at version 4. If you have been putting off building a server because the protocol looked heavy, this is the moment it stopped being heavy. One file, four tools, two resources, one prompt — and an agent host can use all of it.</p>
+<h2>What you'll need</h2>
+<ul>
+<li>Python 3.10 or newer (<code>python3 --version</code> should print 3.10+; this guide uses 3.12). FastMCP 4.1.4 lists Python &gt;= 3.10 in its package metadata.</li>
+<li><code>pip</code> or <code>uv</code> for installing packages.</li>
+<li>No API key, no model account, and no GPU. Every test in this guide runs locally.</li>
+<li>A project directory for the server. All commands below run from inside it.</li>
+</ul>
+<h2>Step 1: Install FastMCP</h2>
+<p>Create a virtual environment and install FastMCP into it. Do not install it into your system Python; a venv keeps the server's dependency tree out of your other projects:</p>
+<pre><code>python3 -m venv .venv
+source .venv/bin/activate
+pip install fastmcp
+fastmcp --version</code></pre>
+<p>You should see a version line. This guide verified every command below against FastMCP 4.1.4 (MCP protocol 2.3.0). If your version differs, expect small differences in help text, but the decorators and client calls below are the stable core of the API. For a reproducible setup, pin the version once you know it works:</p>
+<pre><code>pip install "fastmcp==4.1.4"</code></pre>
+<p>Two names matter from here on. <code>FastMCP</code> is the server class, and <code>Client</code> is the test client. Both come from the same package:</p>
+<pre><code>from fastmcp import FastMCP, Client</code></pre>
+<h2>Step 2: Build the server — storage and the first tools</h2>
+<p>The server manages a reading list: articles you want to read later, each with a URL, a title, tags, and a read/unread status. Storage is SQLite in a file next to the script. That choice is deliberate. A dictionary would lose everything on restart, and a hosted database would add setup for no benefit at this size. Create <code>server.py</code> with the scaffolding and the storage helper:</p>
+<pre><code>"""Readlist: a small FastMCP server that manages a reading list."""
+
+import sqlite3
+from pathlib import Path
+from urllib.parse import urlparse
+
+from fastmcp import FastMCP
+
+DB_PATH = Path(__file__).with_name("reading.db")
+
+mcp = FastMCP(
+    "Readlist",
+    instructions="Manage a personal reading list of articles to read later.",
+)
+
+
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS articles (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               url TEXT NOT NULL UNIQUE,
+               title TEXT NOT NULL,
+               tags TEXT NOT NULL DEFAULT '',
+               status TEXT NOT NULL DEFAULT 'unread'
+                   CHECK (status IN ('unread', 'read'))
+           )"""
+    )
+    conn.commit()
+    return conn
+
+
+def _valid_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)</code></pre>
+<p>Three decisions are already baked in, and all three are worth copying into your own servers. First, the database path is fixed next to the script — no tool ever accepts a path from the caller, so there is no path to escape from. Second, the URL column is <code>UNIQUE</code>, so saving the same article twice is a no-op instead of a duplicate. Third, the status column has a <code>CHECK</code> constraint, so the database itself refuses any status other than <code>read</code> or <code>unread</code>, even if a future tool forgets to validate.</p>
+<p>Now the first two tools. A tool is a function with type hints and a docstring, decorated with <code>@mcp.tool</code>. FastMCP builds the tool's JSON Schema from the type hints, and the first line of the docstring becomes the description the model reads when deciding whether to call it. Write docstrings for the model, not just for yourself:</p>
+<pre><code>@mcp.tool
+def add_article(url: str, title: str, tags: str = "") -> str:
+    """Save an article to the reading list.
+
+    Args:
+        url: The article's http(s) URL.
+        title: A short human-readable title.
+        tags: Optional comma-separated tags, e.g. "agents,eval".
+    """
+    if not _valid_url(url):
+        raise ValueError(f"Not an http(s) URL: {url!r}")
+    if not title.strip():
+        raise ValueError("title must not be empty")
+    conn = _connect()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO articles (url, title, tags) VALUES (?, ?, ?)",
+            (url, title.strip(), tags.strip()),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        return f"Already saved: {url}"
+    finally:
+        conn.close()
+    return f"Saved article #{cursor.lastrowid}: {title.strip()} ({url})"
+
+
+@mcp.tool
+def list_articles(status: str = "unread") -> str:
+    """List articles, newest first.
+
+    Args:
+        status: "unread" (default), "read", or "all".
+    """
+    if status not in ("unread", "read", "all"):
+        raise ValueError("status must be 'unread', 'read', or 'all'")
+    conn = _connect()
+    try:
+        if status == "all":
+            rows = conn.execute(
+                "SELECT id, title, url, tags, status FROM articles "
+                "ORDER BY id DESC"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, title, url, tags, status FROM articles "
+                "WHERE status = ? ORDER BY id DESC",
+                (status,),
+            ).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return f"No {status} articles."
+    lines = [
+        f"#{r['id']} [{r['status']}] {r['title']} — {r['url']}"
+        + (f" (tags: {r['tags']})" if r["tags"] else "")
+        for r in rows
+    ]
+    return "\n".join(lines)</code></pre>
+<p>Notice the error-handling split, which you should keep consistent across the whole server. Expected misses — a duplicate URL, an empty list — are returned as plain strings, because they are normal outcomes the agent can act on. Invalid input — a non-HTTP URL, an unknown status — raises <code>ValueError</code>. Step 6 shows what each looks like from the client side: a returned string arrives as a result, a raised exception arrives as a tool error. Mixing the two up is the most common beginner bug in MCP servers: raising for a routine "not found" makes the host report a failure, and returning a string for invalid input hides a bug the caller should fix.</p>
+<figure class="inline-art"><img src="img2.webp" alt="A three-lane diagram: tools let the agent change the database, resources let the database inform the agent, and prompts give the agent a reusable workflow" loading="lazy"><figcaption>Tools act, resources inform, prompts guide. Keep the three lanes separate and the server stays easy to reason about. Image: AI Frontier Post.</figcaption></figure>
+<h2>Step 3: Finish the tools</h2>
+<p>Add the two remaining tools: marking an article read, and searching. Both follow the same pattern — validate, parameterize, return a string:</p>
+<pre><code>@mcp.tool
+def mark_read(article_id: int) -> str:
+    """Mark one saved article as read.
+
+    Args:
+        article_id: The numeric id from list_articles.
+    """
+    conn = _connect()
+    try:
+        cursor = conn.execute(
+            "UPDATE articles SET status = 'read' WHERE id = ?",
+            (article_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    if cursor.rowcount == 0:
+        return f"No article #{article_id}."
+    return f"Marked article #{article_id} as read."
+
+
+@mcp.tool
+def search_articles(query: str) -> str:
+    """Search titles, URLs, and tags for a keyword.
+
+    Args:
+        query: A single keyword or phrase; matched with LIKE.
+    """
+    if not query.strip():
+        raise ValueError("query must not be empty")
+    pattern = f"%{query.strip()}%"
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, title, url, tags, status FROM articles WHERE "
+            "title LIKE ? OR url LIKE ? OR tags LIKE ? ORDER BY id DESC",
+            (pattern, pattern, pattern),
+        ).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return f"No articles match {query!r}."
+    return "\n".join(
+        f"#{r['id']} [{r['status']}] {r['title']} — {r['url']}" for r in rows
+    )</code></pre>
+<p>Every query here is parameterized — the <code>?</code> placeholders, never string interpolation of user input into SQL. The search tool builds a <code>LIKE</code> pattern from the query, but the pattern still travels as a bound parameter, so a query containing quotes or percent signs cannot break out of the query. If you remember one security rule for tool servers, make it this one: the tool's arguments are untrusted input, even when the only caller is your own agent.</p>
+<h2>Step 4: Add resources and a prompt</h2>
+<p>Tools change state. Resources expose read-only data the agent can pull into context, and prompts package reusable workflows. The distinction matters: a model can read a resource without deciding to "act," and a prompt lets you ship a workflow once instead of re-explaining it in every conversation.</p>
+<p>Add a stats resource, a per-article resource, and a triage prompt:</p>
+<pre><code>@mcp.resource("reading://stats")
+def reading_stats() -> str:
+    """One-line counts of unread, read, and total saved articles."""
+    conn = _connect()
+    try:
+        unread = conn.execute(
+            "SELECT COUNT(*) FROM articles WHERE status = 'unread'"
+        ).fetchone()[0]
+        read = conn.execute(
+            "SELECT COUNT(*) FROM articles WHERE status = 'read'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return f"Reading list: {unread} unread, {read} read, {unread + read} total."
+
+
+@mcp.resource("reading://article/{article_id}")
+def reading_article(article_id: str) -> str:
+    """Full record for one saved article, by numeric id."""
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT id, title, url, tags, status FROM articles WHERE id = ?",
+            (int(article_id),),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return f"No article #{article_id}."
+    return (
+        f"#{row['id']} [{row['status']}] {row['title']}\n"
+        f"URL: {row['url']}\n"
+        f"Tags: {row['tags'] or '(none)'}"
+    )
+
+
+@mcp.prompt
+def triage_inbox() -> str:
+    """Triage the unread inbox: suggest what to read, skip, or tag."""
+    return (
+        "You are triaging a reading list. First read the reading://stats "
+        "resource and list unread articles. Then, for each unread article, "
+        "recommend exactly one action: READ (worth reading this week), "
+        "SKIP (mark it read without reading), or TAG (suggest better tags). "
+        "Do not add, remove, or mark anything read without asking first."
+    )</code></pre>
+<p>Two details here are easy to get wrong. First, the per-article resource is a <em>template</em>: <code>reading://article/{article_id}</code> is a pattern, not a single resource. It will not appear in a plain resource listing (step 6 shows exactly that), but reading <code>reading://article/1</code> works. Second, the resource handler receives the path parameter as a string, so it converts with <code>int(article_id)</code> before querying. And note what the prompt does that a tool cannot: it tells the agent to <em>ask before acting</em>. The prompt is the right place for permission policy, because it travels with the workflow rather than living in one chat transcript.</p>
+<p>Finally, add the entry point. With no arguments, <code>mcp.run()</code> serves the server over stdio — the transport hosts use when they launch your script as a subprocess:</p>
+<pre><code>if __name__ == "__main__":
+    mcp.run()</code></pre>
+<h2>Step 5: Run it</h2>
+<p>Start the server directly and confirm it stays up:</p>
+<pre><code>python server.py</code></pre>
+<p>The process runs until you stop it (Ctrl+C). It prints a startup banner to stderr — never to stdout, because on stdio the stdout stream <em>is</em> the protocol. If you ever add logging to a stdio server, send it to stderr or a file; a single stray print to stdout corrupts the message stream and the host will report a protocol error. Stop the server with Ctrl+C before moving on — the test client in the next step talks to the server object directly, not to this process.</p>
+<h2>Step 6: Test it without a host — the in-memory client</h2>
+<p>You do not need Claude Code, a model, or an API key to test a server. FastMCP's <code>Client</code> can connect to the server object in the same process, with no network and no subprocess. That makes it the fastest test loop you will get, and it belongs in your project's test suite, not just in this tutorial. Create <code>test_client.py</code>:</p>
+<pre><code>import asyncio
+
+from fastmcp import Client
+
+from server import DB_PATH, mcp
+
+
+async def main() -> None:
+    DB_PATH.unlink(missing_ok=True)
+    async with Client(mcp) as client:
+        print("tools:", [t.name for t in await client.list_tools()])
+        print("resources:", [str(r.uri) for r in await client.list_resources()])
+        print("templates:", [str(t.uriTemplate) for t in
+                             await client.list_resource_templates()])
+        print("prompts:", [p.name for p in await client.list_prompts()])
+        print("add:", (await client.call_tool(
+            "add_article",
+            {"url": "https://example.com/fastmcp-guide",
+             "title": "FastMCP guide", "tags": "mcp,python"})).data)
+        print("add again:", (await client.call_tool(
+            "add_article",
+            {"url": "https://example.com/fastmcp-guide",
+             "title": "FastMCP guide"})).data)
+        try:
+            await client.call_tool(
+                "add_article",
+                {"url": "ftp://example.com/x", "title": "Bad"})
+        except Exception as exc:
+            print("bad url:", type(exc).__name__, exc)
+        print("list:", (await client.call_tool(
+            "list_articles", {"status": "unread"})).data)
+        print("stats:", [c.text for c in await client.read_resource(
+            "reading://stats")])
+        print("prompt:", (await client.get_prompt(
+            "triage_inbox")).messages[0].content.text[:80] + "...")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+<p>Run it:</p>
+<pre><code>python test_client.py
+# tools: ['add_article', 'list_articles', 'mark_read', 'search_articles']
+# resources: ['reading://stats']
+# templates: ['reading://article/{article_id}']
+# prompts: ['triage_inbox']
+# add: Saved article #1: FastMCP guide (https://example.com/fastmcp-guide)
+# add again: Already saved: https://example.com/fastmcp-guide
+# bad url: ToolError Error calling tool 'add_article': Not an http(s) URL: 'ftp://example.com/x'
+# list: #1 [unread] FastMCP guide — https://example.com/fastmcp-guide (tags: mcp,python)
+# stats: ['Reading list: 1 unread, 0 read, 1 total.']
+# prompt: You are triaging a reading list. First read the reading://stats resource and lis...</code></pre>
+<p>Read that output the way a server author should. The duplicate add returns a string, not an error — the <code>UNIQUE</code> constraint doing its job through the <code>IntegrityError</code> branch. The bad URL raises, and the client surfaces it as a <code>ToolError</code> naming the tool and the message — which is exactly what a host will show the user, so keep those messages human-readable. The resource listing shows only <code>reading://stats</code>, while the template appears separately under <code>list_resource_templates</code>; if your resource seems to be missing from a host's list, check the templates first. And one genuine gotcha from testing this guide: <code>client.ping()</code> is not answered by the in-memory server in FastMCP 4.1.4 — it raises "Method not found." Do not use ping as a health check for in-memory servers; list the tools instead.</p>
+<p>For a second, independent check, run the inspector. It spawns the server over stdio — the real transport a host would use — and summarizes what it finds:</p>
+<pre><code>fastmcp inspect server.py
+# Server
+#   Name:         Readlist
+#   Version:      4.1.4
+#   Instructions: Manage a personal reading list of articles to read later.
+# Components
+#   Tools:        4
+#   Prompts:      1
+#   Resources:    1
+#   Templates:    1
+# Environment
+#   FastMCP:      4.1.4
+#   MCP:          2.3.0</code></pre>
+<p>Four tools, one prompt, one resource, one template — the whole server, confirmed over the wire. If <code>inspect</code> disagrees with your in-memory test, trust <code>inspect</code>: it exercises the transport your users will actually use.</p>
+<h2>Step 7: Serve it over HTTP</h2>
+<p>Stdio fits one machine and one user. For a shared server — a team tool, a service on your home server — use the Streamable HTTP transport. The CLI starts it without touching your code:</p>
+<pre><code>fastmcp run server.py --transport http --port 8123 --no-banner</code></pre>
+<p>The defaults are worth knowing: the host binds to 127.0.0.1, the default port is 8000, and the route path is <code>/mcp</code> — so the client URL is the base plus <code>/mcp</code>, not the bare host. Connect with the same <code>Client</code>, this time over the network:</p>
+<pre><code>import asyncio
+from fastmcp import Client
+
+async def main():
+    async with Client("http://127.0.0.1:8123/mcp") as client:
+        print("tools:", [t.name for t in await client.list_tools()])
+        r = await client.call_tool("add_article", {"url": "https://example.com/http-test", "title": "HTTP test"})
+        print("add:", r.data)
+        print("stats:", [c.text for c in await client.read_resource("reading://stats")])
+
+asyncio.run(main())
+# tools: ['add_article', 'list_articles', 'mark_read', 'search_articles']
+# add: Saved article #1: HTTP test (https://example.com/http-test)
+# stats: ['Reading list: 1 unread, 0 read, 1 total.']</code></pre>
+<figure class="inline-art"><img src="img3.webp" alt="Two panels comparing transports: stdio runs the server as a local subprocess on one machine, HTTP serves it over the network with a padlock for authentication" loading="lazy"><figcaption>Stdio for one machine, HTTP for a network — and HTTP needs the padlock. Image: AI Frontier Post.</figcaption></figure>
+<p>Do not skip the padlock in that picture. An HTTP MCP server without authentication hands your tools to anyone who can reach the port, and these tools write to a database. FastMCP's answer is an <code>auth=</code> provider on the server (OAuth, remote auth, or token verification) plus per-component auth checks such as required scopes. Setting up a full OAuth provider is beyond this guide's scope, and you should not fake it: keep HTTP servers on localhost until you have configured a real provider, and treat "it binds to 127.0.0.1 by default" as a safety feature, not an inconvenience. The same rule applies to the database file: the server in this guide stores its data next to the script, which is fine for a personal tool and the wrong place for anything multi-user — move the path behind configuration before you share it.</p>
+<h2>Step 8: Plug it into a host</h2>
+<p>The point of the standard is that no host-specific code is needed. FastMCP's installer writes the host configuration for you. For Claude Code:</p>
+<pre><code>fastmcp install claude-code server.py</code></pre>
+<p>The same <code>install</code> command covers Claude Desktop, Cursor, Gemini CLI, and Goose, and <code>fastmcp install mcp-json</code> prints the raw MCP configuration JSON for any host that takes manual config. After installing, restart the host, and the four tools, the stats resource, and the triage prompt appear in its tool list. Ask it to "add this article to my reading list" and it will call <code>add_article</code>; ask it to "triage my inbox" and the prompt's workflow — stats first, one recommendation per article, ask before acting — is what it follows.</p>
+<h2>Which approach should you use?</h2>
+<p>Three choices recur in every server, and this guide gives you a default for each:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Choice</th><th>Use this</th><th>When to switch</th></tr></thead>
+<tbody>
+<tr><td>Tool vs resource</td><td>Tool for anything that changes state; resource for read-only views</td><td>When a "read" has side effects (logging, counting), it is a tool, not a resource</td></tr>
+<tr><td>Prompt vs tool</td><td>Prompt for a reusable workflow with judgment calls; tool for one deterministic action</td><td>When the workflow needs no judgment, fold it into a single tool</td></tr>
+<tr><td>Stdio vs HTTP</td><td>Stdio for personal, single-machine servers</td><td>HTTP when more than one machine or user needs the server — with auth configured first</td></tr>
+<tr><td>Return vs raise</td><td>Return strings for expected misses; raise for invalid input</td><td>When the host must distinguish failure types, raise distinct exception types</td></tr>
+<tr><td>Storage</td><td>SQLite file next to the server for personal tools</td><td>A real database server when the tool is shared or the data outgrows one file</td></tr>
+</tbody>
+</table></div>
+<p>The through-line: make the cheap, safe thing the default. A server that validates inputs, parameterizes queries, fixes its own storage path, and returns boring strings for boring outcomes is a server you can hand to an agent without holding your breath.</p>
+<h2>The takeaway</h2>
+<p>You now have a complete MCP server in one Python file: four tools, two resources, one prompt, a real database, two transports, and a test loop that needs no model and no key. The pattern scales further than this example suggests — swap the SQLite table for your team's issue tracker, your notes database, or an internal API, and the rest of the server stays exactly the same shape. The protocol work is done for you; the remaining work is the part that was always yours: choosing narrow tools, writing descriptions the model can act on, validating every argument, and deciding what an agent is allowed to change without asking. Build the server the way this guide builds it — tested in-memory, inspected over stdio, served over HTTP only with auth in front — and the next capability you give your agent will be a tool you trust, not a script you hope works.</p>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/build-mcp-agent-tutorial/">Build your first MCP-powered agent: tools, servers, and safety rails</a></li><li><a href="/articles/context-mode-mcp-context-window-tutorial/">Context Mode: stop your coding agent from burning its context window — a hands-on tutorial</a></li><li><a href="/articles/codegraph-code-knowledge-graph-tutorial/">Stop letting your coding agent grep: hands-on with CodeGraph, the 72K-star pre-indexed code knowledge graph</a></li><li><a href="/articles/nvidia-skillspector-skill-security-scanner-tutorial/">Scan every skill before you install it: hands-on with NVIDIA's SkillSpector</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
