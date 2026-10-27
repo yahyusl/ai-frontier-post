@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key</title>
+<meta name="description" content="Pydantic AI turns an agent&#x27;s output into a contract: a Pydantic model the model must satisfy, tools built from typed functions, and test models that let you prove it all without an API key. This guide builds a support-ticket triage agent and tests it three ways, all verified on Pydantic AI 2.62.0.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/pydantic-ai-typed-testable-agents-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key">
+<meta property="og:description" content="Pydantic AI turns an agent&#x27;s output into a contract: a Pydantic model the model must satisfy, tools built from typed functions, and test models that let you prove it all without an API key. This guide builds a support-ticket triage agent and tests it three ways, all verified on Pydantic AI 2.62.0.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/pydantic-ai-typed-testable-agents-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/pydantic-ai-typed-testable-agents-tutorial/cover.webp">
+<meta property="og:image:width" content="2352">
+<meta property="og:image:height" content="1008">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key">
+<meta name="twitter:description" content="Pydantic AI turns an agent&#x27;s output into a contract: a Pydantic model the model must satisfy, tools built from typed functions, and test models that let you prove it all without an API key. This guide builds a support-ticket triage agent and tests it three ways, all verified on Pydantic AI 2.62.0.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/pydantic-ai-typed-testable-agents-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key", "description": "Pydantic AI turns an agent's output into a contract: a Pydantic model the model must satisfy, tools built from typed functions, and test models that let you prove it all without an API key. This guide builds a support-ticket triage agent and tests it three ways, all verified on Pydantic AI 2.62.0.", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Priya Nair"}, "image": "https://aifrontierpost.com/articles/pydantic-ai-typed-testable-agents-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key", "description": "Pydantic AI turns an agent's output into a contract: a Pydantic model the model must satisfy, tools built from typed functions, and test models that let you prove it all without an API key. This guide builds a support-ticket triage agent and tests it three ways, all verified on Pydantic AI 2.62.0.", "step": [{"@type": "HowToStep", "name": "Install Pydantic AI", "text": "Install Pydantic AI 2.62.0 into a virtual environment and confirm the version."}, {"@type": "HowToStep", "name": "Run an agent with no model at all", "text": "Set a placeholder API key for offline work and run the triage agent under TestModel."}, {"@type": "HowToStep", "name": "Add tools and typed dependencies", "text": "Give the agent typed tools and a SupportDeps dependency object instead of prompt-embedded data."}, {"@type": "HowToStep", "name": "Make the output type the contract", "text": "Declare TicketAction as the output type so only validated refund, retry, or escalate decisions reach your code."}, {"@type": "HowToStep", "name": "Write three tests without an API key", "text": "Test the wiring with TestModel, force one exact path with FunctionModel, and guard against real requests."}, {"@type": "HowToStep", "name": "Point it at a real model", "text": "Swap the placeholder key for a real one and remove the test override; the agent structure does not change."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key to follow this guide?", "acceptedAnswer": {"@type": "Answer", "text": "No for steps 1 to 5: the install, the agent, and all three tests run locally with TestModel and FunctionModel. You need a real provider key only to run the agent against a real model in step 6, which this guide documents rather than runs."}}, {"@type": "Question", "name": "Does a passing TestModel test prove the agent makes good decisions?", "acceptedAnswer": {"@type": "Answer", "text": "No. TestModel proves your code around the model works: tools are called, dependencies flow, output validates. Whether a real model makes good decisions is a question for evals against real tickets, not unit tests."}}, {"@type": "Question", "name": "What happens when the model returns an invalid output?", "acceptedAnswer": {"@type": "Answer", "text": "Pydantic AI feeds the validation error back to the model for one retry by default. If the model still cannot produce a valid object, the agent raises UnexpectedModelBehavior instead of returning bad data. Your code gets a validated TicketAction or an exception, never a broken object."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key</h1>
+<p class="lede">Pydantic AI turns an agent&#x27;s output into a contract: a Pydantic model the model must satisfy, tools built from typed functions, and test models that let you prove it all without an API key. This guide builds a support-ticket triage agent and tests it three ways, all verified on Pydantic AI 2.62.0.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · October 27, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Pydantic AI makes an agent&#x27;s output a contract: declare a Pydantic model as the output type, build tools from typed functions, inject dependencies as an object, and test everything offline with TestModel and FunctionModel. In this guide, a support-ticket triage agent returns only validated TicketAction decisions, and its three tests pass in 2.41 seconds with no API key.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Pydantic AI 2.62.0, the agent framework from the Pydantic team.</li><li><b>What:</b> Typed tools, typed dependencies, and a validated output type — plus test models that make the whole agent unit-testable offline.</li><li><b>When:</b> Verified 27 October 2026 on Python 3.12.3 (requires Python 3.11 or later).</li><li><b>Requirements:</b> Python 3.11+; no API key, model account, or GPU for steps 1 to 5. A real provider key is needed only for the final, documented-not-run step.</li><li><b>Verified results:</b> TestModel run returned a valid TicketAction (usage: 118 input / 23 output tokens, 2 requests, 2 tool calls); 3 tests passed in 2.41s; invalid output raised UnexpectedModelBehavior after 1 retry; real-request guard raised RuntimeError; the real-model step was documented, not run.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/pydantic-ai-typed-testable-agents-tutorial/cover.webp" alt="A support agent connected to a database, a stack of tickets, and a validation shield" loading="lazy"><figcaption>Agent, tools, and validated output. Image: AI Frontier Post.</figcaption></figure>
+<p>Most AI agent demos end where production begins. The demo prints a string, the string looks right, and everyone moves on. Then the model returns a refund amount as a sentence, or a status word your code has never seen, or a JSON blob with one field missing, and the code downstream does whatever it does with garbage. The failure is not that the model is stupid. It is that nothing between the model and your database checks the shape of what came back.</p>
+<p>Pydantic AI fixes that by making the output type the contract. You declare, as a Pydantic model, exactly what the agent is allowed to return. The framework builds the schema the model must fill, validates what comes back, and sends validation errors back to the model for a retry instead of handing your code a broken object. Tools get the same treatment: typed function signatures become the tool schemas, and dependencies arrive through an explicit object instead of being smuggled in through prompt text.</p>
+<p>This guide builds a real example end to end: a support-ticket triage agent that looks up an order, checks the customer tier, and returns one validated decision — refund, retry, or escalate — with an amount in cents and a reason. Then it tests that agent three ways without spending a cent on API calls: a test model that exercises every tool, a scripted model that forces one exact path, and a guard that makes real model requests impossible inside the test suite. Every command below was run, and every output quoted is the output that came back.</p>
+<h2 id="what-youll-need">What you will need</h2>
+<ul>
+<li>Python 3.11 or later. This guide was verified with Python 3.12.3.</li>
+<li>No API key for steps 1 to 5. The install, the agent, and all three tests run locally with test models. You need a real provider key only for step 6, where the agent is pointed at a real model — and that step is documented, not run, because this guide ran with no key at all.</li>
+<li>A terminal and a text editor. No GPU, no Docker, no model download: the test models live inside the library.</li>
+<li>About 15 minutes. The install is the slow part, and only because of downloads.</li>
+</ul>
+<h2 id="step-1-install">Step 1: Install Pydantic AI</h2>
+<p>Pydantic AI is the agent framework from the Pydantic team, the same people behind the validation library most Python shops already use. Install it with pip, pinning the version this guide verified:</p>
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install "pydantic-ai==2.62.0" pytest</code></pre>
+<p>Check the install:</p>
+<pre><code class="language-bash">python -c "import pydantic_ai; print(pydantic_ai.__version__)"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">2.62.0</code></pre>
+<p>The install also lands Pydantic itself (2.14.1 here) and the test-model machinery. One detail that will matter in step 5: the <code>pydantic-ai</code> package is a thin wrapper around <code>pydantic-ai-slim</code>, which is where the agent code lives. You never import the slim package directly.</p>
+<h2 id="step-2-first-run">Step 2: Run an agent with no model at all</h2>
+<p>Before the triage agent, get one fact straight: Pydantic AI ships a built-in test model, <code>TestModel</code>, that stands in for a real language model. It calls the agent's tools, then returns a dummy answer. That sounds useless until you realise what it buys you: every line of your code around the model — tool logic, dependency wiring, output validation — runs and can be asserted on, with no key, no network, no cost, and the same result every time.</p>
+<p>The one catch, learned the hard way in this guide's sandbox: constructing an agent with a real model name, like <code>'openai:gpt-6.1-sol'</code>, requires the provider's API key variable to be set, even if you intend to override the model in tests. Without it, construction fails immediately with a clear error:</p>
+<pre><code class="language-text">pydantic_ai.exceptions.UserError: Set the `OPENAI_API_KEY` environment variable
+or pass it via `OpenAIProvider(api_key=...)` to use the OpenAI provider.
+To try Pydantic AI without an API key, use the built-in test model: `Agent('test')`.</code></pre>
+<p>So for offline work, set a placeholder. It is never sent anywhere, because the tests override the model and block real requests (step 5 proves both). Keep it in the shell, not in the code:</p>
+<pre><code class="language-bash">export OPENAI_API_KEY=placeholder-for-offline-tests</code></pre>
+<p>Save the triage agent as <code>triage.py</code>. This is the full file used for every run in this guide, and step 3 explains each piece:</p>
+<pre><code class="language-python">"""Support-ticket triage agent: tools, deps, and a validated output type.
+
+Every run in this file works with no API key: the tests override the model
+with TestModel / FunctionModel, and ALLOW_MODEL_REQUESTS=False blocks any
+accidental real request.
+"""
+from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+
+
+@dataclass
+class SupportDeps:
+    """Everything the tools need, injected per run (never baked into prompts)."""
+
+    customer_id: str
+    orders: dict[str, str]  # order_id -> status, e.g. {'ord_1': 'failed'}
+
+
+class TicketAction(BaseModel):
+    """The only shape this agent is allowed to return."""
+
+    action: Literal['refund', 'retry', 'escalate']
+    amount_cents: int = Field(ge=0, le=20_000)
+    reason: str
+
+
+agent = Agent(
+    'openai:gpt-6.1-sol',
+    deps_type=SupportDeps,
+    output_type=TicketAction,
+    instructions=(
+        'Triage support tickets. Refund failed orders under $200, '
+        'retry transient failures, escalate everything else.'
+    ),
+)
+
+
+@agent.tool
+def order_status(ctx: RunContext[SupportDeps], order_id: str) -> str:
+    """Return the status of an order."""
+    return ctx.deps.orders.get(order_id, 'unknown')
+
+
+@agent.tool
+def customer_tier(ctx: RunContext[SupportDeps]) -> str:
+    """Return the customer tier."""
+    return 'pro'
+</code></pre>
+<p>Now run it under <code>TestModel</code> with a small driver script, <code>demo_run.py</code>:</p>
+<pre><code class="language-python">from pydantic_ai.models.test import TestModel
+from triage import SupportDeps, agent
+
+deps = SupportDeps(customer_id='cus_123', orders={'ord_1': 'failed'})
+with agent.override(model=TestModel()):
+    result = agent.run_sync('My order ord_1 never arrived. Fix it.', deps=deps)
+print(result.output)
+print(result.usage)</code></pre>
+<pre><code class="language-bash">python demo_run.py</code></pre>
+<p>Expected output, exactly as it came back:</p>
+<pre><code class="language-text">action='refund' amount_cents=0 reason='a'
+RunUsage(input_tokens=118, output_tokens=23, requests=2, tool_calls=2)</code></pre>
+<p>Read that output carefully, because it teaches the most important lesson in this guide. The output <em>is</em> a valid <code>TicketAction</code> — the right type, the amount inside its 0–20,000 range — but its values are meaningless: amount 0, reason <code>'a'</code>. <code>TestModel</code> invents placeholder values that satisfy the schema. It proves the wiring works. It says nothing about whether a real model would make a good decision. Hold that distinction for the whole guide: test models check your code, evals check the model's judgment, and neither substitutes for the other.</p>
+<h2 id="step-3-tools-deps">Step 3: Tools and dependencies, the typed way</h2>
+<p>Two design decisions in <code>triage.py</code> do most of the work, so they are worth naming explicitly.</p>
+<p>First, <strong>dependencies are a typed object, not prompt text</strong>. <code>SupportDeps</code> is a dataclass holding the customer id and the orders map, declared as <code>deps_type=SupportDeps</code> on the agent and passed per run with <code>deps=deps</code>. Tools receive it as <code>ctx: RunContext[SupportDeps]</code> and read <code>ctx.deps</code>. Nothing about the customer or their orders is pasted into a prompt string, which means nothing about them can be garbled by prompt formatting, and tests can swap in a fake dependency object without touching the agent.</p>
+<p>Second, <strong>tools are plain functions with type hints</strong>. The <code>@agent.tool</code> decorator turns <code>order_status</code> into a tool whose schema comes from its signature: one string argument, <code>order_id</code>, and a docstring that becomes the tool's description to the model. The return type, <code>str</code>, is what the model gets back. There is no separate schema file to keep in sync with the function, because the function <em>is</em> the schema. Change the signature and the schema changes with it — which is also why a test that asserts on tool calls (step 5) is worth writing: it catches signature drift.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/pydantic-ai-typed-testable-agents-tutorial/img2.svg" alt="Diagram: the triage agent calls the order_status and customer_tier tools and returns a validated TicketAction" loading="lazy"><figcaption>The triage agent, its tools, and the validated output type. Diagram: AI Frontier Post.</figcaption></figure>
+<h2 id="step-4-structured-output">Step 4: The output type is the contract</h2>
+<p><code>output_type=TicketAction</code> is the line that changes the agent from a chatbot into a component. Under the hood, Pydantic AI registers a tool named <code>final_result</code> whose arguments are the model's fields, and the model must call it to finish. The returned arguments are validated against <code>TicketAction</code> before your code ever sees them. Three consequences fall out of that, all verified in this guide's sandbox.</p>
+<p><strong>Invalid values never reach your code.</strong> The amount field is <code>Field(ge=0, le=20_000)</code>, so a $200 ceiling is enforced by the type, not by hoping the model respects a sentence in the instructions. When a scripted model was made to return 99,999 cents, the agent retried once and then raised instead of returning a bad object:</p>
+<pre><code class="language-text">pydantic_ai.exceptions.UnexpectedModelBehavior: Exceeded maximum output retries (1)</code></pre>
+<p>The default is one output retry: the framework feeds the validation error back to the model once, and if the model still cannot produce a valid object, it raises. Your code gets a validated <code>TicketAction</code> or an exception — never a string with a JSON fence stuck to it, never an amount your database has to second-guess.</p>
+<p><strong>The action vocabulary is closed.</strong> <code>Literal['refund', 'retry', 'escalate']</code> means the model cannot invent a fourth action like <code>'partial_refund'</code> and hope your switch statement handles it. A value outside the literal fails validation the same way an out-of-range amount does.</p>
+<p><strong>Validation context stays out of the prompt.</strong> Pydantic AI supports a <code>validation_context</code> for validators that need data the model should not see (for example, a list of valid countries for a field validator). This guide's example does not need it, but the pattern matters: checks that belong to your code should not be smuggled into instructions where the model can argue with them.</p>
+<h2 id="step-5-tests">Step 5: Three tests that run without an API key</h2>
+<p>Save the tests as <code>test_triage.py</code>. They use only the standard pytest runner — no async plugin, because every test here calls the synchronous <code>run_sync</code> API at the top level:</p>
+<pre><code class="language-python">"""Tests for triage.py. No API key, no network, same result every run."""
+import pytest
+from pydantic_ai import ModelResponse, ToolCallPart, capture_run_messages, models
+from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.models.test import TestModel
+
+from triage import SupportDeps, TicketAction, agent
+
+models.ALLOW_MODEL_REQUESTS = False
+
+DEPS = SupportDeps(customer_id='cus_123', orders={'ord_1': 'failed'})
+
+
+def test_testmodel_calls_every_tool_and_returns_valid_output():
+    with agent.override(model=TestModel()):
+        with capture_run_messages() as messages:
+            result = agent.run_sync('My order ord_1 never arrived. Fix it.', deps=DEPS)
+    assert isinstance(result.output, TicketAction)
+    tool_calls = [
+        part.tool_name
+        for msg in messages
+        for part in msg.parts
+        if part.part_kind == 'tool-call'
+    ]
+    assert 'order_status' in tool_calls
+    assert 'customer_tier' in tool_calls
+    assert 'final_result' in tool_calls  # the structured-output tool
+
+
+def test_functionmodel_forces_the_failed_order_path():
+    def scripted(messages, info):
+        if len(messages) == 1:
+            return ModelResponse(
+                parts=[ToolCallPart('order_status', {'order_id': 'ord_1'})]
+            )
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    'final_result',
+                    {
+                        'action': 'refund',
+                        'amount_cents': 4999,
+                        'reason': 'Order failed; refund under $200 policy.',
+                    },
+                )
+            ]
+        )
+
+    with agent.override(model=FunctionModel(scripted)):
+        result = agent.run_sync('My order ord_1 never arrived. Fix it.', deps=DEPS)
+    assert result.output == TicketAction(
+        action='refund',
+        amount_cents=4999,
+        reason='Order failed; refund under $200 policy.',
+    )
+
+
+def test_real_model_requests_are_blocked():
+    with pytest.raises(RuntimeError, match='ALLOW_MODEL_REQUESTS'):
+        agent.run_sync('Hello', deps=DEPS)
+</code></pre>
+<p>Each test covers a different layer, and the distinction is the point:</p>
+<ul>
+<li><strong><code>TestModel</code> tests the wiring.</strong> By default it calls every tool, then the <code>final_result</code> output tool. The test asserts the output type and that all three tool calls happened. It also exposes a useful honesty check: <code>capture_run_messages</code> shows <code>TestModel</code> called <code>order_status</code> with the placeholder argument <code>{'order_id': 'a'}</code>. It does not read your prompt and extract the real order id. If your tool logic depends on receiving a realistic argument, <code>TestModel</code> cannot prove that path — which is what the next test is for.</li>
+<li><strong><code>FunctionModel</code> tests one exact path.</strong> You write a function that receives the message list and returns the next model response. On the first call it forces an <code>order_status</code> call with <code>ord_1</code>; on the second it returns the <code>final_result</code> call with exact values. This is how you test the branch where the order really failed, the tool really ran, and the output really validates — without a model in the loop at all. Note the shape: for a structured-output agent, the scripted function must return a <code>final_result</code> tool call whose arguments are the output model's fields, not a plain text reply.</li>
+<li><strong>The guard test proves accidents are impossible.</strong> <code>models.ALLOW_MODEL_REQUESTS = False</code> makes any real model request raise <code>RuntimeError: Model requests are not allowed, since ALLOW_MODEL_REQUESTS is False</code>. The test runs the agent with no override and asserts that error. If someone later removes an override or adds a test that forgets one, the suite fails loudly instead of spending money and waiting on a network call.</li>
+</ul>
+<p>Run them with the placeholder key from step 2 (needed at import time, as explained there — the guard test proves it is never used):</p>
+<pre><code class="language-bash">OPENAI_API_KEY=placeholder-for-offline-tests python -m pytest test_triage.py -q</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">3 passed in 2.41s</code></pre>
+<p>Three tests, two and a half seconds, zero network. That is the loop you want for agent code: fast enough to run on every save, strict enough that a broken tool signature or a changed output field fails here instead of in production.</p>
+<h2 id="step-6-real-model">Step 6: Point it at a real model (one line, documented not run)</h2>
+<p>Everything above runs without a key. To go live, you change nothing about the agent's structure: set a real provider key in the environment, and remove the override so the agent uses the model string it was constructed with:</p>
+<pre><code class="language-bash">export OPENAI_API_KEY="your-real-key"
+python -c "
+from triage import SupportDeps, agent
+deps = SupportDeps(customer_id='cus_123', orders={'ord_1': 'failed'})
+result = agent.run_sync('My order ord_1 never arrived. Fix it.', deps=deps)
+print(result.output)
+"</code></pre>
+<p>This step is documented, not run: this guide had no real key, and it would be dishonest to quote an output from a model call that never happened. What changes when you do run it is only the model behind the same contract — the tools, the dependency object, and the <code>TicketAction</code> validation are identical. And the first thing to check on a real run is the usage object: <code>result.usage</code> reports input tokens, output tokens, requests, and tool calls, which is what you need to price the agent before it meets real traffic. Keep the guard test from step 5 in place: it only blocks requests inside the test process, where <code>ALLOW_MODEL_REQUESTS</code> is set to <code>False</code>, and does not affect production runs.</p>
+<h2 id="what-tests-dont-prove">What these tests do not prove</h2>
+<p>The framework's own testing guide says it plainly, and it is worth repeating because it is the easiest thing to get wrong: unit tests check your code around the model — tools, dependencies, output validation, failure handling. They do not tell you whether the model's answers are good. <code>TestModel</code> returning <code>refund</code> for your ticket proves nothing about what a real model will return for a real ticket, and <code>FunctionModel</code> returning your scripted answer proves even less about the model. What they prove is that <em>if</em> the model behaves, your code handles it correctly, and <em>if</em> it misbehaves, your code fails safely instead of writing garbage downstream.</p>
+<p>Answer quality needs a different tool: evals. Run the agent against a fixed set of real tickets with a real model, record the outputs, and grade them — ideally with assertions on the structured fields (was the action right? was the amount within policy?) rather than vibes about the prose. The structured output type is what makes that grading mechanical: you are asserting on fields, not reading paragraphs. Treat the unit tests in step 5 as the gate that runs on every commit, and evals as the gate that runs before every model or prompt change.</p>
+<h2 id="alternatives">When to use this vs alternatives</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Approach</th><th>What you get</th><th>Use it when</th></tr></thead>
+<tbody>
+<tr><td>A raw provider SDK</td><td>Full control over every request, and full responsibility for parsing, validation, retries, and tool plumbing</td><td>You need one unusual provider feature the frameworks do not expose, and you are willing to build the surrounding machinery yourself</td></tr>
+<tr><td>A graph-based agent framework</td><td>Explicit multi-step workflows with branching, loops, and state machines between steps</td><td>The workflow itself is the product: approval chains, retries across steps, and human-in-the-loop stages</td></tr>
+<tr><td>Pydantic AI</td><td>Typed tools, typed dependencies, and a validated output type, with test models that make the whole thing unit-testable offline</td><td>One agent must return data your code can trust, and you want its tests to run in seconds with no key</td></tr>
+<tr><td>A multi-agent orchestration framework</td><td>Teams of specialised agents with handoffs, shared memory, and delegation</td><td>The task genuinely splits across roles that need to talk to each other, not just one agent with tools</td></tr>
+</tbody></table></div>
+<p>The deciding factor is where your risk lives. If your risk is a malformed output reaching a database, the output type is the whole argument. If your risk is a ten-step workflow with approvals, the graph is the argument. Most single-purpose production agents — triage, extraction, classification, routing — are the first kind, and they are where Pydantic AI earns its place.</p>
+<h2 id="gotchas">Gotchas worth knowing before you build</h2>
+<ul>
+<li><strong>The model string needs a key at import time.</strong> Constructing <code>Agent('openai:gpt-6.1-sol')</code> raises <code>UserError</code> without <code>OPENAI_API_KEY</code> set, even if every test overrides the model. Set a placeholder for offline work; the guard test proves it is never used.</li>
+<li><strong><code>run_sync</code> cannot run inside a running event loop.</strong> Calling it from async code raises <code>RuntimeError: This event loop is already running</code>. Inside async code, use <code>await agent.run(...)</code>; <code>run_sync</code> is for scripts and synchronous tests.</li>
+<li><strong><code>TestModel</code> calls every tool, with placeholder arguments.</strong> It does not extract values from your prompt. If a tool's behaviour depends on a realistic argument, script that path with <code>FunctionModel</code> instead.</li>
+<li><strong>A structured-output agent finishes through the <code>final_result</code> tool.</strong> A scripted model must return a <code>final_result</code> tool call with the output model's fields. A plain text reply will not satisfy an agent whose <code>output_type</code> is a Pydantic model.</li>
+<li><strong>Output retries default to one.</strong> A model that keeps returning invalid output gets one retry, then the agent raises <code>UnexpectedModelBehavior</code>. That is a feature — it is the guarantee that bad data never reaches your code — but budget for it: a model that cannot satisfy a tight schema will fail loudly instead of degrading gracefully.</li>
+<li><strong>Instructions are not validation.</strong> A sentence in the instructions saying "never refund over $200" is a suggestion to the model. <code>Field(le=20_000)</code> is a guarantee enforced after the model answers. Put policy in the type whenever the policy can be expressed as one.</li>
+</ul>
+<h2 id="the-takeaway">The takeaway</h2>
+<p>An agent that returns a string is a demo. An agent that returns a validated object is a component, and components can be tested, priced, and trusted. Declare the output type, inject dependencies as a typed object, let tool signatures be the tool schemas, and test the whole thing with models that never touch the network. The triage agent in this guide is 60 lines of application code and 60 lines of tests, and the tests run in under three seconds with no key. That ratio — tests as cheap as the code, and as strict as the contract — is what makes an agent safe to ship. Build your next agent that way, and let the model argue with the schema instead of your database.</p>
+
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Pydantic AI testing guide: <a href="https://pydantic.dev/docs/ai/guides/testing/" rel="nofollow">pydantic.dev/docs/ai/guides/testing/</a> — TestModel, FunctionModel, Agent.override, ALLOW_MODEL_REQUESTS, and capture_run_messages.</li>
+<li>Pydantic AI output documentation: <a href="https://pydantic.dev/docs/ai/core-concepts/output/" rel="nofollow">pydantic.dev/docs/ai/core-concepts/output/</a> — output_type, structured output via tool calling, and output validation.</li>
+<li>All version numbers, outputs, and error messages in this guide were verified by running Pydantic AI 2.62.0 on Python 3.12.3; the real-model step was documented, not run, because no provider key was available.</li>
+</ul>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/hallmark-anti-slop-design-skill-tutorial/">Stop shipping AI slop: hands-on with Hallmark, the design skill that refuses to look AI-made</a></li><li><a href="/articles/claude-seo-audit-plugin-tutorial/">Run a full SEO audit from your terminal: hands-on with Claude SEO, the 22,000-star Claude Code plugin</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
