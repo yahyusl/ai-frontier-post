@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop letting your coding agent grep: hands-on with XERJ, the local search engine for AI agents</title>
+<meta name="description" content="XERJ (xerj-org/xerj) is a single Rust binary that turns any folder into a local search engine for coding agents: index a project once, then get cited passages instead of whole files. This guide installs v1.0.0-rc.99, indexes a demo shop, and verifies search, go-to-definition, the Elasticsearch API, reference coding, and the MCP server — every command run, every output shown.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/xerj-local-search-agents-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop letting your coding agent grep: hands-on with XERJ, the local search engine for AI agents">
+<meta property="og:description" content="XERJ (xerj-org/xerj) is a single Rust binary that turns any folder into a local search engine for coding agents: index a project once, then get cited passages instead of whole files. This guide installs v1.0.0-rc.99, indexes a demo shop, and verifies search, go-to-definition, the Elasticsearch API, reference coding, and the MCP server — every command run, every output shown.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/xerj-local-search-agents-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/xerj-local-search-agents-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Stop letting your coding agent grep: hands-on with XERJ, the local search engine for AI agents">
+<meta name="twitter:description" content="XERJ (xerj-org/xerj) is a single Rust binary that turns any folder into a local search engine for coding agents: index a project once, then get cited passages instead of whole files. This guide installs v1.0.0-rc.99, indexes a demo shop, and verifies search, go-to-definition, the Elasticsearch API, reference coding, and the MCP server — every command run, every output shown.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/xerj-local-search-agents-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop letting your coding agent grep: hands-on with XERJ, the local search engine for AI agents", "description": "XERJ (xerj-org/xerj) is a single Rust binary that turns any folder into a local search engine for coding agents: index a project once, then get cited passages instead of whole files. This guide installs v1.0.0-rc.99, indexes a demo shop, and verifies search, go-to-definition, the Elasticsearch API, reference coding, and the MCP server — every command run, every output shown.", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Priya Nair"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Stop letting your coding agent grep: hands-on with XERJ, the local search engine for AI agents", "description": "XERJ (xerj-org/xerj) is a single Rust binary that turns any folder into a local search engine for coding agents: index a project once, then get cited passages instead of whole files. This guide installs v1.0.0-rc.99, indexes a demo shop, and verifies search, go-to-definition, the Elasticsearch API, reference coding, and the MCP server — every command run, every output shown.", "step": [{"@type": "HowToStep", "name": "Install XERJ", "text": "Download the v1.0.0-rc.99 release asset, verify its SHA-256 checksum, and confirm the version."}, {"@type": "HowToStep", "name": "Start a node", "text": "Start the server with --insecure on loopback and a data directory outside any folder you will index."}, {"@type": "HowToStep", "name": "Build a demo project", "text": "Create a cart module, an order store, a CSV of orders, a log file, and a README."}, {"@type": "HowToStep", "name": "Index it", "text": "Run autoindex with --prefix demo: 5 files become 15 records across 2 datasets in 12.4s."}, {"@type": "HowToStep", "name": "Search and jump to definitions", "text": "Search returns scored passages with file and line; def returns the declaration for a known symbol."}, {"@type": "HowToStep", "name": "Query the Elasticsearch API", "text": "List indices and run a raw _search: standard Elasticsearch JSON comes back."}, {"@type": "HowToStep", "name": "Do reference coding", "text": "Index a peer project under its own prefix and search it before writing your own version."}, {"@type": "HowToStep", "name": "Connect over MCP", "text": "Preview wiring with init --dry-run, register the xerj mcp server, and confirm xerj_search in the tool list."}, {"@type": "HowToStep", "name": "Measure with gain", "text": "Read searches served and latency from the node's audit log with xerj gain."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What do I need to run XERJ?", "acceptedAnswer": {"@type": "Answer", "text": "A Linux, macOS, or Windows machine, curl, and a shell. The lexical default used in this guide needs no API key, model account, or GPU."}}, {"@type": "Question", "name": "Is --insecure safe?", "acceptedAnswer": {"@type": "Answer", "text": "Only on a dev machine: a fresh node binds loopback only, but with --insecure there is no TLS and no authentication, so every caller that can reach the port is a superuser. Never run it on a shared or exposed host; without the flag, authentication is on and the key is in <data-dir>/admin.key."}}, {"@type": "Question", "name": "Does XERJ replace Elasticsearch?", "acceptedAnswer": {"@type": "Answer", "text": "No. It is wire-compatible, so existing clients work, but it is a local-first single binary for agent workflows, not a distributed cluster."}}, {"@type": "Question", "name": "Is the token-saving claim verified in this guide?", "acceptedAnswer": {"@type": "Answer", "text": "No. The 2.7x figure is the project's controlled study on code the model had not memorised. This guide verifies the machinery and measures real usage with xerj gain."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop letting your coding agent grep: hands-on with XERJ, the local search engine for AI agents</h1>
+<p class="lede">Your coding agent reads whole files to answer narrow questions, and you pay for every wasted line. XERJ replaces the grep-and-read loop with a local index: one Rust binary, one command to index a folder, and passages back with file and line — verified here end to end on v1.0.0-rc.99.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · 2026-10-27 · 17 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> XERJ is a single Rust binary that turns any folder into a local search engine for coding agents: index a project once, then retrieve cited passages instead of whole files. This guide installs v1.0.0-rc.99, indexes a demo shop, and verifies search, go-to-definition, the Elasticsearch API, reference coding, and the 22-tool MCP server — with every output shown as the run produced it.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> xerj-org/xerj on GitHub.</li><li><b>What:</b> a local-first search engine and MCP server for AI agents: BM25, vector, and hybrid search behind an Elasticsearch-compatible API, in one Rust binary.</li><li><b>When:</b> the repository was created 30 June 2026 and had 16,954 GitHub stars and 1,196 forks at the time of writing, with roughly 7,000 stars gained in the previous seven days per the independent tracker findarepo.</li><li><b>Requirements:</b> Linux, macOS, or Windows; curl and a shell. No API key, model account, or GPU for the lexical default used in this guide.</li><li><b>Licence:</b> Apache-2.0.</li><li><b>Verified:</b> autoindex turned 5 files into 15 records across 2 datasets in 12.4s; search returned README.md:3 at score 15.70 and app.log:2 at 22.71; def located apply_discount at cart.py:11 and OrderStore at orders.py:6; raw Elasticsearch search returned 5 hits; the MCP handshake listed 22 tools — all on v1.0.0-rc.99.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/xerj-local-search-agents-tutorial/cover.webp" alt="A glowing magnifying glass over code lines, connected to a small robot agent" loading="lazy"><figcaption>Search the passage, not the file. Image: AI Frontier Post.</figcaption></figure>
+<p>Your coding agent has a reading problem. Give it a question about a codebase it has not seen, and it does what a junior developer does on a first day: it greps, opens whole files, reads past the answer, and reads them again on the next step. The context window fills with code the agent will never use, and the bill for that reading lands on you. XERJ attacks that specific waste. It is a single Rust binary that indexes a folder — code, docs, logs, CSVs, PDFs — and answers questions with the passage that matters, cited by file and line, instead of the file itself.</p>
+<p>Why now: XERJ is having its breakout week. The repository (xerj-org/xerj) was created on 30 June 2026 and, at the time of writing, has 16,954 stars and 1,196 forks on GitHub, with roughly 7,000 of those stars gained in the previous seven days according to the independent tracker findarepo, which listed it on its daily trending ranking. The current release is v1.0.0-rc.99, published under the Apache-2.0 licence. The pitch that earned those stars is narrow and testable: an agent that queries an index spends less of its context on reading, so it can be smaller, cheaper, and still solve the task. This guide tests the machinery behind that pitch, not the pitch itself. Every command below was run against v1.0.0-rc.99, and every output quoted is output the run actually produced.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/xerj-local-search-agents-tutorial/img2.webp" alt="Folders of code, documents and logs flowing into a search index, which returns one cited passage to an AI agent" loading="lazy"><figcaption>Index once, retrieve passages instead of files. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li>A Linux, macOS, or Windows machine. This guide runs on Linux x86-64; the release page carries builds for all three systems on x86-64 and arm64.</li>
+<li><code>curl</code> and a shell. No Rust toolchain, no Docker, no Java runtime: the download is one static binary.</li>
+<li>No API key, no model account, and no GPU. The default search mode is lexical and runs entirely offline. A neural embedding mode exists, but nothing in this guide needs it.</li>
+<li>About 15 minutes and a folder you are allowed to index. You will build a tiny demo shop below, so you do not need to point the tool at a real codebase to follow along.</li>
+</ul>
+<h2 id="step-1-install">Step 1: Install XERJ</h2>
+<p>Download the release asset for your system from the project's GitHub releases page and check it before you run it. The hand-verified path used here, for Linux x86-64, is:</p>
+<pre><code class="language-bash">curl -fsSL -o xerj.tar.gz https://github.com/xerj-org/xerj/releases/download/v1.0.0-rc.99/xerj-1.0.0-rc.99-x86_64-unknown-linux-gnu.tar.gz
+curl -fsSL -o xerj.tar.gz.sha256 https://github.com/xerj-org/xerj/releases/download/v1.0.0-rc.99/xerj-1.0.0-rc.99-x86_64-unknown-linux-gnu.tar.gz.sha256
+sha256sum xerj.tar.gz</code></pre>
+<p>The checksum must read <code>44fe510cff2538f6801ce2317ea4586a1cb177ded43b4c37aa9c1589e816528a</code>. If it does not, stop: you have a different file than the release, and nothing downstream is trustworthy until that is resolved. Extract it and confirm the version:</p>
+<pre><code class="language-bash">mkdir -p ~/xerj && tar -xzf xerj.tar.gz -C ~/xerj
+~/xerj/xerj-1.0.0-rc.99-x86_64-unknown-linux-gnu/xerj --version</code></pre>
+<p>Expected output:</p>
+<pre><code>xerj v1.0.0-rc.99</code></pre>
+<p>The tarball is about 33 MB. If you would rather use the project's one-line installer, it is <code>curl -fsSL https://xerj.org/get | sh</code>, which places <code>xerj</code> in <code>~/.local/bin</code> on Linux and macOS without editing your PATH; the PowerShell equivalent adds its directory to the user PATH. This guide uses the direct download because a checksum can be checked against it. Either way, put the binary somewhere on your PATH or use its full path in the commands below. The rest of this guide calls it <code>xerj</code>.</p>
+<h2 id="step-2-start">Step 2: Start a node — and understand the trust boundary first</h2>
+<p>Start the server before anything else, because the search commands talk to a running node; they do not start one:</p>
+<pre><code class="language-bash">xerj --insecure --data-dir ~/xerj-data &amp;
+curl -s http://localhost:9200/ | head -c 300</code></pre>
+<p>The second command should return a JSON block naming cluster <code>xerj</code> with an Elasticsearch-compatible version block. Two things in that first command deserve a pause, because both are deliberate and both are easy to misuse.</p>
+<p>First, <code>--insecure</code> turns off TLS and API-key authentication. The README is blunt about what that means: every caller that can reach the port is a superuser who can read and delete every index. It is safe on a dev machine only because a fresh node binds <code>127.0.0.1</code> and nothing else, so nothing off the machine can reach it. Never run <code>--insecure</code> on a shared host or a machine with its ports exposed. Without the flag, authentication is on by default and the server writes its key to <code>&lt;data-dir&gt;/admin.key</code> on first boot; clients then pass it with <code>--api-key</code> or the <code>XERJ_API_KEY</code> environment variable.</p>
+<p>Second, keep the data directory outside any folder you will index. The directory <code>data/</code> is not in the built-in ignore list, so a data directory inside an indexed tree gets indexed along with everything else. <code>~/xerj-data</code> sits beside the demo project, not inside it.</p>
+<h2 id="step-3-demo-project">Step 3: Build the demo project</h2>
+<p>Create a small shop with a cart module, an order store, a CSV of orders, a log file, and a README. The point is variety: code, structured data, logs, and prose in one folder, so you can see the indexer sort them into datasets instead of one flat pile.</p>
+<pre><code class="language-bash">mkdir -p demo-shop/shop demo-shop/data
+cat &gt; demo-shop/shop/cart.py &lt;&lt;'EOF'
+"""Shopping cart: totals, discount codes, and checkout."""
+
+DISCOUNT_CODES = {"SAVE10": 0.10, "SAVE20": 0.20}
+
+
+def calculate_subtotal(items):
+    """Return the sum of price * quantity for every item dict."""
+    return sum(item["price"] * item["quantity"] for item in items)
+
+
+def apply_discount(subtotal, code):
+    """Apply a discount code; unknown codes leave the subtotal unchanged."""
+    rate = DISCOUNT_CODES.get(code.upper(), 0.0) if code else 0.0
+    return round(subtotal * (1 - rate), 2)
+
+
+def checkout(items, code=None):
+    """Charge the discounted total. Retries the payment gateway twice
+    on timeout before raising, so a slow gateway does not lose the order."""
+    total = apply_discount(calculate_subtotal(items), code)
+    return {"total": total, "items": len(items)}
+EOF
+cat &gt; demo-shop/shop/orders.py &lt;&lt;'EOF'
+"""Order storage: append orders to CSV and read them back."""
+
+import csv
+
+
+class OrderStore:
+    """A tiny CSV-backed order store."""
+
+    def __init__(self, path):
+        self.path = path
+
+    def save_order(self, order_id, total):
+        """Append one order row to the CSV file."""
+        with open(self.path, "a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([order_id, total])
+
+    def load_orders(self):
+        """Return every stored order as a list of dicts."""
+        with open(self.path, newline="") as f:
+            return list(csv.DictReader(f))
+EOF
+cat &gt; demo-shop/data/orders.csv &lt;&lt;'EOF'
+order_id,total
+ORD-1001,59.98
+ORD-1002,24.50
+ORD-1003,120.00
+EOF
+cat &gt; demo-shop/app.log &lt;&lt;'EOF'
+2026-10-27T09:00:01Z INFO checkout started order=ORD-1004
+2026-10-27T09:00:03Z ERROR checkout error: payment gateway timeout, retrying (attempt 1 of 2)
+2026-10-27T09:00:05Z INFO checkout succeeded order=ORD-1004 total=89.99
+EOF
+cat &gt; demo-shop/README.md &lt;&lt;'EOF'
+# Demo Shop
+
+A tiny shop used to demo local code search. Refund window: 30 days from
+purchase. Discount codes SAVE10 and SAVE20 are defined in shop/cart.py.
+EOF</code></pre>
+<h2 id="step-4-index">Step 4: Index it with one command</h2>
+<p>Point autoindex at the folder and give it a prefix. One prefix is one source folder, and the prefix becomes the first part of every index name, so pick something that means the project:</p>
+<pre><code class="language-bash">xerj autoindex demo-shop --prefix demo</code></pre>
+<p>The run for this guide finished with this summary line:</p>
+<pre><code>xerj-done ok=true exit=0 reason=completed wall=12.4s files=5 records=15 datasets=2 junk_files=0 code_files=2 code_files_indexed=2 code_files_junked=0</code></pre>
+<p>Five files became 15 records across two datasets: <code>demo-docs</code> (12 records from the code, log, and README) and <code>demo-data</code> (3 records from the CSV). Nothing needed a schema, a mapping, or a config file. The indexer sniffed each file, worked out what it was, and split it accordingly; code went through tree-sitter, so it arrived with symbols and line numbers rather than as flat text.</p>
+<p>Three prefix rules will save you confusion later. First, the default prefix is <code>ax</code> when you do not pass one, and <code>xerj search</code> searches that default unless you tell it otherwise — so if you indexed with <code>--prefix demo</code>, search with <code>--prefix demo</code> or you will search an empty default. Second, a prefix keeps only lowercase letters and digits, joined by single dashes, so <code>My_Proj</code> becomes <code>my-proj</code>. Third, one prefix per folder: indexing a second folder under the same prefix is refused, because datasets are keyed to the prefix. To see what an index actually contains, run <code>xerj autoindex map</code>, which prints a data map of datasets, record counts, file formats, and fields.</p>
+<h2 id="step-5-search">Step 5: Ask questions, get passages</h2>
+<p>Search takes plain words, not a query language. Ask about the refund policy:</p>
+<pre><code class="language-bash">xerj search "refund window" --prefix demo -k 3</code></pre>
+<p>Output (abridged only by the tool's own passage window):</p>
+<pre><code>xerj search: these hits are lexical; this command does not consult the embedding.
+
+─── README.md:3  (score 15.70)
+    # Demo Shop
+
+    A tiny shop used to demo local code search. Refund window: 30 days from
+    purchase. Discount codes SAVE10 and SAVE20 are defined in shop/cart.py.
+
+1 passage(s) from 'demo-*'. Cite ax_path:line (ax_path#locator for a data row) for anything you rely on.</code></pre>
+<p>That header line matters: the default ranking is lexical, matching the words you typed. It is not a neural reading of the code, and the tool says so on every run. Ask a harder question, one whose answer lives in two places:</p>
+<pre><code class="language-bash">xerj search "payment gateway timeout retry" --prefix demo -k 3</code></pre>
+<pre><code>─── app.log:2  (score 22.71)
+    2026-10-27T09:00:01Z INFO checkout started order=ORD-1004
+    2026-10-27T09:00:03Z ERROR checkout error: payment gateway timeout, retrying (attempt 1 of 2)
+    2026-10-27T09:00:05Z INFO checkout succeeded order=ORD-1004 total=89.99
+
+─── shop/cart.py:18  (score 7.34)
+    def checkout(items, code=None):
+        """Charge the discounted total. Retries the payment gateway twice
+        on timeout before raising, so a slow gateway does not lose the order."""
+        total = apply_discount(calculate_subtotal(items), code)
+        return {"total": total, "items": len(items)}
+
+2 passage(s) from 'demo-*'.</code></pre>
+<p>Notice what the agent receives in each case: a passage with a file and a line, not a directory listing and not a whole file. The log line outscores the docstring because more of the query's words appear there — lexical ranking is transparent like that, which makes it debuggable when a result surprises you. Two flags are worth knowing: <code>-k</code> sets how many passages come back (default 5), and <code>--full</code> sets how many characters of each passage print (default 600). Add <code>--json</code> when a script, not a human, consumes the result.</p>
+<h2 id="step-6-definitions">Step 6: Jump to definitions instead of searching</h2>
+<p>When you already know the name, <code>def</code> is the sharper tool. It returns the declaration, not every mention:</p>
+<pre><code class="language-bash">xerj def "apply_discount" --prefix demo --lang python
+xerj def "OrderStore" --prefix demo --kind class</code></pre>
+<pre><code>─── shop/cart.py:11  [function]
+    def apply_discount(subtotal, code):
+
+─── shop/orders.py:6  [class]
+    class OrderStore:</code></pre>
+<p>The <code>--kind</code> and <code>--lang</code> filters do what they say: the class query returned exactly one definition. Use <code>search</code> when you do not know the name and <code>def</code> when you do. That distinction is the whole workflow in miniature — a vague question gets passages, a precise name gets a location.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/xerj-local-search-agents-tutorial/img3.webp" alt="Four workflow stages in a row: download, server, indexing, search, with an agent client connected to the server" loading="lazy"><figcaption>Download, start, index, search — then hand the same index to your agent. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="step-7-elasticsearch">Step 7: Use the Elasticsearch API you already know</h2>
+<p>Because the node speaks the Elasticsearch wire API, nothing in your existing tooling needs to learn a new dialect. List the indices:</p>
+<pre><code class="language-bash">curl -s "localhost:9200/_cat/indices?format=json" | python3 -m json.tool | head -40</code></pre>
+<p>You will see <code>demo-docs</code> and <code>demo-data</code> alongside the node's own catalog and memory indices, all green and open. Run a raw search the way you would against Elasticsearch itself:</p>
+<pre><code class="language-bash">curl -s "localhost:9200/demo-*/_search?q=discount&amp;size=2"</code></pre>
+<p>The response for this guide reported 5 hits, all in <code>demo-docs</code>, in standard Elasticsearch JSON shape — hits, total, source documents included. That compatibility is the reason the rest of the ecosystem works unchanged: existing Elasticsearch clients, dashboards, and query DSL point at <code>localhost:9200</code> and function. The node even answers the root endpoint with an Elasticsearch 8.13 version block. Treat that as wire compatibility, not as a claim that this is Elasticsearch under the hood — it is a Rust engine speaking the same protocol.</p>
+<h2 id="step-8-reference-coding">Step 8: Do reference coding with a peer project</h2>
+<p>Indexing your own project answers questions about your code. The use case XERJ is built around goes one step further: before writing a feature, index the open-source projects that already solved it, and read how they did it. Reproduce the loop on a small scale with a second folder that implements retries differently — exponential backoff instead of a fixed retry count:</p>
+<pre><code class="language-bash">mkdir -p demo-peer
+cat &gt; demo-peer/retry.py &lt;&lt;'EOF'
+"""Retry helper from a peer project: exponential backoff."""
+
+import time
+
+
+def retry_with_backoff(fn, attempts=3, base_delay=0.5):
+    """Call fn, retrying with exponential backoff on failure.
+
+    Delay doubles each attempt: 0.5s, 1s, 2s. Raises the last
+    exception after the final attempt.
+    """
+    delay = base_delay
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except Exception:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+EOF
+xerj autoindex demo-peer --prefix peer
+xerj search "exponential backoff retry" --prefix peer -k 2</code></pre>
+<p>The peer index took one file to two records, and the search returned <code>retry.py:1</code> with the full function, score 3.59. The loop is now visible end to end: clone the peer project, index it under its own prefix, search it before writing your own version, and cite what you borrowed. In real work the peer folder is a cloned repository, not a ten-line file, but the commands do not change. One discipline belongs in the loop and XERJ's own docs state it plainly: respect the licenses of the projects you index and cite what you reuse.</p>
+<h2 id="step-9-mcp">Step 9: Hand the index to your agent over MCP</h2>
+<p>So far a human has typed the commands. An agent that cannot run a shell reaches the same index through the Model Context Protocol, and the binary you installed is already the MCP server — nothing else to download. First, wire it into the project. The safe way to preview that wiring is a dry run, which prints what would be written and writes nothing:</p>
+<pre><code class="language-bash">cd demo-shop &amp;&amp; xerj init --dry-run</code></pre>
+<p>In this guide the dry run listed four files it would write: <code>.mcp.json</code> (registering the <code>xerj mcp</code> server), <code>.claude/skills/xerj/SKILL.md</code> and <code>.claude/skills/xerj-hub/SKILL.md</code> (teaching files for the search commands and the hub), and <code>AGENTS.md</code> (a short XERJ section). Run <code>xerj init</code> without <code>--dry-run</code> to actually write them; it backs up any file it edits with a <code>.bak</code> copy. Then restart the agent session so it picks up the new server.</p>
+<p>The MCP registration itself is one entry. In the generic JSON form it looks like this, with the absolute path to your binary:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "xerj": {
+      "command": "/home/you/.local/bin/xerj",
+      "args": ["mcp"],
+      "env": { "XERJ_URL": "http://localhost:9200" }
+    }
+  }
+}</code></pre>
+<p>Two details decide whether this works. First, use the absolute path: hosts launched from a desktop icon do not inherit your shell's PATH. Second, <code>xerj mcp</code> does not start a node — it speaks MCP over stdio and proxies to the node named by <code>XERJ_URL</code> (default <code>http://localhost:9200</code>), so step 2's server must already be running. If the node runs with authentication on, add <code>"XERJ_AUTH": "ApiKey &lt;key&gt;"</code> beside the URL; the key lives in the node's <code>&lt;data-dir&gt;/admin.key</code>.</p>
+<p>To confirm the server side independently of any agent client, this guide spoke raw MCP JSON-RPC to it: an <code>initialize</code> request, the <code>initialized</code> notification, then <code>tools/list</code>. The server answered as <code>xerj-mcp</code> version <code>1.0.0-rc.99</code> with 22 tools, including the search family (<code>xerj_search</code>, <code>xerj_semantic_search</code>, <code>xerj_vector_search</code>, <code>xerj_hybrid_search</code>, <code>xerj_batch_search</code>), go-to-definition (<code>xerj_def</code>), agent memory (<code>xerj_memory_store</code>, <code>xerj_memory_recall</code>), the link index (<code>xerj_brain_overview</code> and friends), and planning and hub tools. The project's README documents 21 tools in one place and a client run that saw 20; the count measured here, on rc.99, is 22, and it will drift as releases add tools. What matters for your setup is not the exact number but the check: after registering, <code>xerj_search</code> must appear in your client's tool list.</p>
+<h2 id="step-10-measure">Step 10: Measure what it saved you</h2>
+<p>XERJ keeps an audit log of the searches it served, and <code>gain</code> reports it back as counts, not estimates:</p>
+<pre><code class="language-bash">xerj gain</code></pre>
+<pre><code>  searches served   5   (100.0% found something; 0 zero-hit)
+  latency           p50 1ms · p95 2ms
+
+  busiest indices
+    demo-*                                   5 searches  (5 with hits)</code></pre>
+<p>Those five are the demo searches from this guide, and the latencies are local-index latencies on a five-file corpus — do not extrapolate them to a million-line monorepo. The value of <code>gain</code> is narrower and more durable: it turns "the agent reads less" from a slogan into a number you can watch over a week of real work, including how often searches come back empty. A rising zero-hit rate is a signal to index more of the corpus or to reword how the agent asks.</p>
+<h2 id="when-to-use">When to use XERJ vs alternatives</h2>
+<ul>
+<li><b>Use XERJ when an agent works on code it has not memorised.</b> Private codebases, internal tools, niche libraries, and anything published after a model's training cutoff are where retrieval beats memory. The project's own case study states the boundary explicitly: on popular public libraries the model already knows, retrieval overhead can make the comparison neutral or negative.</li>
+<li><b>Use grep or ripgrep when the answer is a single string in a small tree.</b> A search engine is the wrong tool for "where is this constant defined" in a hundred files. XERJ earns its keep when the question is conceptual ("how does checkout handle a gateway timeout") and the answer spans files, logs, and docs.</li>
+<li><b>Use Elasticsearch or OpenSearch when you need a production search cluster.</b> XERJ's compatibility means your clients work, but it is a local-first, single-binary engine for agent workflows, not a distributed cluster with replicas, sharding operations, and a team to run it. If you already operate a cluster, XERJ is a complement for the agent's desk, not a replacement for the cluster.</li>
+<li><b>Use a pre-indexed code graph when you need relationships, not passages.</b> Tools that build call graphs and dependency maps answer "what breaks if I change this" in a way a passage retriever cannot. XERJ answers "show me the passage where this is handled." Many teams will end up with both, and XERJ's Elasticsearch API means the passage side drops into existing tooling without a new protocol.</li>
+<li><b>Use a hosted RAG service when the corpus lives in the cloud and the team is not local-first.</b> XERJ's advantage is that the index never leaves the machine: no data leaves for search, no account, no per-query bill. That advantage disappears if the workflow already centralises code in a cloud service the agent queries anyway.</li>
+</ul>
+<h2 id="what-was-not-verified">What this guide did not verify</h2>
+<p>Three boundaries keep this guide honest. First, XERJ is a release candidate: v1.0.0-rc.99 carries the rc tag, and there is no 1.0 final yet. Release candidates move fast — this guide's commands were checked against rc.99 specifically, and flags or tool counts may shift in the next one. Second, the neural embedding mode was not executed. It is a built-in BERT model of about 90 MB that loads at startup, per the binary's own help text; this guide's searches are lexical, and the article says so wherever it matters. Third, the MCP server was verified with a raw protocol handshake, not a full agent-client session: the 22 tools were listed by the real binary against the real node, but no model call was made through them. The project's README documents client runs (OpenCode, Cline, Kimi Code) that did complete that last step, and those are the project's results, not this guide's.</p>
+<p>One more claim needs its boundary stated. The "2.7x fewer output tokens than grep at the same solve rate" figure is the project's controlled study — 8 tasks, 4 languages, 16 runs per arm, real token bills — not a number this guide reproduced, and it applies to code the model had not memorised. Treat it as the reason to try the tool on your own private codebase, where the boundary favours it, and measure with <code>xerj gain</code> and your own token bills before believing it for your workload.</p>
+<h2 id="takeaway">The takeaway</h2>
+<p>The durable idea in XERJ is not the binary; it is the unit of retrieval. An agent that reads whole files will always waste most of what it reads. An agent that queries an index reads the passage, with a file and a line attached, and the passage is checkable in a way a model's recollection is not. Install one binary, start one node on loopback, index each project under its own prefix, and teach the agent to search before it reads and to check a peer project before it writes. Keep <code>--insecure</code> on the dev machine where it belongs, watch <code>xerj gain</code> for a week, and let the counts decide whether the index stays. That is the whole adoption story, and it fits in one afternoon.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>XERJ repository and README (xerj-org/xerj on GitHub) — install paths, the <code>--insecure</code> trust boundary, prefix rules, MCP client table, and the reference-coding case study.</li>
+<li>XERJ v1.0.0-rc.99 release assets and the binary's own <code>--help</code> output — version, checksum, flags, and the neural-mode model note quoted in this guide.</li>
+<li>GitHub repository data for xerj-org/xerj, retrieved 27 October 2026 — 16,954 stars, 1,196 forks, Apache-2.0 licence, created 30 June 2026.</li>
+<li>findarepo daily trending ranking — roughly 7,000 stars gained in the seven days to 27 October 2026.</li>
+</ul>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/google-harness2-recursive-agent-harnessing-tutorial/">Let your agent improve its own playbook: hands-on with Google Research&#x27;s Harness²</a></li><li><a href="/articles/pagesift-rag-ready-markdown-tutorial/">Turn any website into RAG-ready Markdown: hands-on with PageSift</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li><li><a href="/articles/ifixai-agent-audit-hands-on-tutorial/">Audit your AI agent before it audits your reputation: hands-on with iFixAi</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
