@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Let an AI agent cut your video: hands-on with Concat, the free local CapCut replacement</title>
+<meta name="description" content="Concat is a free, open-source video editor that runs entirely on your own machine — and version 0.2.8 ships a built-in MCP server, so a coding agent can drive the same engine the window uses. This guide installs 0.2.8, builds a two-clip edit with a title through MCP calls, and exports a real H.264 file — every command run, every output shown.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/concat-agent-video-editor-mcp-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Let an AI agent cut your video: hands-on with Concat, the free local CapCut replacement">
+<meta property="og:description" content="Concat is a free, open-source video editor that runs entirely on your own machine — and version 0.2.8 ships a built-in MCP server, so a coding agent can drive the same engine the window uses. This guide installs 0.2.8, builds a two-clip edit with a title through MCP calls, and exports a real H.264 file — every command run, every output shown.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/concat-agent-video-editor-mcp-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/concat-agent-video-editor-mcp-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Let an AI agent cut your video: hands-on with Concat, the free local CapCut replacement">
+<meta name="twitter:description" content="Concat is a free, open-source video editor that runs entirely on your own machine — and version 0.2.8 ships a built-in MCP server, so a coding agent can drive the same engine the window uses. This guide installs 0.2.8, builds a two-clip edit with a title through MCP calls, and exports a real H.264 file — every command run, every output shown.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/concat-agent-video-editor-mcp-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Let an AI agent cut your video: hands-on with Concat, the free local CapCut replacement", "description": "Concat is a free, open-source video editor that runs entirely on your own machine — and version 0.2.8 ships a built-in MCP server, so a coding agent can drive the same engine the window uses. This guide installs 0.2.8, builds a two-clip edit with a title through MCP calls, and exports a real H.264 file — every command run, every output shown.", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Sofia Almeida"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Let an AI agent cut your video: hands-on with Concat, the free local CapCut replacement", "description": "Concat is a free, open-source video editor that runs entirely on your own machine — and version 0.2.8 ships a built-in MCP server, so a coding agent can drive the same engine the window uses. This guide installs 0.2.8, builds a two-clip edit with a title through MCP calls, and exports a real H.264 file — every command run, every output shown.", "step": [{"@type": "HowToStep", "name": "Install Concat", "text": "Download the 0.2.8 package for your system, verify its SHA256 checksum, and confirm the version."}, {"@type": "HowToStep", "name": "Make test footage", "text": "Generate two short clips with ffmpeg, or pick two video files of your own."}, {"@type": "HowToStep", "name": "Talk to the MCP server", "text": "Start concat --mcp, read the version answer, and save the client script that drives the edit."}, {"@type": "HowToStep", "name": "Run the edit", "text": "Create a project, import two clips, lay them end to end, add a title, and save."}, {"@type": "HowToStep", "name": "Check the export", "text": "Verify the exported MP4 with ffprobe, inspect a frame, and fix the missing-Vulkan error if it appears."}, {"@type": "HowToStep", "name": "Hand it to Claude Code", "text": "Register the server with claude mcp add and learn the window/headless modes and project locks."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a Concat account or an API key?", "acceptedAnswer": {"@type": "Answer", "text": "No, for everything in this guide. Installing, creating, editing, exporting and the MCP server all run locally with no account. An account or provider key is only relevant to hosted AI features you opt into, which this guide did not run."}}, {"@type": "Question", "name": "Can the MCP server run on a headless server?", "acceptedAnswer": {"@type": "Answer", "text": "Yes — that is exactly how it was verified here, with --mcp headless. The one requirement is a renderer for exports and preview frames: a GPU, or Mesa's lavapipe driver (mesa-vulkan-drivers) on Linux."}}, {"@type": "Question", "name": "Will files made here open in other editors?", "acceptedAnswer": {"@type": "Answer", "text": "The exported MP4 is standard H.264/AAC and plays anywhere. The project folder (concat.json plus media) is Concat's own format — it is not a Premiere or Resolve project, and there is no export to those formats."}}, {"@type": "Question", "name": "Is it really free, and under what licence?", "acceptedAnswer": {"@type": "Answer", "text": "Yes: the editor is free with no watermark, no account and no paywall, under the GNU Affero General Public License v3.0. That licence matters if you build a hosted service on top of it — read it before you do."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Let an AI agent cut your video: hands-on with Concat, the free local CapCut replacement</h1>
+<p class="lede">CapCut&#x27;s price is not money: it is an account, an upload, and a watermark on the free tier. Concat removes all three — a free, local editor — and its 0.2.8 release adds the part that makes it interesting to anyone who already lives in a coding agent: a built-in MCP server that lets an agent do the cutting. This guide proves it, command by command, on version 0.2.8.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 27, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Concat is a free, open-source CapCut replacement that runs locally with no account, no upload and no watermark, and its 0.2.8 release ships a built-in MCP server. This guide installs 0.2.8 with its checksum verified, builds a two-clip edit with a title through MCP tool calls, and exports a real H.264 file — including the one failure (a missing Vulkan renderer on a GPU-less server) and its one-package fix.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Concat (jub0t/Concat on GitHub), a free, open-source video editor.</li><li><b>What:</b> a local CapCut replacement — multi-track editing, keyframes, effects, titles, local captions and voices — whose 0.2.8 release ships a built-in MCP server, so a coding agent can create projects, cut, title and export through typed tool calls.</li><li><b>When:</b> version 0.2.8, released 20 October 2026, is the version verified in this guide; the repository showed 12,028 stars and 1,484 forks at writing.</li><li><b>Requirements:</b> Linux, macOS or Windows; about 155 MB of download; Python 3 for the client script. No API key, no account, and no model downloads for anything in this guide. A GPU, or Mesa's lavapipe driver on GPU-less Linux, for exports.</li><li><b>Licence:</b> GNU Affero General Public License v3.0.</li><li><b>Verified:</b> 0.2.8 Linux package installed with its SHA256 checksum checked; MCP headless server probed (42 tools, apiVersion 0.2, mode headless); a 640×360 project at 30 fps built from two clips plus a title (7.0-second timeline, confirmed by timeline_read); export finished 210 of 210 frames as H.264/AAC, 7.0 seconds, 186,592 bytes; preview frame and an exported frame inspected (the title is painted on the video). Two first attempts failed and their errors are quoted: a wrong assumption about project_create's return shape, and a missing Vulkan renderer fixed by installing mesa-vulkan-drivers.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/concat-agent-video-editor-mcp-tutorial/cover.webp" alt="An AI agent at a console connected by a glowing pipeline to a video editing timeline" loading="lazy"><figcaption>Your agent is the editor now. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="why-now">Why this project, why now</h2>
+<p>CapCut is where most short-form video gets cut, and its price is not money: it is an account, an upload, and a watermark on the free tier. Concat removes all three. It is a free, open-source video editor for macOS, Windows, Linux and Android that runs entirely on your own machine — no account, no subscription, no upload, no watermark on any export, up to 4K at 60 frames per second. The editor itself is a native Rust application with a GPU compositor, multi-track timelines, keyframes, effects and titles, local auto-captions, text-to-speech, voice cloning and background removal.</p>
+<p>That alone would make it one more CapCut alternative. The reason it is blowing up now is the second half of the pitch: the editor is scriptable. Version 0.2.8, released 20 October 2026, ships a built-in MCP server, so a coding agent can drive the same engine the window uses — create projects, import media, cut, title, keyframe, apply effects and export — without opening a window and without an account. When this guide was written, the repository (jub0t/Concat on GitHub) showed 12,028 stars and 1,484 forks, after being created on 25 August 2026, and October's monthly trending board showed it up about 7,900 stars on the month. The agent-editable editor is what that spike is about, and this guide tests exactly that: every command below was run, and every output quoted is the output the run produced.</p>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li>Linux, macOS or Windows. The walkthrough below runs on Linux; the macOS and Windows paths are noted where they differ.</li>
+<li>About 155 MB of download for the Linux package, plus ffmpeg if you want to generate test footage (or two video files of your own).</li>
+<li>No account, no API key, and no model downloads for anything in this guide. The in-app AI features (captions, voices, cutout) download their models once from Settings and then work offline — they are documented here, not run here.</li>
+<li>A GPU, or a software Vulkan renderer. On a GPU-less Linux machine the export fails until you install Mesa's lavapipe driver — step 5 shows the exact error and the one-package fix. macOS and Windows machines use their native GPU path.</li>
+<li>Python 3 for the small MCP client in step 3. No Python packages beyond the standard library.</li>
+</ul>
+<h2 id="step-1-install">Step 1: Install Concat 0.2.8 and check the version</h2>
+<p>Download the release for your platform from the project's GitHub Releases page. On Linux x86_64 that is <code>Concat-0.2.8-linux-x86_64.deb</code> (154,767,456 bytes), alongside <code>.rpm</code> and <code>.AppImage</code> builds, an ARM build, and a <code>SHA256SUMS</code> file. Verify the download before you install it:</p>
+<pre><code class="language-bash">curl -sSL -o Concat-0.2.8-linux-x86_64.deb \
+  https://github.com/jub0t/Concat/releases/download/v0.2.8/Concat-0.2.8-linux-x86_64.deb
+curl -sSL -o SHA256SUMS \
+  https://github.com/jub0t/Concat/releases/download/v0.2.8/SHA256SUMS
+sha256sum -c &lt;(grep "Concat-0.2.8-linux-x86_64.deb" SHA256SUMS)</code></pre>
+<p>The check prints:</p>
+<pre><code class="language-text">Concat-0.2.8-linux-x86_64.deb: OK</code></pre>
+<p>Install it with your package manager (<code>sudo apt install ./Concat-0.2.8-linux-x86_64.deb</code> on Debian/Ubuntu), or, if you only want to try it without installing, extract it with <code>dpkg-deb -x Concat-0.2.8-linux-x86_64.deb extracted</code> and run <code>extracted/opt/concat/concat</code> directly — the <code>/usr/bin/concat</code> wrapper simply execs <code>/opt/concat/concat</code>, so the extracted binary behaves the same. Either way, confirm the version:</p>
+<pre><code class="language-bash">concat --version</code></pre>
+<pre><code class="language-text">concat 0.2.8</code></pre>
+<p>Two things worth knowing before you go further. First, Concat is in beta: it works, and it still has edges — the release notes say so plainly, and Windows builds are not code-signed yet, so SmartScreen asks you to choose More info, then Run anyway. Second, <code>concat --help</code> is not a flag here; the binary's usage line is <code>concat [--project &lt;PROJECT_DIRECTORY&gt; | --mcp [auto|window|headless] | --version | --smoke | --whisper-cpu]</code>. The <code>--mcp</code> flag is the one this guide is about.</p>
+<h2 id="step-2-footage">Step 2: Make two test clips (or use your own footage)</h2>
+<p>The edit below needs two video files. If you have footage, skip this step and use your own paths. Otherwise generate two plain clips with ffmpeg — a 4-second dark-blue clip and a 3-second dark-red clip, each with a tone so you can hear the cut as well as see it:</p>
+<pre><code class="language-bash">ffmpeg -y -v error -f lavfi -i color=c=0x1a3a5c:s=640x360:d=4 \
+  -f lavfi -i sine=frequency=440:d=4 -shortest clip1.mp4
+ffmpeg -y -v error -f lavfi -i color=c=0x5c1a1a:s=640x360:d=3 \
+  -f lavfi -i sine=frequency=660:d=3 -shortest clip2.mp4</code></pre>
+<p>Confirm the durations — 4 seconds and 3 seconds — because the timeline math in step 4 depends on them:</p>
+<pre><code class="language-bash">ffprobe -v error -show_entries format=duration -of csv=p=0 clip1.mp4</code></pre>
+<pre><code class="language-text">4.000000</code></pre>
+<h2 id="step-3-client">Step 3: The client script that talks to Concat's MCP server</h2>
+<p>Concat's MCP server speaks newline-delimited JSON-RPC 2.0 over stdio. An agent — Claude Code, Claude Desktop, or any MCP client — starts it as <code>concat --mcp</code> and nothing extra needs installing. The server's own <code>concat_version</code> tool reports what it speaks; on the verified run it answered:</p>
+<pre><code class="language-json">{
+  "apiVersion": "0.2",
+  "capabilities": ["events", "mcp"],
+  "concat": "0.2.8",
+  "mcp": {"mode": "headless", "writesUnder": ["&lt;your work folder&gt;"]}
+}</code></pre>
+<p>Two details in that answer matter. The mode is <code>headless</code>: with no window open, the server runs the editor engine itself. And <code>writesUnder</code> is the sandbox rule — the agent writes projects, exports and frames only under your home folder unless you set <code>CONCAT_MCP_ROOTS</code> (a colon-separated path list) to allow other folders in headless mode. Keep your demo project under your home folder and you need no extra configuration. The server exposes 42 tools, named for what they do: <code>project_create</code>, <code>media_import</code>, <code>clips_add_sequence</code>, <code>title_add</code>, <code>timeline_read</code>, <code>project_save</code>, <code>export_start</code>, <code>export_wait</code>, <code>preview_frame</code>, and the rest — effects, keyframes, masks, stabilization, templates, undo and redo. Times are seconds on the timeline; sizes and offsets are fractions of the frame.</p>
+<p>Save the following script as <code>concat_mcp_edit.py</code>. It is the exact script the verified run used: it handshakes, creates a 640×360 project at 30 frames per second, imports two clips, lays them end to end, adds a title, saves, exports, and grabs a preview frame, printing the server's answer at each step. One correction is already baked in, and it is worth knowing about: <code>project_create</code> returns a summary with no folder field, so the script takes the folder as location plus project name rather than reading a path out of the answer — the first version of this script assumed a <code>path</code> field and failed with a <code>KeyError</code> before importing anything.</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+&quot;&quot;&quot;Drive Concat 0.2.8&#x27;s built-in MCP server over stdio.
+
+Builds a short edit with no window and no account: a project, two imported
+clips laid end to end, a title over the cut, then an export to MP4 and a
+preview frame. Every step prints the server&#x27;s own answer.
+
+Usage:
+    python3 concat_mcp_edit.py --binary /usr/bin/concat \
+        --work ~/concat-demo --clips clip1.mp4 clip2.mp4
+
+On a GPU-less Linux server the export needs a software Vulkan renderer:
+    sudo apt install mesa-vulkan-drivers   # provides lavapipe
+Projects the agent writes must live under your home folder unless you set
+CONCAT_MCP_ROOTS to allow another root.
+&quot;&quot;&quot;
+import argparse
+import json
+import os
+import select
+import subprocess
+import sys
+import time
+
+
+class Mcp:
+    def __init__(self, binary, env_extra):
+        env = dict(os.environ)
+        env.update(env_extra)
+        self.proc = subprocess.Popen(
+            [binary, &quot;--mcp&quot;, &quot;headless&quot;],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, env=env, text=True, bufsize=1)
+        self.next_id = 0
+
+    def handshake(self):
+        self._send({&quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: 0, &quot;method&quot;: &quot;initialize&quot;,
+                    &quot;params&quot;: {&quot;protocolVersion&quot;: &quot;2025-06-18&quot;, &quot;capabilities&quot;: {},
+                               &quot;clientInfo&quot;: {&quot;name&quot;: &quot;concat-demo&quot;, &quot;version&quot;: &quot;0.1&quot;}}})
+        self._read_id(0, timeout=60)
+        self._send({&quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;method&quot;: &quot;notifications/initialized&quot;})
+
+    def call(self, name, args, timeout=120):
+        self.next_id += 1
+        rid = self.next_id
+        self._send({&quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: rid, &quot;method&quot;: &quot;tools/call&quot;,
+                    &quot;params&quot;: {&quot;name&quot;: name, &quot;arguments&quot;: args}})
+        msg = self._read_id(rid, timeout=timeout)
+        result = msg[&quot;result&quot;]
+        if result.get(&quot;isError&quot;):
+            raise RuntimeError(f&quot;{name} failed: &quot;
+                               f&quot;{result[&#x27;content&#x27;][0][&#x27;text&#x27;]}&quot;)
+        return result[&quot;content&quot;][0][&quot;text&quot;]
+
+    def _send(self, obj):
+        self.proc.stdin.write(json.dumps(obj) + &quot;\n&quot;)
+        self.proc.stdin.flush()
+
+    def _read_id(self, rid, timeout):
+        end = time.time() + timeout
+        while time.time() &lt; end:
+            ready, _, _ = select.select([self.proc.stdout], [], [], 0.5)
+            if ready:
+                line = self.proc.stdout.readline()
+                if not line:
+                    break
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if msg.get(&quot;id&quot;) == rid:
+                    return msg
+        raise TimeoutError(f&quot;no reply to request {rid}&quot;)
+
+    def close(self):
+        try:
+            self.proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        time.sleep(1)
+        self.proc.terminate()
+        try:
+            self.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument(&quot;--binary&quot;, default=&quot;/usr/bin/concat&quot;)
+    ap.add_argument(&quot;--work&quot;, required=True, help=&quot;directory for the project&quot;)
+    ap.add_argument(&quot;--clips&quot;, nargs=2, required=True)
+    ap.add_argument(&quot;--title&quot;, default=&quot;Built by an agent&quot;)
+    args = ap.parse_args()
+    work = os.path.abspath(os.path.expanduser(args.work))
+    os.makedirs(work, exist_ok=True)
+
+    mcp = Mcp(args.binary, {})
+    try:
+        mcp.handshake()
+        version = json.loads(mcp.call(&quot;concat_version&quot;, {}))
+        print(&quot;server:&quot;, version[&quot;concat&quot;], &quot;| mode:&quot;, version[&quot;mcp&quot;][&quot;mode&quot;])
+        project = json.loads(mcp.call(&quot;project_create&quot;, {
+            &quot;location&quot;: work, &quot;name&quot;: &quot;mcp-short&quot;,
+            &quot;video&quot;: {&quot;width&quot;: 640, &quot;height&quot;: 360, &quot;rateNum&quot;: 30, &quot;rateDen&quot;: 1}}))
+        # The summary carries no folder field: the folder is location + name.
+        path = os.path.join(work, &quot;mcp-short&quot;)
+        print(&quot;project:&quot;, project[&quot;project&quot;][&quot;name&quot;],
+              project[&quot;project&quot;][&quot;width&quot;], &quot;x&quot;, project[&quot;project&quot;][&quot;height&quot;],
+              &quot;@&quot;, project[&quot;project&quot;][&quot;fps&quot;], &quot;fps -&gt;&quot;, path)
+        ids = []
+        for clip in args.clips:
+            imported = json.loads(mcp.call(&quot;media_import&quot;, {
+                &quot;path&quot;: path, &quot;file&quot;: os.path.abspath(clip)}))
+            ids.append(imported[&quot;createdId&quot;])
+            print(&quot;imported:&quot;, clip, &quot;-&gt;&quot;, imported[&quot;createdId&quot;])
+        mcp.call(&quot;clips_add_sequence&quot;,
+                 {&quot;path&quot;: path, &quot;mediaIds&quot;: ids, &quot;start&quot;: 0})
+        mcp.call(&quot;title_add&quot;, {&quot;path&quot;: path, &quot;start&quot;: 0.5, &quot;duration&quot;: 3,
+                               &quot;style&quot;: {&quot;content&quot;: args.title}, &quot;above&quot;: True})
+        timeline = json.loads(mcp.call(&quot;timeline_read&quot;, {&quot;path&quot;: path}))
+        clips = [(c[&quot;id&quot;], c[&quot;kind&quot;], c[&quot;start&quot;], c[&quot;end&quot;])
+                 for c in timeline[&quot;timeline&quot;][&quot;clips&quot;]]
+        print(&quot;timeline:&quot;, timeline[&quot;timeline&quot;][&quot;duration&quot;], &quot;seconds,&quot;, clips)
+        mcp.call(&quot;project_save&quot;, {&quot;path&quot;: path})
+        out = os.path.join(work, &quot;mcp-short.mp4&quot;)
+        job = json.loads(mcp.call(&quot;export_start&quot;, {&quot;path&quot;: path, &quot;output&quot;: out}))
+        waited = json.loads(mcp.call(&quot;export_wait&quot;,
+                                      {&quot;job&quot;: job[&quot;job&quot;], &quot;timeoutSeconds&quot;: 300},
+                                      timeout=330))
+        print(&quot;export:&quot;, waited[&quot;state&quot;], waited[&quot;frame&quot;], &quot;of&quot;,
+              waited[&quot;total&quot;], &quot;frames -&gt;&quot;, out)
+        if waited[&quot;state&quot;] != &quot;done&quot;:
+            sys.exit(f&quot;export did not finish: {waited}&quot;)
+        frame = json.loads(mcp.call(&quot;preview_frame&quot;,
+                                    {&quot;path&quot;: path, &quot;time&quot;: 1.0,
+                                     &quot;output&quot;: os.path.join(work, &quot;frame.png&quot;),
+                                     &quot;width&quot;: 640, &quot;height&quot;: 360}))
+        print(&quot;preview frame:&quot;, frame[&quot;path&quot;], frame[&quot;width&quot;], &quot;x&quot;, frame[&quot;height&quot;])
+    finally:
+        mcp.close()
+
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</code></pre>
+<figure><img class="story-image" src="/articles/concat-agent-video-editor-mcp-tutorial/img2.webp" alt="Diagram of a coding agent sending commands through a protocol hub to a video editing engine" loading="lazy"><figcaption>Agent, protocol, engine: the MCP server is the middle of the picture. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="step-4-run">Step 4: Run the edit — two clips, one title, seven seconds</h2>
+<p>Run the script against your two clips. The <code>--work</code> folder must be under your home folder (or added to <code>CONCAT_MCP_ROOTS</code>); the run below used a folder under home:</p>
+<pre><code class="language-bash">python3 concat_mcp_edit.py --binary /usr/bin/concat \
+  --work ~/concat-demo --clips clip1.mp4 clip2.mp4</code></pre>
+<p>The server's answers, as the verified run printed them:</p>
+<pre><code class="language-text">server: 0.2.8 | mode: headless
+project: mcp-short 640 x 360 @ 30.0 fps -&gt; ~/concat-demo/mcp-short
+imported: clip1.mp4 -&gt; m1
+imported: clip2.mp4 -&gt; m2
+timeline: 7.0 seconds, [('c3', 'video', 0.0, 4.0), ('c5', 'text', 0.5, 3.5), ('c4', 'video', 4.0, 7.0)]
+export: done 210 of 210 frames -&gt; ~/concat-demo/mcp-short.mp4
+preview frame: ~/concat-demo/frame.png 640 x 360</code></pre>
+<p>Read that timeline line carefully, because it is the whole edit in one row. Clip <code>c3</code> is the first clip on track T1 from 0 to 4 seconds; clip <code>c4</code> is the second clip on the same track from 4 to 7 seconds; clip <code>c5</code> is the title, a text clip on a lane above the video (T2) from 0.5 to 3.5 seconds, reading "Built by an agent". The two clips' durations add up to the 7-second timeline, and the title overlaps the first clip only. <code>project_save</code> wrote the project document to <code>mcp-short/concat.json</code> in the project folder — edits stay in memory until you save, exactly as in the window, so a script that crashes before saving keeps nothing.</p>
+<h2 id="step-5-export">Step 5: Check the export — and fix the one failure you will hit on a GPU-less server</h2>
+<p>The export is already done by step 4, so this step is verification. Read the file back with ffprobe:</p>
+<pre><code class="language-bash">ffprobe -v error -show_entries format=duration,size \
+  -show_entries stream=codec_name,width,height,r_frame_rate \
+  -of default=noprint_wrappers=1 ~/concat-demo/mcp-short.mp4</code></pre>
+<pre><code class="language-text">codec_name=h264
+width=640
+height=360
+r_frame_rate=30/1
+codec_name=aac
+duration=7.000000
+size=186592</code></pre>
+<p>That is a real, playable file: H.264 video with AAC audio, 640×360 at 30 frames per second, exactly 7 seconds, 186,592 bytes. The preview frame the script grabbed is a 640×360 PNG. Open it, or pull a frame out of the export yourself with <code>ffmpeg -ss 1.5 -i ~/concat-demo/mcp-short.mp4 -frames:v 1 check.png</code> — at 1.5 seconds you are inside the title's span, and the frame shows "Built by an agent" in white over the dark-blue clip. That frame is the proof the title is not metadata on a timeline but paint on the exported video.</p>
+<p>Now the failure, because you will hit it if your machine has no GPU. The first export attempt in the verified run did not fail on the edit — it failed on the render, with this exact error from <code>export_wait</code>:</p>
+<pre><code class="language-text">no GPU or software renderer is available to draw with - install Mesa's Vulkan drivers (lavapipe)</code></pre>
+<p>The fix is one package on Debian/Ubuntu, and it changes nothing else about the setup:</p>
+<pre><code class="language-bash">sudo apt install mesa-vulkan-drivers</code></pre>
+<p>After that install, the same project exported cleanly: 210 of 210 frames, state <code>done</code>, with no change to the project or the script. The same failure hits <code>preview_frame</code>, for the same reason — both need a renderer, and lavapipe is the software one. If you are on a laptop or desktop with a GPU, you will never see this error; it is specific to headless servers and virtual machines. Note also that export defaults are H.264 at CRF 20 with the medium preset and limited color range — pass <code>codec</code>, <code>crf</code> or <code>preset</code> to <code>export_start</code> if you want HEVC, AV1, or a different quality point.</p>
+<figure><img class="story-image" src="/articles/concat-agent-video-editor-mcp-tutorial/img3.webp" alt="Diagram of clips flowing through a compositor into a finished video file" loading="lazy"><figcaption>Timeline in, finished file out: the export is the same engine the window uses. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="step-6-agent">Step 6: Hand the server to Claude Code (or any MCP client)</h2>
+<p>The script above proves the protocol; for daily use you hand the server to your agent instead of running a script. In Claude Code, one command registers it — use the binary path for your install:</p>
+<pre><code class="language-bash">claude mcp add concat -- /usr/bin/concat --mcp</code></pre>
+<p>On macOS that path is <code>/Applications/Concat.app/Contents/MacOS/concat</code>; on Windows, <code>%LOCALAPPDATA%\Programs\Concat\concat.exe</code> for a per-user install or <code>C:\Program Files\Concat\concat.exe</code> for an all-users or .msi install; on Linux with the AppImage, point at the <code>.AppImage</code> file itself. For Claude Desktop and most other clients, the same shape goes in the JSON config:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "concat": {
+      "command": "/usr/bin/concat",
+      "args": ["--mcp"]
+    }
+  }
+}</code></pre>
+<p>Three operating rules keep this safe. First, modes: <code>concat --mcp</code> defaults to <code>auto</code> — through the open window when one is running with Settings, Automation, Scripts and apps switched on, otherwise headless on its own. Force one with <code>--mcp window</code> (fail rather than run on its own) or <code>--mcp headless</code>. Second, locks: every Concat process locks the project folders it has open, so a project open in the window is refused to the agent with a note to use window mode, and vice versa — you cannot have the agent and the window saving over each other. Third, the agent edits projects of its own; it does not edit the project open in the window while you watch. That live mode is planned, not available. Treat the agent as a second editor with its own projects, and hand projects back and forth by closing one side first.</p>
+<h2 id="vs-alternatives">When to use this vs the alternatives</h2>
+<p><b>Against CapCut:</b> pick Concat when the edit must stay on your machine, be repeatable by a script, or run without an account — and when you do not need CapCut's template and trending-effects library, which is far larger than anything Concat ships. If templates are the reason you edit in CapCut, stay there.</p>
+<p><b>Against ffmpeg scripts:</b> pick Concat when the edit has a timeline you want to see, revise, or hand to an agent — titles, layered tracks, keyframed moves. ffmpeg is still lighter for a single conversion or a fixed filter chain, and it needs no renderer at all.</p>
+<p><b>Against a hosted AI video tool:</b> pick Concat when the footage cannot leave your disk, or when you want the project file afterwards rather than a finished render. Hosted tools win when you want a clip generated from a prompt rather than cut from footage you own.</p>
+<p><b>Against Premiere or DaVinci Resolve:</b> pick Concat when free, local and agent-scriptable beats a mature effect library and a polished window. Concat is beta with a small team; the established editors are the safer choice for deadline work with clients.</p>
+<h2 id="limits">Limits, stated plainly</h2>
+<p>Concat is beta, and the rough edges are real: Windows builds are unsigned, the window's GPU path on exotic hardware is still being worked out, and the AI features — local Whisper captions, text-to-speech, voice cloning, background removal — were not run in this guide, because they need model downloads from Settings first and this guide's bar is commands actually run. Voice cloning deserves one extra line: only clone a voice you have the right to clone; the tool will happily clone a sample, and consent is your call, not the software's. The graphical editor itself was also not driven in this guide's headless run — the verified path is the MCP engine, which is the same engine the window uses, but if you want to cut by hand, install the app, open it, drop footage on the timeline, and export from the Export sheet; that flow follows the project's own documentation, not a run in this guide. Finally, keep backups of anything important: a beta editor that locks project folders is not the place for the only copy of a project.</p>
+<h2 id="takeaway">The takeaway</h2>
+<p>Concat's bet is that video editing should be a file format and a protocol, not just a window. The window is free and local; the engine behind it answers typed tool calls over stdio; and a seven-second edit built entirely by those calls exports as a real H.264 file with the title painted on it. If you cut short-form video and you already live in a coding agent, that combination — no account, no upload, no watermark, and an agent that can actually do the cutting — is worth an evening of testing on one real project. Start with the script above, then hand the server to your agent and let it do the second cut.</p>
+<h2 id="faq">Questions, answered</h2>
+<p><b>Do I need a Concat account or an API key?</b> No, for everything in this guide. Installing, creating, editing, exporting and the MCP server all run locally with no account. An account or provider key is only relevant to hosted AI features you opt into, which this guide did not run.</p>
+<p><b>Can the MCP server run on a headless server?</b> Yes — that is exactly how it was verified here, with <code>--mcp headless</code>. The one requirement is a renderer for exports and preview frames: a GPU, or Mesa's lavapipe driver (<code>mesa-vulkan-drivers</code>) on Linux.</p>
+<p><b>Will files made here open in other editors?</b> The exported MP4 is standard H.264/AAC and plays anywhere. The project folder (<code>concat.json</code> plus media) is Concat's own format — it is not a Premiere or Resolve project, and there is no export to those formats.</p>
+<p><b>Is it really free, and under what licence?</b> Yes: the editor is free with no watermark, no account and no paywall, under the GNU Affero General Public License v3.0. That licence matters if you build a hosted service on top of it — read it before you do.</p>
+
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Concat repository page (jub0t/Concat on GitHub) — star and fork counts, creation date, licence, and the 0.2.8 version badge quoted in this guide.</li>
+<li>Concat docs/MCP.md — the MCP server setup, the per-platform binary paths, window vs headless modes, the project-lock rules, and the tool list.</li>
+<li>Concat 0.2.8 release page — the release date, the Linux package names, and the SHA256SUMS file used for the checksum check.</li>
+<li>The Concat binary's own <code>--version</code> output and the MCP server's responses — every command, flag, tool name, schema field, and output quoted in this guide, including the two failures and their fixes.</li>
+</ul>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/hyperframes-html-to-video-tutorial/">Write HTML, get MP4: hands-on with HyperFrames, the 54K-star video framework built for agents</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li><li><a href="/articles/claude-seo-audit-plugin-tutorial/">Run a full SEO audit from your terminal: hands-on with Claude SEO, the 22,000-star Claude Code plugin</a></li><li><a href="/articles/genoffice-ai-office-suite-cli-tutorial/">Run your office from the terminal: hands-on with GenOffice, the open-source AI office suite</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
