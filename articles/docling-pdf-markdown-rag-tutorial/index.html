@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</title>
+<meta name="description" content="Docling turns PDFs, Word files, slides and spreadsheets into structured Markdown, JSON and chunks your retriever can actually cite. This guide installs Docling 2.143.1, converts a real Word report and its PDF, inspects the tables and headings the parser recovered, tunes the pipeline, and chunks the result for RAG — every command run, every output shown.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/docling-pdf-markdown-rag-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling">
+<meta property="og:description" content="Docling turns PDFs, Word files, slides and spreadsheets into structured Markdown, JSON and chunks your retriever can actually cite. This guide installs Docling 2.143.1, converts a real Word report and its PDF, inspects the tables and headings the parser recovered, tunes the pipeline, and chunks the result for RAG — every command run, every output shown.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/docling-pdf-markdown-rag-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/docling-pdf-markdown-rag-tutorial/cover.webp">
+<meta property="og:image:width" content="1400">
+<meta property="og:image:height" content="787">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling">
+<meta name="twitter:description" content="Docling turns PDFs, Word files, slides and spreadsheets into structured Markdown, JSON and chunks your retriever can actually cite. This guide installs Docling 2.143.1, converts a real Word report and its PDF, inspects the tables and headings the parser recovered, tunes the pipeline, and chunks the result for RAG — every command run, every output shown.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/docling-pdf-markdown-rag-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling", "description": "Docling turns PDFs, Word files, slides and spreadsheets into structured Markdown, JSON and chunks your retriever can actually cite. This guide installs Docling 2.143.1, converts a real Word report and its PDF, inspects the tables and headings the parser recovered, tunes the pipeline, and chunks the result for RAG — every command run, every output shown.", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Sofia Almeida"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling", "description": "Docling turns PDFs, Word files, slides and spreadsheets into structured Markdown, JSON and chunks your retriever can actually cite. This guide installs Docling 2.143.1, converts a real Word report and its PDF, inspects the tables and headings the parser recovered, tunes the pipeline, and chunks the result for RAG — every command run, every output shown.", "step": [{"@type": "HowToStep", "name": "Install Docling", "text": "Install the full docling 2.143.1 package in a virtual environment and confirm the version."}, {"@type": "HowToStep", "name": "Build test documents", "text": "Create a Word report with a table and export it to PDF so every conversion can be checked."}, {"@type": "HowToStep", "name": "Convert with the CLI", "text": "Run docling convert on the Word file and the PDF and check headings, tables and reading order."}, {"@type": "HowToStep", "name": "Inspect the structure", "text": "Use the Python API to list text items and tables in the parsed document and export JSON."}, {"@type": "HowToStep", "name": "Tune the pipeline", "text": "Set table-structure and OCR options explicitly for the document in front of you."}, {"@type": "HowToStep", "name": "Chunk for RAG", "text": "Produce structure-aware chunks with the hybrid chunker and check heading context and table integrity."}, {"@type": "HowToStep", "name": "Batch a folder", "text": "Convert a directory, keep one JSON sidecar per document, and log failures per file."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU or an API key?", "acceptedAnswer": {"@type": "Answer", "text": "No to both, for everything in this guide. Docling runs locally on CPU with no account. A GPU speeds up PDF layout and table models; an API key is only relevant if you choose a hosted VLM backend, which this guide does not use."}}, {"@type": "Question", "name": "Does Docling work on scanned PDFs?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, via OCR on pages without a text layer. Expect good results on clean scans and degraded results on poor ones, and always check a sample of OCR output before indexing a scanned archive."}}, {"@type": "Question", "name": "Can I use Docling with LangChain or LlamaIndex?", "acceptedAnswer": {"@type": "Answer", "text": "Yes — both ecosystems have Docling integrations, and the chunk output from this guide drops into any vector store without them. Start with plain chunks and add a framework only when you need what it adds."}}, {"@type": "Question", "name": "How is this different from converting with Pandoc or MarkItDown?", "acceptedAnswer": {"@type": "Answer", "text": "Pandoc and MarkItDown convert formats; Docling understands pages. The difference shows up exactly where RAG breaks: tables, reading order, and structure-aware chunking. For a single clean conversion, the lighter tools are fine; for an index you will answer questions from, use the parser that preserves structure."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</h1>
+<p class="lede">Most RAG pipelines fail before the model ever runs: the parser flattens tables, scrambles reading order, and drops the headings a chunker needs. Docling fixes the input. This guide proves it on Docling 2.143.1 — a real Word report and its PDF, converted, inspected, tuned, and chunked for retrieval, with the two install traps (the slim package, the old CLI form) documented from the runs that hit them.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 27, 2026 · 18 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Docling is an open-source document converter from IBM Research (LF AI &amp; Data Foundation, MIT) that recovers layout, reading order and table structure instead of dumping text. This guide installs the full 2.143.1 package, converts a Word report and its PDF with `docling convert`, inspects headings and tables in the parsed document, tunes OCR and table options, and produces structure-aware chunks for RAG — with every command run and every output shown as produced, including the two install attempts that failed first.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Docling (docling-project/docling), from IBM Research Zurich, now hosted by the LF AI &amp; Data Foundation.</li><li><b>What:</b> an open-source document converter that recovers layout, reading order and table structure from PDF, Word, slides, spreadsheets, HTML and more, and exports Markdown, HTML, lossless JSON, DocTags — plus structure-aware chunks for RAG.</li><li><b>When:</b> version 2.143.1, verified in this guide (Docling Core 2.105.0, IBM Models 4.0.4, Parse 7.24.0).</li><li><b>Requirements:</b> Python 3.10 or newer; about 2 GB of free disk (package plus roughly 500 MB of layout and table models); no account, no API key, no GPU.</li><li><b>Licence:</b> MIT.</li><li><b>Verified:</b> 2.143.1 installed and version-checked; a Word report and its PDF converted with <code>docling convert</code> (Word in 0.05 s, PDF in 18.61 s cold and 9.97 s cached); the 4-row by 3-column table preserved as a pipe table in both; document inspected in Python (1 table, 4 rows, 3 columns); CLI chunking produced 2 chunks (46 and 63 tokens) with heading, page and source-item metadata. Two install traps documented from failed runs: the slim package refuses local conversion, and the old bare <code>docling &lt;file&gt;</code> form does not work in 2.x.</li></ul>
+
+<figure class="hero-art"><img class="story-image" src="/articles/docling-pdf-markdown-rag-tutorial/cover.webp" alt="Messy paper documents flowing through a glowing pipeline and emerging as neat structured digital pages" loading="lazy"><figcaption>Messy documents in, structured documents out. Image: AI Frontier Post.</figcaption></figure>
+<p>Your RAG pipeline is only as good as the documents you feed it, and most documents are hostile to machines. A PDF that looks perfect on screen can hand your retriever a table with its columns shuffled, a two-column article read straight across the fold, and a heading floating three paragraphs from the section it belongs to. The model then answers confidently from garbage, and no amount of prompt engineering fixes input that was mangled before the model ever saw it.</p>
+<p>Docling is the tool that fixes the input. It is an open-source document conversion library from IBM Research Zurich, now hosted by the LF AI &amp; Data Foundation under the MIT licence, and it treats a document as a structure to understand, not a bag of characters to dump. It recovers page layout and reading order, rebuilds tables with their headers, recognises formulas and code, and hands you one uniform document object whether the input was a PDF, a Word file, a slide deck, a spreadsheet, or an HTML page. From that object you can export Markdown, HTML, lossless JSON, or DocTags — and, crucially for RAG, structure-aware chunks whose headings travel with them.</p>
+<p>Why now: Docling is moving fast — the 2.x line shipped through 2026 with a rewritten PDF backend, a native PDF pipeline, MHTML and email support, and VLM-based conversion options — and it sits at the exact point where most RAG projects fail: ingestion. This guide installs the current release, converts a real Word document and a real PDF, inspects what the parser actually recovered, tunes the pipeline, and ends with chunks that are ready to embed. Every command below was run on Linux in a fresh virtual environment, and every output quoted is output the run actually produced.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/docling-pdf-markdown-rag-tutorial/img2.webp" alt="Diagram of the Docling pipeline: files become a structured document, then exports, then chunks, then a searchable index" loading="lazy"><figcaption>One parsed structure feeds every export. Diagram: AI Frontier Post.</figcaption></figure>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li>Python 3.10 or newer. This guide uses Python 3.12 on Linux x86-64; macOS and Windows work the same way.</li>
+<li>About 2 GB of free disk: the full package with its dependencies is roughly 1.5 GB installed, and the first PDF run downloads about 500 MB of models (the layout model plus the TableFormer table models). Install the full <code>docling</code> package, not <code>docling-slim</code>: the slim package's CLI refuses local conversion and tells you to install the full package instead. That check was run, not assumed.</li>
+<li>No account, no API key, and no GPU. Everything here runs on CPU.</li>
+<li>Two test documents, which you will build in Step 2: a Word report with a table, and the PDF exported from it. Using your own files works too — the commands are identical.</li>
+</ul>
+<h2 id="step-1-install">Step 1: Install Docling in a clean environment</h2>
+<p>Never install a document pipeline into your system Python. Make a virtual environment first, then install the package:</p>
+<pre><code class="language-bash">python3 -m venv docling-env
+source docling-env/bin/activate
+pip install docling</code></pre>
+<p>Confirm the install and see the version this guide verified:</p>
+<pre><code class="language-bash">docling --version</code></pre>
+<p>Expected output:</p>
+<pre><code>Docling version: 2.143.1
+Docling Core version: 2.105.0
+Docling IBM Models version: 4.0.4
+Docling Parse version: 7.24.0
+Python: cpython-312 (3.12.3)
+Platform: Linux-7.0.0-39-generic-x86_64-with-glibc2.39</code></pre>
+<p>The first PDF conversion downloads the layout and table-structure models into your Hugging Face cache — about 500 MB in this run (the layout model plus the TableFormer table models). That download happens once; later runs reuse the cache and start immediately. On this run the first PDF conversion took 18.61 seconds with cold models and 9.97 seconds once cached, and the Word conversion took 0.05 seconds. If you are on a metered connection, run your first PDF conversion now and let it finish before you start timing anything.</p>
+<h2 id="step-2-documents">Step 2: Build two test documents you can judge honestly</h2>
+<p>A tutorial that converts only its author's perfect files teaches nothing. Build a small, awkward document instead: headings, a paragraph that refers to a table, a three-column table, and a note that must stay attached to that table rather than floating away as body text. In Python, with <code>python-docx</code>:</p>
+<pre><code class="language-python">from docx import Document
+
+doc = Document()
+doc.add_heading("Quarterly Support Report", 1)
+doc.add_paragraph("This report summarises support volume for Q3 2026. "
+    "The table below is the part most parsers mangle: if its columns "
+    "or rows come back shuffled, every number in it becomes a guess.")
+doc.add_heading("Ticket volume by channel", 2)
+table = doc.add_table(rows=1, cols=3)
+table.style = "Table Grid"
+for cell, header in zip(table.rows[0].cells,
+                        ["Channel", "Tickets", "Share"]):
+    cell.text = header
+for row in [("Email", "1,284", "41%"),
+            ("Live chat", "1,102", "35%"),
+            ("Phone", "742", "24%")]:
+    for cell, value in zip(table.add_row().cells, row):
+        cell.text = value
+doc.add_paragraph("Note: phone volume fell after the callback "
+                  "option launched in August.")
+doc.save("support-report.docx")</code></pre>
+<p>Export the same document to PDF with LibreOffice (or Word, or Google Docs — the point is a real PDF with a real table, not a hand-crafted one):</p>
+<pre><code class="language-bash">soffice --headless --convert-to pdf support-report.docx --outdir .</code></pre>
+<p>You now have the same content in two hostile formats. The rest of the guide converts both and compares them against the source you just wrote, so you can check every claim yourself.</p>
+<h2 id="step-3-cli">Step 3: Convert both files with the CLI</h2>
+<p>The CLI takes a file, a URL, or a directory, and writes one output file per input. Convert the Word document first — it needs no downloaded models, so it is the fastest possible proof that your install works:</p>
+<pre><code class="language-bash">docling convert support-report.docx --to md --output ./out</code></pre>
+<p>Note the verb: in Docling 2.x the CLI is a command group, and local conversion is <code>docling convert</code>. The bare <code>docling &lt;file&gt;</code> form from older guides does not work in 2.143.1. Then the PDF:</p>
+<pre><code class="language-bash">docling convert support-report.pdf --to md --output ./out</code></pre>
+<p>Open <code>out/support-report.md</code>. The Word conversion returns Markdown like this (abridged only by removing the repeated body paragraph):</p>
+<pre><code>## Quarterly Support Report
+
+This report summarises support volume for Q3 2026. The table below is the part most parsers mangle: if its columns or rows come back shuffled, every number in it becomes a guess.
+
+### Ticket volume by channel
+
+| Channel   |   Tickets | Share   |
+|-----------|-----------|---------|
+| Email     |     1,284 | 41%     |
+| Live chat |     1,102 | 35%     |
+| Phone     |       742 | 24%     |
+
+Note: phone volume fell after the callback option launched in August.</code></pre>
+<p>The PDF conversion returns the same content — same table, same note attached after the table — with one honest difference in heading levels. The Word conversion renders the title as <code>##</code> and the section as <code>###</code>; the PDF conversion renders both as <code>##</code>:</p>
+<pre><code>## Quarterly Support Report
+
+This report summarises support volume for Q3 2026. The table below is the part most parsers mangle: if its columns or rows come back shuffled, every number in it becomes a guess.
+
+## Ticket volume by channel
+
+| Channel   |   Tickets | Share   |
+|-----------|-----------|---------|
+| Email     |     1,284 | 41%     |
+| Live chat |     1,102 | 35%     |
+| Phone     |       742 | 24%     |
+
+Note: phone volume fell after the callback option launched in August.</code></pre>
+<p>That difference is worth knowing, not worrying about: the PDF pipeline recovers headings and their order, but it does not always recover their relative depth. If your chunker splits on heading levels, test it against your PDFs specifically. What matters most survived identically in both: the table came back as a table, the note stayed with its table, and nothing was reordered. A plain text extractor would have given you the table's cells in reading order and left you to guess which number belonged to which channel.</p>
+<p>Three checks to run on any conversion, before you trust it in a pipeline:</p>
+<ol>
+<li><strong>Headings are headings.</strong> Search the Markdown for <code>#</code> and <code>##</code>. If your section titles came back as bold paragraphs, your chunker will never see the document's structure, because Markdown chunkers split on headings.</li>
+<li><strong>Tables are tables.</strong> Look for the pipe characters and the header separator row. If the table collapsed into lines of numbers, retrieval on any question about that table is lost.</li>
+<li><strong>Reading order is right.</strong> Read the output top to bottom and ask whether a human reading the original would meet the ideas in this order. Two-column layouts and sidebars are where naive extractors fail silently.</li>
+</ol>
+<h2 id="step-4-python">Step 4: Use the Python API and inspect the structure</h2>
+<p>The CLI is for one-off conversions. A pipeline uses the API, because the API gives you the document object itself — every text item, every table, with its page number, label, and position. Convert the PDF in Python:</p>
+<pre><code class="language-python">from docling.document_converter import DocumentConverter
+
+converter = DocumentConverter()
+result = converter.convert("support-report.pdf")
+doc = result.document
+
+print(doc.export_to_markdown())</code></pre>
+<p>Now stop exporting strings and inspect the structure. This is the habit that separates a working RAG pipeline from a hopeful one:</p>
+<pre><code class="language-python">for item in doc.texts:
+    print(item.label, "|", item.text[:80])
+print("tables:", len(doc.tables))
+for table in doc.tables:
+    print("table rows:", table.data.num_rows,
+          "cols:", table.data.num_cols)
+    print(table.export_to_markdown(doc))</code></pre>
+<p>Expected output on the test PDF:</p>
+<pre><code>section_header | Quarterly Support Report
+text | This report summarises support volume for Q3 2026. The table below is the part m
+section_header | Ticket volume by channel
+text | Note: phone volume fell after the callback option launched in August.
+tables: 1
+table rows: 4 cols: 3
+| Channel   |   Tickets | Share   |
+|-----------|-----------|---------|
+| Email     |     1,284 | 41%     |
+| Live chat |     1,102 | 35%     |
+| Phone     |       742 | 24%     |</code></pre>
+<p>Two things in that output matter. First, <code>doc.texts</code> labels each item — here both headings come back as <code>section_header</code> and the rest as <code>text</code> — so downstream code can treat a heading differently from body text instead of guessing from font size. Second, <code>doc.tables</code> gives you the table as data (rows, columns, cells), not as a string you must re-parse. If you ever need to answer "what was the phone share?" from a table, you want the data form, and this is where you get it.</p>
+<p>The same object exports to the other formats without re-parsing anything:</p>
+<pre><code class="language-python">html = doc.export_to_html()
+data = doc.export_to_dict()   # lossless JSON-able dict
+doc.save_as_json("support-report.json")</code></pre>
+<p>Rule for your own pipeline: parse once, export many times. Every export you add later — a search index, a preview page, a dataset — reads the same parsed object, so a parse fix improves all of them at once.</p>
+<h2 id="step-5-tune">Step 5: Tune the pipeline for the document in front of you</h2>
+<p>Defaults are good for born-digital PDFs. Real corpora are not all born-digital, so Docling exposes the pipeline options you will actually reach for. The two that matter most:</p>
+<ul>
+<li><strong>Table structure</strong> (<code>do_table_structure</code>): on by default. Turn it off only for documents you know contain no tables, where it buys you speed; turning it off on a document with tables is how you lose the exact data this guide exists to preserve.</li>
+<li><strong>OCR</strong> (<code>do_ocr</code>): Docling runs OCR only where a page has no usable text layer — that is, on scans and photographs of pages. For a born-digital PDF it costs you nothing; for a scanned archive it is the difference between an empty result and a result. The OCR engine is selectable (RapidOCR, EasyOCR, Tesseract, and others), and the engine choice is a speed-versus-language trade-off, not a quality mystery: RapidOCR is the fast default, EasyOCR covers more languages.</li>
+</ul>
+<p>Set them explicitly so your pipeline's behaviour is a decision, not an accident:</p>
+<pre><code class="language-python">from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
+
+pipeline_options = PdfPipelineOptions(
+    do_table_structure=True,
+    do_ocr=True,
+)
+converter = DocumentConverter(
+    format_options={
+        InputFormat.PDF: PdfFormatOption(
+            pipeline_options=pipeline_options
+        )
+    }
+)
+result = converter.convert("support-report.pdf")</code></pre>
+<p>For scanned documents, also consider the VLM pipeline (<code>--pipeline vlm</code>; the default VLM preset is GraniteDocling): instead of the classic layout-plus-table models, a vision-language model reads the page as an image. It is slower and heavier, and it is the right call for pages where layout models struggle — dense forms, unusual tables, heavy handwriting-adjacent layouts. Start with the standard pipeline, measure on your worst ten pages, and switch only the pages that fail. The pipeline option exists so you can make that call per document, not per library.</p>
+<h2 id="step-6-chunk">Step 6: Chunk for RAG — by structure, not by character count</h2>
+<p>This is where most RAG pipelines quietly break. A fixed-size splitter cuts every 1,000 characters wherever the count lands, which is often in the middle of a table row. The retrieved chunk then contains half a table and no heading, and the model must guess what the numbers mean. Docling's <code>HybridChunker</code> instead cuts along the document's own structure — paragraphs, sections, tables — and counts tokens against your embedding model's tokenizer, so a chunk fits the model and still makes sense on its own.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/docling-pdf-markdown-rag-tutorial/img3.webp" alt="Diagram contrasting a fixed-size split that cuts a table in half with a structure-aware chunk that keeps the whole table and its heading" loading="lazy"><figcaption>A chunk should make sense on its own, with its heading attached. Diagram: AI Frontier Post.</figcaption></figure>
+<p>Chunking ships with the full package — there is no separate <code>docling-chunking</code> package to install in 2.x, and asking for one fails resolution. The CLI can chunk directly, with the hybrid chunker as the default and the <code>sentence-transformers/all-MiniLM-L6-v2</code> tokenizer as the default:</p>
+<pre><code class="language-bash">docling convert support-report.pdf --to chunks --output ./out-chunks</code></pre>
+<p>The same chunker is available in Python for the document you already parsed:</p>
+<pre><code class="language-python">from docling.chunking import HybridChunker
+
+chunker = HybridChunker(
+    tokenizer="sentence-transformers/all-MiniLM-L6-v2"
+)
+chunks = list(chunker.chunk(doc))
+print("chunks:", len(chunks))
+for chunk in chunks:
+    print("---- chunk ----")
+    print(chunk.text[:400])</code></pre>
+<p>Expected output on the test PDF:</p>
+<pre><code>chunks: 2
+--- chunk 0 ---
+This report summarises support volume for Q3 2026. The table below is the part most parsers mangle: if its columns or rows come back shuffled, every number in it becomes a guess.
+--- chunk 1 ---
+Email, Tickets = 1,284. Email, Share = 41%. Live chat, Tickets = 1,102. Live chat, Share = 35%. Phone, Tickets = 742. Phone, Share = 24%
+Note: phone volume fell after the callback option launched in August.</code></pre>
+<p>Two details in that output are worth pausing on. First, the table did not survive as a pipe table: the chunker verbalised it into sentences — "Email, Tickets = 1,284. Email, Share = 41%." — which is exactly what an embedding model wants, since it reads sentences, not grid layouts. Second, the CLI's chunk file is JSONL with one object per chunk, carrying <code>num_tokens</code>, the <code>headings</code> the chunk belongs to, its <code>page_numbers</code>, and the <code>doc_items</code> it came from — the provenance your answers will cite. The Python chunker produced the same two chunks for this document; its chunk texts match the CLI's, and its options include <code>repeat_table_header</code> and <code>merge_peers</code> for tables that span chunk boundaries.</p>
+<p>Read the chunks and check three properties, because these are the contract your retriever depends on:</p>
+<ol>
+<li><strong>Every chunk carries its heading context.</strong> A chunk about phone volume should say which report and which section it came from, or retrieval will return correct numbers with no provenance.</li>
+<li><strong>No chunk ends mid-table.</strong> This table fit in one chunk; on your largest real table, check what happens at the boundary — the chunker's <code>repeat_table_header</code> option exists for exactly that case. Check this on your largest real table, not on the toy one here.</li>
+<li><strong>Chunk sizes are token counts, not character counts.</strong> The tokenizer argument is your embedding model's tokenizer. If you change embedding models, re-chunk: a chunk sized for one model's token budget is mis-sized for another's.</li>
+</ol>
+<p>From here, the rest of the RAG pipeline is standard and deliberately not re-taught here: embed each chunk's text, store the embedding with the chunk's text and metadata (source file, page, heading path), and retrieve by similarity. The point of this guide is that the text and metadata going into that store are now trustworthy — the embedding step cannot rescue text that was already broken.</p>
+<h2 id="step-7-batch">Step 7: Batch a folder and keep the failures visible</h2>
+<p>One document proves the tool; a folder proves the pipeline. The CLI converts a directory in one command:</p>
+<pre><code class="language-bash">docling convert ./inbox --to md --to json --output ./out</code></pre>
+<p>One trap to avoid, found by running exactly this: if your folder mixes a <code>.docx</code> and a <code>.pdf</code> with the same stem, both conversions write the same output filename and the second overwrites the first. Keep one input format per batch folder, or convert formats in separate runs with separate output directories.</p>
+<p>For a production batch, add two disciplines that cost nothing now and save a post-mortem later. First, write one JSON sidecar per document (the <code>--to json</code> above) even if you only need Markdown today: the JSON is the lossless record of what the parser saw, and it is what you will debug from when a user reports a wrong answer six months later. Second, log failures per file and keep going — a batch job that dies on file 400 of 10,000 because one PDF is corrupt has failed at its job, which is to convert 9,999 files and tell you about the one it could not. In Python, that is a try/except around each <code>convert()</code> call that records the filename and the error and moves on; in a shell loop, it is checking the exit code per file instead of stopping at the first non-zero one.</p>
+<h2 id="which-approach">Which approach should you use?</h2>
+<p>Docling is the right default for RAG ingestion, but it is not the only tool, and the honest comparison is short:</p>
+<ul>
+<li><strong>Use Docling</strong> when tables, reading order, or chunk quality matter — which is to say, for almost any RAG pipeline over real documents — and when you want one tool for PDF, Word, slides, and spreadsheets.</li>
+<li><strong>Use MarkItDown</strong> (Microsoft's converter) when you need the lightest possible Markdown conversion of Office and web documents and you do not need table structure or layout analysis. It is faster and simpler; it is not trying to understand the page.</li>
+<li><strong>Use a hosted parser</strong> (such as LlamaParse) when you cannot run models locally, or when you need a managed service with support. You pay per page and your documents leave your machine — for sensitive corpora, that trade is usually the wrong one, and it is exactly the trade Docling's local execution avoids.</li>
+<li><strong>Use pdfplumber or PyMuPDF directly</strong> when you need surgical control over one known PDF layout — a fixed form, a fixed report — and you are willing to write the layout logic yourself. That is precision work, not a pipeline.</li>
+</ul>
+<h2 id="limits">The honest limits</h2>
+<ul>
+<li><strong>CPU speed.</strong> Layout analysis and table-structure recognition are neural models. On CPU, a long PDF takes seconds per page, not milliseconds. Budget for it, batch overnight for large corpora, and use a GPU if latency matters.</li>
+<li><strong>Multi-page tables.</strong> A table that runs across pages can come back as one table per page, with later pages missing the header row. Check your longest tables by hand; if they matter, stitch them before chunking, and repeat the header in each chunk.</li>
+<li><strong>Scans.</strong> OCR quality is bounded by scan quality. A skewed, low-contrast photocopy will OCR badly no matter which engine you pick — fix the scan before blaming the parser.</li>
+<li><strong>First-run downloads.</strong> The model download on first PDF use surprises people in CI and containers. Pre-warm the cache in your image build, or your first production run pays the download cost at the worst possible moment.</li>
+<li><strong>VLM cost.</strong> The vision-language pipeline is the most capable option and the most expensive one. Reserve it for pages the standard pipeline fails on, not as the default for everything.</li>
+</ul>
+<h2 id="takeaway">The takeaway</h2>
+<p>Ingestion is not plumbing. It is the step that decides whether your retriever sees a table or a pile of numbers, a section or a fragment, a citable fact or a guess. Docling earns its place in a RAG pipeline by preserving the structure that makes answers checkable: headings that stay headings, tables that stay tables, and chunks that carry their context with them. Install it, convert your worst ten documents first, run the three checks from Step 3 on each, and only then build the index. If the parse is right, everything downstream gets easier; if it is wrong, nothing downstream can save it.</p>
+<h2 id="faq">Questions readers ask</h2>
+<h3>Do I need a GPU or an API key?</h3>
+<p>No to both, for everything in this guide. Docling runs locally on CPU with no account. A GPU speeds up PDF layout and table models; an API key is only relevant if you choose a hosted VLM backend, which this guide does not use.</p>
+<h3>Does Docling work on scanned PDFs?</h3>
+<p>Yes, via OCR on pages without a text layer. Expect good results on clean scans and degraded results on poor ones, and always check a sample of OCR output before indexing a scanned archive.</p>
+<h3>Can I use Docling with LangChain or LlamaIndex?</h3>
+<p>Yes — both ecosystems have Docling integrations (a LangChain loader that can take a chunker, and LlamaIndex readers), and the chunk JSONL you produce in Step 6 drops into any vector store without them. Start with plain chunks and add a framework only when you need what it adds.</p>
+<h3>How is this different from converting with Pandoc or MarkItDown?</h3>
+<p>Pandoc and MarkItDown convert formats; Docling understands pages. The difference shows up exactly where RAG breaks: tables, reading order, and structure-aware chunking. For a single clean conversion, the lighter tools are fine; for an index you will answer questions from, use the parser that preserves structure.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Docling documentation — docling-project.github.io/docling (features, formats, and the current 2.x pipeline surface).</li>
+<li>Docling project on GitHub — github.com/docling-project/docling (source, licence MIT, LF AI &amp; Data Foundation hosting).</li>
+<li>IBM, "From first document to production scale: What's new in Docling for IBM watsonx" — the 2.x backend rewrite, native PDF pipeline, and MCP support.</li>
+<li>Docling chunking behaviour — verified against the installed 2.143.1 package: the HybridChunker's fields (<code>tokenizer</code>, <code>repeat_table_header</code>, <code>merge_peers</code>) and the CLI's <code>--to chunks</code> output format.</li>
+</ul>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/document-extraction-tutorial/">Document extraction at scale: invoices to structured data</a></li><li><a href="/articles/build-first-rag-pipeline-afternoon/">Build your first RAG pipeline in an afternoon</a></li><li><a href="/articles/fine-tune-embeddings-domain-retrieval/">Fine-tune embeddings for your domain: contrastive training that measurably improves retrieval</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
