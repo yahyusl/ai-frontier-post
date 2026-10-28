@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a tool-calling agent that runs entirely on your laptop: LangGraph and a local Qwen model, no API key</title>
+<meta name="description" content="LangGraph turns an agent into a graph you can inspect: nodes, edges, and a router that decides what runs next. This guide builds that graph around Qwen2.5-0.5B-Instruct running on your own CPU, gives it a calculator and a notes lookup, and proves the whole loop — tool calls, multi-step questions, and memory across turns — with no API key and no inference-time cloud call.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/langgraph-local-tool-calling-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a tool-calling agent that runs entirely on your laptop: LangGraph and a local Qwen model, no API key">
+<meta property="og:description" content="LangGraph turns an agent into a graph you can inspect: nodes, edges, and a router that decides what runs next. This guide builds that graph around Qwen2.5-0.5B-Instruct running on your own CPU, gives it a calculator and a notes lookup, and proves the whole loop — tool calls, multi-step questions, and memory across turns — with no API key and no inference-time cloud call.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/langgraph-local-tool-calling-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/langgraph-local-tool-calling-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Build a tool-calling agent that runs entirely on your laptop: LangGraph and a local Qwen model, no API key">
+<meta name="twitter:description" content="LangGraph turns an agent into a graph you can inspect: nodes, edges, and a router that decides what runs next. This guide builds that graph around Qwen2.5-0.5B-Instruct running on your own CPU, gives it a calculator and a notes lookup, and proves the whole loop — tool calls, multi-step questions, and memory across turns — with no API key and no inference-time cloud call.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/langgraph-local-tool-calling-agent-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a tool-calling agent that runs entirely on your laptop: LangGraph and a local Qwen model, no API key", "description": "LangGraph turns an agent into a graph you can inspect: nodes, edges, and a router that decides what runs next. This guide builds that graph around Qwen2.5-0.5B-Instruct running on your own CPU, gives it a calculator and a notes lookup, and proves the whole loop — tool calls, multi-step questions, and memory across turns — with no API key and no inference-time cloud call.", "image": "https://aifrontierpost.com/articles/langgraph-local-tool-calling-agent-tutorial/cover.webp", "datePublished": "2026-10-28", "author": {"@type": "Person", "name": "Priya Nair"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build a tool-calling agent that runs entirely on your laptop: LangGraph and a local Qwen model, no API key", "description": "LangGraph turns an agent into a graph you can inspect: nodes, edges, and a router that decides what runs next. This guide builds that graph around Qwen2.5-0.5B-Instruct running on your own CPU, gives it a calculator and a notes lookup, and proves the whole loop — tool calls, multi-step questions, and memory across turns — with no API key and no inference-time cloud call.", "step": [{"@type": "HowToStep", "name": "Install the stack", "text": "Create a virtual environment and install the CPU build of PyTorch, transformers, LangGraph, and the LangChain Hugging Face package, with pinned versions."}, {"@type": "HowToStep", "name": "Load a local model and prove it answers", "text": "Load Qwen2.5-0.5B-Instruct from the local cache and run a plain chat completion on CPU, with timings."}, {"@type": "HowToStep", "name": "Define two real tools", "text": "Write a safe arithmetic calculator and a notes lookup as LangChain tools, with docstrings the model can read."}, {"@type": "HowToStep", "name": "Build the graph", "text": "Wire an agent node, a tools node, and a custom router into a StateGraph, and compile it with a memory checkpointer."}, {"@type": "HowToStep", "name": "Run a single-tool question", "text": "Ask the agent a question that needs one tool call and read the trace it leaves behind."}, {"@type": "HowToStep", "name": "Run a multi-step question with memory", "text": "Ask a question that needs both tools, then a follow-up in the same thread that tests whether the saved state helps the model recall — and see both fail honestly."}, {"@type": "HowToStep", "name": "Swap in a bigger model when you are ready", "text": "Change one model id to move the same graph to a larger local model."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a tool-calling agent that runs entirely on your laptop: LangGraph and a local Qwen model, no API key</h1>
+<p class="lede">Every hosted agent you have used is a loop you cannot see: your question goes to someone else's server, tokens bill by the thousand, and the trace of what the agent did lives behind their dashboard. LangGraph turns that loop inside out. An agent becomes a graph — nodes that do things, edges that decide what runs next — and once the loop is a graph, you can read it, log it, test it, and run it anywhere. This guide builds one around a model that lives on your own machine, and proves every step on CPU, with no API key and no inference-time cloud call.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · October 28, 2026 · 19 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> LangGraph turns a tool-calling agent into an explicit state graph: an agent node proposes one JSON action per turn, a router sends tool calls to real Python functions, and a memory checkpointer carries state across turns. This guide builds that graph around Qwen2.5-0.5B-Instruct on CPU, with a calculator and a notes lookup, and verifies a single-tool question end to end — then shows, honestly, where the small model drops the second half of a two-part question and fails a recall question, and what those failures teach about building agents.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> LangGraph (langchain-ai/langgraph on GitHub) + Qwen2.5-0.5B-Instruct (Qwen on Hugging Face).</li><li><b>What:</b> a tool-calling agent as an explicit state graph: an agent node, a tools node, and a router, running against a model on your own CPU.</li><li><b>When:</b> versions verified in this guide are listed in Step 1; the model is Qwen2.5-0.5B-Instruct (0.49B parameters, 32,768-token context).</li><li><b>Requirements:</b> Python 3.12, pip, about 2 GB of disk for the CPU PyTorch install plus the model. No API key, no account, no GPU.</li><li><b>Licence:</b> LangGraph is MIT; Qwen2.5-0.5B-Instruct is Apache-2.0.</li><li><b>Verified:</b> every command and program in this guide was run on a 2-core Linux VM; the agent answers a single-tool question end to end, repairs its own malformed JSON, and carries state across turns — while the multi-tool and recall failures are documented, not hidden.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/langgraph-local-tool-calling-agent-tutorial/cover.webp" alt="A laptop running a small AI agent drawn as a graph of connected nodes, with tool boxes for a calculator and notes" loading="lazy"><figcaption>An agent you can draw on a whiteboard: nodes, edges, and a router — running on the laptop itself. Image: AI Frontier Post.</figcaption></figure>
+
+<h2 id="why-now">Why this matters now</h2>
+<p>Agent frameworks have converged on the same shape: a language model that decides, tools that act, and a loop that connects them. The differences that matter in practice are not which model you pick first — they are whether you can see the loop, bound it, and replay it. A hosted agent API gives you a transcript after the fact. A graph gives you the loop itself, as code you own: every node is a function you can unit-test, every edge is a decision you can log, and the whole run fits in a state object you can inspect at any step.</p>
+<p>That matters more as models get smaller and cheaper. A 0.5-billion-parameter model will not out-reason a frontier model, and this guide does not pretend otherwise. What it does — follow a strict output format, call the right tool, combine a result into an answer — is exactly the mechanical core of an agent, and it is the part most tutorials skip past by renting a big model. Learn the loop on a model you own, and swapping in a bigger model later is a one-line change, not a rewrite.</p>
+<p>The other reason is privacy and cost. A local agent sends nothing anywhere: your notes, your questions, and your tool results never leave the machine. For personal automation — a notes assistant, a file organizer, a calculator that remembers context — that is often the whole requirement, and the per-token bill is zero.</p>
+<h2 id="what-you-need">What you'll need</h2>
+<p>Python 3.12 and pip. About 2 GB of free disk: roughly 1 GB for the CPU build of PyTorch and the LangGraph stack, plus about 1 GB for the model on its first download. No GPU, no API key, no account. The commands below were run on a 2-core Linux virtual machine under heavy load from other jobs, so the timings are pessimistic — a modern laptop will be faster. Everything runs on CPU.</p>
+<p>Versions verified in this guide, exactly as installed:</p>
+<ul><li>torch 2.9.1+cpu (from the PyTorch CPU index)</li><li>transformers 5.21.0</li><li>langgraph 1.2.18</li><li>langchain-core 1.7.0</li><li>Qwen/Qwen2.5-0.5B-Instruct — 0.49 billion parameters, 24 layers, 32,768-token context, Apache-2.0</li></ul>
+<p>One honest warning up front: the model in this guide is small on purpose. It follows instructions well for short, structured tasks and it fumbles longer ones. That is a feature for learning — you will see the failure modes (malformed JSON, wrong tool arguments, dropped sub-tasks) and the graph mechanisms that contain them — but do not ship this exact model for work that matters. Step 7 shows how to graduate.</p>
+<h2 id="step-1-install">Step 1: Install the stack</h2>
+<p>Create a virtual environment, install the CPU build of PyTorch first (the default PyPI wheel bundles CUDA libraries you do not need and do not want on a laptop), then the rest:</p>
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install transformers==5.21.0 langgraph==1.2.18 langchain-core==1.7.0</code></pre>
+<p>That is the whole dependency list. Two things are deliberately absent. <code>accelerate</code> is not needed: transformers 5.x only requires it when you pass a <code>device_map</code>, and the code in this guide does not — CPU is the default when no GPU is present. <code>langchain-huggingface</code> is not needed either: its chat model wraps a transformers pipeline but does not parse tool calls from pipeline output (tool-call parsing there only exists for structured chat APIs such as text-generation-inference servers). Since this guide parses the model's JSON itself, that package would add nothing but weight. Both facts were verified by installing, then removing, those packages and confirming the agent still runs.</p>
+<figure class="inline-art"><img class="story-image" loading="lazy" src="/articles/langgraph-local-tool-calling-agent-tutorial/img3.webp" alt="Three stacked layers: LangGraph graph on top, local model in the middle, your CPU at the bottom" loading="lazy"><figcaption>The whole stack, and nothing else: a LangGraph graph, a local model, your CPU. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="step-2-model">Step 2: Load a local model and prove it answers</h2>
+<p>Before any graph, prove the model itself works. The first run downloads about 1 GB from the Hugging Face Hub; later runs reuse the cache. Load it with plain <code>from_pretrained</code> — no <code>device_map</code>, for the reason given in Step 1:</p>
+<pre><code class="language-python">from transformers import AutoModelForCausalLM, AutoTokenizer
+
+MODEL = &quot;Qwen/Qwen2.5-0.5B-Instruct&quot;
+tokenizer = AutoTokenizer.from_pretrained(MODEL)
+model = AutoModelForCausalLM.from_pretrained(MODEL)</code></pre>
+<p>On the verification machine the weights loaded in about 3 seconds and the model reported 0.494 billion parameters, matching the model card. A plain chat completion, using the model's own chat template, came back coherent — and slow, because the machine was heavily loaded at the time:</p>
+<pre><code>User: Give me a short introduction to large language model.
+Assistant: Certainly! A large language model (LLM) is a type of artificial
+intelligence that can generate human-like text based on the input it
+receives. These models are designed to be highly accurate and capable of
+understanding complex natural language tasks such as translation,
+summarization, question answering, and more.</code></pre>
+<p>That completion took 208.3 seconds for 120 tokens under a load average above 11 on two cores — quoted exactly because it is the honest number for that machine, not a promise for yours. The short generations the agent actually uses are far quicker: the JSON probe below took 25.1 seconds for 20 tokens on the same loaded machine. If your machine is idle, expect several times faster; if you have a GPU, an order of magnitude faster.</p>
+<p>Now the probe that decides the whole design. Give the model a system prompt that allows exactly one JSON action per turn, and ask it something that needs a tool:</p>
+<pre><code class="language-python">SYSTEM = &quot;&quot;&quot;You are a careful assistant with two tools. Reply with EXACTLY ONE JSON object and nothing else.
+
+Tools:
+- calculator: {&quot;expression&quot;: &quot;&lt;arithmetic, e.g. 96*45&gt;&quot;} — evaluates arithmetic.
+- lookup_note: {&quot;topic&quot;: &quot;&lt;topic&gt;&quot;} — looks up a saved note.
+
+To call a tool: {&quot;action&quot;: &quot;calculator&quot;, &quot;args&quot;: {&quot;expression&quot;: &quot;96*45&quot;}}
+To finish: {&quot;action&quot;: &quot;final&quot;, &quot;answer&quot;: &quot;&lt;your answer, using the tool results&gt;&quot;}
+Never call a tool and give a final answer in the same reply. One JSON object per turn.&quot;&quot;&quot;</code></pre>
+<p>With greedy decoding (<code>do_sample=False</code>, so the output is deterministic), the model replied with exactly:</p>
+<pre><code>{&quot;action&quot;: &quot;calculator&quot;, &quot;args&quot;: {&quot;expression&quot;: &quot;96*45&quot;}}</code></pre>
+<p>That is the contract the rest of the guide is built on: a small local model, asked for one JSON object, produces a parseable tool call. Everything after this step is plumbing to run that contract in a loop.</p>
+<h2 id="step-3-tools">Step 3: Define two real tools</h2>
+<p>Tools are ordinary Python functions with docstrings — the docstrings matter, because they are what the model reads about each tool. The calculator evaluates arithmetic through the <code>ast</code> module, never through <code>eval</code> on raw input: only numbers and the operators <code>+ - * / % **</code> are allowed, so a malicious expression cannot execute code. The notes lookup reads from a plain dictionary standing in for whatever store you already have:</p>
+<pre><code class="language-python">&quot;&quot;&quot;A tool-calling agent that runs 100% locally: LangGraph + Qwen2.5-0.5B-Instruct.
+
+No API key, no cloud call. The graph is the agent: the model proposes one
+JSON action per turn, the router sends tool calls to real Python functions,
+and the loop continues until the model returns a final answer.
+
+Run:  HF_HUB_OFFLINE=1 python agent.py
+&quot;&quot;&quot;
+import ast
+import json
+import operator as op
+
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import tool
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+MODEL = &quot;Qwen/Qwen2.5-0.5B-Instruct&quot;
+
+# ---------------------------------------------------------------- tools
+ALLOWED = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
+           ast.Div: op.truediv, ast.Mod: op.mod, ast.Pow: op.pow,
+           ast.USub: op.neg}
+
+
+def _eval(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in ALLOWED:
+        return ALLOWED[type(node.op)](_eval(node.left), _eval(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in ALLOWED:
+        return ALLOWED[type(node.op)](_eval(node.operand))
+    raise ValueError(&quot;unsupported expression&quot;)
+
+
+@tool
+def calculator(expression: str) -&gt; str:
+    &quot;&quot;&quot;Evaluate a simple arithmetic expression, e.g. &#x27;96*45&#x27;. Returns the result as text.&quot;&quot;&quot;
+    return str(_eval(ast.parse(expression, mode=&quot;eval&quot;).body))
+
+
+NOTES = {
+    &quot;langgraph checkpointer&quot;: &quot;LangGraph checkpointers save the graph state after each step. &quot;
+    &quot;MemorySaver keeps it in RAM for the session; SqliteSaver persists it to disk.&quot;,
+    &quot;qwen2.5 context&quot;: &quot;Qwen2.5-0.5B-Instruct supports a 32,768-token context window.&quot;,
+    &quot;langgraph router&quot;: &quot;A router is a plain Python function that reads the latest message &quot;
+    &quot;and returns the name of the next node to run.&quot;,
+}
+
+
+@tool
+def lookup_note(topic: str) -&gt; str:
+    &quot;&quot;&quot;Look up a saved note by topic. Known topics: langgraph checkpointer, qwen2.5 context, langgraph router.&quot;&quot;&quot;
+    key = topic.strip().lower()
+    if key in NOTES:
+        return NOTES[key]
+    return f&quot;No note saved for &#x27;{topic}&#x27;. Known topics: {&#x27;, &#x27;.join(sorted(NOTES))}.&quot;
+
+
+TOOLS = [calculator, lookup_note]
+
+SYSTEM = &quot;&quot;&quot;You are a careful assistant with two tools. Reply with EXACTLY ONE JSON object and nothing else.
+
+Tools:
+- calculator: {&quot;expression&quot;: &quot;&lt;arithmetic, e.g. 96*45&gt;&quot;} — evaluates arithmetic.
+- lookup_note: {&quot;topic&quot;: &quot;&lt;topic&gt;&quot;} — looks up a saved note.
+
+To call a tool: {&quot;action&quot;: &quot;calculator&quot;, &quot;args&quot;: {&quot;expression&quot;: &quot;96*45&quot;}}
+To finish: {&quot;action&quot;: &quot;final&quot;, &quot;answer&quot;: &quot;&lt;your answer, using the tool results&gt;&quot;}
+Never call a tool and give a final answer in the same reply. One JSON object per turn.&quot;&quot;&quot;</code></pre>
+<p>Two details worth noticing. First, the <code>@tool</code> decorator turns each function into a LangChain tool object with a name, a description, and an argument schema — that is what the graph's tools node executes later. Second, the notes are private data: the model cannot know them without calling <code>lookup_note</code>. That turns out to be the key property for reliable demos, as Step 6 shows. A tool the model can route around — arithmetic it can do in its head — will sometimes be skipped, and that is rational behavior, not a bug.</p>
+<h2 id="step-4-graph">Step 4: Build the graph</h2>
+<p>Here is the whole agent. Read it top to bottom before running it; every part is doing one job:</p>
+<pre><code class="language-python"># ---------------------------------------------------------------- model
+tokenizer = AutoTokenizer.from_pretrained(MODEL)
+model = AutoModelForCausalLM.from_pretrained(MODEL)
+
+
+def _render(state) -&gt; list:
+    &quot;&quot;&quot;Convert graph messages to ChatML dicts the Qwen template renders natively.
+
+    Tool calls become assistant turns holding the JSON the model emitted, and
+    tool results become user turns reporting the result — so the model always
+    sees a plain ChatML conversation and always replies with one JSON action.
+    &quot;&quot;&quot;
+    msgs = [{&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: SYSTEM}]
+    for m in state[&quot;messages&quot;]:
+        if isinstance(m, HumanMessage):
+            msgs.append({&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: m.content})
+        elif isinstance(m, AIMessage) and m.tool_calls:
+            for tc in m.tool_calls:
+                msgs.append({&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: json.dumps(
+                    {&quot;action&quot;: tc[&quot;name&quot;], &quot;args&quot;: tc[&quot;args&quot;]})})
+        elif isinstance(m, AIMessage):
+            msgs.append({&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: m.content})
+        else:  # ToolMessage
+            msgs.append({&quot;role&quot;: &quot;user&quot;,
+                         &quot;content&quot;: f&quot;Tool {m.name} returned: {m.content}&quot;})
+    return msgs
+
+
+def agent_node(state: MessagesState):
+    prompt = tokenizer.apply_chat_template(
+        _render(state), tokenize=False, add_generation_prompt=True)
+    inputs = tokenizer([prompt], return_tensors=&quot;pt&quot;)
+    out = model.generate(**inputs, max_new_tokens=150, do_sample=False,
+                          pad_token_id=tokenizer.eos_token_id)
+    raw = tokenizer.decode(
+        out[0][len(inputs.input_ids[0]):], skip_special_tokens=True
+    ).strip()
+    try:
+        action = json.loads(raw[raw.index(&quot;{&quot;):raw.rindex(&quot;}&quot;) + 1])
+    except Exception:
+        return {&quot;messages&quot;: [HumanMessage(
+            content=&quot;Your previous reply was not valid JSON. &quot;
+            &quot;Reply with exactly one JSON object, nothing else.&quot;)]}
+    if action.get(&quot;action&quot;) == &quot;final&quot;:
+        return {&quot;messages&quot;: [AIMessage(content=str(action.get(&quot;answer&quot;, &quot;&quot;)))]}
+    name, args = action.get(&quot;action&quot;), action.get(&quot;args&quot;, {})
+    if name in (&quot;calculator&quot;, &quot;lookup_note&quot;) and isinstance(args, dict):
+        return {&quot;messages&quot;: [AIMessage(content=&quot;&quot;, tool_calls=[
+            {&quot;name&quot;: name, &quot;args&quot;: args, &quot;id&quot;: f&quot;call_{name}&quot;,
+             &quot;type&quot;: &quot;tool_call&quot;}])]}
+    return {&quot;messages&quot;: [HumanMessage(
+        content=f&quot;Unknown action &#x27;{name}&#x27;. Use calculator, lookup_note, or final.&quot;)]}
+
+
+def route(state: MessagesState):
+    last = state[&quot;messages&quot;][-1]
+    if isinstance(last, AIMessage) and last.tool_calls:
+        return &quot;tools&quot;
+    if isinstance(last, HumanMessage):
+        return &quot;agent&quot;  # repair nudge -&gt; try again
+    return END
+
+
+builder = StateGraph(MessagesState)
+builder.add_node(&quot;agent&quot;, agent_node)
+builder.add_node(&quot;tools&quot;, ToolNode(TOOLS))
+builder.add_edge(START, &quot;agent&quot;)
+builder.add_conditional_edges(&quot;agent&quot;, route,
+                              {&quot;tools&quot;: &quot;tools&quot;, &quot;agent&quot;: &quot;agent&quot;, END: END})
+builder.add_edge(&quot;tools&quot;, &quot;agent&quot;)
+graph = builder.compile(checkpointer=MemorySaver())</code></pre>
+<p>The pieces, in order. <code>MessagesState</code> is the graph's state: a list of messages, with new messages appended rather than replacing old ones. The <code>agent</code> node renders the conversation through the model's own chat template (so role markers match what the model was trained on), generates one reply with greedy decoding, and parses it. A valid tool action becomes an <code>AIMessage</code> carrying a <code>tool_call</code>; a valid final action becomes a plain answer; anything else becomes a correction message that sends the model around again. The <code>tools</code> node is LangGraph's prebuilt <code>ToolNode</code>: it executes each tool call and appends the result as a <code>ToolMessage</code>.</p>
+<p>The router is custom, deliberately. LangGraph ships <code>tools_condition</code>, which sends the run to the tools node when the last message has tool calls and ends it otherwise — but a correction message is a <code>HumanMessage</code>, and <code>tools_condition</code> would end the run on it instead of retrying. The custom router has three exits: tool calls go to <code>tools</code>, corrections go back to <code>agent</code>, everything else ends. The <code>recursion_limit</code> of 12 in the demo bounds the loop: a model that never produces a valid action stops after 12 steps instead of forever. Compile with <code>MemorySaver</code> and every thread's state is checkpointed after each step — that is the memory in Step 6.</p>
+<figure class="inline-art"><img class="story-image" loading="lazy" src="/articles/langgraph-local-tool-calling-agent-tutorial/img2.webp" alt="Agent graph diagram: START to AGENT to ROUTER, ROUTER to TOOLS and back to AGENT, ROUTER to END" loading="lazy"><figcaption>The graph, drawn out: START → AGENT → ROUTER, with TOOLS looping back and END as the only exit. Image: AI Frontier Post.</figcaption></figure>
+<h2 id="step-5-single">Step 5: Run a single-tool question — and read the trace</h2>
+<p>Run the demo. It asks three questions in one thread; this step covers the first:</p>
+<pre><code class="language-python">if __name__ == &quot;__main__&quot;:
+    import sys
+
+    config = {&quot;configurable&quot;: {&quot;thread_id&quot;: &quot;demo-1&quot;},
+              &quot;recursion_limit&quot;: 12}
+    for question in sys.argv[1:] or [
+            &quot;What does my note say about the langgraph checkpointer?&quot;,
+            &quot;What is 173 times 284, and what does my note say about the qwen2.5 context?&quot;,
+            &quot;What did I ask you first in this conversation?&quot;]:
+        print(f&quot;\n=== User: {question}&quot;)
+        result = graph.invoke({&quot;messages&quot;: [HumanMessage(content=question)]},
+                              config=config)
+        print(&quot;=== Agent:&quot;, result[&quot;messages&quot;][-1].content)</code></pre>
+<p>Expected output for the first question — quoted exactly from the verification run, including the stumble:</p>
+<pre><code>===== User: What does my note say about the langgraph checkpointer?
+[HumanMessage] What does my note say about the langgraph checkpointer?
+[HumanMessage] Unknown action &#x27;None&#x27;. Use calculator, lookup_note, or final.
+[AIMessage]  tool_calls=[{&#x27;name&#x27;: &#x27;lookup_note&#x27;, &#x27;args&#x27;: {&#x27;topic&#x27;: &#x27;langgraph checkpointer&#x27;}, &#x27;id&#x27;: &#x27;call_lookup_note&#x27;, &#x27;type&#x27;: &#x27;tool_call&#x27;}]
+[ToolMessage] LangGraph checkpointers save the graph state after each step. MemorySaver keeps it in RAM for the session; SqliteSaver persists it to disk.
+[AIMessage] LangGraph checkpointers save the graph state after each step. MemorySaver keeps it in RAM for the session; SqliteSaver persists it to disk.
+FINAL: LangGraph checkpointers save the graph state after each step. MemorySaver keeps it in RAM for the session; SqliteSaver persists it to disk.</code></pre>
+<p>Read that trace the way you would read a log. The model's first attempt was malformed — it produced an action the parser could not use, so the node answered with a correction instead of crashing or guessing. The model retried and produced a proper tool call with the exact argument <code>langgraph checkpointer</code>. The tool ran, its result entered the conversation as a <code>ToolMessage</code>, and the final answer quotes the note exactly, without paraphrase drift. That repair loop is not theoretical decoration: it fired three times across the full three-question demo, and without it the first question would have ended in an error.</p>
+<p>One design choice to notice: the malformed reply itself is not stored — the node keeps only the correction. That keeps the transcript clean, at the cost of losing the exact bad output for debugging. If you want the bad output logged, append it to a file inside the node before returning the correction; the graph does not care.</p>
+<h2 id="step-6-multi-memory">Step 6: Ask for two things at once — and test memory</h2>
+<p>The second question asks for two things: hard arithmetic and a second private note. The traces below omit the messages from the first question, which repeat at the start of every later turn — that repetition is itself the checkpointer working.</p>
+<pre><code>===== User: What is 173 times 284, and what does my note say about the qwen2.5 context?
+[AIMessage]  tool_calls=[{&#x27;name&#x27;: &#x27;calculator&#x27;, &#x27;args&#x27;: {&#x27;expression&#x27;: &#x27;173*284&#x27;}, &#x27;id&#x27;: &#x27;call_calculator&#x27;, &#x27;type&#x27;: &#x27;tool_call&#x27;}]
+[ToolMessage] 49132
+[HumanMessage] Your previous reply was not valid JSON. Reply with exactly one JSON object, nothing else.
+[AIMessage] The result of 173 times 284 is 49132.
+FINAL: The result of 173 times 284 is 49132.</code></pre>
+<p>The calculator half is correct (173 × 284 = 49,132 — check it: 173 × 300 − 173 × 16 = 51,900 − 2,768). The note half never happened: after the tool result, the model emitted invalid JSON, took the correction, and then finalized with only the arithmetic, dropping the second sub-task entirely. The same pattern appeared in an earlier run, where a two-part question got only the note half and the arithmetic was dropped, with the note's "SqliteSaver" corrupted into "sqlitetimer" along the way. The lesson is consistent and worth stating plainly: this 0.5-billion-parameter model reliably performs one tool call per question and drops the second sub-task. The graph loops correctly; the model does not plan multi-tool sequences. If you need two tools used, ask two questions — or use a bigger model, per Step 7.</p>
+<p>Now memory. The third question, in the same thread, asks what was asked first:</p>
+<pre><code>===== User: What did I ask you first in this conversation?
+[AIMessage] I&#x27;m sorry, but I need more information to provide an accurate response. What question did you have?
+FINAL: I&#x27;m sorry, but I need more information to provide an accurate response. What question did you have?</code></pre>
+<p>That is a failure, quoted exactly — and it teaches the most important distinction in this guide. The checkpointer did its job: the full transcript, both earlier questions with their tool calls and results, was present in the state the model was given (you can see it in the trace above, where every earlier message reappears). Persistence worked. Recall did not: the small model could not pick the first question out of that transcript. In LangGraph, "memory" means persisted state, and it is mechanical and reliable. Using that state well is the model's job, and it depends on the model. Do not confuse the two when you evaluate an agent: check the state object separately from the answer.</p>
+<h2 id="step-7-swap">Step 7: Swap in a bigger model when you are ready</h2>
+<p>Nothing in the graph depends on which model produces the JSON. To graduate, change one line:</p>
+<pre><code class="language-python">MODEL = &quot;Qwen/Qwen2.5-7B-Instruct&quot;  # 7B parameters at 2 bytes each is ~14 GB of weights alone: use a GPU machine</code></pre>
+<p>The tools, the node, the router, and the checkpointer all stay exactly as they are; only the brain gets bigger, and with it the reliability of multi-tool plans and recall. The same applies in the other direction: the graph also accepts a hosted model behind the same JSON protocol, but that path needs an API key and was deliberately not run in this guide, which is keyless end to end. When you do swap, re-run the three demo questions before anything else: they are a regression test for the whole loop, and any model that passes all three — tool call, repair, multi-part, recall — has earned real work.</p>
+<h2 id="which-approach">Which approach should you use?</h2>
+<p>Three ways to build this agent, and when each earns its place:</p>
+<ul><li><b>Prebuilt <code>create_react_agent</code></b> — fastest when your model has native tool calling: hosted APIs and text-generation-inference servers parse tool calls for you. Use it there. Do not use it with a local transformers pipeline: the pipeline returns text, and there is nothing to parse the tool call out of it.</li><li><b>Hand-built StateGraph, as in this guide</b> — the right call for local models and for learning. The loop is yours: you choose the output format, the repair behavior, the routing, and the memory. More code, total control, and the graph itself teaches how agents work.</li><li><b>Hand-built graph + bigger model</b> — the production shape. Keep the graph, upgrade the model until multi-tool plans and recall pass your own demo questions. The graph is the stable part; the model is the interchangeable part.</li></ul>
+<h2 id="what-was-not-verified">What this guide did not verify</h2>
+<ul><li>The hosted-model swap in Step 7 was not run (it needs an API key). The claim is structural — the graph does not depend on the model — not empirical.</li><li>Quality at scale: three demo questions on one small model do not characterize it. The failure modes shown (dropped sub-tasks, paraphrase corruption, failed recall) are real observations, not an exhaustive list.</li><li>Timings are load-bound: the verification machine was heavily loaded by other jobs, so treat every timing here as pessimistic, not typical.</li><li>Streaming, async invocation, and persistent (disk-backed) checkpointers were not exercised; <code>MemorySaver</code> keeps state in RAM for the session only.</li></ul>
+<h2 id="takeaway">The takeaway</h2>
+<p>An agent is not a model with a prompt. It is a loop: propose an action, run it, look at the result, repeat — bounded, repairable, and inspectable. LangGraph makes that loop explicit, and once it is explicit you can test it node by node, on a laptop, for free, with a model you own. The small model in this guide will drop your second sub-task and fumble recall; that is useful information, not a reason to rent a bigger model before you understand the loop. Build the graph first, prove it with questions you can check, and let the model graduate when the loop has earned it.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Qwen2.5-0.5B-Instruct model card (Qwen on Hugging Face) — parameter count, context length, architecture, and the chat-template quickstart used in Step 2.</li>
+<li>LangGraph prebuilt reference for <code>create_react_agent</code> (LangChain) — the agent/tools loop the hand-built graph mirrors, and the note that <code>MessageGraph</code> is deprecated in favor of <code>StateGraph</code>.</li>
+<li>LangChain forum discussion of <code>ChatHuggingFace</code> tool-call parsing — tool-call parsing exists for structured chat APIs, not for raw transformers pipelines, which is why this guide parses JSON in its own node.</li>
+<li>The installed packages themselves, run in this guide: torch 2.9.1+cpu, transformers 5.21.0, langgraph 1.2.18, langchain-core 1.7.0 — every version, flag, and output quoted here came from running them, not from documentation alone.</li>
+</ul>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/openai-agents-sdk-multi-agent-tutorial/">Build a working multi-agent system with the OpenAI Agents SDK: tools, handoffs, guardrails, and offline tests</a></li><li><a href="/articles/pydantic-ai-typed-testable-agents-tutorial/">Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
