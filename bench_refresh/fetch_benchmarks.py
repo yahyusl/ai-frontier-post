@@ -169,6 +169,7 @@ FC_ORGS = {
     "Claude Opus 4.7": "Anthropic",
     "Claude Sonnet 5.5": "Anthropic",
     "Claude Sonnet 5": "Anthropic",
+    "Claude Haiku 5.5": "Anthropic",
     "GPT-6 Astra": "OpenAI",
     "GPT-6.1 Sol": "OpenAI",
     "GPT-6 Sol": "OpenAI",
@@ -212,6 +213,7 @@ def fetch_frontiercode():
 # which lists runs per effort variant; take best-per-model from its table.
 AB_ORGS = {
     "Gemini 4 Argon": "Google",
+    "Gemini 4 Carbon": "Google",
     "Claude Sonnet 5.5": "Anthropic",
     "Claude Opus 5.5": "Anthropic",
     "Claude Haiku 5.5": "Anthropic",
