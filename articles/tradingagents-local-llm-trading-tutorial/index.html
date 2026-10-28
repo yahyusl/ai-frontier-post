@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run a multi-agent trading desk on your own machine: hands-on with TradingAgents and Ollama</title>
+<meta name="description" content="TradingAgents turns one ticker into a full research firm — analysts, bull-versus-bear debate, trader, risk team, portfolio manager — and version 0.7.1 runs it all against a local model. This guide installs it, runs NVIDIA through the whole firm on Ollama with no API keys, and shows exactly where the tiny local model can and cannot be trusted.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/tradingagents-local-llm-trading-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run a multi-agent trading desk on your own machine: hands-on with TradingAgents and Ollama">
+<meta property="og:description" content="TradingAgents turns one ticker into a full research firm — analysts, bull-versus-bear debate, trader, risk team, portfolio manager — and version 0.7.1 runs it all against a local model. This guide installs it, runs NVIDIA through the whole firm on Ollama with no API keys, and shows exactly where the tiny local model can and cannot be trusted.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/tradingagents-local-llm-trading-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/tradingagents-local-llm-trading-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Run a multi-agent trading desk on your own machine: hands-on with TradingAgents and Ollama">
+<meta name="twitter:description" content="TradingAgents turns one ticker into a full research firm — analysts, bull-versus-bear debate, trader, risk team, portfolio manager — and version 0.7.1 runs it all against a local model. This guide installs it, runs NVIDIA through the whole firm on Ollama with no API keys, and shows exactly where the tiny local model can and cannot be trusted.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/tradingagents-local-llm-trading-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run a multi-agent trading desk on your own machine: hands-on with TradingAgents and Ollama", "description": "TradingAgents turns one ticker into a full research firm — analysts, bull-versus-bear debate, trader, risk team, portfolio manager — and version 0.7.1 runs it all against a local model. This guide installs it, runs NVIDIA through the whole firm on Ollama with no API keys, and shows exactly where the tiny local model can and cannot be trusted.", "image": "https://aifrontierpost.com/articles/tradingagents-local-llm-trading-tutorial/cover.webp", "datePublished": "2026-10-27", "author": {"@type": "Person", "name": "Marcus Doyle"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Run a multi-agent trading desk on your own machine: hands-on with TradingAgents and Ollama", "description": "TradingAgents turns one ticker into a full research firm — analysts, bull-versus-bear debate, trader, risk team, portfolio manager — and version 0.7.1 runs it all against a local model. This guide installs it, runs NVIDIA through the whole firm on Ollama with no API keys, and shows exactly where the tiny local model can and cannot be trusted.", "step": [{"@type": "HowToStep", "name": "Install Ollama and pull a local model", "text": "Install Ollama, start the server, pull qwen3:0.6b, and verify the local API answers."}, {"@type": "HowToStep", "name": "Install TradingAgents 0.7.1", "text": "Clone the repo, create a virtual environment, install the package, and confirm the CLI renders."}, {"@type": "HowToStep", "name": "Point TradingAgents at the local model", "text": "Set the TRADINGAGENTS_* variables so the CLI runs headless against Ollama."}, {"@type": "HowToStep", "name": "Run NVIDIA through the whole firm", "text": "Run one CLI command for NVDA on 2026-10-26 with market, news, and fundamentals analysts."}, {"@type": "HowToStep", "name": "Read the report it saved", "text": "Open the saved bundle and read the trader plan and the portfolio manager's Hold rating."}, {"@type": "HowToStep", "name": "Audit the small model's work", "text": "Check the unit slip, the invented news figures, and the entry-price contradiction before trusting anything."}, {"@type": "HowToStep", "name": "Choose the model for real research", "text": "Swap the provider and model variables to a capable cloud model for research you intend to use."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run a multi-agent trading desk on your own machine: hands-on with TradingAgents and Ollama</h1>
+<p class="lede">TradingAgents does not try to build a smarter stock picker. It hires a whole firm: four analysts read the data, a bull and a bear argue about it, a trader writes a plan, three risk analysts attack the plan, and a portfolio manager signs or kills it. Version 0.7.1 runs that firm against any model you choose — including one on your own machine, with no API key and no broker. This guide proves it: a full NVIDIA run on a local Ollama model, every command shown, every output quoted from the run, and an honest account of where the tiny model earned trust and where it did not.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 27, 2026 · 13 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Clone TradingAgents 0.7.1, point it at Ollama with a small local model, and run one ticker through the whole firm with a single command. On a 2-core VM the NVIDIA run finished in about 46 minutes, saved a complete report (21,044-byte Markdown plus an HTML page), and ended with a Hold rating. The data layer is real — Yahoo prices and SEC filings, no keys. The small model's reading of that data is not: it misread millions as millions of dollars, invented revenue figures in the news report, and failed structured output three times. Treat the local run as a working smoke test of the pipeline, not as research you would act on.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> TradingAgents (TauricResearch/TradingAgents on GitHub).</li><li><b>What:</b> a multi-agent trading research firm: four analysts, a bull-versus-bear debate, a trader, a risk team, and a portfolio manager — reports only, no broker connection.</li><li><b>When:</b> version 0.7.1, verified in this guide; 117,304 stars at the 2026-10-28 snapshot, up 4,296 stars in five days.</li><li><b>Requirements:</b> Python 3.11+, Ollama, about 522 MB for qwen3:0.6b. No API key, no account, and no GPU for the small model used here.</li><li><b>Licence:</b> Apache-2.0.</li><li><b>Verified:</b> a full NVDA run for 2026-10-26 completed in about 46 minutes on a 2-core VM; the saved bundle holds a 21,044-byte Markdown report plus HTML; the final rating was Hold; the small model’s failures (unit slip, invented news figures, three structured-output fallbacks) are documented in Step 6.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/tradingagents-local-llm-trading-tutorial/cover.webp" alt="Robot analysts debating around a trading-desk table in front of market-chart screens" loading="lazy"><figcaption>A trading desk of agents, not people. Image: AI Frontier Post.</figcaption></figure>
+
+
+<h2 id="why-now">Why this project is blowing up now</h2>
+<p>TradingAgents (TauricResearch/TradingAgents, Apache-2.0) is a multi-agent LLM financial-trading framework built on LangGraph. You give it a ticker and a date; it returns a decision and a report. It does not place trades and it is not connected to a broker — approved orders go to a simulated exchange — and its authors describe it as research, not financial advice. That framing matters, and this tutorial keeps it: nothing here is a recommendation to buy, sell, or hold anything.</p>
+<p>The numbers behind the surge are measured, not vibes. Whatstrending.ai's daily snapshots put the repo at 117,304 stars on 2026-10-28, up 4,296 stars in the five days from October 23 to October 28, with its growth rate accelerating from 254 stars a day to 859 stars a day — the biggest acceleration of any tracked AI repo that week. The timing lines up with the 0.7.1 release line, which added per-tier model providers (so the managers can run on a different model from the analysts) and one-page HTML reports. This guide uses 0.7.1, verified with <code>pip show tradingagents</code>.</p>
+
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li>Python 3.11 or later (verified here on Python 3.12) and <code>pip</code>.</li>
+<li>Ollama (verified here: 0.40.11) and about 522 MB of disk for the <code>qwen3:0.6b</code> model on first pull.</li>
+<li>Git, and an internet connection for Yahoo Finance prices and SEC EDGAR filings. Neither needs an account or an API key.</li>
+<li>No LLM API key, no market-data subscription, no broker account. The whole run below costs $0 in API usage.</li>
+<li>Patience on a small machine: the full run took about 46 minutes on a 2-core VM, because the local model generates at roughly 5 tokens a second. A stronger local model or a cloud model finishes much faster, at the price of API usage.</li>
+</ul>
+<p>A warning before you start: the model in this guide is tiny — 0.6 billion parameters. It is here to prove the pipeline end to end for free. Its analysis is weak, and Step 6 shows exactly how. If you want research you can rely on, run the same steps with a capable model (Step 7 explains how) and still verify every figure yourself.</p>
+
+<figure class="inline-art"><img class="story-image" loading="lazy" src="/articles/tradingagents-local-llm-trading-tutorial/img2.webp" alt="Diagram of the TradingAgents pipeline: analysts, debate, trader, risk reviewers, portfolio manager"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="step-1">Step 1 — Install Ollama and pull a local model</h2>
+<p>Ollama serves local models behind an OpenAI-compatible API on <code>http://localhost:11434/v1</code>, which is exactly what TradingAgents talks to in its Ollama mode. Install it from Ollama's own installer, then start the server:</p>
+<pre><code>curl -fsSL https://ollama.com/install.sh | sh
+ollama serve</code></pre>
+<p>Then pull the small model this guide uses. The first pull downloads about 522 MB:</p>
+<pre><code>ollama pull qwen3:0.6b
+ollama list</code></pre>
+<p>Expected output (verified):</p>
+<pre><code>NAME                    ID              SIZE      MODIFIED
+qwen3:0.6b              7df6b6e09427    522 MB    4 weeks ago</code></pre>
+<p>One honest note: in this sandbox the pull's manifest fetch timed out behind the network proxy, so the run below used a previously cached copy of the model. The cached model itself was verified three ways — <code>ollama list</code> shows it, the server answers <code>/api/tags</code>, and a chat-completions call returned a correct answer. If your pull stalls, check your proxy before blaming the model.</p>
+<p>Confirm the API the framework will use, with a one-word smoke test:</p>
+<pre><code>curl -s -X POST http://127.0.0.1:11434/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Reply with the single word OK."}],"temperature":0}'</code></pre>
+<p>Verified response: a completion whose message content is <code>OK</code>. If this fails, stop here — TradingAgents will fail the same way, and the fix is in your Ollama server, not in TradingAgents.</p>
+
+<h2 id="step-2">Step 2 — Install TradingAgents 0.7.1</h2>
+<p>Clone the repo and install it into a virtual environment:</p>
+<pre><code>git clone https://github.com/TauricResearch/TradingAgents.git
+cd TradingAgents
+python3 -m venv venv
+./venv/bin/pip install .</code></pre>
+<p>The clone is small (9 MB). The install pulls LangGraph and its dependencies; on a flaky proxy you may see pip retry a few wheels before succeeding — that is retry noise, not failure. Verify the install:</p>
+<pre><code>./venv/bin/python -c "import tradingagents; print('tradingagents import OK')"
+./venv/bin/pip show tradingagents | head -3</code></pre>
+<p>Verified output:</p>
+<pre><code>tradingagents import OK
+Name: tradingagents
+Version: 0.7.1</code></pre>
+<p><code>./venv/bin/tradingagents --help</code> should render the full CLI, including <code>--ticker</code>, <code>--date</code>, <code>--analysts</code>, <code>--save</code>, <code>--no-show</code>, and <code>--html</code>. If help renders, the install is good.</p>
+
+<h2 id="step-3">Step 3 — Point TradingAgents at the local model</h2>
+<p>TradingAgents reads its configuration from <code>TRADINGAGENTS_*</code> environment variables, which also skip the interactive CLI's questions. Set these before running:</p>
+<pre><code>export NO_PROXY=localhost,127.0.0.1
+export TRADINGAGENTS_NO_UPDATE_CHECK=1
+export TRADINGAGENTS_LLM_PROVIDER=ollama
+export TRADINGAGENTS_QUICK_THINK_LLM=qwen3:0.6b
+export TRADINGAGENTS_DEEP_THINK_LLM=qwen3:0.6b
+export TRADINGAGENTS_OUTPUT_LANGUAGE=English
+export TRADINGAGENTS_MAX_DEBATE_ROUNDS=1
+export TRADINGAGENTS_MAX_RISK_ROUNDS=1</code></pre>
+<p>What each line does: <code>NO_PROXY</code> keeps the Ollama loopback address off the network proxy (without it, local calls can be routed out and fail); the provider line selects Ollama, whose default endpoint is <code>http://localhost:11434/v1</code> with no key; the two model lines put the same small model on both tiers — the quick tier serves analysts, researchers, debaters and trader, the deep tier serves the research and portfolio managers; the rounds lines keep the debate and the risk discussion to one round each, which is the default and the fastest setting.</p>
+<p>Storage defaults to <code>~/.tradingagents</code>. This run pointed storage at a scratch folder with <code>TRADINGAGENTS_RESULTS_DIR</code>, <code>TRADINGAGENTS_CACHE_DIR</code>, and <code>TRADINGAGENTS_MEMORY_LOG_PATH</code>; omit those three lines to use the defaults. Nothing else in the command below depends on them.</p>
+
+<h2 id="step-4">Step 4 — Run NVIDIA through the whole firm</h2>
+<p>One command, no questions asked, because every choice is either a flag or an environment variable:</p>
+<pre><code>./venv/bin/tradingagents --ticker NVDA --date 2026-10-26 \
+  --analysts market,news,fundamentals --save --no-show</code></pre>
+<p>The CLI confirms every choice before it starts. Verified output:</p>
+<pre><code>✓ Ticker from --ticker: NVDA
+✓ Analysis date from --date: 2026-10-26
+✓ Output language from environment: English
+Selected analysts: market, news, fundamentals
+✓ Research depth from environment: 1 debate / 1 risk rounds
+✓ LLM provider from environment: ollama
+✓ Backend URL: http://localhost:11434/v1
+✓ Thinking agents from environment: quick=qwen3:0.6b, deep=qwen3:0.6b</code></pre>
+<p>The analysts run in parallel. The market analyst pulls Yahoo prices, the news analyst pulls current news and macro data, and the fundamentals analyst pulls SEC EDGAR filings — for NVIDIA, the cache shows <code>CIK0001045810.json</code>, NVIDIA's EDGAR company file. The data layer verifies point-in-time integrity: the log records "Rows after the requested analysis date are excluded before verification," and the snapshot it used is real Yahoo data for 2026-10-26:</p>
+<pre><code># Stock data for NVDA from 2026-10-26 to 2026-10-26
+Date,Open,High,Low,Close,Volume,Dividends,Stock Splits
+2026-10-26,213.11,217.75,212.61,216.00,90829300,0.0,0.0</code></pre>
+<p>Analyst wall times from the finished run: Market 754.23s, News 138.74s, Fundamentals 416.36s. The spread is the model, not the data — the market analyst's report is the longest generation. Then the bull and bear researchers debate, the trader writes a plan, three risk analysts (aggressive, conservative, neutral) rebut it, and the portfolio manager decides. Expect roughly three quarters of an hour on a machine like this one; the progress is visible in the reports folder as each stage lands.</p>
+<p>Three lines in the log deserve attention, because they are the small model's signature. Each of the three manager roles failed structured output once and fell back to free text:</p>
+<pre><code>Research Manager: structured-output invocation failed (structured output returned no parsed result); retrying once as free text
+Trader: structured-output invocation failed (structured output returned no parsed result); retrying once as free text
+Portfolio Manager: structured-output invocation failed (structured output returned no parsed result); retrying once as free text</code></pre>
+<p>The fallbacks worked — the run completed — but they are a warning: this model cannot reliably produce the structured outputs the framework asks for. A capable model does not need the fallback.</p>
+
+<figure class="inline-art"><img class="story-image" loading="lazy" src="/articles/tradingagents-local-llm-trading-tutorial/img3.webp" alt="A laptop on a home desk showing a candlestick chart with an amber signal light"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+
+<h2 id="step-5">Step 5 — Read the report it saved</h2>
+<p>The run ends with <code>Analysis Complete!</code> and a saved bundle. Verified:</p>
+<pre><code>✓ Report saved to: results/reports/NVDA_20261028_021642
+  Complete report: complete_report.md
+  HTML report: complete_report.html</code></pre>
+<p>Inside the bundle: <code>complete_report.md</code> (21,044 bytes) and <code>complete_report.html</code> (52,875 bytes), plus one folder per stage — <code>1_analysts</code>, <code>2_research</code> (bull, bear, manager), <code>3_trading</code> (trader), <code>4_risk</code> (conservative, neutral, aggressive), <code>5_portfolio</code> (decision). The decision itself, from <code>5_portfolio/decision.md</code>:</p>
+<pre><code>- **Rating**: Hold
+- **Executive Summary**: The trader's position is a strategic risk-based move aligned
+  with the technical strength of the current upward trend, supported by MACD signals
+  (signal -0.9178) and moving average levels (50 SMA $222.216), as well as volume evidence.</code></pre>
+<p>The trader's plan behind it:</p>
+<pre><code>- **Action**: Hold
+- **Entry Price**: $189.5
+- **Stop Loss**: ATR $6.11
+- **Position Sizing**: 10% of the total investment</code></pre>
+<p>The market report's indicator values, as the model reported them: close 216.00, moving averages 222.216 and 203.519, RSI 44.1367, MACD signal −0.9178, ATR 6.11169. The fundamentals table lists quarterly revenue of 81,615 and 96,221 (millions) for the quarters ending 2026-04-26 and 2026-07-26, with net income of 58,321 and 59,688 (millions) for the periods 2026-04-26 and 2026-07-26. Treat those as the model's report of the data, and check them against the filing before you use them — Step 6 is why.</p>
+
+<h2 id="step-6">Step 6 — Audit the small model's work before you trust any of it</h2>
+<p>This is the most important step, and it is the reason the local run is a smoke test rather than research. Four concrete failures from this exact run:</p>
+<ol>
+<li><strong>It misread the units.</strong> The fundamentals table is labeled in millions, and the model's own insights call the same figures "$81.6M in revenue" and "$58.3 million" of net income. 81,615 millions is $81.6 billion, not $81.6 million. Any conclusion built on the model's prose inherits a thousand-fold error.</li>
+<li><strong>It invented figures in the news report.</strong> The news report claims "NVIDIA's recent Q4 revenue growth of $15B" and a stock "expected to reach $18B by 2026." Neither figure appears in the data the run fetched. The data layer is verified; the news prose is not.</li>
+<li><strong>Its own plan contradicts its own data.</strong> The trader's plan sets an entry price of $189.5 while the market report's verified close is 216.00. A plan whose entry is 12% below the close it just reported is not a plan you execute — it is a sign the model lost track of the numbers.</li>
+<li><strong>It cannot do structured output.</strong> All three manager roles failed structured output and needed the free-text retry (Step 4). The framework handled it, but on a longer or stricter run that fallback is where a pipeline silently degrades.</li>
+</ol>
+<p>The pattern is consistent: the framework's data fetching, verification, debate structure, and report assembly all worked, and the tiny model's reasoning about the numbers did not. That split is the whole point of running it locally first — you learn which half to trust before you pay for a model that can do the other half.</p>
+
+<h2 id="step-7">Step 7 — When to use this, and what to run instead for real research</h2>
+<p>Use the local path when you want to learn the framework, test a configuration, or verify that your data vendors work — all for $0. Use it to answer "does this pipeline run?" Never use a 0.6-billion-parameter model's Hold rating as an investment input.</p>
+<p>For research you intend to rely on, change only the model, not the workflow. Set <code>TRADINGAGENTS_LLM_PROVIDER</code> to a cloud provider you have a key for (OpenAI, Google, Anthropic, DeepSeek, Groq, and others are supported) and set the quick and deep model variables to capable models, then re-run the same command. The per-tier settings exist for exactly this: put a strong model on the deep tier (research and portfolio managers) even if the analysts run on something cheaper. Expect API costs per run, and expect the debate to take minutes rather than three quarters of an hour.</p>
+<p>Two more routes the same install gives you, neither run here so neither is claimed as verified: the <code>tradingagents backtest</code> subcommand scores past decisions over a grid of tickers and dates, and the Python API (<code>TradingAgentsGraph(...).propagate(ticker, date)</code>) lets you drive the firm from your own code, including passing a portfolio so the trader sizes against your actual book. Both are documented in the repo's README; start with the CLI run above before you reach for them.</p>
+<p>What this does not replace: a single careful read of the filing, a second data source for any figure you act on, and your own judgment. The framework's own docs say the same — it is research tooling, and live data moves, so a run dated today sees different news and social inputs than the same run next week even for the same trade date.</p>
+
+<h2 id="alternatives">When to use this vs alternatives</h2>
+<div class="table-wrap"><table>
+<tr><th>Approach</th><th>Use it when</th><th>Watch out for</th></tr>
+<tr><td>TradingAgents, local model (this guide)</td><td>Learning the framework, testing config, $0 smoke tests</td><td>Weak reasoning, unit slips, invented figures — audit everything</td></tr>
+<tr><td>TradingAgents, cloud model</td><td>Research you intend to use, with a strong model on the deep tier</td><td>API cost per run; still verify every figure</td></tr>
+<tr><td>Single-prompt stock analysis</td><td>A quick second opinion on one question</td><td>No debate, no risk team, no audit trail</td></tr>
+<tr><td>Broker research and filings, read directly</td><td>Any decision involving real money</td><td>Slower; that is the point</td></tr>
+</table></div>
+
+<h2 id="takeaway">The takeaway</h2>
+<p>TradingAgents earns its surge honestly at the framework level: a real multi-agent pipeline, real free data vendors, point-in-time discipline, and a complete report bundle from one command. The local-model run proves all of that for $0 in about 46 minutes on a small machine. It also proves the limit that matters: a tiny model will misread the very data the framework verified. Run it locally to learn the machine, run it on a capable model to do research, and never let either one skip the audit in Step 6.</p>
+<p>Checklist: Ollama serving with <code>qwen3:0.6b</code> listed; TradingAgents 0.7.1 installed and importing; environment variables set; the NVDA command exits 0 with "Analysis Complete!"; the saved bundle contains <code>complete_report.md</code> and <code>complete_report.html</code>; and you have read the trader's plan and the portfolio manager's rating with the Step 6 audit in mind. If any item is missing, the run is not done — re-run it rather than trusting a partial bundle.</p>
+
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://github.com/TauricResearch/TradingAgents" rel="nofollow">TauricResearch/TradingAgents — README, installation, Ollama configuration, CLI flags, and Python API (version 0.7.1, read 2026-10-27)</a></li>
+<li><a href="https://whatstrending.ai/repos/weekly" rel="nofollow">whatstrending.ai — AI Repo Acceleration Report, updated 2026-10-28 (star snapshots for TradingAgents)</a></li>
+</ul>
+<p class="disclosure">Research only. This tutorial demonstrates open-source software with a simulated exchange; it is not financial, investment, or trading advice, and no trade was placed. Verify every figure against primary sources before acting on any research output.</p>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/ifixai-agent-audit-hands-on-tutorial/">Audit your AI agent before it audits your reputation: hands-on with iFixAi</a></li><li><a href="/articles/code-review-graph-local-code-intelligence-tutorial/">Stop feeding your agent the whole repo: a hands-on tutorial for code-review-graph</a></li><li><a href="/articles/pydantic-ai-typed-testable-agents-tutorial/">Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key</a></li><li><a href="/articles/chaos-intelligence-agents-as-functions-tutorial/">Call an agent like a function: a hands-on guide to Chaos Intelligence</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
