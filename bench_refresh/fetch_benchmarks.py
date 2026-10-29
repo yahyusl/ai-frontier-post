@@ -56,21 +56,33 @@ def http_post_json(url, payload, timeout=30):
 
 # ---------------------------------------------------------------- AA Index
 def fetch_aa():
+    # NOTE (2026-10-28): NEVER parse name/score pairs with a cross-field
+    # regex over this page. Models with intelligenceIndex null (e.g.
+    # Nemotron 3 Nano Omni, North Mini Code, Hy3, Apodex 1.1, Motif 3)
+    # made the old greedy pattern skip ahead and pair their names with
+    # the NEXT model's score — it published Carbon's 59.4 under
+    # Nemotron's name and dropped Carbon from the board entirely.
+    # Parse per model object instead: split on object starts and read
+    # each chunk's own name/org/index, so a null can never shift a score.
     html = http_get("https://artificialanalysis.ai/leaderboards/models").decode("utf-8", "replace")
-    pat = re.compile(
-        r'\\"name\\":\\"((?:[^\\]|\\.)*?)\\",\\"shortName\\":'
-        r'.*?\\"modelCreatorName\\":\\"((?:[^\\]|\\.)*?)\\",'
-        r'.*?\\"intelligenceIndex\\":([0-9.]+),'
-        r'\\"intelligenceIndexIsEstimated\\":(true|false)',
-        re.S,
-    )
+    starts = [m.start() for m in re.finditer(r'\\"slug\\":\\"', html)]
     best = {}
-    for m in pat.finditer(html):
-        raw = m.group(1).encode().decode("unicode_escape", "replace")
-        org = m.group(2).encode().decode("unicode_escape", "replace")
-        score, est = float(m.group(3)), m.group(4) == "true"
-        if est:
+    for si, s in enumerate(starts):
+        e = starts[si + 1] if si + 1 < len(starts) else len(html)
+        chunk = html[s:min(e, s + 3000)]
+        nm = re.search(r'\\"name\\":\\"((?:[^\\]|\\.)*?)\\"', chunk)
+        om = re.search(r'\\"modelCreatorName\\":\\"((?:[^\\]|\\.)*?)\\"', chunk)
+        im = re.search(r'\\"intelligenceIndex\\":(null|[0-9.]+)', chunk)
+        em = re.search(r'\\"intelligenceIndexIsEstimated\\":(true|false)', chunk)
+        if not (nm and om and im):
             continue
+        if im.group(1) == "null":
+            continue
+        if em and em.group(1) == "true":
+            continue
+        raw = nm.group(1).encode().decode("unicode_escape", "replace")
+        org = om.group(1).encode().decode("unicode_escape", "replace")
+        score = float(im.group(1))
         base = re.sub(r"\s*\([^)]*\)\s*$", "", raw).strip()
         if base not in best or score > best[base][1]:
             best[base] = (org, score)
