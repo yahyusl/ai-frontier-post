@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Smolagents: the agent that thinks in Python code, running on a local model with no API key</title>
+<meta name="description" content="Smolagents turns an agent into Python code: the model writes a program, a sandboxed interpreter runs it, and your tools answer what the model does not know. We built a CodeAgent on Qwen2.5-Coder-1.5B-Instruct running locally — one hand-written tool, two tasks, no API key — and report all four runs that failed before the finishing instructions made it work.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/smolagents-code-agent-local-model-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Smolagents: the agent that thinks in Python code, running on a local model with no API key">
+<meta property="og:description" content="Smolagents turns an agent into Python code: the model writes a program, a sandboxed interpreter runs it, and your tools answer what the model does not know. We built a CodeAgent on Qwen2.5-Coder-1.5B-Instruct running locally — one hand-written tool, two tasks, no API key — and report all four runs that failed before the finishing instructions made it work.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/smolagents-code-agent-local-model-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/smolagents-code-agent-local-model-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Smolagents: the agent that thinks in Python code, running on a local model with no API key">
+<meta name="twitter:description" content="Smolagents turns an agent into Python code: the model writes a program, a sandboxed interpreter runs it, and your tools answer what the model does not know. We built a CodeAgent on Qwen2.5-Coder-1.5B-Instruct running locally — one hand-written tool, two tasks, no API key — and report all four runs that failed before the finishing instructions made it work.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/smolagents-code-agent-local-model-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Smolagents: the agent that thinks in Python code, running on a local model with no API key", "description": "Smolagents turns an agent into Python code: the model writes a program, a sandboxed interpreter runs it, and your tools answer what the model does not know. We built a CodeAgent on Qwen2.5-Coder-1.5B-Instruct running locally — one hand-written tool, two tasks, no API key — and report all four runs that failed before the finishing instructions made it work.", "image": "https://aifrontierpost.com/articles/smolagents-code-agent-local-model-tutorial/cover.webp", "datePublished": "2026-10-28", "author": {"@type": "Person", "name": "Sofia Almeida"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Smolagents: the agent that thinks in Python code, running on a local model with no API key", "description": "Smolagents turns an agent into Python code: the model writes a program, a sandboxed interpreter runs it, and your tools answer what the model does not know. We built a CodeAgent on Qwen2.5-Coder-1.5B-Instruct running locally — one hand-written tool, two tasks, no API key — and report all four runs that failed before the finishing instructions made it work.", "step": [{"@type": "HowToStep", "name": "Install the stack", "text": "Create a virtual environment, install CPU PyTorch from its own index, then smolagents, transformers, and accelerate — accelerate is required because TransformersModel passes a device map."},{"@type": "HowToStep", "name": "Load a local model and prove it answers", "text": "Load a local model with TransformersModel using the list-of-parts message format, and ask it a question to see what the raw model can and cannot do."},{"@type": "HowToStep", "name": "Turn a Python function into a tool", "text": "Write a lookup_note function with the @tool decorator, a precise docstring, and type hints, so smolagents builds its description and argument schema."},{"@type": "HowToStep", "name": "Build the CodeAgent", "text": "Create a CodeAgent with your tool, the local model, a max_steps budget, add_base_tools=False, and explicit instructions to use your tools."},{"@type": "HowToStep", "name": "Run it with smaller models — and watch four attempts fail", "text": "Run the notes and arithmetic tasks with Qwen2.5-0.5B-Instruct, Qwen2.5-Coder-0.5B-Instruct, and Qwen2.5-Coder-1.5B-Instruct under weaker instructions, and read the traces: invented web scraping, stuck finishes, hallucinated notes, and missing final_answer calls."},{"@type": "HowToStep", "name": "Finish it with the bigger model and explicit instructions", "text": "Use Qwen2.5-Coder-1.5B-Instruct with instructions that demand the tool result exactly and a last block containing only final_answer, and watch the notes task finish in 2 steps with the exact quote."},{"@type": "HowToStep", "name": "Bound the agent before you trust it", "text": "Set a step budget, respect the executor import allowlist, and run generated code in a sandbox before it touches anything real."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Smolagents: the agent that thinks in Python code, running on a local model with no API key</h1>
+<p class="lede">Most agent frameworks make the model answer in JSON. Smolagents makes it answer in Python — and that changes what an agent can do, and what can go wrong. This guide builds a CodeAgent on a local model, with one tool you write yourself, and reports every stumble honestly.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 28, 2026 · 16 min read</span></span></div>
+
+
+<figure class="hero-art"><img class="story-image" src="/articles/smolagents-code-agent-local-model-tutorial/cover.webp" alt="A robot built from Python code blocks working at a laptop"><figcaption>Cover illustration: AI Frontier Post. No free public image of smolagents with a reusable licence was found, so the cover and diagrams in this article are AI-generated illustrations.</figcaption></figure>
+<div class="article-body">
+<p>Most agent frameworks ask you to describe what the agent should do in JSON: a tool name, a schema, a list of arguments. Smolagents, Hugging Face's agent library, asks for something else — Python code. The model writes a short program, the framework runs it, and the program itself calls your tools, does the arithmetic, and decides what to do next. That one design choice changes what an agent can express: loops, conditionals, and nested function calls come for free, because they are just code.</p>
+<p>This guide builds a working smolagents CodeAgent that runs entirely on your own machine: a local model, one tool you write yourself, and two tasks that test the loop — a tool question the agent answers exactly, and an arithmetic question whose executed code is exact even when the finish is not. No API key, no account, no GPU. It also reports, in full, the four runs that did not work — because the most useful thing about a CodeAgent is learning exactly where small models break, and the fix turned out to be a bigger model plus explicit finishing instructions. Everything below was run on a 2-core Linux VM, and the timings and failures are reported exactly as they happened.</p>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Smolagents' CodeAgent turns a task into Python code and runs it in a sandboxed interpreter. Install smolagents 1.26.0 with CPU PyTorch, transformers, and accelerate; load Qwen2.5-Coder-1.5B-Instruct locally with TransformersModel; write a tool with the @tool decorator; and give it to CodeAgent with explicit instructions to use your tools and to finish with a single final_answer call. The agent then calls your tool and returns its result exactly — with no API key and no cloud call at inference time. Getting there took four failed attempts with smaller models, and this guide reports all of them: the finish format, not the reasoning, is what small models fail at.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> smolagents (huggingface/smolagents on GitHub), Hugging Face's agent library — Apache-2.0.</li><li><b>What:</b> a CodeAgent that writes and executes Python to solve tasks, powered here by a local model and one hand-written tool.</li><li><b>When:</b> versions verified in this guide are smolagents 1.26.0, transformers 5.21.0, torch 2.15.0+cpu, and accelerate 1.15.0, run October 28, 2026; the demo model is Qwen2.5-Coder-1.5B-Instruct (Apache-2.0). The failure experiments used Qwen2.5-0.5B-Instruct and Qwen2.5-Coder-0.5B-Instruct (both Apache-2.0).</li><li><b>Requirements:</b> Python 3.12, pip, and about 5 GB of free disk for the virtual environment plus the 3.1 GB model. No API key, no account, no GPU.</li></ul>
+<h2 id="why-code">Why an agent that writes code is different</h2>
+<p>In a JSON tool-calling agent, every action is one tool call: the model picks a tool, fills in its arguments, waits for the result, and repeats. That works, but anything more complex than a straight line — a loop over a list, a branch on a value, a value computed from two tool results — has to be squeezed through repeated single calls, with the model holding the intermediate state in its head.</p>
+<p>A CodeAgent removes that bottleneck. The model writes ordinary Python: it can call a tool inside a loop, store a result in a variable, compute with it, and pass it to another tool, all in one step. The framework executes that code in a sandboxed interpreter and hands the observations back. If the code fails, the error message goes back to the model and it tries again — the same feedback loop, but with the full expressiveness of a programming language in the middle.</p>
+<p>The trade-off is real and this guide does not hide it. Generated code has to be syntactically valid, wrapped in the code-block format the framework parses, and limited to what the sandbox allows. A small model will write imperfect code, hit the sandbox's limits, and need retries. That is why the demo below starts with the wrong model on purpose: it shows both what the pattern buys you and where it strains, before showing the model that makes it work.</p>
+<h2 id="step-1">Step 1: Install the stack</h2>
+<p>Create a virtual environment first, so the tutorial's packages never touch your system Python. Then install CPU PyTorch from its own index, and smolagents, transformers, and accelerate together. The order matters for two reasons: the PyTorch CPU index keeps you from downloading a multi-gigabyte CUDA build you cannot use, and accelerate is not optional here — smolagents' TransformersModel passes a device map to transformers, and transformers 5.x refuses to do that without accelerate installed. That failure is easy to misread as a model problem; it is a missing-package problem, and this step prevents it.</p>
+<pre><code class="language-bash">python3 -m venv smolagents-env
+source smolagents-env/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install smolagents transformers accelerate</code></pre>
+<p>Verify the install with the versions this guide was tested against:</p>
+<pre><code class="language-bash">python -c "import smolagents, transformers, torch, accelerate; print(smolagents.__version__, transformers.__version__, torch.__version__, accelerate.__version__)"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">1.26.0 5.21.0 2.15.0+cpu 1.15.0</code></pre>
+<p>If your versions are newer, the API calls below should still work — smolagents' CodeAgent, TransformersModel, and @tool decorator are its stable surface — but pin the versions above if anything behaves differently.</p>
+<h2 id="step-2">Step 2: Load a local model and prove it answers</h2>
+<p>Before building any agent, prove the model itself works. The script below loads a local model from the Hugging Face cache (about 1 GB on first download for the coder model; set the offline flags if you want to guarantee no network use after that) and asks it one question. Note the message format: smolagents 1.26 expects each message's content as a list of parts, not a plain string. Passing a plain string raises <code>TypeError: string indices must be integers, not 'str'</code> deep inside the model wrapper — another error that looks like a model failure and is actually a format mismatch.</p>
+<pre><code class="language-python">import os
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+from smolagents import TransformersModel
+
+model = TransformersModel(
+    model_id="Qwen/Qwen2.5-Coder-1.5B-Instruct",
+    max_new_tokens=256,
+)
+out = model([{"role": "user", "content": [
+    {"type": "text", "text": "What is 17 times 38? Answer with just the number."}
+]}])
+print(out.content)</code></pre>
+<p>Run this as a load check, not as an arithmetic test. On the test machine the 1.5B model loaded in about 21 seconds. The guide's first probe of this kind, with the general-purpose chat model Qwen2.5-0.5B-Instruct, returned <strong>596</strong> for the same question. The correct answer is 646. A small model doing mental arithmetic is exactly as unreliable as it sounds, and that unreliability is the point of the next steps: the agent in this guide does not trust the model's arithmetic. It makes the model write code, and then it trusts the interpreter.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/smolagents-code-agent-local-model-tutorial/img2.webp" alt="Diagram of the CodeAgent loop: task, code agent, local executor, final answer, with a feedback loop"><figcaption>Diagram: AI Frontier Post. The CodeAgent loop — the model writes code, the local executor runs it, and errors or observations feed back into the next step until a final answer is produced.</figcaption></figure>
+<h2 id="step-3">Step 3: Turn a Python function into a tool</h2>
+<p>Tools in smolagents are ordinary functions with a decorator. The docstring is not decoration: smolagents builds the tool's description and argument schema from the docstring and the type hints, and that generated description is what the model reads when it decides whether to call the tool. Write the docstring as if the model were your only reader, because it is. Verified on the test machine: this function's generated description is "Look up a short note by topic.", its input schema is <code>topic</code> as a string with the description from the Args section, and its output type is string.</p>
+<pre><code class="language-python">from smolagents import tool
+
+@tool
+def lookup_note(topic: str) -&gt; str:
+    """Look up a short note by topic.
+
+    Args:
+        topic: the topic to look up, e.g. 'smolagents executor'.
+    """
+    notes = {
+        "smolagents executor": "The local executor runs generated code in a sandboxed Python interpreter on your own machine.",
+    }
+    return notes.get(topic, "No note on that topic.")</code></pre>
+<p>Two rules make tools reliable. First, keep the function's contract narrow: one job, typed arguments, a string back. Second, never put a secret or a destructive action behind a tool you hand to an agent without thinking about what generated code could do with it — the agent will call the tool with whatever arguments it invents, including wrong ones. A lookup tool like this one is safe by construction: it can only read from a fixed dictionary.</p>
+<h2 id="step-4">Step 4: Build the CodeAgent</h2>
+<p>The agent itself is four arguments: the tools, the model, a step budget, and instructions. <code>max_steps</code> is your safety net — it caps how many code-and-execute rounds the agent may take before it must stop, which bounds both runtime and cost. <code>add_base_tools=False</code> keeps the demo honest: no web search, no bundled tools, just the one tool you wrote. <code>instructions</code> is the part most tutorials skip and this one does not: it is where you tell the agent how to behave, and the experiments in Step 5 show why it matters.</p>
+<pre><code class="language-python">from smolagents import CodeAgent
+
+INSTRUCTIONS = ("Use only the tools provided to you. To answer questions about notes, "
+                "call lookup_note with the topic. Never import requests, BeautifulSoup, "
+                "or any other library to search or scrape the web. Pass the tool's return "
+                "value to final_answer EXACTLY as returned: do not paraphrase, shorten, "
+                "or invent any part of it. When you have the answer, your next and last "
+                "code block must contain ONLY one line: final_answer(&lt;the answer&gt;). "
+                "Do not print the answer instead of calling final_answer. Never assign "
+                "anything to a variable named final_answer.")
+
+agent = CodeAgent(
+    tools=[lookup_note],
+    model=model,
+    max_steps=6,
+    add_base_tools=False,
+    instructions=INSTRUCTIONS,
+)</code></pre>
+<p>What happens on <code>agent.run(task)</code> is the loop in the diagram above: the model receives the task plus a system prompt describing your tools and the code format it must produce, writes a code block, and the local executor runs it. Tool calls inside the code resolve to your functions. Observations and errors return to the model for the next step, until the code calls <code>final_answer(...)</code> or the step budget runs out.</p>
+<h2 id="step-5">Step 5: The runs that did not work — and what each one taught</h2>
+<p>Before the working demo, here are the runs that did not work, because they teach more than a clean run would. All four used the same program shape as Step 4, with the same two tasks: quote the note about the smolagents executor exactly, and calculate 17 times 38.</p>
+<p><strong>Attempt 1 — chat model, no instructions.</strong> Powered by Qwen2.5-0.5B-Instruct with no instructions at all, the agent never reached the tool: twice the model wrote code importing <code>requests</code> and BeautifulSoup to scrape a web search for the note, and twice the sandboxed executor refused it — <code>InterpreterError: Import of requests is not allowed</code>. That refusal is the sandbox working as designed, and it is also a warning: a model that does not know your tool will invent its own way to answer.</p>
+<p><strong>Attempt 2 — chat model, use-the-tool instructions.</strong> Adding an instruction to use the provided tool fixed the tool use immediately. Step 1 of the notes task was perfect: <code>note_about_executor = lookup_note('smolagents executor')</code>, and the execution log printed the exact note. Then the model got stuck for five more steps: it repeatedly wrote <code>note_about_executor.split('\n')[1]</code> and <code>print(final_answer)</code> instead of calling <code>final_answer(...)</code> — trying to take the second line of a one-line note, and treating the finish function as a variable to print, which the system prompt explicitly forbids ("Don't name any new variable with the same name as a tool"). After 311.7 seconds and 7 steps, the run returned a serialised blob of its own thoughts and code, not a final answer. The arithmetic task went worse: all six steps were code-parsing errors, each one prose ending in "Final Answer: 606" — wrong, and in the wrong format. When the step budget ran out, the returned summary happened to say 646. That is not a computed answer; it is a guess that landed right at the end, and this guide does not count it.</p>
+<p><strong>Attempt 3 — coder model, same size.</strong> Qwen2.5-Coder-0.5B-Instruct was tidier — its notes-task step 1 was a clean tool call in 43 output tokens, and its arithmetic steps executed <code>answer = 17 * 38; print(answer)</code> with execution logs of 646 three times — but it never called <code>final_answer</code> either. Its notes run ended in empty code blocks; its arithmetic run returned '1684', the model's first-step guess, even though executed code had printed 646. Lesson: the returned value is not the executed result. If the model never calls <code>final_answer</code>, the run's return value is junk no matter what the code printed.</p>
+<p><strong>Attempt 4 — bigger coder model, original instructions.</strong> Qwen2.5-Coder-1.5B-Instruct could finish the format — its notes task called <code>final_answer</code> in step 3 — but with the wrong content: step 2 had invented a fake note ("a high-performance, multi-threaded executor…") and printed it instead of using the tool result from step 1, and step 3 finalised the invention. The lesson is precise: with small models, the CodeAgent loop works mechanically — tools execute, errors feed back — but the model cannot reliably follow the finish format <em>and</em> keep the tool result intact. Format compliance and result fidelity, not reasoning, are the bottlenecks.</p>
+<h2 id="step-6">Step 6: The working demo — bigger model plus explicit finishing instructions</h2>
+<p>The combination that worked was attempt 4's model with attempt 2's lesson written into the instructions: the Step 4 instructions above, which tell the agent to pass the tool's return value to <code>final_answer</code> exactly as returned, and to make its last code block contain only that call. Nothing else changed. Run the two tasks:</p>
+<pre><code class="language-python">result = agent.run("Use the lookup_note tool to find what my note says about the "
+                   "smolagents executor, then quote it exactly as your final answer.")
+print(result)
+
+agent2 = CodeAgent(tools=[], model=model, max_steps=6, add_base_tools=False)
+result2 = agent2.run(
+    "Calculate 17 times 38. Give only the number as your final answer.")
+print(result2)</code></pre>
+<p>The notes task finished in 2 steps and 175.2 seconds. Step 1 (87.1 seconds, 17 output tokens) was a bare tool call, <code>lookup_note("smolagents executor")</code>, whose step output was the exact note. Step 2 (88.2 seconds, 43 tokens) was a single line:</p>
+<pre><code class="language-python">final_answer("The local executor runs generated code in a sandboxed Python interpreter on your own machine.")</code></pre>
+<p>And the returned value was exactly that string — the note, quoted verbatim, delivered through the finish call rather than printed. That is the whole demo in one trace: tool call, exact result, finish call, exact return.</p>
+<p>The arithmetic task is reported with the same honesty. Its code executed 646 correctly — <code>result = 17 * 38; print(result)</code> printed 646 in steps 1 and 4 — but across 6 steps the model never called <code>final_answer</code>: steps 2 and 5 were prose parse errors, steps 3 and 6 were syntax errors from unterminated string literals, and the run ended at the step budget with the summary 'Final answer: 646'. The value is right and the code proved it, but the finish is a summary, not a call. The entire successful run's log contains exactly one <code>final_answer(</code> call — the notes task's step 2. So the practical rule for your own CodeAgent runs is: read the trace, not just the returned string. A correct returned value with no <code>final_answer</code> call in the trace is a summary, and a trace with the call is a finished run. Whenever a task has a part that a machine can compute exactly — arithmetic, sorting, counting, formatting — push that part into code and let the model orchestrate instead of calculate; and when a CodeAgent fails, check the model size and the finishing instructions before you rewrite the agent.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/smolagents-code-agent-local-model-tutorial/img3.webp" alt="Diagram of the local stack: local model at the bottom, smolagents in the middle, tools on top"><figcaption>Diagram: AI Frontier Post. The whole stack in this guide runs on one machine: the local model at the bottom, smolagents orchestrating in the middle, your tools on top.</figcaption></figure>
+<h2 id="step-7">Step 7: Bound the agent before you trust it</h2>
+<p>Three controls matter before a CodeAgent touches anything real. First, <code>max_steps</code>: every run in this guide used 6, and you should set it deliberately low while testing — a runaway agent burns time in proportion to its budget, and the failed chat-model runs above took about five minutes each. Second, the executor's import allowlist: generated code runs in a sandbox that permits only a fixed set of imports (time, re, math, datetime, statistics, collections, and a few others). During testing, a generated step tried <code>import requests</code> and the executor refused it. That refusal is the sandbox working as designed — but it also means code that needs a library you did not authorise will fail, so add imports explicitly with <code>additional_authorized_imports</code> when you genuinely need them, and never add a module that can touch the network or the filesystem casually.</p>
+<p>Third, execution locality: the default executor runs code on your machine. Smolagents also offers remote executors (E2B, Modal, Docker, Blaxel) that move generated code off your machine entirely. For anything beyond a trusted demo, run generated code in one of those sandboxes or in a throwaway container — not in the same environment that holds your credentials. And keep tools narrow: a tool that can delete files or spend money should never be handed to an agent whose code you have not reviewed.</p>
+<h2 id="which-approach">Which approach should you use?</h2>
+<p>Smolagents gives you two agent shapes. <strong>CodeAgent</strong>, used here, is the right default when tasks need control flow — loops, branches, computed values passed between tools. <strong>ToolCallingAgent</strong> is the JSON tool-calling shape: simpler to reason about and a better fit when your model already calls tools reliably and your tasks are single-tool lookups. If you need a visible, inspectable state machine with checkpoints and branching graphs, a graph framework is the better tool — see our <a href="/articles/langgraph-local-tool-calling-agent-tutorial/">LangGraph local tool-calling guide</a>, which builds the same kind of local agent as an explicit graph. If you need typed, testable agents with structured outputs, see our <a href="/articles/pydantic-ai-typed-testable-agents-tutorial/">Pydantic AI guide</a>; for a multi-agent system with handoffs and guardrails, see our <a href="/articles/openai-agents-sdk-multi-agent-tutorial/">OpenAI Agents SDK guide</a>.</p>
+<p>The model choice follows the same logic as the agent choice. A tiny local model like the one here is perfect for learning the loop and for tasks where code execution carries the correctness. For production work, swap the model, not the agent code: <code>InferenceClientModel</code> for Hugging Face inference providers, <code>LiteLLMModel</code> for 100+ providers including a local Ollama server, or <code>OpenAIServerModel</code> for any OpenAI-compatible endpoint. Those swaps change one constructor; the tools and the agent stay the same. That portability is the practical payoff of a model-agnostic library.</p>
+<h2 id="takeaway">The takeaway</h2>
+<p>A CodeAgent is not a smarter model — it is a model given a better instrument. The model still reasons, still makes mistakes, and still needs a step budget and a sandbox. What changes is where correctness comes from: tools answer what the model does not know, and executed code computes what the model cannot be trusted to calculate. Build the loop locally first, with a code-trained model big enough to follow the finish format and instructions explicit enough to demand it, and a tool you wrote yourself — and judge every run by its trace, not its returned string. The full demo program is the code in Steps 2–6, in order, in a single file — model, tool, agent, two tasks, no API key.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://huggingface.co/docs/smolagents/en/index" rel="nofollow">smolagents documentation — quickstart, CodeAgent, and model options (Hugging Face)</a></li>
+<li><a href="https://github.com/huggingface/smolagents" rel="nofollow">smolagents repository (GitHub)</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct" rel="nofollow">Qwen2.5-Coder-1.5B-Instruct model card (Hugging Face)</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct" rel="nofollow">Qwen2.5-Coder-0.5B-Instruct model card (Hugging Face)</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct" rel="nofollow">Qwen2.5-0.5B-Instruct model card (Hugging Face)</a></li>
+</ul>
+</div>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/metaharness-build-your-own-agent-harness-tutorial/">MetaHarness: mint your own branded agent harness — scaffold, validate, and ship it under your name</a></li><li><a href="/articles/photocraft-headless-photo-editor-cli-tutorial/">PhotoCraft: the open-source Photoshop rival you can drive from the terminal</a></li><li><a href="/articles/anatomy-isometric-figures-agent-skill-tutorial/">Anatomy turns your coding agent into an illustrator: build interactive isometric figures that explain how things work</a></li><li><a href="/articles/ruflo-agent-harness-tutorial/">Ruflo: the 80,000-star agent harness, installed and verified — swarms, local memory, and an MCP server you can actually run</a></li></ul></section>
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
