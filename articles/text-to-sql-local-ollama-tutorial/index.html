@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Ask your database anything: build a local text-to-SQL assistant with Ollama and SQLite — AI Frontier Post</title>
+<meta name="description" content="Ask a SQLite database questions in plain English — with no account, no API key, and no data leaving your machine. This guide builds a local text-to-SQL assistant with Ollama and a 522 MB model, adds three layers of guardrails, and shows, with real outputs, exactly where the small model succeeds and where it fails.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/text-to-sql-local-ollama-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Ask your database anything: build a local text-to-SQL assistant with Ollama and SQLite">
+<meta property="og:description" content="Ask a SQLite database questions in plain English — with no account, no API key, and no data leaving your machine. This guide builds a local text-to-SQL assistant with Ollama and a 522 MB model, adds three layers of guardrails, and shows, with real outputs, exactly where the small model succeeds and where it fails.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/text-to-sql-local-ollama-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/text-to-sql-local-ollama-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-29">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ask your database anything: build a local text-to-SQL assistant with Ollama and SQLite">
+<meta name="twitter:description" content="Ask a SQLite database questions in plain English — with no account, no API key, and no data leaving your machine. This guide builds a local text-to-SQL assistant with Ollama and a 522 MB model, adds three layers of guardrails, and shows, with real outputs, exactly where the small model succeeds and where it fails.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/text-to-sql-local-ollama-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Ask your database anything: build a local text-to-SQL assistant with Ollama and SQLite", "description": "Ask a SQLite database questions in plain English — with no account, no API key, and no data leaving your machine. This guide builds a local text-to-SQL assistant with Ollama and a 522 MB model, adds three layers of guardrails, and shows, with real outputs, exactly where the small model succeeds and where it fails.", "image": "https://aifrontierpost.com/articles/text-to-sql-local-ollama-tutorial/cover.webp", "datePublished": "2026-10-29", "dateModified": "2026-10-29", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Ask your database anything: build a local text-to-SQL assistant with Ollama and SQLite", "description": "Ask a SQLite database questions in plain English — with no account, no API key, and no data leaving your machine. This guide builds a local text-to-SQL assistant with Ollama and a 522 MB model, adds three layers of guardrails, and shows, with real outputs, exactly where the small model succeeds and where it fails.", "step": [{"@type": "HowToStep", "name": "Install Ollama and pull a small model", "text": "Install Ollama 0.40.13 and pull qwen3:0.6b (522 MB)."}, {"@type": "HowToStep", "name": "Build a demo shop database", "text": "Run seed.py to create shop.db with customers, products, and orders."}, {"@type": "HowToStep", "name": "Write the guarded ask script", "text": "Save ask.py: schema prompt, SELECT-only guard, read-only connection, error-feedback retry."}, {"@type": "HowToStep", "name": "Ask questions and try to break it", "text": "Run counts and filters, then destructive requests and join questions, and read every failure."}, {"@type": "HowToStep", "name": "Point it at your own database", "text": "Change DB to your SQLite file; swap in a larger model when joins matter."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Ask your database anything: build a local text-to-SQL assistant with Ollama and SQLite</h1>
+<p class="lede">Your database already holds the answers — the hard part is asking it without learning SQL or uploading your data to somebody else's server. This guide builds a text-to-SQL assistant that runs entirely on your machine: a small local model, three layers of guardrails, and every success and failure quoted from real runs.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · October 29, 2026 · 11 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> A local text-to-SQL assistant in about 120 lines of Python: Ollama 0.40.13 plus Qwen3 0.6B (522 MB) translates questions into SQLite queries against a demo shop database. Verified here keyless on CPU: counts and filters correct first try; destructive queries refused three ways (prompt constraint, guard, read-only connection); multi-table joins and aggregates fail in instructive, quotable ways with the tiny model — the article shows each failure and what fixes it.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Ollama (free local model runner) + Qwen3 0.6B + SQLite, using only the Python standard library — no pip installs beyond Ollama itself.</li><li><b>What:</b> ask.py: a schema prompt read from the database, a SELECT-only guard, a read-only connection, and an error-feedback retry loop, over a demo shop database (5 customers, 4 products, 8 orders).</li><li><b>When:</b> verified October 29, 2026: Ollama 0.40.13, model qwen3:0.6b (522 MB), Python 3.12, CPU-only.</li><li><b>Requirement:</b> Linux or macOS (WSL on Windows), Python 3.11+, about 1.5 GB of disk. No account, no API key, no GPU for anything in this guide.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/text-to-sql-local-ollama-tutorial/cover.webp" alt="A person typing a question at a laptop showing a database table, with a small robot assistant beside it"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+
+<h2 id="why-now">Why this matters now</h2>
+<p>Every team has the same fantasy: type a question in plain English — "which customer spent the most this year?" — and get an answer from the company database without bothering an engineer. Hosted AI tools will happily do this for you, but they do it by sending your question, and usually your schema, to somebody else's server. For a personal project, a small business, or any database you would rather not upload, that trade is hard to justify.</p>
+<p>The alternative is to run the whole thing at home: a small model on your own machine translates the question into SQL, and a layer of guardrails you control decides whether that SQL is allowed to run. Nothing leaves the machine. This guide builds exactly that, end to end, with free tools: Ollama for the model, SQLite for the database, and about 120 lines of Python you can read in one sitting. Every command and every quoted output below comes from a real run on an ordinary CPU-only machine — no GPU, no account, no API key.</p>
+<p>One honest warning up front: the model in this guide is tiny (Qwen3 with 0.6 billion parameters, 522&nbsp;MB). It handles the questions in this tutorial, and it will fumble harder ones. That is the point of the guardrails: the system is designed so that a wrong answer is a failed query, never a corrupted database. When you want better accuracy, you swap in a bigger local model — the code does not change.</p>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li><b>A computer running Linux or macOS</b> with Python 3.11 or later (verified here with Python 3.12). Windows users can follow along in WSL.</li>
+<li><b>Ollama 0.40.13</b> — the free local model runner. About 1&nbsp;GB of disk for the app plus the model.</li>
+<li><b>The Qwen3 0.6B model</b> (522&nbsp;MB download). No GPU needed; it runs on CPU, slowly but fine for short queries.</li>
+<li><b>About 30 minutes</b>, most of it waiting for the model to download and answer.</li>
+<li><b>No account, no API key, no cloud service.</b> If a step below ever asks you to sign up for something, you have taken a wrong turn.</li>
+</ul>
+<h2 id="step-1-ollama">Step 1: Install Ollama and pull a small model</h2>
+<p>Install Ollama from <a href="https://ollama.com/download">ollama.com/download</a> (Linux users: the install script on that page; macOS users: the app). Then check it answers, and pull the model:</p>
+<pre><code class="language-bash">ollama --version
+# ollama version is 0.40.13
+
+ollama pull qwen3:0.6b
+ollama list
+# NAME          ID              SIZE      MODIFIED
+# qwen3:0.6b    7df6b6e09427    522 MB    ...</code></pre>
+<p>Start the server in a second terminal (or leave the desktop app running) and confirm it responds:</p>
+<pre><code class="language-bash">ollama serve
+curl http://127.0.0.1:11434/api/version
+# {"version":"0.40.13"}</code></pre>
+<p>If the pull stalls on a slow connection, just run it again — Ollama resumes. Two pull attempts for a larger code model failed from the verification machine with a registry timeout, which is why this guide standardises on the small model that is already cached and verified below. Do not let a model download become the project; the 0.6B model is enough to prove the whole pattern.</p>
+<h2 id="step-2-database">Step 2: Build a small shop database to ask questions about</h2>
+<p>Real text-to-SQL demos fail when the database is a mystery. Ours is deliberately tiny and fully visible: three tables, five customers, four products, eight orders. Save this as <code>seed.py</code> and run it:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""Create shop.db: a tiny, realistic shop database for the text-to-SQL demo."""
+import sqlite3
+from pathlib import Path
+
+DB = Path(__file__).with_name("shop.db")
+if DB.exists():
+    DB.unlink()
+
+con = sqlite3.connect(DB)
+con.executescript("""
+CREATE TABLE customers (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    city TEXT NOT NULL,
+    signup_date TEXT NOT NULL
+);
+CREATE TABLE products (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    price REAL NOT NULL
+);
+CREATE TABLE orders (
+    id INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(id),
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    quantity INTEGER NOT NULL,
+    order_date TEXT NOT NULL
+);
+""")
+con.executemany("INSERT INTO customers VALUES (?,?,?,?)", [
+    (1, "Amina Diallo", "Montreal", "2024-03-11"),
+    (2, "Lucas Tremblay", "Quebec City", "2024-05-02"),
+    (3, "Sara Kim", "Toronto", "2025-01-19"),
+    (4, "Omar Haddad", "Montreal", "2025-02-08"),
+    (5, "Emma Wilson", "Vancouver", "2025-06-30"),
+])
+con.executemany("INSERT INTO products VALUES (?,?,?,?)", [
+    (1, "Trail Running Shoes", "Footwear", 129.99),
+    (2, "Insulated Bottle", "Accessories", 34.50),
+    (3, "Yoga Mat", "Fitness", 49.00),
+    (4, "Headlamp", "Outdoors", 59.95),
+])
+con.executemany("INSERT INTO orders VALUES (?,?,?,?,?)", [
+    (1, 1, 1, 2, "2025-03-04"),
+    (2, 1, 2, 1, "2025-03-05"),
+    (3, 2, 3, 1, "2025-04-12"),
+    (4, 3, 1, 1, "2025-05-20"),
+    (5, 3, 4, 2, "2025-05-21"),
+    (6, 4, 1, 3, "2025-07-02"),
+    (7, 5, 2, 4, "2025-08-15"),
+    (8, 2, 4, 1, "2026-01-10"),
+])
+con.commit()
+print("created", DB, "customers=5 products=4 orders=8")
+con.close()</code></pre>
+<pre><code class="language-bash">python3 seed.py
+# created shop.db customers=5 products=4 orders=8</code></pre>
+<p>Dates are stored as <code>YYYY-MM-DD</code> text, which SQLite compares correctly as strings. That choice matters later: it is what makes "in 2025" answerable with a simple range filter instead of date functions the small model might get wrong.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/text-to-sql-local-ollama-tutorial/img2.webp" alt="A four-step pipeline: a question, a gear, a shield with a checkmark, and a database"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-3-ask-script">Step 3: Write the ask script — model, guardrails, read-only execution</h2>
+<p>This is the whole application. Read it top to bottom before running it, because the guardrails are the lesson:</p>
+<ul>
+<li><b>The schema comes from the database itself.</b> <code>schema_text()</code> reads the real <code>CREATE TABLE</code> statements from <code>sqlite_master</code>, so the model can never be tricked by a stale description — and you never hand-write a schema summary that drifts from reality.</li>
+<li><b>The prompt demands exactly one query.</b> Temperature 0 (deterministic) and a 256-token cap keep the model terse; <code>clean_sql()</code> strips any markdown fence anyway.</li>
+<li><b>The guard runs before anything touches the database.</b> One statement only, it must start with <code>SELECT</code> or <code>WITH</code>, and a blocklist rejects writes (<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>DROP</code>, and friends).</li>
+<li><b>The connection itself is read-only.</b> <code>file:shop.db?mode=ro</code> means that even if a hostile query slipped past the guard, SQLite would refuse to write. Defence in depth, not a single clever check.</li>
+<li><b>Errors go back to the model.</b> If SQLite rejects the query, the error text is appended to the next attempt, up to three tries. Most small-model failures are a wrong column name; the error message usually fixes them.</li>
+</ul>
+<p>Save this as <code>ask.py</code> in the same directory as <code>shop.db</code>:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""ask.py — plain-English questions over shop.db, answered by a local model."""
+import json
+import os
+import re
+import sqlite3
+import sys
+import urllib.request
+
+OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+MODEL = os.environ.get("T2SQL_MODEL", "qwen3:0.6b")
+DB = "shop.db"  # run from the directory that holds shop.db
+
+BLOCKED = ("insert", "update", "delete", "drop", "alter", "create",
+           "replace", "truncate", "attach", "detach", "vacuum", "pragma")
+
+
+def schema_text(con):
+    """Exact CREATE TABLE statements, straight from sqlite_master."""
+    rows = con.execute(
+        "SELECT sql FROM sqlite_master "
+        "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).fetchall()
+    return "\n".join(r[0] + ";" for r in rows)
+
+
+def clean_sql(raw):
+    """Strip a markdown fence and trailing semicolons/whitespace."""
+    sql = raw.strip()
+    m = re.search(r"```(?:sql)?\s*(.*?)```", sql, re.S)
+    if m:
+        sql = m.group(1).strip()
+    return sql.rstrip(";").strip()
+
+
+def guard(sql):
+    """Return an error string, or None if the statement is safe to run."""
+    if not sql:
+        return "empty SQL"
+    if ";" in sql:
+        return "refused: more than one statement"
+    first = sql.split()[0].lower()
+    if first not in ("select", "with"):
+        return f"refused: only SELECT queries are allowed, got {first.upper()}"
+    lowered = " " + re.sub(r"\s+", " ", sql.lower()) + " "
+    for word in BLOCKED:
+        if f" {word} " in lowered or f" {word}(" in lowered:
+            return f"refused: forbidden keyword {word.upper()}"
+    return None
+
+
+def ask_model(question, schema, error=None):
+    system = (
+        "You translate a question into ONE SQLite SELECT query.\n"
+        "Reply with ONLY the SQL query, no explanation, no markdown fence.\n"
+        "Use exactly these tables and columns:\n" + schema
+    )
+    user = question
+    if error:
+        user += f"\nYour previous query failed with this SQLite error: {error}. Fix it."
+    payload = json.dumps({
+        "model": MODEL,
+        "stream": False,
+        "options": {"temperature": 0, "num_predict": 256},
+        "think": False,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }).encode()
+    req = urllib.request.Request(OLLAMA_URL, data=payload,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as resp:
+        return json.load(resp)["message"]["content"]
+
+
+def main(question):
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    schema = schema_text(con)
+    error = None
+    for attempt in (1, 2, 3):
+        raw = ask_model(question, schema, error)
+        sql = clean_sql(raw)
+        problem = guard(sql)
+        if problem == "empty SQL":
+            print(f"[attempt {attempt}] empty reply — retrying")
+            error = "your previous reply was empty; reply with only the SQL query"
+            continue
+        if problem:
+            print(f"[attempt {attempt}] {problem}: {sql}")
+            return
+        print(f"[attempt {attempt}] SQL: {sql}")
+        try:
+            cur = con.execute(sql)
+            rows = cur.fetchall()
+            print("columns:", [d[0] for d in cur.description])
+            for row in rows:
+                print(row)
+            return
+        except sqlite3.Error as exc:
+            error = str(exc)
+            print(f"[attempt {attempt}] SQLite error: {error} — retrying")
+    print("gave up after 3 attempts")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("usage: python3 ask.py 'your question'")
+        sys.exit(2)
+    main(" ".join(sys.argv[1:]))</code></pre>
+<p>Three details worth noticing. First, the script uses only the Python standard library — no <code>pip install</code> at all — because Ollama is reached over plain HTTP. Second, the guard checks the <em>generated</em> SQL, not the question: a politely worded request to delete data still produces a <code>DELETE</code> statement, and that is what gets refused. You will see this in Step 5. Third, <code>"think": False</code> is not cosmetic. Qwen3 is a thinking model: left alone, it spends its token budget on a hidden reasoning trace, and with a 256-token cap the visible answer came back empty (verified here: 256 tokens generated, empty reply). Disabling thinking makes the small model answer directly — the right trade for a translation task where the query itself is the whole output.</p>
+<h2 id="step-4-ask">Step 4: Ask your first questions</h2>
+<p>Make sure Ollama is serving, then ask the easy questions first. Each run prints the SQL before it prints the answer — that ordering is deliberate, and Step 5 explains why you should never skip reading it.</p>
+<pre><code class="language-bash">python3 ask.py "How many customers are there?"
+# [attempt 1] SQL: SELECT COUNT(*) FROM customers
+# columns: ['COUNT(*)']
+# (5,)
+
+python3 ask.py "List all customers from Montreal."
+# [attempt 1] SQL: SELECT * FROM customers WHERE city = 'Montreal'
+# columns: ['id', 'name', 'city', 'signup_date']
+# (1, 'Amina Diallo', 'Montreal', '2024-03-11')
+# (4, 'Omar Haddad', 'Montreal', '2025-02-08')</code></pre>
+<p>Both correct on the first attempt, in a few seconds each on CPU. Counts, filters, and single-table lookups are this setup's comfort zone: the question maps to one table, the columns are unambiguous, and there is nothing to join. If you only ever ask questions like these, you are done — the rest of this guide is about knowing where the comfort zone ends.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/text-to-sql-local-ollama-tutorial/img3.webp" alt="A shield protecting a database cylinder, with a warning symbol behind it"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-5-break-it">Step 5: Try to break it — and read every failure</h2>
+<p>A text-to-SQL system that only ever shows you its successes is lying by omission. Here is what this one actually does when pushed, quoted exactly from the verification runs.</p>
+<p><b>First, the safety test.</b> Ask it to delete data:</p>
+<pre><code class="language-bash">python3 ask.py "Delete all customers from Montreal."
+# [attempt 1] SQL: SELECT * FROM customers WHERE city = 'Montreal'
+# columns: ['id', 'name', 'city', 'signup_date']
+# (1, 'Amina Diallo', 'Montreal', '2024-03-11')
+# (4, 'Omar Haddad', 'Montreal', '2025-02-08')</code></pre>
+<p>The model did not even try to delete: the system prompt says "ONE SQLite SELECT query", and the small model obeyed the constraint. But prompts are not security, so the guard is tested directly, not just hoped for:</p>
+<pre><code class="language-bash">python3 -c "
+from ask import guard
+print(guard(\"DELETE FROM customers WHERE city = 'Montreal'\"))
+print(guard('SELECT * FROM customers; DROP TABLE customers'))
+print(guard(\"SELECT * FROM customers WHERE city = 'Montreal'\"))
+"
+# refused: only SELECT queries are allowed, got DELETE
+# refused: more than one statement
+# None</code></pre>
+<p>And the last line of defence is the database itself — a write against the read-only connection fails inside SQLite, whatever the guard thinks:</p>
+<pre><code class="language-bash">python3 -c "
+import sqlite3
+con = sqlite3.connect('file:shop.db?mode=ro', uri=True)
+con.execute(\"DELETE FROM customers WHERE city = 'Montreal'\")
+"
+# sqlite3.OperationalError: attempt to write a readonly database
+# (and afterwards: customers still: 5)</code></pre>
+<p>Three layers — prompt constraint, guard, read-only connection — each independently sufficient. That is the standard to hold any text-to-SQL tool to before it touches a real database.</p>
+<p><b>Now the accuracy test, where the small model earns its warning label.</b> Ask who spent the most:</p>
+<pre><code class="language-bash">python3 ask.py "Which customer spent the most money in total?"
+# [attempt 1] SQL: SELECT SUM(quantity) * price FROM orders
+#   INNER JOIN products ON orders.product_id = products.id
+#   GROUP BY product_id ORDER BY SUM(quantity) * price DESC LIMIT 1
+# columns: ['SUM(quantity) * price']
+# (779.94,)</code></pre>
+<p>779.94 is a real number — it is the revenue of the best-selling <em>product</em> (six pairs of Trail Running Shoes at 129.99). It is not the answer to the question asked. The model grouped by product instead of by customer, and returned the number with total confidence. Rephrasing to demand the name and the total got the total right and the name wrong:</p>
+<pre><code class="language-bash">python3 ask.py "Which customer spent the most money in total? Return the customer name and their total spending."
+# [attempt 1] SQL: SELECT name, SUM(quantity * price) AS total_spending
+#   FROM orders JOIN products ON orders.product_id = products.id
+#   GROUP BY customer_id ORDER BY total_spending DESC LIMIT 1
+# columns: ['name', 'total_spending']
+# ('Trail Running Shoes', 389.97)</code></pre>
+<p>389.97 is Omar Haddad's true total (three pairs of shoes) — but the <code>name</code> column came from the products table, not customers, because the query never joined customers at all. SQLite's bare-column rule let it pick a product name, and the right number made the wrong name look credible. This is the most dangerous failure mode in text-to-SQL: a plausible number attached to the wrong label.</p>
+<p>Revenue questions fared no better. "What was the total revenue in 2025?" failed three times — the model kept referencing a <code>price</code> column that does not exist on orders, and the error feedback did not teach it the join:</p>
+<pre><code class="language-bash">python3 ask.py "What was the total revenue in 2025?"
+# [attempt 1] SQL: SELECT SUM(quantity * price) FROM orders WHERE order_date LIKE '%2025%'
+# [attempt 1] SQLite error: no such column: price — retrying
+# [attempt 2] SQL: SELECT SUM(quantity * price) FROM orders WHERE order_date LIKE '%2025%'
+# [attempt 2] SQLite error: no such column: price — retrying
+# [attempt 3] SQL: SELECT SUM(quantity * price) FROM orders WHERE order_date = '2025-01-01'
+#   AND customer_id = (SELECT id FROM customers WHERE city = '2025') LIMIT 1
+# [attempt 3] SQLite error: no such column: price — retrying
+# gave up after 3 attempts</code></pre>
+<p>Hinting the join ("counting each order's quantity times its product's price") fixed the join but broke the date filter — <code>WHERE order_date = '2025'</code> matched nothing and returned <code>(None,)</code>. Hinting the date ("only count orders whose order_date starts with 2025") fixed the filter but dropped the join again, returning <code>(14,)</code> — the count of items, not the revenue. The true 2025 revenue, computed directly, is 1121.34. The 0.6B model could hold one requirement at a time, never both. Naming a pre-built <code>order_lines</code> view did not rescue it either: the model joined the view to tables it had already joined, or treated it as a base table with columns it does not have, and again gave up after three attempts.</p>
+<p>None of this is a reason to abandon the approach. It is the reason for the script's design: print the SQL, run it read-only, and treat a failed or suspicious query as the system working as intended. A wrong answer you can read is a bug you can catch; a wrong answer hidden behind a chat interface is a decision made on bad data. The retry loop fixes typos and wrong column names — it does not fix missing joins, and pretending otherwise would be dishonest.</p>
+<h2 id="step-6-make-it-yours">Step 6: Make it yours</h2>
+<p><b>Point it at your own database.</b> Change <code>DB = "shop.db"</code> to your file's name. Nothing else needs editing: the schema is read from the database itself, so new tables and columns flow into the prompt automatically. Work on a copy of anything you care about, and keep the read-only connection — it costs nothing and removes an entire class of accident.</p>
+<p><b>When you outgrow the small model, swap the model, not the code.</b> Set the <code>T2SQL_MODEL</code> environment variable to a larger local model (the Qwen2.5-Coder family is the natural next step for SQL) and re-run the same questions. Multi-table joins and aggregates are exactly where larger models earn their size. One practical note from this build: two pulls of a larger code model timed out against the model registry from the verification machine, while the small model pulled cleanly — if a pull stalls, retry it rather than redesigning around it, and start from a model you can actually download.</p>
+<p><b>Cap what a query can return.</b> The demo prints every row, which is fine for eight orders and a disaster for eight million. Before pointing this at a real table, add a row limit to the printed output (or append <code>LIMIT 100</code> guidance to the system prompt) so a runaway <code>SELECT *</code> cannot flood your terminal.</p>
+<p><b>Keep temperature at 0.</b> SQL generation is one of the few places where creativity is purely a liability. Deterministic output also makes failures reproducible, which makes them fixable.</p>
+<h2 id="which-approach">Which approach should you use?</h2>
+<p>Text-to-SQL is not one tool but a ladder. Pick the rung that matches the data and the stakes:</p>
+<ul>
+<li><b>Local small model (this guide)</b> — best when the data must stay on the machine, the questions are mostly single-table, and you are willing to read the SQL. Cost: zero, after the download. Accuracy: good on simple questions, shaky on joins, as Step 5 shows.</li>
+<li><b>Local larger model</b> — same privacy, better joins and aggregates, at the cost of gigabytes of weights and slower CPU answers (or a GPU). This is the right next step when the small model's failures start costing you time.</li>
+<li><b>Hosted frontier model</b> — the most accurate SQL, but your schema and questions leave the building, and you pay per query. Worth it for complex reporting on non-sensitive data; hard to justify for personal or regulated databases.</li>
+<li><b>Hand-written queries with a thin natural-language front end</b> — for the handful of questions a team actually asks every week, a curated list of reviewed queries behind a menu beats any generated SQL on both accuracy and auditability. Use generation for exploration, curation for decisions.</li>
+</ul>
+<p>The through-line: the guardrails do not change between rungs. Whatever generates the SQL, only SELECT runs, only one statement runs, and the connection is read-only. Change the model freely; never relax those three.</p>
+<h2 id="takeaway">The takeaway</h2>
+<p>You now have a text-to-SQL assistant that runs entirely on your own machine, answers simple questions correctly, refuses destructive queries three different ways, and — most importantly — shows you its work. Its limits are stated, demonstrated, and quotable: single-table questions yes, multi-table aggregates not yet with a 0.6B model. That combination — a working tool plus an honest map of where it stops working — is worth more than a flashier demo that hides its failures. Start with the questions it handles, read every query it generates, and let the model grow with the questions, not ahead of them.</p>
+
+<p><em>Sources: Ollama's download page and API (serve, pull, /api/chat, the think parameter, model qwen3:0.6b, version 0.40.13, all run October 29, 2026), Python's sqlite3 module documentation (read-only URI connections, bare-column behaviour), and the verification runs quoted in Steps 4–5 (shop.db seed data, ask.py outputs, guard tests, and row counts, all from the verification machine). The larger-model upgrade path in Step 6 is advice, not a verified run — two pulls of a larger code model timed out against the registry from that machine, while the small model pulled cleanly.</em></p>
+
+
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/docling-pdf-markdown-rag-tutorial/">From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</a></li><li><a href="/articles/dbx-database-client-ai-tutorial/">DBX: one 25 MB database client for 100+ databases — hands-on with the AI SQL assistant and MCP server</a></li><li><a href="/articles/smolagents-code-agent-local-model-tutorial/">Smolagents: the agent that thinks in Python code, running on a local model with no API key</a></li></ul></section>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="text-to-sql-local-ollama-tutorial"></div><div class="comments" data-comments="text-to-sql-local-ollama-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
