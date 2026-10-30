@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Your fine-tune is only as good as its data: build a clean SFT dataset from your own documents — AI Frontier Post</title>
+<meta name="description" content="Most fine-tuning failures are data failures, not model failures: this guide turns a folder of draft examples into a validated, deduplicated, leakage-checked SFT dataset — train/validation split included — with Python&#x27;s standard library alone, every check run and every number real.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/sft-dataset-from-your-own-documents-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Your fine-tune is only as good as its data: build a clean SFT dataset from your own documents">
+<meta property="og:description" content="Most fine-tuning failures are data failures, not model failures: this guide turns a folder of draft examples into a validated, deduplicated, leakage-checked SFT dataset — train/validation split included — with Python&#x27;s standard library alone, every check run and every number real.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/sft-dataset-from-your-own-documents-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/sft-dataset-from-your-own-documents-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-10-30">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Your fine-tune is only as good as its data: build a clean SFT dataset from your own documents">
+<meta name="twitter:description" content="Most fine-tuning failures are data failures, not model failures: this guide turns a folder of draft examples into a validated, deduplicated, leakage-checked SFT dataset — train/validation split included — with Python&#x27;s standard library alone, every check run and every number real.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/sft-dataset-from-your-own-documents-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Your fine-tune is only as good as its data: build a clean SFT dataset from your own documents", "description": "Most fine-tuning failures are data failures, not model failures: this guide turns a folder of draft examples into a validated, deduplicated, leakage-checked SFT dataset — train/validation split included — with Python's standard library alone, every check run and every number real.", "image": "https://aifrontierpost.com/articles/sft-dataset-from-your-own-documents-tutorial/cover.webp", "datePublished": "2026-10-30", "dateModified": "2026-10-30", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Your fine-tune is only as good as its data: build a clean SFT dataset from your own documents", "description": "Most fine-tuning failures are data failures, not model failures: this guide turns a folder of draft examples into a validated, deduplicated, leakage-checked SFT dataset — train/validation split included — with Python's standard library alone, every check run and every number real.", "step": [{"@type": "HowToStep", "name": "Write drafts in the one format every trainer understands", "text": "Write drafts in the one format every trainer understands"}, {"@type": "HowToStep", "name": "Set up the project folder", "text": "Set up the project folder"}, {"@type": "HowToStep", "name": "Add the validation and deduplication half of the script", "text": "Add the validation and deduplication half of the script"}, {"@type": "HowToStep", "name": "Add the split, the leakage check, and the report", "text": "Add the split, the leakage check, and the report"}, {"@type": "HowToStep", "name": "Run it and read the report, not just the counts", "text": "Run it and read the report, not just the counts"}, {"@type": "HowToStep", "name": "Fix the drafts, re-run, and prove the split is stable", "text": "Fix the drafts, re-run, and prove the split is stable"}, {"@type": "HowToStep", "name": "Choose the right approach", "text": "Choose the right approach"}, {"@type": "HowToStep", "name": "Know the limits", "text": "Know the limits"}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Your fine-tune is only as good as its data: build a clean SFT dataset from your own documents</h1>
+<p class="lede">Most fine-tuning failures are data failures, not model failures: this guide turns a folder of draft examples into a validated, deduplicated, leakage-checked SFT dataset — train/validation split included — with Python&#x27;s standard library alone, every check run and every number real.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 30, 2026 · 18 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> A fine-tuning dataset is a contract with the model, and this guide makes that contract checkable: a standard-library-only Python script validates every example, drops exact and near-duplicate prompts, splits off a validation set with a leakage assertion, and reports what it did. Verified October 30, 2026, on Python 3.12.3: a 14-example demo file came out as 10 kept, 2 rejected, 2 duplicates dropped, and an 8-and-2 train/validation split with zero shared prompts, reproduced byte-for-byte across reruns. Not verified: the truth, licensing, or safety of any example — those checks are human work.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> a standard-library-only Python script — no packages, no accounts, no GPU.</li><li><b>What:</b> validate SFT examples, drop exact and near-duplicate prompts, split a leakage-checked validation set, and report every decision by line number.</li><li><b>When:</b> verified October 30, 2026, on Python 3.12.3: 14 drafts → 10 kept, 2 rejected, 2 duplicates dropped, 8 train / 2 validation, zero shared prompts, byte-identical across reruns.</li><li><b>Requirement:</b> Python 3.10 or newer and a folder of draft examples you have the right to train on.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/sft-dataset-from-your-own-documents-tutorial/cover.webp" alt="Illustration of rough draft papers passing through a glowing funnel and emerging as a neat stack"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="why-now">Why your fine-tune starts with the dataset, not the model</h2>
+<p>Fine-tuning has never been more accessible, and that is exactly why dataset quality now decides the result. Open-weight trainers accept a plain JSONL file, hosted fine-tuning takes the same format, and the training run itself is the easy part: you point a trainer at a file and wait. What the trainer cannot do is notice that your file teaches contradictions. If the same question appears twice with different answers, if a near-identical prompt leaks from training into validation, or if a handful of empty answers slip in, the model learns all of it faithfully — and your evaluation then reports a score that flatters a model which memorised its own test set.</p>
+<p>The platform guidance agrees, and it is worth quoting the shape of it before you write a line of code. OpenAI's supervised fine-tuning guide says to set up evals before investing in fine-tuning, to start with well-crafted demonstrations, and to carve the holdout data out of the same dataset you train on, so the holdout acts as a control. It puts the minimum file at 10 examples and says improvements are typically seen from 50 to 100. One caveat belongs in the same paragraph: OpenAI's own fine-tuning platform is winding down — it is no longer accessible to new users, and eligible existing customers can create training jobs only until January 6, 2027. That is why this guide produces trainer-agnostic JSONL instead of a platform-specific upload: the same file, in the conversational <code>messages</code> format, is what Hugging Face's TRL <code>SFTTrainer</code> accepts, applying the model's chat template itself. Build the file right once, and you are not locked to a single trainer.</p>
+<p>This guide builds that file from your own documents and draft examples, with a small script that does four jobs and nothing else: validate every example's structure, drop exact and near-duplicate prompts, split off a validation set with a leakage check, and report what it did. It uses only the Python standard library, so there is nothing to install and nothing to version-pin. Every number below comes from a real run of the finished script on a 14-example demo file, and the demo file was deliberately seeded with the four defects this pipeline exists to catch.</p>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li><strong>Python 3.10 or newer.</strong> The steps below ran on Python 3.12.3. Check with <code>python3 --version</code>.</li>
+<li><strong>No packages at all.</strong> The script imports only <code>argparse</code>, <code>json</code>, <code>random</code>, <code>re</code>, <code>statistics</code>, and <code>sys</code>. If your machine runs Python, it runs this.</li>
+<li><strong>A folder of draft examples.</strong> These are question-and-answer pairs you wrote (or your team wrote) from your own documentation: support answers, internal procedures, style examples. The script does not write examples for you, and that is a feature — generated examples need the same checks, plus a factual review this script cannot do.</li>
+<li><strong>Data you have the right to train on.</strong> Strip secrets, credentials, and personal information before a draft ever reaches the file. This script checks structure, not rights, not privacy, and not truth.</li>
+<li><strong>About 30 minutes.</strong> The script runs in under a second on a demo file; the thinking — which examples belong, and what "good" looks like — takes the rest.</li>
+</ul>
+<h2 id="step-1">Step 1: Write drafts in the one format every trainer understands</h2>
+<p>A fine-tuning dataset in JSONL is one JSON object per line, no wrapping array, no commas between lines. Each object holds a <code>messages</code> array, and each message has a <code>role</code> — <code>system</code>, <code>user</code>, or <code>assistant</code> — and a <code>content</code> string. The system message sets the behaviour, the user message is the input, and the assistant message is the response you want the model to learn. Here is one complete example, from the fictional camping-gear shop used throughout this guide. Every example in the demo file follows the same shape, with the same single system prompt:</p>
+<pre><code class="language-json">{"messages": [{"role": "system", "content": "You are a helpful support assistant for Northwind Outdoors, a fictional camping-gear shop. Answer concisely and never invent order details."}, {"role": "user", "content": "How do I reset my Northwind headlamp to factory settings?"}, {"role": "assistant", "content": "Hold the power button for 10 seconds until the lamp flashes red twice, then release it. The headlamp restarts in its default mode. If it still does not respond, charge it for at least 30 minutes first, because a low battery blocks the reset."}]}</code></pre>
+<p>Three rules make a drafts file worth curating. First, one system prompt for the whole file: if half your examples teach one voice and half teach another, the model learns the average of two voices, which is neither. The script counts distinct system prompts and reports the number, so drift shows up in the report instead of in the model. Second, answers should be complete enough to imitate — a one-word answer teaches the model to be terse, not to be right. The script rejects final assistant answers under 20 characters, and you should raise that floor for your own domain. Third, write prompts the way real users actually ask, including the awkward phrasings: a dataset of perfectly polished questions trains a model that is confused by real ones.</p>
+<p>Save your drafts as <code>drafts.jsonl</code>, one example per line. The verification run below used 14 lines: 10 clean examples plus one of each defect — an exact duplicate, a near-duplicate, an empty answer, and a message with an invalid role. You do not need to copy those defects; the table in Step 5 shows what each one looks like when the script catches it.</p>
+<h2 id="step-2">Step 2: Set up the project folder</h2>
+<p>Make a directory for the dataset and move into it. Everything this guide produces lives here, and nothing is uploaded anywhere:</p>
+<pre><code class="language-bash">mkdir sft-dataset &amp;&amp; cd sft-dataset
+ls
+# drafts.jsonl  (your file, one example per line)</code></pre>
+<p>Keep the drafts file as the only hand-edited input. The script writes <code>train.jsonl</code>, <code>val.jsonl</code>, and <code>report.json</code> beside it, and you never edit those outputs by hand: if something is wrong, fix the draft and re-run. That discipline is what makes the split reproducible, which matters the moment you compare two training runs and need to know the data did not quietly change between them.</p>
+<h2 id="step-3">Step 3: Add the validation and deduplication half of the script</h2>
+<p>Save the first half of the script as <code>build_dataset.py</code>. It defines the checks and the duplicate detectors. The validation rules are deliberately strict about structure and deliberately silent about content: a structurally perfect example can still be factually wrong, and no script can save you from that. Read the rules as a checklist for what a training example is:</p>
+<pre><code class="language-bash">cat &gt; build_dataset.py &lt;&lt;'EOF'
+"""Build a clean SFT dataset from drafts.jsonl: validate, dedupe, split, report.
+
+Standard library only. Usage:
+    python3 build_dataset.py            # reads drafts.jsonl, writes train.jsonl, val.jsonl, report.json
+    python3 build_dataset.py --help     # show the tunable thresholds
+"""
+import argparse
+import json
+import random
+import re
+import statistics
+import sys
+
+ALLOWED_ROLES = {"system", "user", "assistant"}
+MIN_ASSISTANT_CHARS = 20          # answers shorter than this are too thin to teach from
+NEAR_DUP_JACCARD = 0.8            # prompts sharing &gt;=80% of their words are near-duplicates
+VAL_FRACTION = 0.2
+SEED = 42
+
+
+def norm(text):
+    """Lowercase and collapse whitespace: the same prompt in different casing is the same prompt."""
+    return re.sub(r"\s+", " ", text.strip().lower())
+
+
+def validate(example, line_no):
+    """Return a list of problems; an empty list means the example is structurally sound."""
+    problems = []
+    if not isinstance(example, dict) or not isinstance(example.get("messages"), list):
+        return ["not an object with a 'messages' list"]
+    msgs = example["messages"]
+    roles = [m.get("role") for m in msgs if isinstance(m, dict)]
+    if any(m.get("role") not in ALLOWED_ROLES for m in msgs if isinstance(m, dict)):
+        problems.append("role outside {system, user, assistant}")
+    if "user" not in roles or "assistant" not in roles:
+        problems.append("needs at least one user turn and one assistant turn")
+    if "user" in roles and "assistant" in roles and roles.index("assistant") &lt; roles.index("user"):
+        problems.append("assistant turn appears before the user turn")
+    for m in msgs:
+        if not isinstance(m, dict) or not isinstance(m.get("content"), str) or not m["content"].strip():
+            problems.append("empty or missing message content")
+            break
+    assistants = [m["content"] for m in msgs if isinstance(m, dict) and m.get("role") == "assistant"
+                  and isinstance(m.get("content"), str)]
+    if assistants and len(assistants[-1].strip()) &lt; MIN_ASSISTANT_CHARS:
+        problems.append(f"final assistant answer under {MIN_ASSISTANT_CHARS} characters (too thin)")
+    return problems
+
+
+def word_set(text):
+    return set(re.findall(r"[a-z0-9]+", norm(text)))
+
+
+def jaccard(a, b):
+    return len(a &amp; b) / len(a | b) if a | b else 0.0
+EOF</code></pre>
+<p>Two details deserve attention because they are the whole point of this half. Normalisation lowercases and collapses whitespace before any comparison, so a prompt typed in capitals with extra spaces is recognised as the same prompt — that is exactly how the demo's exact duplicate was caught. And near-duplicate detection uses Jaccard similarity over the prompt's word set: the size of the shared vocabulary divided by the size of the combined vocabulary. A threshold of 0.8 is aggressive on purpose for a curated dataset; it will flag genuinely similar prompts for your review, and the report names the line it matched, so you can rescue a false positive by rewording one of the pair.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/sft-dataset-from-your-own-documents-tutorial/img2.webp" alt="A sieve catching torn and duplicate cards while clean cards pass through"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-4">Step 4: Add the split, the leakage check, and the report</h2>
+<p>Append the second half. It runs the checks in order — validate, then exact-dedupe, then near-dedupe — shuffles the survivors with a fixed seed, splits off the validation fraction, and then asserts the one property that makes the validation set meaningful: no normalised prompt on both sides. If that assertion ever fires, the script stops instead of writing a contaminated split, which is the correct failure mode:</p>
+<pre><code class="language-bash">cat &gt;&gt; build_dataset.py &lt;&lt;'EOF'
+
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--input", default="drafts.jsonl")
+    ap.add_argument("--seed", type=int, default=SEED)
+    args = ap.parse_args()
+
+    drafts = [json.loads(line) for line in open(args.input) if line.strip()]
+    kept, rejected, dropped_exact, dropped_near = [], [], [], []
+    seen_prompts, seen_word_sets = {}, []
+
+    for i, ex in enumerate(drafts, start=1):
+        problems = validate(ex, i)
+        if problems:
+            rejected.append({"line": i, "problems": problems})
+            continue
+        prompt = next(m["content"] for m in ex["messages"] if m["role"] == "user")
+        key = norm(prompt)
+        if key in seen_prompts:
+            dropped_exact.append({"line": i, "first_seen_line": seen_prompts[key], "prompt": key})
+            continue
+        ws = word_set(prompt)
+        near = [(j, jaccard(ws, other)) for j, other in seen_word_sets if jaccard(ws, other) &gt;= NEAR_DUP_JACCARD]
+        if near:
+            dropped_near.append({"line": i, "similar_to_line": near[0][0], "jaccard": round(near[0][1], 3)})
+            continue
+        seen_prompts[key] = i
+        seen_word_sets.append((i, ws))
+        # Normalise whitespace in every message so training sees one canonical form.
+        for m in ex["messages"]:
+            m["content"] = re.sub(r"\s+", " ", m["content"].strip())
+        kept.append(ex)
+
+    rng = random.Random(args.seed)
+    order = kept[:]
+    rng.shuffle(order)
+    n_val = max(1, round(len(order) * VAL_FRACTION))
+    val, train = order[:n_val], order[n_val:]
+
+    # Leakage check: no normalised prompt may appear on both sides of the split.
+    train_prompts = {norm(next(m["content"] for m in ex["messages"] if m["role"] == "user")) for ex in train}
+    val_prompts = {norm(next(m["content"] for m in ex["messages"] if m["role"] == "user")) for ex in val}
+    assert not train_prompts &amp; val_prompts, f"LEAKED PROMPTS: {train_prompts &amp; val_prompts}"
+
+    for name, rows in (("train.jsonl", train), ("val.jsonl", val)):
+        with open(name, "w") as f:
+            for ex in rows:
+                f.write(json.dumps(ex, ensure_ascii=False) + "\n")
+
+    assistant_words = [len(next(m["content"] for m in ex["messages"] if m["role"] == "assistant").split())
+                       for ex in kept]
+    systems = {next((m["content"] for m in ex["messages"] if m["role"] == "system"), None) for ex in kept}
+    report = {
+        "drafts": len(drafts), "kept": len(kept), "rejected": rejected,
+        "dropped_exact_duplicates": dropped_exact, "dropped_near_duplicates": dropped_near,
+        "train": len(train), "val": len(val),
+        "assistant_words": {"min": min(assistant_words), "median": statistics.median(assistant_words),
+                            "max": max(assistant_words)},
+        "distinct_system_prompts": len(systems),
+        "leakage_prompts_shared": 0,
+    }
+    json.dump(report, open("report.json", "w"), indent=2)
+    print(f"drafts={len(drafts)} kept={len(kept)} rejected={len(rejected)} "
+          f"exact_dupes={len(dropped_exact)} near_dupes={len(dropped_near)} "
+          f"train={len(train)} val={len(val)}")
+    print(f"assistant answer words: min={report['assistant_words']['min']} "
+          f"median={report['assistant_words']['median']} max={report['assistant_words']['max']}")
+    print(f"distinct system prompts: {len(systems)} (1 is ideal; more means mixed instructions)")
+    print("leakage check: 0 prompts shared between train and val")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+EOF</code></pre>
+<p>Note what the split is not: it is not a random sample of your users, and at small sizes it is not statistically anything. With 10 kept examples, a 20 percent split gives 2 validation examples — enough to prove the machinery works and to smoke-test a trained model by hand, nowhere near enough to measure it. The split's job at this scale is discipline, not statistics: it forces you to hold something back, and it forces the holdout to be genuinely held out. As the dataset grows toward the 50-to-100 range where fine-tuning starts to show effects, the same script, unchanged, gives you 10 to 20 validation examples, and the same leakage assertion keeps them clean.</p>
+<h2 id="step-5">Step 5: Run it and read the report, not just the counts</h2>
+<p>Run the script in the same folder as your drafts file. On the verification machine this produced the output below, in under a second, from the 14-line demo file:</p>
+<pre><code class="language-bash">python3 build_dataset.py</code></pre>
+<pre><code class="language-text">drafts=14 kept=10 rejected=2 exact_dupes=1 near_dupes=1 train=8 val=2
+assistant answer words: min=41 median=43.5 max=54
+distinct system prompts: 1 (1 is ideal; more means mixed instructions)
+leakage check: 0 prompts shared between train and val</code></pre>
+<p>Your counts will differ — that is expected, and it is the point. What should look the same is the shape of the report: every dropped or rejected example is named by line number, with a reason you can act on. The demo's four defects were caught like this:</p>
+<table>
+<thead><tr><th>Demo line</th><th>What was wrong</th><th>What the script did</th></tr></thead>
+<tbody>
+<tr><td>Line 9</td><td>Same headlamp prompt as line 1, retyped in capitals with extra spaces</td><td>Dropped as an exact duplicate after normalisation</td></tr>
+<tr><td>Line 10</td><td>Headlamp prompt with one word added ("its"), sharing 90.9% of its words with line 1</td><td>Dropped as a near-duplicate (Jaccard 0.909, above the 0.8 threshold)</td></tr>
+<tr><td>Line 11</td><td>Assistant answer left empty</td><td>Rejected: empty content, and under the 20-character floor</td></tr>
+<tr><td>Line 12</td><td>Reply labelled with the role "helper", which no trainer recognises</td><td>Rejected: role outside system, user, and assistant</td></tr>
+</tbody>
+</table>
+<p>Open <code>report.json</code> and check the same three things every time: the rejected list should contain only defects you recognise, the dropped lists should contain only true duplicates (rescue anything that is a genuinely different question wearing similar words), and the assistant-answer length range should look like your intended style. In the demo, answers run 41 to 54 words with a median of 43.5 — a tight, consistent band. A real dataset with answers from 5 words to 500 words is telling you its authors disagreed about the job, and the model will inherit that disagreement.</p>
+<p>Finally, confirm the split actually happened the way the report claims. Count the lines, and check that the validation prompts do not appear in training:</p>
+<pre><code class="language-bash">wc -l train.jsonl val.jsonl
+#   8 train.jsonl
+#   2 val.jsonl
+python3 -c "
+import json
+tr = [json.loads(l) for l in open('train.jsonl')]
+va = [json.loads(l) for l in open('val.jsonl')]
+def prompt(ex): return next(m['content'] for m in ex['messages'] if m['role'] == 'user')
+print('validation prompts:', [prompt(e) for e in va])
+print('disjoint:', not (set(map(prompt, tr)) &amp; set(map(prompt, va))))"
+# validation prompts: ['How do I choose between a 2-season and a 3-season sleeping bag?', 'Do you ship to Canada?']
+# disjoint: True</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/sft-dataset-from-your-own-documents-tutorial/img3.webp" alt="A large stack of cards separated by a padlock from a small stack, showing a clean train and validation split"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-6">Step 6: Fix the drafts, re-run, and prove the split is stable</h2>
+<p>Never patch <code>train.jsonl</code> by hand. Fix the draft, re-run, and let the script regenerate everything. The seed is fixed at 42, so the same drafts file always produces the same split — the verification run was repeated three times and produced byte-identical <code>train.jsonl</code> and <code>val.jsonl</code> each time. That reproducibility is what lets you compare training runs honestly: change the model or the hyperparameters, not the data, and you know which change moved the score.</p>
+<p>Then grow the file deliberately. The order that works in practice is: fix every rejected and dropped item the report names, add examples for the questions your users actually ask (not the ones that were easy to write), re-check the system-prompt count stays at one, and re-check the answer-length band stays tight. Stop adding examples when your validation set stops surprising you, not when you hit a round number — but treat 50 as the floor for a first real attempt, since that is where the platform guidance says effects start to show, and keep a held-out set from the very first run, even when it is only two examples. A habit formed on a tiny dataset survives contact with a large one; a habit formed on a large dataset, where the mess was already baked in, does not.</p>
+<h2 id="when-to-use">Which approach should you use?</h2>
+<p>This script is the right tool when your examples are hand-written, your dataset fits in a file you can read, and you want a check you can run before every training job. It is not the right tool for everything around it:</p>
+<ul>
+<li><strong>Use this pipeline</strong> when you are teaching style, format, or domain behaviour — support tone, internal procedures, output formats — with examples you wrote and reviewed. That is what supervised fine-tuning is for.</li>
+<li><strong>Use retrieval instead of fine-tuning</strong> when the answers change often: prices, policies, product details, anything with a date on it. A fine-tuned model memorises a snapshot; a retriever reads the current document. Baking fast-changing facts into weights is the most common expensive mistake in this area, and no amount of deduplication fixes it.</li>
+<li><strong>Use a trainer's built-in validation as well, not instead.</strong> Trainers reject malformed files, but they do not notice that your validation set is a copy of your training set. The leakage check here is the part no uploader performs for you.</li>
+<li><strong>Use synthetic generation only with a human review gate.</strong> Generating thousands of examples from a larger model is fast, and it imports that model's errors, biases, and phrasing at scale. If you go that route, run this pipeline first and add a factual review second — the order matters, because a clean file of wrong answers trains just as confidently as a clean file of right ones.</li>
+</ul>
+<h2 id="limits">Know the limits</h2>
+<ul>
+<li><strong>Word counts are a proxy, not tokens.</strong> The report measures answer length in words because it needs no tokenizer and no downloads. Before a real training run, check token lengths with your model's actual tokenizer: a 50-word answer can be 60 tokens in one tokenizer and 90 in another, and long examples are what blow up sequence lengths.</li>
+<li><strong>The 0.8 Jaccard threshold is a starting point, not a law.</strong> It caught a one-word-different prompt at 0.909 in the demo, but it will also flag legitimately similar questions — "how do I reset X" and "how do I reset Y" share most of their words. Always read the dropped list before training; a dropped example you actually wanted is a dataset bug, just a quieter one.</li>
+<li><strong>Near-duplicates are judged on prompts only.</strong> Two examples with different prompts but identical answers, or the same answer pasted under many questions, pass this script untouched. Add an answer-similarity check if your drafts were templated.</li>
+<li><strong>Nothing here checks truth, licensing, or safety.</strong> A structurally perfect example can still be wrong, copied without permission, or contain personal data. Those checks are human work, and they belong before the file is written, not after the model is trained.</li>
+<li><strong>The demo is 14 examples, and 14 examples train nothing.</strong> Treat the demo as a test of the pipeline, not a dataset. A first real attempt starts at 50 well-crafted examples, with a held-out set, and an eval you wrote before training — the order OpenAI's guide insists on, and the order that keeps a fine-tuning project honest.</li>
+</ul>
+<h2 id="takeaway">The takeaway</h2>
+<p>A fine-tuning dataset is a contract with the model: every line says "answer like this". This guide's contract is short — validate the structure, drop the duplicates, hold out a clean validation set, and report everything — and it runs with nothing but the Python standard library, in under a second, on a file you can read end to end. The demo run proves the machinery: 14 drafts in, 10 kept, 2 rejected, 2 duplicates dropped, an 8-and-2 split with zero leakage, reproduced byte-for-byte across reruns. Your file will have different counts, and that is fine; the discipline is the same at 14 examples and at 1,400. Write the examples you actually want imitated, run the checks before every training job, and never let a validation set you have already trained on tell you how good your model is.</p>
+<h2 id="sources">Sources and further reading</h2>
+<ul>
+<li><a href="https://developers.openai.com/api/docs/guides/supervised-fine-tuning" rel="nofollow">OpenAI: Supervised fine-tuning</a> — evals before fine-tuning, the 10-example minimum, improvements from 50–100 examples, JSONL chat format, holdout carved from the training dataset, and the platform wind-down dates. Checked October 30, 2026.</li>
+<li><a href="https://huggingface.co/docs/trl/main/en/sft_trainer" rel="nofollow">Hugging Face TRL: SFT Trainer</a> — the conversational <code>messages</code> dataset format accepted by SFTTrainer, which applies the model's chat template automatically. Checked October 30, 2026.</li>
+<li><a href="https://jsonlines.org/" rel="nofollow">JSON Lines specification</a> — one complete JSON value per line, the format the dataset files in this guide follow.</li>
+<li><a href="/articles/lora-fine-tuning-one-gpu/">LoRA fine-tuning on one GPU</a> — the training step that comes after the dataset built here.</li>
+<li><a href="/articles/inspect-ai-eval-framework-tutorial/">Stop vibe-checking your model: write real evals with inspect_ai</a> — the eval-first habit this guide's validation set supports.</li>
+</ul>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/lora-fine-tuning-one-gpu/">Fine-tune a model with LoRA on a single GPU</a></li><li><a href="/articles/inspect-ai-eval-framework-tutorial/">Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute&#x27;s framework</a></li><li><a href="/articles/fine-tune-embeddings-domain-retrieval/">Fine-tune embeddings for your domain: contrastive training that measurably improves retrieval</a></li><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li></ul></section>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="sft-dataset-from-your-own-documents-tutorial"></div><div class="comments" data-comments="sft-dataset-from-your-own-documents-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
