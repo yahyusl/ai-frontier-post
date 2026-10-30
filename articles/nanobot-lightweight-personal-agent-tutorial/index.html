@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Nanobot hands-on: run a 4,000-line personal agent on your own machine — AI Frontier Post</title>
+<meta name="description" content="Nanobot is a self-hosted personal AI agent with a roughly 4,000-line Python core: this guide installs 0.4.0, points it at a local Ollama model, proves the file read/write loop, and documents honestly where a 0.6B model fails and where this sandbox blocked the WebUI.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/nanobot-lightweight-personal-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Nanobot hands-on: run a 4,000-line personal agent on your own machine">
+<meta property="og:description" content="Nanobot is a self-hosted personal AI agent with a roughly 4,000-line Python core: this guide installs 0.4.0, points it at a local Ollama model, proves the file read/write loop, and documents honestly where a 0.6B model fails and where this sandbox blocked the WebUI.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/nanobot-lightweight-personal-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/nanobot-lightweight-personal-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-10-30">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Nanobot hands-on: run a 4,000-line personal agent on your own machine">
+<meta name="twitter:description" content="Nanobot is a self-hosted personal AI agent with a roughly 4,000-line Python core: this guide installs 0.4.0, points it at a local Ollama model, proves the file read/write loop, and documents honestly where a 0.6B model fails and where this sandbox blocked the WebUI.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/nanobot-lightweight-personal-agent-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Nanobot hands-on: run a 4,000-line personal agent on your own machine", "description": "Nanobot is a self-hosted personal AI agent with a roughly 4,000-line Python core: this guide installs 0.4.0, points it at a local Ollama model, proves the file read/write loop, and documents honestly where a 0.6B model fails and where this sandbox blocked the WebUI.", "datePublished": "2026-10-30", "dateModified": "2026-10-30", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/nanobot-lightweight-personal-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/nanobot-lightweight-personal-agent-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Nanobot hands-on: run a 4,000-line personal agent on your own machine", "description": "Nanobot is a self-hosted personal AI agent with a roughly 4,000-line Python core: this guide installs 0.4.0, points it at a local Ollama model, proves the file read/write loop, and documents honestly where a 0.6B model fails and where this sandbox blocked the WebUI.", "step": [{"@type": "HowToStep", "name": "Install the package and verify it", "text": "pip install nanobot-ai and confirm version 0.4.0."}, {"@type": "HowToStep", "name": "Scaffold the instance", "text": "onboard creates config.json and the workspace non-interactively."}, {"@type": "HowToStep", "name": "Point it at a local model", "text": "Ollama qwen3:0.6b via config, verified with status."}, {"@type": "HowToStep", "name": "Get a first reply", "text": "A one-shot agent message returns HELLO-NANOBOT."}, {"@type": "HowToStep", "name": "Run a file task", "text": "Read notes.txt and write summary.md; small-model limits documented."}, {"@type": "HowToStep", "name": "Open the browser workbench", "text": "webui with --yes; gateway and sandbox limits noted."}, {"@type": "HowToStep", "name": "Keep it running", "text": "Gateway background mode, status, logs, stop; Dream every 2 hours."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Nanobot hands-on: run a 4,000-line personal agent on your own machine</h1>
+<p class="lede">A personal agent you can install with pip, point at a local model, and trust with your files — nanobot packs a browser workbench, scheduled automations, and file-backed memory into a core small enough to read. This guide installs 0.4.0, wires it to Ollama, and proves every step, including the two that did not work as expected.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · October 30, 2026 · 13 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Nanobot (HKUDS/nanobot, MIT) is a self-hosted personal AI agent with a roughly 4,000-line Python core: 49,676 stars, v0.4.0 released October 28, 2026. Verified here: pip install 0.4.0, non-interactive onboard, an Ollama qwen3:0.6b one-shot reply, a file read/write loop proven with a scripted stand-in after the 0.6B model wrote a 2-character summary, and a gateway that starts but crashes on this sandbox's file-watch limit.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Nanobot (HKUDS/nanobot, MIT), a self-hosted personal AI agent written in Python.</li><li><b>What:</b> pip install, JSON config, a one-shot terminal agent, file tools, Dream memory, scheduled automations, and a browser WebUI.</li><li><b>When:</b> verified October 30, 2026: nanobot-ai 0.4.0, Ollama 0.40.11, qwen3:0.6b.</li><li><b>Requirement:</b> Python 3.11 or newer, plus a model — local Ollama or a provider key. No account for the local path; chat channels need bot tokens and were not tested here.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/nanobot-lightweight-personal-agent-tutorial/cover.webp" alt="A small robot cat assistant sitting on a laptop, connected to chat, calendar, file, and terminal icons"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="why-now">Why this matters now</h2>
+<p>Nanobot is a self-hosted personal AI agent small enough to read and cheap enough to run anywhere. It comes from the HKUDS research group, it is MIT-licensed, and on October 30, 2026 its GitHub page showed 49,676 stars, 8,699 forks, and 5,170 commits behind it. The immediate trigger is a release: v0.4.0 landed on October 28, 2026, adding durable conversation history, a richer browser workbench, and terminal diagrams — and the project has been gaining hundreds of stars a week since (FindaRepo's October 30 local-AI ranking credits it with +372 stars in seven days). Community write-ups put the agent core at roughly 4,000 lines of Python, a deliberate contrast with agent platforms whose cores run to hundreds of thousands of lines. That smallness is the point: you can install it with pip, point it at a model, and have an agent that reads files, runs shell commands, keeps memory, and runs on a schedule — without handing your notes to someone else's cloud.</p>
+<p>What you get for that smallness is a complete loop, not a demo. One command installs it. A short config file chooses the model. A one-shot command sends a single message and prints the reply. The same agent can work in a browser workbench, over Telegram or Discord, or from the terminal, and it keeps long-term memory through a consolidation job called Dream. This guide works through that loop in order, and every command and output below was run in a sandbox on October 30, 2026, against nanobot-ai 0.4.0 and a local Ollama model. Where the sandbox limited what could be proven — and it did, twice — the article says so plainly instead of smoothing it over.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/nanobot-lightweight-personal-agent-tutorial/img2.webp" alt="Diagram of a small glowing agent core connected to file, terminal, search, chat, and database panels"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li><strong>Python 3.11 or newer.</strong> The README requires it; this guide used Python 3.12 inside a virtual environment. No Node build, no Docker, no compiler.</li>
+<li><strong>A model.</strong> Either a provider key (OpenAI, Anthropic, DeepSeek, OpenRouter, and many more are supported) or a local model server. This guide uses Ollama with qwen3:0.6b, a 522&nbsp;MB model, because it costs nothing and keeps everything on the machine — with one honest caveat, covered in Step 5, about what a 0.6&nbsp;billion-parameter model can and cannot do.</li>
+<li><strong>About 300&nbsp;MB of disk for nanobot and its dependencies,</strong> plus whatever your model weighs. The pip install here pulled the usual Python web stack (httpx, pydantic, typer, and the MCP client) and nothing heavier.</li>
+<li><strong>No account and no API key for the local path.</strong> Ollama needs neither. A provider key is only needed if you choose a hosted model instead.</li>
+<li><strong>One sandbox note before you start.</strong> If you run behind a proxy that intercepts loopback traffic — this sandbox does — export <code>NO_PROXY="localhost,127.0.0.1"</code> before starting nanobot, or its calls to <code>127.0.0.1:11434</code> will be routed to the proxy and fail. On a normal home machine you can skip this line.</li>
+</ul>
+<h2 id="step-1-install">Step 1 — Install it and verify the version</h2>
+<p>Install the stable package into a virtual environment and confirm the version string. The version matters: this guide was written against 0.4.0, the release current on October 30, 2026, and the CLI surface below matches it.</p>
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install nanobot-ai
+nanobot --version</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">🐈 nanobot v0.4.0</code></pre>
+<p>Run <code>nanobot --help</code> at any point to see the command set: <code>onboard</code>, <code>agent</code>, <code>webui</code>, <code>gateway</code>, <code>serve</code>, <code>channels</code>, <code>provider</code>, <code>status</code>, and a few more. The three you need for this guide are <code>onboard</code>, <code>agent</code>, and <code>status</code>. A global <code>--home</code> flag selects the instance directory; without it, nanobot uses <code>~/.nanobot</code>. This guide passes <code>--home</code> explicitly so the test instance stays separate from any other install — replace it with nothing on your own machine and the defaults apply.</p>
+<h2 id="step-2-onboard">Step 2 — Scaffold the instance with onboard</h2>
+<p><code>onboard</code> without <code>--wizard</code> creates the configuration and workspace non-interactively. The wizard is the interactive route; the plain command is the scriptable one.</p>
+<pre><code class="language-bash">nanobot --home ./home onboard</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">✓ Created config at /home/hatch/workspace/nanobot-verify/home/config.json
+  Created AGENTS.md
+  Created HEARTBEAT.md
+  Created SOUL.md
+  Created USER.md
+  Created memory/MEMORY.md
+  Created prompts/README.md
+  Created memory/history.jsonl
+
+✓ nanobot is ready. Run: nanobot webui</code></pre>
+<p>Two things are worth knowing about what just landed. The config file is plain JSON, so every setting in the rest of this guide is a file edit, not a hidden database write. And the workspace ships with its own <code>AGENTS.md</code>, <code>SOUL.md</code>, <code>USER.md</code>, and <code>memory/MEMORY.md</code> — the agent's profile and long-term memory live in files you can read, back up, and correct by hand.</p>
+<h2 id="step-3-ollama">Step 3 — Point it at a local model</h2>
+<p>Start Ollama and make sure the model is present. The Ollama binary used here is 0.40.11, and qwen3:0.6b was already in the local model cache from earlier testing, so no fresh download was measured for this step; on a clean machine, <code>ollama pull qwen3:0.6b</code> fetches the 522&nbsp;MB model first.</p>
+<pre><code class="language-bash">ollama serve
+ollama list</code></pre>
+<p>Expected output (abridged):</p>
+<pre><code class="language-text">NAME                    SIZE      MODIFIED
+nomic-embed-text:latest 274 MB    4 weeks ago
+qwen3:0.6b              522 MB    4 weeks ago</code></pre>
+<p>Ollama's own metadata lists qwen3:0.6b as supporting tools, which is what the file task in Step 5 needs. Now edit the three fields that matter in <code>home/config.json</code>: the default model, the default provider, and the Ollama endpoint. The provider entry already exists with empty values; only these fields change.</p>
+<pre><code class="language-json">{
+  "agents": {
+    "defaults": {
+      "model": "qwen3:0.6b",
+      "provider": "ollama"
+    }
+  },
+  "providers": {
+    "ollama": {
+      "apiBase": "http://127.0.0.1:11434/v1"
+    }
+  }
+}</code></pre>
+<p>The <code>/v1</code> suffix matters: nanobot's Ollama provider speaks the OpenAI-compatible API, and its default base is <code>http://localhost:11434/v1</code>. Using <code>127.0.0.1</code> instead of <code>localhost</code> here pairs with the <code>NO_PROXY</code> note above. Verify the configuration before sending anything:</p>
+<pre><code class="language-bash">nanobot --home ./home status</code></pre>
+<p>Expected output (abridged):</p>
+<pre><code class="language-text">🐈 nanobot Status
+
+Config: /home/hatch/workspace/nanobot-verify/home/config.json ✓
+Workspace: /home/hatch/workspace/nanobot-verify/home/workspace ✓
+Model: qwen3:0.6b
+Agent: ✓ provider/model configuration is ready</code></pre>
+<p>If status does not say the configuration is ready, fix the config before continuing — every later step fails downstream of a bad model setting, and the error messages will not point back here.</p>
+<h2 id="step-4-first-reply">Step 4 — Get a first reply with one command</h2>
+<p>The fastest check is a one-shot message. It exercises the whole chain — config, provider, model, reply rendering — without opening any interactive UI:</p>
+<pre><code class="language-bash">nanobot --home ./home agent -m "Reply with exactly: HELLO-NANOBOT" --no-markdown --no-logs</code></pre>
+<p>Expected output (abridged):</p>
+<pre><code class="language-text">🐈 nanobot
+✻ Okay, the user wants me to reply with exactly "HELLO-NANOBOT".
+✻ Let me check the tools available.
+✻ ...
+HELLO-NANOBOT</code></pre>
+<p>The final line is correct, and the chatter above it is the lesson: a 0.6&nbsp;billion-parameter model narrates its own reasoning out loud, including wrong turns about tools it never calls. For a smoke test that is fine — the reply arrived. For real work it is a warning, and Step 5 shows exactly where the warning bites.</p>
+<h2 id="step-5-file-task">Step 5 — Give it a real file task (and learn the small-model limit)</h2>
+<p>Put a notes file in the workspace and ask for a summary. This is the README's own first file task, and it is the smallest job that proves tool use rather than chat:</p>
+<pre><code class="language-bash">cat &gt; home/workspace/notes.txt &lt;&lt;'EOF'
+Project Mercury field notes, October 2026
+- The riverside sensor array recorded 41.2 mm of rain on Oct 12, the wettest day of the month.
+- Battery pack B failed its load test on Oct 19 and was replaced the same day.
+- The team agreed to move the weekly sync from Friday to Thursday, starting Nov 6.
+EOF
+nanobot --home ./home agent -m "Read notes.txt and write a short summary to summary.md. Reply with only the word DONE when the file is written." --no-markdown --no-logs</code></pre>
+<p>With qwen3:0.6b, the tool loop itself worked — the transcript shows the agent calling the write tool, and <code>summary.md</code> was created. But the content was two characters long: <code>13</code>. The model executed the plumbing and failed the job. That is the honest result for this model size, and it matches what other agent projects report for sub-billion-parameter models: they can prove the loop, they cannot be trusted with the work. Do not run real file tasks on qwen3:0.6b. Use a tool-capable 7&nbsp;billion-parameter-or-larger local model, or a hosted provider model, for anything you care about.</p>
+<p>To prove the loop end to end with correct output, the same task was re-run against a tiny scripted stand-in: a local HTTP server speaking the OpenAI chat-completions API that answers in three turns — first a <code>read_file</code> call for <code>notes.txt</code>, then a <code>write_file</code> call for <code>summary.md</code> with the correct summary, then <code>DONE</code>. The transcript shows both tool calls landing, and the resulting file reads:</p>
+<pre><code class="language-text">Project Mercury field notes — summary
+- Wettest day: 41.2 mm of rain on Oct 12 (riverside sensor array).
+- Battery pack B failed its load test on Oct 19 and was replaced the same day.
+- Weekly sync moves from Friday to Thursday, starting Nov 6.</code></pre>
+<p>Two details from that stand-in are worth keeping if you ever build a test double for an agent. First, nanobot requests <code>stream: true</code>, so the stand-in must answer with server-sent-events chunks ending in a finish reason; a plain JSON reply fails with "Model stream ended before a finish reason was received." Second, the tool names are <code>read_file</code> (arguments: <code>path</code>) and <code>write_file</code> (arguments: <code>path</code>, <code>content</code>) — those are the names in nanobot 0.4.0's tool registry, and the write result reports the character count it wrote.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/nanobot-lightweight-personal-agent-tutorial/img3.webp" alt="A small robot cat filing glowing note cards into a large memory book beside a calendar and clock"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-6-webui">Step 6 — Open the browser workbench (and one sandbox failure, honestly reported)</h2>
+<p>The WebUI is the browser workbench for topics, workspace controls, skills, and automations, and it ships inside the published wheel — no separate frontend build. Launch it without opening a browser on a headless machine:</p>
+<pre><code class="language-bash">nanobot --home ./home webui --no-open --yes</code></pre>
+<p>The <code>--yes</code> flag is not optional decoration. The first attempt without it stopped with: "WebUI setup needs confirmation. Re-run with --yes or use <code>nanobot onboard --wizard</code>." With <code>--yes</code>, the gateway starts and the log shows what it registers: 22 tools (including <code>read_file</code>, <code>write_file</code>, <code>exec</code>, <code>web_fetch</code>, and <code>web_search</code>), a websocket channel, the Dream consolidation job every 2 hours, and a heartbeat job every 1,800 seconds, with a health endpoint on port 18790.</p>
+<p>Then, in this sandbox, it crashed. The gateway's config watcher hit the machine's file-watch ceiling — <code>OSError: OS file watch limit reached</code> from the watchfiles library — and the launcher reported "WebUI did not become ready." The cause is environmental, not a nanobot defect: this shared VM's inotify budget is exhausted by other processes, and its <code>/proc/sys</code> is read-only, so the limit cannot be raised from here. On a typical single-user machine this step should proceed to the login link on port 8765; here it is the one step that could not be completed, and it is reported as such rather than claimed. If you hit the same error on your own machine, check how many watchers your other tools are holding before blaming the agent.</p>
+<h2 id="step-7-keep-running">Step 7 — Keep the agent running after you close the terminal</h2>
+<p>Interactive clients are not the long-running part; the gateway is. Once a model is configured, promote it to background mode and manage it with the gateway commands, all verified from <code>--help</code> and the gateway log above:</p>
+<pre><code class="language-bash">nanobot gateway --background
+nanobot gateway status
+nanobot gateway logs
+nanobot gateway restart
+nanobot gateway stop</code></pre>
+<p>Background mode keeps channels and automations alive after clients exit, but it does not survive a reboot and does not replay missed schedules after a restart — use the <code>install-service</code> subcommand for a systemd user service or macOS LaunchAgent if you want startup supervision. Dream consolidation runs every 2 hours by default; the README's own advice stands: a conversational acknowledgement that a preference was saved is not proof. Send <code>/compact</code> and then <code>/dream</code>, wait for each to finish, and check the actual changes to <code>USER.md</code> or <code>memory/MEMORY.md</code> in the workspace.</p>
+<h2 id="alternatives">When to use this vs alternatives</h2>
+<p>Use nanobot when you want a self-hosted agent you can fully inspect: the config is JSON, the memory is files, the install is pip, and the whole thing runs on hardware you already own. It fits a personal assistant that files notes, watches a folder, answers from your documents, or runs scheduled checks — especially where sending those documents to a hosted provider is the thing you are trying to avoid.</p>
+<p>Use something else when the job needs frontier-model judgment on every turn: a tiny local model will not supply it, and at that point you are paying a provider either way, so pick the agent whose tooling fits your editor rather than the one with the smallest core. And use plain scheduled scripts, not an agent, when the task is fully specified — an agent that can browse and write files is the wrong tool for a job a cron entry and an API call already describe. Nanobot's own OpenClaw-adjacent history is visible in the blog's earlier OpenClaw tutorial; the difference here is scale and language — a small Python core you can read in an afternoon versus a platform you operate.</p>
+<h2 id="takeaway">The takeaway</h2>
+<p>Nanobot delivers what its star count promises, with the limits stated on the tin. Install is one pip command, configuration is one JSON file, the one-shot reply works against a free local model, and the tool loop provably reads and writes files. The two things to carry away are the model caveat — a 0.6&nbsp;billion-parameter model proves the loop and fails the job, so bring a capable model for real work — and the operating caveat — the gateway is a real background service with real system dependencies, including file watchers, and a crowded machine can starve it. Neither caveat diminishes the core result: a personal agent you own, in about ten minutes of setup, that answers in your terminal and keeps its memory in files you can read.</p>
+<h2 id="verification-notes">Verification notes</h2>
+<p>Every command above was run on October 30, 2026, in a Linux sandbox: pip install of nanobot-ai 0.4.0, <code>onboard</code>, <code>status</code>, the one-shot reply, the file task against both qwen3:0.6b and the scripted stand-in, and the WebUI launch. The gateway's 22-tool registry, Dream interval, and heartbeat interval come from its own startup log. The star, fork, and commit counts come from the project's GitHub page on the same day; the +372-stars-in-seven-days figure comes from FindaRepo's October 30 local-AI ranking; the roughly-4,000-line core figure comes from community write-ups, not from a measurement here. Connecting a chat channel (Telegram, Discord, Slack, WeChat, Email, Mattermost, or Linear) is documented in the README but was not exercised — it needs a bot token — and the <code>serve</code> command's OpenAI-compatible API server was not run either. The Ollama binary and model were already present from earlier testing, so no fresh Ollama download was measured.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://github.com/HKUDS/nanobot" rel="nofollow">HKUDS/nanobot on GitHub</a> — README, install instructions, Quick Start, WebUI and deployment sections (read October 30, 2026).</li>
+<li><a href="https://pypi.org/project/nanobot-ai/" rel="nofollow">nanobot-ai on PyPI</a> — stable package, version 0.4.0.</li>
+<li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a> — AI Frontier Post's own Ollama setup reference.</li>
+</ul>
+
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/openclaw-self-hosted-ai-agent-hands-on/">OpenClaw: run your own self-hosted AI agent on WhatsApp and Telegram — hands-on with the 391K-star personal assistant</a></li><li><a href="/articles/llama-cpp-python-local-api-tutorial/">Your laptop is the API: run a local LLM server with llama-cpp-python and a 398 MB GGUF model</a></li><li><a href="/articles/claude-code-hooks-complete-guide/">Claude Code hooks: the complete hands-on guide to deterministic agent control</a></li><li><a href="/articles/hindsight-local-agent-memory-tutorial/">Give your AI agent a real memory: hands-on with Hindsight, the local-first memory layer</a></li></ul></section>
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="nanobot-lightweight-personal-agent-tutorial"></div><div class="comments" data-comments="nanobot-lightweight-personal-agent-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
