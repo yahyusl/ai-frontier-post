@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Put your agents to sleep: hands-on with Infinity, the runtime built for 75,000 concurrent agents — AI Frontier Post</title>
+<meta name="description" content="Infinity, the AWS and UC Berkeley agent runtime released in October 2026, suspends an agent the moment it calls a tool and resumes it when the result arrives — instead of holding a process open while it waits. This guide builds a real agent on the runtime with no API key and no AWS account, using the crate’s own scripted model, and watches a sleep tool call hibernate and resume.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/infinity-agent-runtime-suspend-resume-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Put your agents to sleep: hands-on with Infinity, the runtime built for 75,000 concurrent agents">
+<meta property="og:description" content="Infinity, the AWS and UC Berkeley agent runtime released in October 2026, suspends an agent the moment it calls a tool and resumes it when the result arrives — instead of holding a process open while it waits. This guide builds a real agent on the runtime with no API key and no AWS account, using the crate’s own scripted model, and watches a sleep tool call hibernate and resume.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/infinity-agent-runtime-suspend-resume-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/infinity-agent-runtime-suspend-resume-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-10-30">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Put your agents to sleep: hands-on with Infinity, the runtime built for 75,000 concurrent agents">
+<meta name="twitter:description" content="Infinity, the AWS and UC Berkeley agent runtime released in October 2026, suspends an agent the moment it calls a tool and resumes it when the result arrives — instead of holding a process open while it waits. This guide builds a real agent on the runtime with no API key and no AWS account, using the crate’s own scripted model, and watches a sleep tool call hibernate and resume.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/infinity-agent-runtime-suspend-resume-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Put your agents to sleep: hands-on with Infinity, the runtime built for 75,000 concurrent agents", "description": "Infinity, the AWS and UC Berkeley agent runtime released in October 2026, suspends an agent the moment it calls a tool and resumes it when the result arrives — instead of holding a process open while it waits. This guide builds a real agent on the runtime with no API key and no AWS account, using the crate’s own scripted model, and watches a sleep tool call hibernate and resume.", "image": "https://aifrontierpost.com/articles/infinity-agent-runtime-suspend-resume-tutorial/cover.webp", "datePublished": "2026-10-30", "dateModified": "2026-10-30", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Put your agents to sleep: hands-on with Infinity, the runtime built for 75,000 concurrent agents", "description": "Infinity, the AWS and UC Berkeley agent runtime released in October 2026, suspends an agent the moment it calls a tool and resumes it when the result arrives — instead of holding a process open while it waits. This guide builds a real agent on the runtime with no API key and no AWS account, using the crate’s own scripted model, and watches a sleep tool call hibernate and resume.", "step": [{"@type": "HowToStep", "name": "Install Rust", "text": "Download the rustup installer, run it with the minimal profile, and verify cargo --version."}, {"@type": "HowToStep", "name": "Create the project and pin the dependencies", "text": "Create a binary project with cargo new and set Cargo.toml to infinity-agent-core 0.2, infinity-provider-protocol 0.2 with the mock feature, Tokio 1, and serde_json 1."}, {"@type": "HowToStep", "name": "Write the agent", "text": "Replace src/main.rs with the agent program: in-memory stores, a StaticModel wrapping the scripted mock model, tokio sleep tools, and a thread that sends one message and prints its events."}, {"@type": "HowToStep", "name": "Build and run, then read the event stream", "text": "Run cargo build and the binary, and confirm the UserInput, ToolCall, CompletionFinished, ToolResult, TextChunk sequence with about 2 seconds elapsed."}, {"@type": "HowToStep", "name": "Vary the pause", "text": "Change the sleep to 10 seconds, rebuild, and confirm the tool call, tool result, and elapsed time all follow the new value."}, {"@type": "HowToStep", "name": "Move to a real model", "text": "Swap in the Bedrock provider from the project's quickstart with AWS credentials and Bedrock model access, keeping the rest of the program unchanged."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Put your agents to sleep: hands-on with Infinity, the runtime built for 75,000 concurrent agents</h1>
+<p class="lede">Infinity, the AWS and UC Berkeley agent runtime released in October 2026, suspends an agent the moment it calls a tool and resumes it when the result arrives — instead of holding a process open while it waits. This guide builds a real agent on the runtime with no API key and no AWS account, using the crate’s own scripted model, and watches a sleep tool call hibernate and resume.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 30, 2026 · 11 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Infinity suspends an agent when it calls a tool and resumes it when the result arrives, so a waiting agent costs only its stored history. Verified here with no API key and no AWS account: a Rust agent built on infinity-agent-core 0.2, driven by the crate’s own scripted model, calls the built-in sleep tool, ends its round, receives the tool result, and answers — in 2.1 seconds for a 2-second sleep and 10.0 seconds for a 10-second sleep. The Bedrock quickstart path is documented, not run: it needs AWS credentials and Bedrock model access.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> hydro-project/infinity (Apache-2.0) — 394 stars, 37 forks, 513 commits at check on October 30, 2026; about +180 stars that day; a Hydro project collaboration between AWS and UC Berkeley, released October 2026.</li><li><b>What:</b> a Rust agent runtime that executes each agent as bounded slices — one model completion and at most one tool call per slice — with in-memory or durable stores, an input queue per thread, and a provider trait for models.</li><li><b>When:</b> verified October 30, 2026: Rust 1.99.1, infinity-agent-core 0.2.0, infinity-provider-protocol 0.2.0, Tokio 1.54.1; first build 5m37s on a 2-core VM, later builds ~12s.</li><li><b>Requirement:</b> a terminal, Rust, and 1–2 GB free disk for the build directory. No API key, no AWS account, no GPU for the worked example; AWS credentials plus Bedrock model access only for the real-model step.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/infinity-agent-runtime-suspend-resume-tutorial/cover.webp" alt="A field of small dormant agent orbs with a few bright awake ones connected to a central hub"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+
+<h2 id="why-now">Why this runtime is blowing up now</h2>
+<p>Most agent frameworks run an agent the way a person reads a recipe: call the model, run the tool, wait for the tool, repeat — with a process and its memory held open for the entire wait. That works when a tool takes milliseconds. It breaks down when the tool is a twenty-minute build, a pull request that needs a human review, or a pipeline that finishes tomorrow. You end up paying for thousands of idle agents, or you build your own queueing, persistence, and resume logic on top.</p>
+<p>Infinity, from the Hydro project — a collaboration between AWS and UC Berkeley — takes the opposite approach. When an agent calls a tool, Infinity dispatches the call, saves the conversation, and suspends the agent. When the tool result arrives, the runtime resumes the agent from its saved state. A waiting agent is pure data: its conversation history, with no task, no stack, and no open connection. That is the whole idea, and it is why the project is suddenly everywhere: it was released under the Apache 2.0 licence in October 2026, and on October 30 it was gaining about 180 stars a day, with 394 stars and 37 forks on GitHub at the time of writing.</p>
+<p>The headline number comes from the AWS announcement. The team ran a benchmark of 80,000 agents, each doing twenty turns through the runtime against a simulated model, on a single thread of an AMD EPYC 9R14 with in-memory stores. Resident memory grew by about 100 KB per idle agent, which puts roughly 75,000 agents inside the 8 GB of a Raspberry Pi 5. That is their benchmark, with a simulated model — not a number reproduced here. What this guide does reproduce, on a plain virtual machine with no API key and no AWS account, is the mechanism itself: a real agent built on the real runtime, calling a real tool, suspending, and resuming. If you follow every step below, you will see the same event stream this guide shows.</p>
+<p>One honest limit up front, because it shapes the whole tutorial. The project's own quickstart runs its agent against Amazon Bedrock, which needs AWS credentials and Bedrock model access. This sandbox has neither, so the Bedrock path in Step 7 is documented from the project's docs, not run here. Everything else — the install, the build, the agent, the tool call, the suspend-and-resume sequence — was run for this article, twice, with identical event streams.</p>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li><strong>A Linux or macOS machine with a terminal.</strong> The steps below were run on a 2-core Linux virtual machine with 8 GB of RAM.</li>
+<li><strong>No API key, no AWS account, no GPU.</strong> The worked example uses the crate's own scripted test model, which is published as part of the project. You need an AWS account only for the optional Bedrock step at the end.</li>
+<li><strong>Rust, installed in Step 1.</strong> No Rust experience is assumed; you will paste one file and run two commands.</li>
+<li><strong>Time and disk.</strong> The first build took 5 minutes 37 seconds on this 2-core machine, and the build directory reached about 950 MB, mostly compiled dependencies. Keep 1–2 GB free. Later builds take seconds.</li>
+<li><strong>About 30 minutes.</strong> Most of it is the first compile.</li>
+</ul>
+<h2 id="step-1">Step 1: Install Rust</h2>
+<p>Infinity is a Rust library, so its programs are ordinary Rust programs built with Cargo. If you already have Cargo, skip to Step 2. Otherwise, download the official installer and run it with the minimal profile, which is what was used here:</p>
+<pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
+sh rustup-init.sh -y --profile minimal
+export PATH="$HOME/.cargo/bin:$PATH"
+cargo --version</code></pre>
+<p>The last command should print a version. This guide's run printed <code>cargo 1.99.1</code> and <code>rustc 1.99.1</code>; any recent stable toolchain works the same way, though your version numbers will differ. The <code>export</code> line puts Cargo on your path for the current terminal session; repeat it in each new terminal, or add it to your shell profile.</p>
+<h2 id="step-2">Step 2: Create the project and pin the dependencies</h2>
+<p>Create a new binary project and move into it:</p>
+<pre><code class="language-bash">cargo new my-agent
+cd my-agent</code></pre>
+<p>Replace the generated <code>Cargo.toml</code> with this one. Three things are pinned deliberately, because a tutorial that says "latest" rots: <code>infinity-agent-core</code> 0.2 is the runtime, <code>infinity-provider-protocol</code> 0.2 is the provider abstraction (with its <code>mock</code> feature switched on, which is what makes the keyless demo possible), and Tokio is the async runtime the library is built on.</p>
+<pre><code class="language-toml">[package]
+name = "my-agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+infinity-agent-core = "0.2"
+infinity-provider-protocol = { version = "0.2", features = ["mock"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+serde_json = "1"</code></pre>
+<p>The versions this resolved to on October 30, 2026 were <code>infinity-agent-core</code> 0.2.0, <code>infinity-provider-protocol</code> 0.2.0, Tokio 1.54.1, and <code>serde_json</code> 1.0.154. If your lockfile resolves differently, that is fine — the APIs used below are the 0.2 APIs.</p>
+<h2 id="step-3">Step 3: Write the agent</h2>
+<p>Replace <code>src/main.rs</code> with the program below. It is short, and every line earns its place:</p>
+<pre><code class="language-rust">use std::sync::Arc;
+
+use infinity_agent_core::stores::{InMemoryConversationStore, InMemoryStateStore};
+use infinity_agent_core::system::{AgentEvent, AgentSystemBuilder, StaticModel};
+use infinity_provider_protocol::mock::mock_model;
+use infinity_provider_protocol::{ModelEntry, SingleModelProvider};
+use tokio::task::LocalSet;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    LocalSet::new()
+        .run_until(async {
+            // The crate's own scripted test model: no API key, no network.
+            let (model, mut ctrl) = mock_model();
+            let entry = ModelEntry {
+                model_id: "mock".to_owned(),
+                display_name: "mock".to_owned(),
+                context_window: 0,
+                max_output_tokens: None,
+                supports_image_input: false,
+            };
+            let provider = Arc::new(SingleModelProvider::new(entry, model));
+            let model = StaticModel::new(provider, "mock").await?;
+
+            let system = AgentSystemBuilder::new_local(
+                InMemoryConversationStore::new(),
+                InMemoryStateStore::new(),
+                model,
+            )
+            .with_tokio_sleep_tools()
+            .start();
+
+            // Drive the scripted model on a local task: round 1 calls the
+            // built-in sleep tool, round 2 answers after the tool result.
+            let driver = tokio::task::spawn_local(async move {
+                let _req = ctrl.next_request().await;
+                ctrl.send_tool_call(
+                    "tc-sleep",
+                    "sleep",
+                    serde_json::json!({"seconds": 2, "reason": "demo pause"}),
+                );
+                ctrl.finish();
+                let _req = ctrl.next_request().await;
+                ctrl.send_text("Slept, then answered: hibernation works.");
+                ctrl.finish_with_usage(None);
+            });
+
+            let mut thread = system.thread_builder().launch().await;
+            thread
+                .send_user_text("Sleep for 2 seconds, then confirm you are back.")
+                .await?;
+            let mut finished_rounds = 0;
+            let started = std::time::Instant::now();
+            while let Some(event) = thread.recv().await {
+                println!("{:?}", event);
+                if matches!(event, AgentEvent::CompletionFinished { .. }) {
+                    finished_rounds += 1;
+                    if finished_rounds == 2 {
+                        break;
+                    }
+                }
+            }
+            println!("ELAPSED_SECS {:.1}", started.elapsed().as_secs_f64());
+            driver.await?;
+            system.shutdown().await;
+            Ok(())
+        })
+        .await
+}</code></pre>
+<p>Four pieces matter. First, <code>AgentSystemBuilder::new_local</code> builds an agent system with two in-memory stores: one holds conversation history, the other holds runtime state. Those stores are the whole reason an agent can hibernate — everything a suspended agent is, lives in them. Second, <code>with_tokio_sleep_tools()</code> registers the runtime's built-in <code>sleep</code> and <code>sleep_until</code> tools, backed by Tokio timers. The <code>sleep</code> tool takes <code>seconds</code> (a number, required) and <code>reason</code> (a string). Third, <code>StaticModel</code> fixes one model for every completion round; here it wraps the scripted model, registered under the id <code>"mock"</code>. Fourth, the <code>driver</code> task is the stand-in for a language model: it waits for each completion round, then feeds the runtime a scripted response. Nothing in the runtime knows the model is scripted — it goes through the same provider trait a Bedrock or Anthropic provider would.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/infinity-agent-runtime-suspend-resume-tutorial/img2.webp" alt="Three pipeline stages: a message entering, a clock and pause symbol in the middle stage, and a message leaving, with a loop arrow returning to the first stage"><figcaption>One slice ends at the tool call; the tool result starts the next. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="step-4">Step 4: Understand the two rounds before you run anything</h2>
+<p>Read the driver task again, because it is the experiment. Round 1: the model answers the user's message with a single tool call — <code>sleep</code> for 2 seconds — and then finishes its turn. The runtime must now do the thing Infinity exists to do: persist the turn, dispatch the tool, and end the slice without blocking. Round 2: only when the sleep tool's result arrives does the runtime start a new completion, and the model answers with plain text.</p>
+<p>If Infinity worked like a conventional agent loop, the event stream would still look similar for a 2-second sleep — the difference is architectural, not visible at this scale. What this demo proves is narrower and more useful: the runtime's own machinery accepts a tool call, ends the round, delivers the tool result asynchronously, and starts a fresh round from the persisted state, with no process held open in between beyond the demo harness itself. The scale claim — thousands of idle agents costing only their histories — follows from that design, and it is AWS's benchmark, not something one agent on one machine can demonstrate.</p>
+<h2 id="step-5">Step 5: Build and run, then read the event stream</h2>
+<p>Build, then run:</p>
+<pre><code class="language-bash">cargo build
+./target/debug/my-agent</code></pre>
+<p>The first build took 5 minutes 37 seconds here; the second build, after a one-line change in Step 6, took 12 seconds. You should see exactly this output (your elapsed time will vary by a tenth of a second):</p>
+<pre><code class="language-text">UserInput { text: "Sleep for 2 seconds, then confirm you are back." }
+CompletionStarted
+ToolCall { name: "sleep", args: Object {"reason": String("demo pause"), "seconds": Number(2)}, display_as: Some("Sleeping 2s: demo pause") }
+CompletionFinished { usage: None }
+ToolResult { segments: [Text("Slept for 2 seconds")] }
+CompletionStarted
+TextChunk { text: "Slept, then answered: hibernation works." }
+CompletionFinished { usage: None }
+ELAPSED_SECS 2.1</code></pre>
+<p>Read it line by line. <code>UserInput</code> is your message entering the thread's history. <code>CompletionStarted</code> opens round 1. <code>ToolCall</code> is the model calling <code>sleep</code> — note <code>display_as</code>, the runtime's pretty-printed form of the call, rendered from the tool's own display script. <code>CompletionFinished</code> ends round 1: the slice is over, and the agent is now just stored history. <code>ToolResult</code> arrives later, on its own, carrying the sleep tool's text — this is the resume. A second <code>CompletionStarted</code> opens round 2, <code>TextChunk</code> carries the answer, and the final <code>CompletionFinished</code> ends the run. <code>ELAPSED_SECS 2.1</code> confirms the wall-clock cost is the sleep itself, not overhead.</p>
+<p>If your output differs, check three things in order: that <code>Cargo.toml</code> has the <code>mock</code> feature on <code>infinity-provider-protocol</code> (without it, the <code>mock</code> module does not exist and the build fails); that you replaced the whole of <code>src/main.rs</code> rather than appending to the generated hello-world program; and that you are running the freshly built binary from the project directory.</p>
+<h2 id="step-6">Step 6: Vary the pause and watch the resume follow</h2>
+<p>Change one number — <code>"seconds": 2</code> to <code>"seconds": 10</code> in the driver — rebuild, and run again. The output changes in exactly the three places it should:</p>
+<pre><code class="language-text">ToolCall { name: "sleep", args: Object {"reason": String("demo pause"), "seconds": Number(10)}, display_as: Some("Sleeping 10s: demo pause") }
+ToolResult { segments: [Text("Slept for 10 seconds")] }
+ELAPSED_SECS 10.0</code></pre>
+<p>Everything else is identical. That is the point of the exercise: the pause is a property of the tool call, not of the agent loop, and the runtime does not care whether the wait is 2 seconds or — in a real deployment, where the sleep timer is a durable queue delay rather than a Tokio timer — days. Change the number back to 2 when you are done, so your project matches the listing in Step 3.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/infinity-agent-runtime-suspend-resume-tutorial/img3.webp" alt="A small server sending parcels into a tall stack of trays, most closed and dormant, with one tray open and glowing"><figcaption>Waiting agents cost only their stored history. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="step-7">Step 7: From the scripted model to a real one (documented, not run)</h2>
+<p>The demo proves the runtime. A real deployment needs a real model, and this is where the project's own quickstart takes over. It is reproduced here from the docs, with the one substitution the docs themselves describe, and it was not run in this sandbox because it needs an AWS account with Bedrock model access enabled for the Anthropic models in your region.</p>
+<p>Swap the provider dependency: replace <code>infinity-provider-protocol</code> with <code>infinity-provider-bedrock = "0.2"</code>, and replace the mock-model setup with the quickstart's version:</p>
+<pre><code class="language-rust">use infinity_provider_bedrock::BedrockProvider;
+
+let provider = Arc::new(BedrockProvider::from_env());
+let model = StaticModel::new(provider, "global.anthropic.claude-sonnet-4-6").await?;</code></pre>
+<p>Everything else in the program stays the same: the same builder, the same stores, the same thread loop. <code>BedrockProvider::from_env()</code> reads your AWS configuration from the environment, and <code>StaticModel</code> looks the model id up in the provider's catalog. The runtime never calls an LLM API directly — all inference goes through the provider trait, which lists models and streams completions back. That is also why a single-model setup can be tested with a one-method adapter: implement the <code>CompletionModel</code> trait, wrap it with <code>SingleModelProvider</code>, and the runtime treats it like any other provider. If you would rather use Anthropic, OpenAI, or Gemini directly than Bedrock, the docs point to the <code>infinity-provider-rig</code> bridge crate, which serves one of the Rig library's backends through the same trait.</p>
+<p>Two more pieces of the project are worth knowing about before you commit to it, both documented rather than run here. First, the runtime has a step mode for serverless deployment: instead of keeping tasks running, the platform calls <code>step</code> once per batch of queue messages and the process may exit as soon as it returns, with conversation history in a durable store and one queue group per thread. The reference deployment uses an SQS FIFO queue, a Lambda function per delivery, Aurora DSQL for histories, DynamoDB for deduplication, and SQS delays plus EventBridge Scheduler for the sleep timers, with CDK constructs in the repository to provision them. Second, the project ships Infinity Code, a coding agent built on the runtime, and a Reactive Agent Protocol for serving tools over the network to agents that currently have no process at all, with a compatibility layer for existing MCP servers. Both are beyond one tutorial, but they show what the runtime is for: it is infrastructure for agent fleets, not a chatbot demo.</p>
+<h2 id="when-to-use">When to use this vs alternatives</h2>
+<p>Use Infinity when your problem is concurrency and waiting. If you run many agents that spend most of their lives waiting on builds, approvals, webhooks, or other agents, and you want waiting to cost history storage rather than running processes — including on serverless platforms where a function is supposed to exit — this is the runtime designed for exactly that. Use it in Rust, where its model fits naturally, and where you are comfortable with a 0.2 research release whose APIs may still move.</p>
+<p>Use a process-level harness instead when your unit of work is a coding workflow driven by an existing agent CLI. Archon, covered in this blog's earlier tutorial, turns a development process into a YAML graph of agent, script, loop, and approval-gate nodes and runs it through Claude Code, Codex, or Pi — with a human gate between a check and a release. That is the right shape when the agent is a guest in your repository and the workflow is the product. Infinity is the right shape when the agent fleet is the product and the runtime is yours.</p>
+<p>Use neither when there is no language model in the loop. If your tasks are plain async work with no model calls, Tokio tasks and queues already give you suspend-and-resume semantics without a provider trait, a model catalog, or a 950 MB build directory. Infinity earns its complexity only when model completions and long waits mix.</p>
+<h2 id="takeaway">The takeaway</h2>
+<p>The agent frameworks most people reach for treat waiting as an accident: the loop blocks, the process stays up, and scale means paying for idleness. Infinity treats waiting as the normal state. A tool call ends a slice, a result starts a new one, and an idle agent costs about 100 KB of history — AWS's measured figure, on their benchmark. You have now seen the mechanism work with your own build: a sleep call, a finished round, a result arriving on its own, and a second round answering from the resumed state. The Bedrock step is a provider swap away, the serverless step is a queue away, and the part that would have been hardest to believe — that an agent can simply stop existing between tool calls and come back intact — is the part you just ran.</p>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/archon-deterministic-ai-coding-workflows-tutorial/">Archon: make your AI coding agents deterministic — hands-on with the open-source harness builder</a></li><li><a href="/articles/karpathy-claude-code-guidelines-tutorial/">Stop your coding agent from overbuilding: hands-on with the Karpathy guidelines for Claude Code</a></li><li><a href="/articles/freellmapi-free-llm-router-tutorial/">One endpoint for every free model: hands-on with FreeLLMAPI, the self-hosted LLM router</a></li><li><a href="/articles/a2a-agent-interoperability-hands-on/">Your agents can&#x27;t talk to each other: build two interoperating agents with the A2A protocol — hands-on</a></li></ul></section>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="infinity-agent-runtime-suspend-resume-tutorial"></div><div class="comments" data-comments="infinity-agent-runtime-suspend-resume-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
