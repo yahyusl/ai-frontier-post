@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Soup hands-on: fine-tune an LLM from a single YAML file, from first config to a working adapter — AI Frontier Post</title>
+<meta name="description" content="Soup is a command-line tool that collapses LLM fine-tuning into one YAML file and one command — and its layer streaming trains an 8B model on a 4 GB laptop GPU. This guide installs Soup, writes a real training config, trains a LoRA adapter on CPU, and proves the adapter changed the model's answers.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/soup-fine-tune-llm-one-yaml-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Soup hands-on: fine-tune an LLM from a single YAML file, from first config to a working adapter">
+<meta property="og:description" content="Soup is a command-line tool that collapses LLM fine-tuning into one YAML file and one command — and its layer streaming trains an 8B model on a 4 GB laptop GPU. This guide installs Soup, writes a real training config, trains a LoRA adapter on CPU, and proves the adapter changed the model's answers.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/soup-fine-tune-llm-one-yaml-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/soup-fine-tune-llm-one-yaml-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-10-30">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Soup hands-on: fine-tune an LLM from a single YAML file, from first config to a working adapter">
+<meta name="twitter:description" content="Soup is a command-line tool that collapses LLM fine-tuning into one YAML file and one command — and its layer streaming trains an 8B model on a 4 GB laptop GPU. This guide installs Soup, writes a real training config, trains a LoRA adapter on CPU, and proves the adapter changed the model's answers.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/soup-fine-tune-llm-one-yaml-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Soup hands-on: fine-tune an LLM from a single YAML file, from first config to a working adapter", "description": "Soup is a command-line tool that collapses LLM fine-tuning into one YAML file and one command \u2014 and its layer streaming trains an 8B model on a 4 GB laptop GPU. This guide installs Soup, writes a real training config, trains a LoRA adapter on CPU, and proves the adapter changed the model's answers.", "datePublished": "2026-10-30", "dateModified": "2026-10-30", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/soup-fine-tune-llm-one-yaml-tutorial/"}, "image": "https://aifrontierpost.com/articles/soup-fine-tune-llm-one-yaml-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Soup hands-on: fine-tune an LLM from a single YAML file, from first config to a working adapter", "description": "Soup is a command-line tool that collapses LLM fine-tuning into one YAML file and one command \u2014 and its layer streaming trains an 8B model on a 4 GB laptop GPU. This guide installs Soup, writes a real training config, trains a LoRA adapter on CPU, and proves the adapter changed the model's answers.", "step": [{"@type": "HowToStep", "name": "Install Soup and check your machine", "text": "Install the light CLI and the training stack, then run the doctor command."}, {"@type": "HowToStep", "name": "Let quickstart show you the shape of a run", "text": "Generate the demo data and config, and inspect both."}, {"@type": "HowToStep", "name": "Write your own dataset and config", "text": "Ten format-consistent examples and a small-model config, validated dry-run first."}, {"@type": "HowToStep", "name": "Train the adapter", "text": "Run the real CPU training job and read its loss and output files."}, {"@type": "HowToStep", "name": "Prove the adapter did something", "text": "Batch inference on a held-out question, base model versus adapter."}, {"@type": "HowToStep", "name": "Ship the adapter as a full model", "text": "Merge the adapter into a standalone model directory."}, {"@type": "HowToStep", "name": "The trick behind the headline: layer streaming", "text": "How one-layer-at-a-time training fits an 8B model on a 4 GB card, and its caveats."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Soup hands-on: fine-tune an LLM from a single YAML file, from first config to a working adapter</h1>
+<p class="lede">Fine-tuning a language model is a solved pattern buried in friction: a training script here, a config format there, a separate tool for data, evaluation, and export. Soup collapses that stack into one YAML file and one command — and this guide takes it from first install to a working adapter, every command verified.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 30, 2026 · 19 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Soup (MakazhanAlpamys/Soup, Apache-2.0) is a CLI that fine-tunes LLMs from a single YAML file: 9,824 stars, version 0.77.1, verified here October 30, 2026. This guide installs the light CLI plus the training stack, runs the quickstart demo, trains a real LoRA adapter on a CPU-only machine, proves it with batch inference, and merges it into a standalone model. Layer-streaming figures are the project's own measured numbers, not re-measured here.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Soup (MakazhanAlpamys/Soup, Apache-2.0), a CLI for fine-tuning and post-training LLMs from one YAML file.</li><li><b>What:</b> one-command SFT/DPO/GRPO training, data tools, eval gating, merge, export, and push — plus beta layer streaming that trains an 8B model on a 4 GB GPU.</li><li><b>When:</b> verified October 30, 2026: soup v0.77.1, Python 3.12.3, torch CPU stack, Qwen2.5-0.5B-Instruct, 2-core CPU-only sandbox.</li><li><b>Requirement:</b> Python 3.11–3.13, about 2 GB for the training stack plus ~1 GB for the demo model. No account, no API key for local training; a GPU is recommended, CPU is experimental.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/soup-fine-tune-llm-one-yaml-tutorial/cover.webp" alt="A glowing configuration document flowing into a robot brain that outputs a small golden adapter chip"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="why-now">Why this matters now</h2>
+<p>Fine-tuning a language model has a reputation problem. The training itself is a solved pattern — pick a base model, show it examples, save the adapter — but everything around it is friction: a training script here, a config format there, a separate tool for data cleaning, another for evaluation, and a third for exporting the result somewhere useful. Soup exists to collapse that stack into one command-line tool driven by one YAML file, and it is climbing fast because of it. On October 30, 2026, the project — MakazhanAlpamys/Soup, Apache-2.0 — held 9,824 stars and 1,620 forks, had just shipped version 0.77.1, and was gaining roughly 238 stars a week on independent tracker counts. Its headline feature is the reason for the spike: layer streaming, a technique that trains an 8-billion-parameter model on a 4&nbsp;GB laptop GPU by keeping the frozen base weights in host RAM and feeding them to the GPU one decoder layer at a time.</p>
+<p>The numbers behind that claim are the project's own, measured and published in its benchmarks directory rather than asserted in marketing copy — and they deserve the same careful reading the project itself gives them. On an RTX 3050 Laptop with 4&nbsp;GB, Llama-3.1-8B-Instruct with NF4 quantization ran at 119.6 tokens per second with a 3.32&nbsp;GB peak on version 0.72.2, and a later post-repair run on another 4&nbsp;GB laptop read 208.6 tokens per second in a 2.40&nbsp;GB peak. Those are not figures this guide re-measures: the sandbox used here has no GPU at all, so the streaming numbers below are attributed to the project, and the guide points you at the project's own free Colab check — a T4 capped to 4&nbsp;GB that asserts a streamed model is bit-identical to a normal one — if you want to verify them yourself. What this guide does verify, end to end, is the workflow every reader actually runs first: install, configure, train a real adapter, and generate from it. The training run below was executed on a 2-core CPU-only machine with 7.7&nbsp;GB of RAM, which Soup documents as experimental and very slow. If it works there, it works on your laptop; on a GPU the same config runs the same way, faster, and with quantization switched on.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/soup-fine-tune-llm-one-yaml-tutorial/img2.webp" alt="Abstract diagram of data flowing through a configuration gear and a training loop into a small adapter chip"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="what-you-need">What you'll need</h2>
+<ul>
+<li><strong>Python 3.11, 3.12, or 3.13.</strong> Those are the versions Soup's CI tests; 3.14 is not supported yet because the PyTorch stack has not been validated there. This guide ran on Python 3.12.3.</li>
+<li><strong>A virtual environment and about 2&nbsp;GB of disk for the training stack, plus room for the base model.</strong> The light CLI alone is small; the <code>[train]</code> extra pulls in PyTorch, transformers, PEFT, TRL, and datasets. The 0.5-billion-parameter model trained below downloads roughly 1&nbsp;GB.</li>
+<li><strong>No account and no API key for local training.</strong> Everything here runs against models downloaded from the Hugging Face Hub. One exception to plan around: Soup's own chat template defaults to Llama-3.1-8B-Instruct, which is a gated model — you need Hugging Face access approval before it downloads. This guide trains Qwen2.5-0.5B-Instruct instead, which downloads without approval, and says so wherever the template default would send you to a gated download.</li>
+<li><strong>A GPU is recommended; a CPU is the fallback, not the plan.</strong> Soup's README is blunt: CPU training is experimental and very slow, and quantization is auto-disabled on CPU. The CPU run below is deliberately tiny — 10 examples, 2 epochs — so it finishes in minutes. Treat it as proof the pipeline works, then scale the same config up on a GPU.</li>
+<li><strong>About 30 minutes, most of it downloads.</strong> The commands themselves take seconds except the training run and the model download.</li>
+</ul>
+<h2 id="step-1-install">Step 1 — Install Soup and check your machine</h2>
+<p>Install the light CLI first, then add the training stack into the same environment. The light install is enough for configuration, data tools, and inspection; the README states that fine-tuning (<code>soup train</code>) needs the <code>[train]</code> extra.</p>
+<pre><code>python3 -m venv .venv
+source .venv/bin/activate
+pip install soup-cli
+pip install "soup-cli[train]"
+soup --version</code></pre>
+<p>Expected output, verified October 30, 2026:</p>
+<pre><code>soup v0.77.1
+https://github.com/MakazhanAlpamys/Soup</code></pre>
+<p>Note the double quotes around <code>"soup-cli[train]"</code> — Soup's README stresses this spelling because it is the only one that works in every shell, and single quotes will make pip reject the extra on some systems. Then run the doctor command, which reports Python, GPU backend, RAM, disk, and every dependency in one table:</p>
+<pre><code>soup doctor</code></pre>
+<p>On the CPU-only sandbox, doctor reported Python 3.12.3, Linux x86_64, a GPU backend of "unknown (torch not installed)" before the training extra was added, 8&nbsp;GB of RAM, and 43&nbsp;GB of free disk, with the light dependencies (pydantic, typer, rich, pyyaml, plotext) all marked OK and torch listed under <code>[train]</code> as not installed. After the training install, doctor reported a "CPU only" backend with the warning "Training will be slow without GPU," torch 2.15.0+cpu, transformers 5.22.1, peft 0.21.2, trl 0.29.1, datasets 5.1.0, and the verdict "All checks passed! Your environment is ready." If doctor flags a missing item, fix that item before going further — every later step assumes this table is green.</p>
+<h2 id="step-2-quickstart">Step 2 — Let quickstart show you the shape of a run</h2>
+<p>Before writing your own config, generate Soup's demo and read it. The dry-run flag creates the demo data and config without training anything:</p>
+<pre><code>mkdir soup-demo &amp;&amp; cd soup-demo
+soup quickstart --dry-run --output . --yes</code></pre>
+<p>That writes two files. <code>quickstart_data.jsonl</code> holds 20 examples in Alpaca format — each line an <code>instruction</code>, an <code>input</code>, and an <code>output</code> — and <code>quickstart_soup.yaml</code> is the whole training job:</p>
+<pre><code># Soup Quickstart Config — auto-generated demo
+base: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+task: sft
+
+data:
+  train: ./quickstart_data.jsonl
+  format: alpaca
+  val_split: 0.1
+
+training:
+  epochs: 1
+  lr: 2e-4
+  batch_size: auto
+  lora:
+    r: 16
+    alpha: 32
+  quantization: "none"
+
+output: ./quickstart_output</code></pre>
+<p>Every field earns its place. <code>base</code> is the model to adapt. <code>task: sft</code> selects supervised fine-tuning from Soup's 23 methods, which also include DPO, ORPO, SimPO, KTO, and GRPO. <code>data.format: alpaca</code> tells Soup how to read your JSONL; <code>val_split: 0.1</code> holds back a tenth of the rows for validation. Under <code>training</code>, <code>lora.r</code> and <code>lora.alpha</code> size the adapter — rank 16 with alpha 32 is the demo's modest default — and <code>quantization: "none"</code> is what a CPU run wants, since Soup disables quantization on CPU anyway. Inspect the demo data with Soup's own tool rather than eyeballing it:</p>
+<pre><code>soup data inspect quickstart_data.jsonl</code></pre>
+<p>Verified output: 20 samples, columns <code>instruction, input, output</code>, average length 96 characters, minimum 73, maximum 112, zero empty fields, zero duplicates. That is the standard to hold your own data to in the next step.</p>
+<h2 id="step-3-your-data">Step 3 — Write your own dataset and config</h2>
+<p>The demo teaches general knowledge. A better test of whether training worked is a dataset with a visible format: every answer is one sentence, then one line starting with "Example:". Ten examples are enough to teach a format — not enough to teach facts, and this guide does not pretend otherwise. Create <code>data.jsonl</code>:</p>
+<pre><code>{"instruction": "What is photosynthesis?", "input": "", "output": "Photosynthesis is how plants turn sunlight, water, and carbon dioxide into food and oxygen.\nExample: A sunflower uses photosynthesis to grow toward the light."}
+{"instruction": "What is inflation?", "input": "", "output": "Inflation is a rise in prices that lowers what a unit of money can buy.\nExample: A loaf of bread that cost two dollars last year costs two dollars and twenty cents this year."}
+{"instruction": "What is recursion?", "input": "", "output": "Recursion is when a function solves a problem by calling itself on a smaller version of it.\nExample: A countdown function prints a number, then calls itself with the next lower number."}
+{"instruction": "What is a black hole?", "input": "", "output": "A black hole is a region of space where gravity is so strong that nothing, not even light, can escape.\nExample: A star much heavier than the Sun can collapse into a black hole at the end of its life."}
+{"instruction": "What is an algorithm?", "input": "", "output": "An algorithm is a step-by-step procedure for solving a problem or completing a task.\nExample: A recipe is an algorithm for cooking a meal."}
+{"instruction": "What is evaporation?", "input": "", "output": "Evaporation is when a liquid changes into a gas at its surface.\nExample: A puddle shrinks on a sunny day because its water evaporates into the air."}
+{"instruction": "What is a budget?", "input": "", "output": "A budget is a plan that assigns expected income to expected spending over a set period.\nExample: A student budgets fifty dollars a week for groceries and ten for transport."}
+{"instruction": "What is friction?", "input": "", "output": "Friction is the force that resists motion between two surfaces in contact.\nExample: Rubbing your hands together warms them because of friction."}
+{"instruction": "What is a vaccine?", "input": "", "output": "A vaccine is a preparation that trains the immune system to recognize a pathogen without causing the disease.\nExample: A flu vaccine teaches the body to recognize influenza viruses before winter."}
+{"instruction": "What is the water cycle?", "input": "", "output": "The water cycle is the continuous movement of water between the Earth and the atmosphere through evaporation, condensation, and precipitation.\nExample: Ocean water evaporates, forms clouds, and falls back as rain."}</code></pre>
+<p>Then the config, <code>soup.yaml</code>. It mirrors the quickstart file with three deliberate changes: a smaller, ungated base model so the download needs no approval; <code>max_length: 256</code> so short examples do not pad out to long sequences on a slow CPU; and 20 epochs. Twenty epochs on ten examples sounds like a lot, and it is deliberate: the first run of this guide used 2 epochs — 6 optimizer steps — and the resulting adapter changed almost nothing, not even on a question it had trained on. Small data needs many passes before the format sticks, and this guide verified that 20 epochs is where the effect appears:</p>
+<pre><code>base: Qwen/Qwen2.5-0.5B-Instruct
+
+task: sft
+
+data:
+  train: ./data.jsonl
+  format: alpaca
+  val_split: 0.1
+  max_length: 256
+
+training:
+  epochs: 20
+  lr: 2e-4
+  batch_size: auto
+  lora:
+    r: 16
+    alpha: 32
+  quantization: "none"
+
+output: ./output</code></pre>
+<p>Validate before you spend any compute. The dry-run flag checks the config and the data without training, and it is also the fastest way to catch Soup's strictest new behaviour: since version 0.75, unknown config keys are rejected instead of silently ignored, so a typo like <code>quantizaton</code> fails here rather than quietly doing nothing during a long run:</p>
+<pre><code>soup train --config soup.yaml --dry-run</code></pre>
+<p>Verified output on the CPU-only sandbox:</p>
+<pre><code>Loading config from soup.yaml...
+Device:  CPU (no GPU detected)
+Memory:  N/A (CPU mode)
+Model:   Qwen/Qwen2.5-0.5B-Instruct
+Task:    sft
+Backend: transformers
+LoRA:    r=16, alpha=32
+Quant:   none
+Seed:    42 (unset default)
+Dry run - validating data...
+Data OK: 9 train samples
+Val: 1 samples
+Config valid. Ready to train!</code></pre>
+<p>While you are here, ask Soup what the run will cost in memory before it starts. <code>soup profile</code> estimates memory, speed, and GPU requirements from the same config, using one peak-VRAM estimate calibrated on 39 measured runs in version 0.77:</p>
+<pre><code>soup profile --config soup.yaml</code></pre>
+<p>Verified output for the same config:</p>
+<pre><code>Model:     Qwen/Qwen2.5-0.5B-Instruct
+Params:    0.5B (trainable: 1,081,344 with LoRA r=16 on q_proj, v_proj)
+Quantization: none
+
+GPU Memory Estimate:
+  Model                                 ~1.0 GB
+  LoRA                                  ~0.0 GB
+  Optimizer                             ~0.0 GB
+  Activations (bs=4, seq=256)           ~1.2 GB
+  Logits and loss (vocab 151,936)       ~1.9 GB
+  Overhead                              ~0.7 GB
+  --------------------               ----------
+  Total                                 ~4.8 GB
+
+Speed Estimate:
+  Tokens/sec: ~2,500
+  Samples/sec: ~9.8
+  Typical A100 throughput, not specific to your GPU.
+
+Recommendations:
+  ? No GPU detected: would fit in an assumed 24 GB (need ~5 GB).
+  ? batch_size 8 assumes 24 GB VRAM
+
+Compatible GPUs:
+  - RTX3050_6GB (6 GB)
+  - RTX3050LAPTOP_6GB (6 GB)
+  - RTX3060LAPTOP (6 GB)
+  - RTX4050LAPTOP (6 GB)
+  - RTX3050 (8 GB)</code></pre>
+<p>Read that estimate the way it is labelled. The memory total is the useful number — about 4.8&nbsp;GB, which is why even a 6&nbsp;GB laptop card appears on the compatible list. The speed line is explicitly "typical A100 throughput, not specific to your GPU," so do not plan a CPU run around 2,500 tokens per second; the CPU run in the next step is far slower, and that is expected.</p>
+<h2 id="step-4-train">Step 4 — Train the adapter</h2>
+<p>Run it. The first launch downloads the base model (roughly 1&nbsp;GB for Qwen2.5-0.5B-Instruct) and then trains:</p>
+<pre><code>soup train --config soup.yaml</code></pre>
+<p>Verified run on the CPU-only sandbox (base model already cached; first launch downloads roughly 1&nbsp;GB): 60 steps over 20 epochs in 374 seconds of training time, about 7 minutes wall-clock, ending at train loss 0.7489 against 1.806 for the 2-epoch run. Final validation loss was 1.377 — treat that number loosely, because with <code>val_split: 0.1</code> on ten examples the validation set is a single row, so it swings from epoch to epoch. The finished adapter directory contains <code>adapter_config.json</code> (rank 16, alpha 32, target modules q_proj and v_proj, base Qwen/Qwen2.5-0.5B-Instruct), <code>adapter_model.safetensors</code> (4,338,000 bytes), the ChatML chat template, and the tokenizer files — plus a <code>checkpoint-60</code> directory. The adapter is small by design: LoRA trains only about 1.08 million parameters here, so the output is megabytes, not another copy of the base model. If the run dies with an out-of-memory error on a CPU box, the honest fixes are a smaller base model, a shorter <code>max_length</code>, or a smaller LoRA rank — not a bigger swap file.</p>
+<h2 id="step-5-prove">Step 5 — Prove the adapter did something</h2>
+<p>A finished adapter directory is not proof of learning; a changed answer is. Run batch inference over a held-out question — one the model never saw in training — with the adapter loaded, and compare it against the base model answering the same prompt. One gotcha first, learned the hard way in this guide's verification: <code>soup infer</code> treats each prompt as plain text. Feed it a bare question and you get plain completion from both models, adapter or not. For a chat model, wrap the question in the model's ChatML turns — the same template Soup saved into the adapter directory — so generation starts in the assistant turn where training happened:</p>
+<pre><code>python3 - &lt;&lt;'EOF'
+import json
+p = "&lt;|im_start|&gt;system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.&lt;|im_end|&gt;\n&lt;|im_start|&gt;user\nWhat is an API?&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n"
+open('prompts-chat.jsonl','w').write(json.dumps({"prompt": p})+"\n")
+EOF
+soup infer --model ./output --input prompts-chat.jsonl --output results.jsonl --temperature 0
+soup infer --model Qwen/Qwen2.5-0.5B-Instruct --input prompts-chat.jsonl --output results-base.jsonl --temperature 0</code></pre>
+<p>Verified outputs on the CPU-only sandbox, temperature 0 (greedy decoding, so no sampling luck in the comparison). The base model answered with 220 tokens of essay:</p>
+<pre><code>An API (Application Programming Interface) is a set of rules and protocols that allow different software applications to communicate with each other. It's like a bridge between different systems or services, enabling them to exchange data and perform tasks.
+
+APIs are designed to be flexible and reusable, allowing developers to create custom solutions without having to write code from scratch for every interaction they need to have. [...]</code></pre>
+<p>The adapter answered the identical prompt in 54 tokens — and in exactly the trained shape:</p>
+<pre><code>An API stands for "as a service". It's a way for developers to build applications that don't need to know about the underlying technology or infrastructure.
+Example: A web developer can use an API to create a website without knowing how it works under the hood.</code></pre>
+<p>Read that result honestly, because it teaches two things at once. The format transferred perfectly: one sentence, then an "Example:" line, on a question the model never trained on. The facts did not: "stands for 'as a service'" is muddled, and the sentence is vague. Ten examples cannot teach a model new facts, and the guide does not claim they do — what they teach is the two-part answer shape, and the held-out answer above shows that shape surviving on an unseen question. That is the correct mental model for small fine-tunes generally: format and style transfer first, knowledge second, and only with far more data. Temperature 0 matters here: it removes sampling luck from the comparison, so the format match is evidence, not a coin flip.</p>
+<h2 id="step-6-ship">Step 6 — Ship the adapter as a full model</h2>
+<p>An adapter is only useful with its base model attached. Merge the two into a standalone model directory, which you can then serve, export, or upload:</p>
+<pre><code>soup merge --adapter ./output --output ./merged</code></pre>
+<p>Verified on the CPU-only sandbox in 35 seconds: Soup printed a merge plan (adapter <code>./output</code>, base Qwen/Qwen2.5-0.5B-Instruct, float16 output), loaded the base weights and the adapter, and wrote a standalone model of 953.2&nbsp;MB — <code>model.safetensors</code> plus <code>config.json</code>, <code>generation_config.json</code>, the chat template, and the tokenizer files. The merged directory answers without any adapter flag, which is the point: it is now just a model.</p>
+<p>From there, the same CLI covers the rest of the lifecycle without new tools: <code>soup chat --model ./merged</code> for an interactive session, <code>soup export --model ./merged --format gguf --quant q4_k_m</code> for a GGUF file that Ollama or llama.cpp can serve, and <code>soup push --model ./merged --repo you/my-model</code> to publish to the Hugging Face Hub — the last one needs a Hub token and is the only step in this guide that touches an account. The template config in Step 2's <code>soup init --template chat</code> is the same file shape scaled up: Llama-3.1-8B-Instruct, 4-bit quantization, LoRA rank 64, 3 epochs. Swap your base, data, and output paths into it and the workflow does not change.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/soup-fine-tune-llm-one-yaml-tutorial/img3.webp" alt="Abstract diagram of a stack of model layers in memory with a single layer flowing into a small graphics card"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-7-streaming">Step 7 — The trick behind the headline: layer streaming</h2>
+<p>Everything so far works on any GPU with room for the model. Layer streaming is for the machine that does not have room. Normally, fine-tuning keeps the whole frozen base model in VRAM; on a 4&nbsp;GB card, an 8-billion-parameter model does not fit even quantized, so training is simply unavailable. Streaming changes what "fits" means: the frozen base lives in host RAM (or NVMe), and Soup copies it to the GPU one decoder layer at a time on a dedicated CUDA stream. Peak VRAM is bounded by one layer plus the adapter, not by the model — hence the project's measured 3.32&nbsp;GB peak for an 8B model on a 4&nbsp;GB card.</p>
+<p>Three honest caveats come with it, all from the project's own record. First, streaming is beta and opt-in: add <code>stream_layers: true</code> to the training section of your config, and expect slower wall-clock time than a resident run, because layers shuttle back and forth. Second, the measurement history is unusually transparent, including a retraction: version 3 of the layer-streaming preprint withdraws its earlier explanation that streaming is bound by host-to-device transfer, after measuring that deleting every host-to-device byte buys only 1.4% — the real streaming cost is per-layer NF4 dequantisation, about 9.8% of the step. Third, the project once shipped a silent wrong-gradient defect on NF4 layers above about 165&nbsp;MiB, where the forward pass stayed bit-exact and the loss curve looked healthy while gradients were wrong; it was found, reported upstream, and repaired, with the repair gated against controls on real 32B and 72B models. None of that makes streaming unusable — it makes it a beta feature to enable deliberately, on a card that needs it, with the project's Colab T4 self-check as your own verification before trusting it on a real run.</p>
+<h2 id="when-to-use">When to use Soup vs the alternatives</h2>
+<p>Soup is not the only way to fine-tune, and the alternatives are not straw men. LLaMA-Factory covers a similar breadth with a web UI and a larger recipe collection, and it is the better pick if you want to click through configuration. Axolotl gives you deeper config control and a long track record on multi-GPU setups, at the cost of more YAML to learn. Unsloth is the speed pick on supported GPUs, with 2–5× faster training claimed for its kernels — Soup itself offers it as a backend option (<code>backend: unsloth</code> with the <code>[fast]</code> extra) rather than competing with it. Raw Hugging Face Trainer is still the right choice when you need full control over the training loop itself. Choose Soup when you want one CLI for the whole arc — data tools, method selection, eval gating, merge, export, and push — with a config file you can read in a minute, and when your hardware is the constraint: its memory estimates, quantization menu, and layer streaming are built for small cards first.</p>
+<h2 id="limits">Limits and gotchas, collected in one place</h2>
+<ul>
+<li><strong>CPU training is a smoke test, not a strategy.</strong> Soup says so itself: experimental and very slow. The 10-example run here exists to prove the pipeline; real datasets belong on a GPU or on Apple Silicon via the MLX backend.</li>
+<li><strong>Configs are strict since 0.75.</strong> Unknown keys fail the load. Run <code>soup doctor --config soup.yaml</code> after upgrading from 0.76, and run <code>soup train --dry-run</code> before any long job.</li>
+<li><strong>The chat template's default model is gated.</strong> <code>soup init --template chat</code> writes Llama-3.1-8B-Instruct as the base. If you have not been granted access on the Hugging Face Hub, the download fails with an authorization error — swap in an ungated model first, as this guide does.</li>
+<li><strong>Quantization is auto-disabled on CPU.</strong> Do not be surprised when a CPU run ignores <code>quantization: 4bit</code>; that is documented behaviour, not a bug, and it is why the CPU config here says <code>"none"</code> explicitly.</li>
+<li><strong>Layer streaming is beta and opt-in.</strong> It trades speed for fit. On a card with room to spare, a resident run is faster; streaming earns its keep on 4–8&nbsp;GB cards.</li>
+<li><strong>Version churn is real.</strong> Version 0.77.0 alone refused configs 0.76 merely warned about, and the project ships 183 releases. Pin the version you verified — <code>soup-cli==0.77.1</code> here — in any config you intend to rerun months later.</li>
+</ul>
+<h2 id="takeaway">The takeaway</h2>
+<p>Soup's idea is deliberately boring: one file describes the job, one command runs it, and the same command covers data, training, evaluation, merging, and shipping. The interesting part is what that boring idea unlocks on modest hardware — a real adapter trained on your own examples, in an afternoon, on a machine that was never supposed to train models at all, and on a 4&nbsp;GB laptop GPU, an 8-billion-parameter model that previously did not fit. Start with the CPU smoke run above to learn the shape of the workflow, then take the same YAML to a GPU, switch quantization back on, and point it at a dataset that actually matters to you. The config will not need to change shape — only scale.</p>
+
+
+<p><em>Sources: the Soup README and repository page (install routes, quickstart, configuration fields, layer-streaming measurements, requirements, version 0.77.1 release notes, read October 30, 2026), the v0.77.0 release notes (config strictness, MLX GRPO, layer streaming for DeepSeek-V3), and the verification runs quoted in Steps 1–6 (doctor output, quickstart files, data-inspect stats, dry-run validation, training run, inference comparison, merge). The 8B-on-4GB figures (3.32 GB peak, 119.6 tok/s pre-repair; 2.40 GB peak, 208.6 tok/s post-repair) are the project's measured figures, not independent measurements — this sandbox has no GPU. The template default model Llama-3.1-8B-Instruct is gated on the Hugging Face Hub; the guide trains an ungated model instead.</em></p>
+
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/sft-dataset-from-your-own-documents-tutorial/">Your fine-tune is only as good as its data: build a clean SFT dataset from your own documents</a></li><li><a href="/articles/llama-cpp-python-local-api-tutorial/">Your laptop is the API: run a local LLM server with llama-cpp-python and a 398 MB GGUF model</a></li><li><a href="/articles/fine-tune-embeddings-domain-retrieval/">Fine-tune embeddings for your domain: contrastive training that measurably improves retrieval</a></li><li><a href="/articles/nanobot-lightweight-personal-agent-tutorial/">Nanobot hands-on: run a 4,000-line personal agent on your own machine</a></li></ul></section>
+
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="soup-fine-tune-llm-one-yaml-tutorial"></div><div class="comments" data-comments="soup-fine-tune-llm-one-yaml-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
