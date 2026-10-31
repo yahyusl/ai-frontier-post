@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR — AI Frontier Post</title>
+<meta name="description" content="MiniCPM-OCR 1.0 (OpenBMB/MiniCPM-OCR, Apache-2.0, 707 GitHub stars) is a 1.3B model that parses PDFs and images into Markdown — text, tables, formulas, and charts — with a second model, MiniCPM-OCR Jev, that scores each region for correctness. This guide runs it locally through Ollama, parses a first document with the minicpmvocr SDK, and shows the vLLM path for heavier batches.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/minicpm-ocr-parse-documents-locally-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR">
+<meta property="og:description" content="MiniCPM-OCR 1.0 (OpenBMB/MiniCPM-OCR, Apache-2.0, 707 GitHub stars) is a 1.3B model that parses PDFs and images into Markdown — text, tables, formulas, and charts — with a second model, MiniCPM-OCR Jev, that scores each region for correctness. This guide runs it locally through Ollama, parses a first document with the minicpmvocr SDK, and shows the vLLM path for heavier batches.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/minicpm-ocr-parse-documents-locally-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/minicpm-ocr-parse-documents-locally-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-10-31">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR">
+<meta name="twitter:description" content="MiniCPM-OCR 1.0 (OpenBMB/MiniCPM-OCR, Apache-2.0, 707 GitHub stars) is a 1.3B model that parses PDFs and images into Markdown — text, tables, formulas, and charts — with a second model, MiniCPM-OCR Jev, that scores each region for correctness. This guide runs it locally through Ollama, parses a first document with the minicpmvocr SDK, and shows the vLLM path for heavier batches.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/minicpm-ocr-parse-documents-locally-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR", "description": "MiniCPM-OCR 1.0 (OpenBMB/MiniCPM-OCR, Apache-2.0, 707 GitHub stars) is a 1.3B model that parses PDFs and images into Markdown — text, tables, formulas, and charts — with a second model, MiniCPM-OCR Jev, that scores each region for correctness. This guide runs it locally through Ollama, parses a first document with the minicpmvocr SDK, and shows the vLLM path for heavier batches.", "datePublished": "2026-10-31", "dateModified": "2026-10-31", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/minicpm-ocr-parse-documents-locally-tutorial/"}, "image": "https://aifrontierpost.com/articles/minicpm-ocr-parse-documents-locally-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an NVIDIA GPU, or Linux?", "acceptedAnswer": {"@type": "Answer", "text": "For the vLLM path, yes: the tutorial requires Linux x86_64 and an NVIDIA GPU, with driver 580 or newer, and its commands were verified on an RTX 5090. The Ollama path runs on the platforms Ollama supports, including macOS and Windows through its official downloads, with GPU and driver requirements set by Ollama's own documentation; the SDK layout-detection commands in this guide still use cuda:0."}}, {"@type": "Question", "name": "What does a low Jev score mean — is the text wrong?", "acceptedAnswer": {"@type": "Answer", "text": "A Jev score runs from 0 to 1, and higher means the candidate is more likely correct. A low score is a routing signal, not a verdict: send that region to human review, or let Jev pick the best candidate among several parsers. Before using any score, check that the verdict is “scored” — fixed values returned for precheck, rendering, or forward-pass failures must not be read as low model scores. Pick the accept threshold from samples of your own documents."}}, {"@type": "Question", "name": "Does it handle languages other than Chinese and English?", "acceptedAnswer": {"@type": "Answer", "text": "Chinese and English are the model's primary languages, and this guide only claims what the model card states. The project documents handling of scans, curved pages, photographs, skewed pages, and recaptured documents in those languages. Validate on your own document types before trusting it elsewhere."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR", "description": "MiniCPM-OCR 1.0 (OpenBMB/MiniCPM-OCR, Apache-2.0, 707 GitHub stars) is a 1.3B model that parses PDFs and images into Markdown — text, tables, formulas, and charts — with a second model, MiniCPM-OCR Jev, that scores each region for correctness. This guide runs it locally through Ollama, parses a first document with the minicpmvocr SDK, and shows the vLLM path for heavier batches.", "step": [{"@type": "HowToStep", "name": "Step 1: Clone the repo and check the hardware bar", "text": "Clone the MiniCPM-OCR repository and confirm an NVIDIA GPU with a new enough driver is present."}, {"@type": "HowToStep", "name": "Step 2: Install the SDK in its own environment", "text": "Create a Python 3.12 environment with uv and install the minicpm-ocr SDK and PaddlePaddle GPU packages."}, {"@type": "HowToStep", "name": "Step 3: Install Ollama and download the three GGUF files", "text": "Install Ollama 0.40.12 or later and download the matched main model, vision projector, and DSpark draft files."}, {"@type": "HowToStep", "name": "Step 4: Start Ollama and register the model", "text": "Serve Ollama on port 18499, register the model with a Modelfile, and verify the service endpoints."}, {"@type": "HowToStep", "name": "Step 5: Parse your first document", "text": "Run a one-page smoke test with minicpmvocr, then parse the full document to Markdown and inspect the output."}, {"@type": "HowToStep", "name": "Step 6: Parse at volume with vLLM and DSpark", "text": "Build vLLM from source, start it with DSpark speculative decoding, and parse through the same SDK command."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR</h1>
+<p class="lede">MiniCPM-OCR 1.0 (OpenBMB/MiniCPM-OCR, Apache-2.0, 707 GitHub stars) is a 1.3B model that parses PDFs and images into Markdown — text, tables, formulas, and charts — with a second model, MiniCPM-OCR Jev, that scores each region for correctness. This guide runs it locally through Ollama, parses a first document with the minicpmvocr SDK, and shows the vLLM path for heavier batches.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · October 31, 2026 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MiniCPM-OCR 1.0 turns a PDF or a phone photo into Markdown — body text, HTML tables, and LaTeX formulas, in reading order — without sending the document to a cloud OCR service. Install the <code>minicpmvocr</code> SDK, serve the 1.3B model with Ollama on port 18499, parse one document, and use the companion Jev model to decide which regions a human should still check.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> OpenBMB. MiniCPM-OCR 1.0 parses documents; MiniCPM-OCR Jev scores each parsed region for correctness.</li><li><b>What:</b> A 1.3B OCR model (SigLIP vision encoder plus Qwen3.5, built on MiniCPM-V 4.6) and a 2B correctness model, for Chinese and English documents.</li><li><b>When:</b> Repository created 27 October 2026 and open-sourced 28 October 2026; 707 GitHub stars and 44 forks at research time. Apache-2.0 throughout.</li><li><b>Reported quality:</b> 93.68 on Real5-OmniDocBench and 54.7 on OCRBench v2 for MiniCPM-OCR 1.0; Jev reaches 93.6 AUROC (x100) on JevOCRBench. OpenBMB's numbers, on its test setups.</li><li><b>Reported speed:</b> 1.2 pages per second on an NVIDIA RTX 5090 with the accelerated configuration; DSpark improves end-to-end efficiency by 55%.</li><li><b>Local run:</b> Ollama 0.40.12 or later, three GGUF files totalling about 2.04 GB, service on port 18499. The vLLM path needs Linux, a driver 580 or newer, and at least 40 GB of disk.</li></ul>
+
+<figure class="hero-art"><img class="story-image" src="/articles/minicpm-ocr-parse-documents-locally-tutorial/cover.webp" alt="OpenBMB example outputs: a scanned court document beside its parsed Markdown, and a newspaper page beside its parsed text"><figcaption>Example outputs from OpenBMB’s MiniCPM-OCR repository: original documents beside the Markdown the model produces.</figcaption></figure>
+<h2>Why this matters now</h2>
+<p>Most OCR tools hand you text and no reason to doubt it. A misread digit in an invoice total or a dropped minus sign in a formula looks exactly like a correct one, and the error only surfaces downstream, when a human notices or a payment goes wrong. <a href="https://github.com/OpenBMB/MiniCPM-OCR">MiniCPM-OCR</a>, open-sourced by OpenBMB on 28 October 2026, treats that doubt as part of the system instead of an afterthought.</p>
+<p>The job is split three ways. A layout model, PP-DocLayoutV3, finds the regions on a page. The recognition model, MiniCPM-OCR 1.0, reads each region: plain text, tables, formulas, charts, seals, and structured fields. The <code>minicpmvocr</code> SDK then assembles the regions into Markdown in reading order. A second, separate model, MiniCPM-OCR Jev, scores each region from 0 to 1 for correctness, so the pipeline can auto-accept the reliable parts and route the rest to a person. That second opinion is the reason this release is worth a tutorial rather than a news item.</p>
+<p>It is also small enough to run yourself. At 1.3 billion parameters, with quantized GGUF builds and an Ollama deployment guide, it fits a single GPU machine and keeps the documents on that machine: the project's tutorial states that local deployment needs no cloud OCR service and documents do not need to be uploaded anywhere. Every command below is copied from the project's own tutorial and SDK documentation and checked on 31 October 2026. The heavy vLLM path was not executed for this article; where a number comes from the project's own benchmarks, the text says so.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li>A machine with an NVIDIA GPU. The vLLM path in Step 6 requires Linux x86_64 (commands use Ubuntu 22.04), driver 580 or newer, and at least 40 GB of free disk. The Ollama path in Steps 3 to 5 follows Ollama's own GPU and driver requirements.</li>
+<li>Ollama 0.40.12 or later for the main path, or a vLLM build from source for the batch path.</li>
+<li>Python 3.12, downloaded automatically by <code>uv</code>; no prior Python installation is required for the SDK environment.</li>
+<li>About 2 GB of downloads for the three Ollama GGUF files, plus the layout model the SDK fetches on first run, and an internet connection for the first install and model downloads.</li>
+<li>One PDF or image you own or have the right to parse. Start with a single page: a scanned letter, a receipt, or a photographed page.</li>
+</ul>
+<h2>Step 1: Clone the repo and check the hardware bar</h2>
+<p>Clone the repository and confirm the GPU the docs assume is actually present. The Ollama commands in Step 3 run from the repository root, and the vLLM install script in Step 6 lives in its <code>scripts/</code> directory, so the clone is not optional.</p>
+<pre><code>git clone https://github.com/OpenBMB/MiniCPM-OCR.git
+cd MiniCPM-OCR
+nvidia-smi</code></pre>
+<p><code>nvidia-smi</code> prints the driver version at the top of its output. The vLLM tutorial needs 580 or newer for CUDA 13; for older drivers, its FAQ describes a CUDA compatibility library to configure first. If there is no NVIDIA GPU in the machine, stop here: the documented layout-detection commands use <code>cuda:0</code>, and the Ollama guide defers GPU requirements to Ollama's own documentation rather than promising a CPU path.</p>
+<h2>Step 2: Install the SDK in its own environment</h2>
+<p>The runtime has two parts that live in separate Python environments: the SDK, which handles layout detection, cropping, and result assembly, and the inference service, which runs the recognition model. Set up the SDK environment first.</p>
+<pre><code>pip install uv
+uv venv .minicpm-ocr --python 3.12 --seed
+source .minicpm-ocr/bin/activate
+python -m pip install --upgrade "minicpm-ocr[all]"
+python -m pip install "paddlepaddle-gpu==3.3.0" \
+  -i https://www.paddlepaddle.org.cn/packages/stable/cu129/</code></pre>
+<p>The package on PyPI is <code>minicpm-ocr</code>; the command-line interface it installs is <code>minicpmvocr</code>. The PaddlePaddle GPU package backs the PP-DocLayoutV3 layout detection. Keep this terminal for SDK commands, and use a second terminal for the inference service: the tutorial is explicit that the two parts run in separate terminals.</p>
+<h2>Step 3: Install Ollama and download the three GGUF files</h2>
+<p>Ollama is the shortest route to a running service. It needs version 0.40.12 or later, and it loads three matched files together: the Q8_0 main model, the F16 vision projector that makes image input possible, and the Q8_0 DSpark draft model for speculative decoding. All three must come from the same 1.0 release; the model card warns against mixing a draft model with a different main checkpoint.</p>
+<pre><code>curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.40.12 sh
+ollama --version</code></pre>
+<p>On macOS and Windows, use Ollama's official downloads instead of the install script. Then download the three files into the repository, exactly as the deployment guide lists them:</p>
+<pre><code>mkdir -p ./models/MiniCPM-OCR-1.0-gguf
+
+curl -fL --retry 3 \
+  -o ./models/MiniCPM-OCR-1.0-gguf/MiniCPM-OCR-1_0-Q8_0.gguf \
+  https://huggingface.co/openbmb/MiniCPM-OCR-1.0-gguf/resolve/main/MiniCPM-OCR-1_0-Q8_0.gguf
+
+curl -fL --retry 3 \
+  -o ./models/MiniCPM-OCR-1.0-gguf/mmproj-model-f16-4x.gguf \
+  https://huggingface.co/openbmb/MiniCPM-OCR-1.0-gguf/resolve/main/mmproj-model-f16-4x.gguf
+
+curl -fL --retry 3 \
+  -o ./models/MiniCPM-OCR-1.0-gguf/dspark-MiniCPM-OCR-1_0-Q8_0.gguf \
+  https://huggingface.co/openbmb/MiniCPM-OCR-1.0-DSpark-gguf/resolve/main/dspark-MiniCPM-OCR-1_0-Q8_0.gguf</code></pre>
+<p>The files are about 0.81 GB for the main model, 0.90 GB for the projector, and 0.33 GB for the draft model. If Hugging Face is unreachable, the same guide lists official ModelScope mirrors for the same three files. Do not substitute a draft file from another release.</p>
+<h2>Step 4: Start Ollama and register the model</h2>
+<p>Start the service in its own terminal at the repository root, on port 18499 rather than Ollama's default 11434, so every address in this guide matches. On Linux with an NVIDIA GPU, prefix the serve command with <code>CUDA_VISIBLE_DEVICES=0</code> to select GPU 0.</p>
+<pre><code>export OLLAMA_HOST=127.0.0.1:18499
+export OLLAMA_MODELS="$PWD/models/ollama"
+export OLLAMA_NUM_PARALLEL=1
+export OLLAMA_MAX_LOADED_MODELS=1
+ollama serve</code></pre>
+<p>Keep that terminal running. In a second terminal at the repository root, write the Modelfile that binds the three files together and register the model under the name <code>minicpm-ocr</code>:</p>
+<pre><code>export OLLAMA_HOST=127.0.0.1:18499
+
+cat &gt; ./models/MiniCPM-OCR-1.0-gguf/Modelfile &lt;&lt;'EOF'
+FROM ./MiniCPM-OCR-1_0-Q8_0.gguf
+FROM ./mmproj-model-f16-4x.gguf
+DRAFT ./dspark-MiniCPM-OCR-1_0-Q8_0.gguf
+REQUIRES 0.40.12
+PARAMETER num_ctx 8192
+PARAMETER temperature 0
+PARAMETER draft_num_predict 15
+EOF
+
+ollama create minicpm-ocr -f ./models/MiniCPM-OCR-1.0-gguf/Modelfile
+ollama show minicpm-ocr
+ollama show minicpm-ocr --modelfile
+curl --noproxy 127.0.0.1 -f http://127.0.0.1:18499/api/version
+curl --noproxy 127.0.0.1 -f http://127.0.0.1:18499/api/tags</code></pre>
+<p>The two <code>FROM</code> lines load the main model and the vision projector; <code>DRAFT</code> loads the matching DSpark draft model. The checks should agree: <code>ollama show</code> reports the <code>vision</code> capability, the Modelfile view includes the <code>DRAFT</code> line and <code>draft_num_predict 15</code>, <code>/api/version</code> returns 0.40.12 or later, and <code>/api/tags</code> lists <code>minicpm-ocr:latest</code>. On the first inference request, the service log should show the speculative implementation being added; look for <code>draft acceptance</code> afterwards to confirm DSpark took part in decoding. If the version check fails, upgrade Ollama and restart the service before going further.</p>
+<h2>Step 5: Parse your first document</h2>
+<p>Back in the SDK terminal, run a one-page smoke test first: without an output file, the SDK prints Markdown to standard output, and <code>--set input.limit=1</code> limits the run to the first page. Replace <code>doc.pdf</code> with your own file; the SDK also accepts PNG, JPG, JPEG, BMP, WebP, TIF, and TIFF. The <code>--server-url</code> and <code>--model</code> values must be passed explicitly on every invocation, and <code>--backend ollama</code> selects the Ollama backend from the SDK's documented list (<code>vllm</code>, <code>openai</code>, <code>llamacpp</code>, <code>ollama</code>).</p>
+<pre><code>source .minicpm-ocr/bin/activate
+minicpmvocr parse --device cuda:0 \
+  --server-url http://127.0.0.1:18499 \
+  --model minicpm-ocr --backend ollama \
+  --input doc.pdf --set input.limit=1</code></pre>
+<p>On the first run the SDK checks <code>models/PP-DocLayoutV3_infer/</code> and automatically downloads the layout model from the official Paddle URL if the files are missing or incomplete, so the first parse is slower than the ones after it. If the output looks right, parse the whole document to a file:</p>
+<pre><code>minicpmvocr parse doc.pdf -o doc.md --device cuda:0 \
+  --server-url http://127.0.0.1:18499 --model minicpm-ocr --backend ollama</code></pre>
+<p>Open <code>doc.md</code> and check three things: body text in reading order, tables rendered as HTML, and formulas as LaTeX. That trio is the SDK's documented output contract, and it is what makes the result usable as source material rather than a text dump: a table that survives as a table, and a formula that survives as a formula. Per-page Markdown, structured results, and run records land under <code>runs/&lt;run-tag&gt;/</code> in the working directory, so a bad page can be inspected without re-running the whole document. Run <code>minicpmvocr parse --help</code> for the full option list, including <code>--workers</code> for concurrent recognition requests; the quickstart default is 32.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/minicpm-ocr-parse-documents-locally-tutorial/img2.webp" alt="OpenBMB's throughput chart: MiniCPM-OCR 1.0 at 1.217 pages per second, ahead of GLM-OCR, PaddleOCR-VL-1.6, and MinerU2.5 Pro"><figcaption>Chart: OpenBMB's throughput comparison, from the MiniCPM-OCR repository. All models use accelerated configurations; MiniCPM-OCR 1.0 is measured at 1.2 pages per second on an RTX 5090.</figcaption></figure>
+<h2>Step 6: Parse at volume with vLLM and DSpark</h2>
+<p>The Ollama path is the way to start. The vLLM path is the way to push volume: it is the configuration behind the project's 1.2-pages-per-second figure, and it needs a second environment built from source. Budget for it. The tutorial reserves at least 40 GB of disk and notes the full installation takes about 40 minutes on a 96-core machine; compilation uses 8 processes by default, or <code>MAX_JOBS=32</code> with enough CPU and memory.</p>
+<pre><code>apt-get update
+apt-get install -y software-properties-common
+apt-get update
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
+apt-get install -y gcc-13 g++-13 libdw-dev libelf-dev
+bash scripts/install.sh vllm</code></pre>
+<p>Then start the service in a new terminal at the repository root, with DSpark enabled through the speculative configuration that pairs the main model with its matching draft model from the same release:</p>
+<pre><code>source .venv-vllm/bin/activate
+export CC=gcc-13 CXX=g++-13
+export CUDA_HOME="$(python -c 'import sysconfig; print(sysconfig.get_path("purelib") + "/nvidia/cu13")')"
+export PATH="$CUDA_HOME/bin:$PATH"
+vllm serve openbmb/MiniCPM-OCR-1.0   --served-model-name minicpm-ocr   --host 127.0.0.1   --port 18499   --max-model-len 40960   --max-num-batched-tokens 40960   --max-num-seqs 32   --limit-mm-per-prompt '{"image":36,"video":0}'   --attention-backend FLASH_ATTN   --mm-encoder-attn-backend FLASH_ATTN   --mm-processor-kwargs '{"downsample_mode":"4x"}'   --gpu-memory-utilization 0.85   --trust-request-mm-kwargs   --speculative-config '{
+    "method": "dspark",
+    "model": "openbmb/MiniCPM-OCR-1.0-DSpark",
+    "num_speculative_tokens": 15,
+    "enable_adaptive_verification": false
+  }'   --default-chat-template-kwargs '{"enable_thinking":false}'</code></pre>
+<p>To run without the draft model, remove the <code>--speculative-config</code> argument and its entire JSON block for standard decoding. Parse with the same SDK command as Step 5, minus the Ollama backend flag, against the same address and model name:</p>
+<pre><code>minicpmvocr parse   --device cuda:0   --server-url http://127.0.0.1:18499   --model minicpm-ocr   --input doc.pdf   --output doc.md</code></pre>
+<p>If the service runs out of GPU memory, the tutorial's first move is to reduce <code>--max-model-len</code> and, if necessary, <code>--gpu-memory-utilization</code>. If SDK requests fail or keep waiting, check <code>/v1/models</code> first, verify the service URL, and confirm <code>--trust-request-mm-kwargs</code> is in the startup command. SGLang, llama.cpp, and FlagOS deployment guides cover the same SDK with different backends; except for FlagOS, they enable DSpark by default.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/minicpm-ocr-parse-documents-locally-tutorial/img3.webp" alt="MiniCPM-OCR Jev scoring examples: a wrong text candidate scores 0.0079 and the correct one 0.9803; the same pattern holds for a formula and a table"><figcaption>Image: OpenBMB's Jev scoring examples, from the MiniCPM-OCR repository. Wrong candidates score near zero; correct ones score near one.</figcaption></figure>
+<h2>Score every region with Jev before you trust the output</h2>
+<p>Parsing is only half the system. <a href="https://huggingface.co/openbmb/MiniCPM-OCR-Jev">MiniCPM-OCR Jev</a> is a 2B correctness decision model, trained from Qwen3.5-2B with its language-model head replaced by a binary classification head. Given one region image and one candidate OCR result, it returns a score from 0 to 1: higher means the candidate is more likely correct. It is deliberately small — OpenBMB reports 93.6 AUROC (x100) on its JevOCRBench, above a 35B Jev variant at 90.1 and close to a 397B Qwen model at 93.8 — and it generalises across parsers, scoring 91.9 to 93.4 on results from MiniCPM-OCR 1.0, GLM-OCR, PaddleOCR-VL-1.6, and Xiaomi-OCR-0.</p>
+<p>Use it as a router, not a judge. Score each region, choose a threshold from samples of your own documents, auto-accept what clears it, and send the rest to human review. The same scoring can pick the best candidate when several OCR models parse the same region, combining the winners in reading order. Two rules from the project's own docs are non-negotiable: set the threshold only after checking it on a small batch from the real application, and check the <code>verdict</code> field before using a score, since only <code>scored</code> means model scoring actually ran. Jev ships with its own deployment tutorial in the same repository, with Docker, SDK, vLLM, SGLang, llama.cpp, Ollama, and FlagOS guides; deploy it the same way you deployed the parser, and keep the two services' purposes separate in your head. One reads documents. The other checks the reading.</p>
+<h2>What you built</h2>
+<p>A local document-parsing pipeline with a built-in sceptic. The SDK detects layout and assembles Markdown; the 1.3B recognition model reads each region; Jev scores the results region by region. Nothing in the parse step needs a cloud OCR service, and the documents stay on the machine that runs the service. Concretely, you now have: a registered <code>minicpm-ocr</code> model on a local Ollama service at port 18499, a repeatable one-command parse that turns a PDF or image into Markdown with HTML tables and LaTeX formulas, per-page run records under <code>runs/</code> for inspection, and a vLLM configuration — with DSpark speculative decoding — for larger batches. The structured-extraction prompts in the project's recognition guide, including key-information extraction formatted as JSON with <code>###</code> for missing fields, are the next step once plain parsing is reliable: extract fields from the regions you already trust, rather than asking the model to invent structure from the whole page.</p>
+<h2>Honest limitations</h2>
+<ul>
+<li><b>The headline numbers are the project's, on the project's hardware.</b> 93.68 on Real5-OmniDocBench, 54.7 on OCRBench v2, and 1.2 pages per second were measured by OpenBMB, the throughput figure on an RTX 5090 with 1,651 images at image-level concurrency 1. Your pages, your GPU, and your concurrency will differ. Treat the numbers as a reason to test, not a promise.</li>
+<li><b>The vLLM path is demanding.</b> Linux x86_64, an NVIDIA GPU, driver 580 or newer, 40 GB of disk, and a source build measured in tens of minutes. The Ollama path is lighter, but it still assumes a GPU machine and Ollama's own driver requirements.</li>
+<li><b>Two languages are claimed.</b> Chinese and English are the primary languages. Curved pages, photographs, skewed pages, and recaptured documents are documented for those languages; other languages and document types need validation on your own samples.</li>
+<li><b>Jev needs calibration.</b> Its score is only useful with a threshold chosen on your documents, and a non-<code>scored</code> verdict must never be read as a low score. Uncalibrated, it is decoration.</li>
+<li><b>DSpark is unforgiving about matching.</b> The main and draft models must come from the same release. Mixing them is explicitly warned against, and the failure mode is wrong output, not an error message you can rely on.</li>
+<li><b>This guide was verified against the docs, not executed on a GPU.</b> The commands, flags, file sizes, and version numbers were checked against the project's tutorial, SDK API guide, Ollama deployment guide, and model cards on 31 October 2026. Run the smoke test in Step 5 on your own machine before parsing anything that matters.</li>
+</ul>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an NVIDIA GPU, or Linux?</h3><p>For the vLLM path, yes: the tutorial requires Linux x86_64 and an NVIDIA GPU, with driver 580 or newer, and its commands were verified on an RTX 5090. The Ollama path runs on the platforms Ollama supports, including macOS and Windows through its official downloads, with GPU and driver requirements set by Ollama's own documentation; the SDK layout-detection commands in this guide still use cuda:0.</p><h3>What does a low Jev score mean — is the text wrong?</h3><p>A Jev score runs from 0 to 1, and higher means the candidate is more likely correct. A low score is a routing signal, not a verdict: send that region to human review, or let Jev pick the best candidate among several parsers. Before using any score, check that the verdict is “scored” — fixed values returned for precheck, rendering, or forward-pass failures must not be read as low model scores. Pick the accept threshold from samples of your own documents.</p><h3>Does it handle languages other than Chinese and English?</h3><p>Chinese and English are the model's primary languages, and this guide only claims what the model card states. The project documents handling of scans, curved pages, photographs, skewed pages, and recaptured documents in those languages. Validate on your own document types before trusting it elsewhere.</p></section>
+
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/qwen3-8-27b-local-setup/">Qwen3.8-27B on your own hardware: the complete local setup guide</a></li><li><a href="/articles/dossier-self-hosted-job-search-tailored-resumes-tutorial/">Run your job search on your own server: hands-on with Dossier, the self-hosted resume tailor</a></li><li><a href="/articles/freellmapi-free-llm-router-tutorial/">One endpoint for every free model: hands-on with FreeLLMAPI, the self-hosted LLM router</a></li><li><a href="/articles/nemotron-35-transcribe-meetings-tutorial/">Turn meeting recordings into speaker-labelled transcripts with Nvidia&#x27;s Nemotron 3.5 Transcribe</a></li></ul></section>
+
+
+
+
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="minicpm-ocr-parse-documents-locally-tutorial"></div><div class="comments" data-comments="minicpm-ocr-parse-documents-locally-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
