@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>FLUX.1 [dev]: generate images on your own GPU — hands-on with Black Forest Labs&#x27; open-weights model — AI Frontier Post</title>
+<meta name="description" content="FLUX.1 [dev] (black-forest-labs/FLUX.1-dev) is a 12-billion-parameter open-weights image model you can run on your own GPU. This guide installs it with diffusers, generates a first image, tunes guidance and steps, and covers the faster FLUX.1 [schnell] variant — plus the hardware it really needs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/flux-1-dev-local-image-generation-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="FLUX.1 [dev]: generate images on your own GPU — hands-on with Black Forest Labs&#x27; open-weights model">
+<meta property="og:description" content="FLUX.1 [dev] (black-forest-labs/FLUX.1-dev) is a 12-billion-parameter open-weights image model you can run on your own GPU. This guide installs it with diffusers, generates a first image, tunes guidance and steps, and covers the faster FLUX.1 [schnell] variant — plus the hardware it really needs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/flux-1-dev-local-image-generation-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/flux-1-dev-local-image-generation-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-05">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="FLUX.1 [dev]: generate images on your own GPU — hands-on with Black Forest Labs&#x27; open-weights model">
+<meta name="twitter:description" content="FLUX.1 [dev] (black-forest-labs/FLUX.1-dev) is a 12-billion-parameter open-weights image model you can run on your own GPU. This guide installs it with diffusers, generates a first image, tunes guidance and steps, and covers the faster FLUX.1 [schnell] variant — plus the hardware it really needs.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/flux-1-dev-local-image-generation-hands-on-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "FLUX.1 [dev]: generate images on your own GPU \u2014 hands-on with Black Forest Labs' open-weights model", "description": "FLUX.1 [dev] (black-forest-labs/FLUX.1-dev) is a 12-billion-parameter open-weights image model you can run on your own GPU. This guide installs it with diffusers, generates a first image, tunes guidance and steps, and covers the faster FLUX.1 [schnell] variant \u2014 plus the hardware it really needs.", "datePublished": "2026-11-05", "dateModified": "2026-11-05", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/flux-1-dev-local-image-generation-hands-on-tutorial/"}, "image": ["https://aifrontierpost.com/articles/flux-1-dev-local-image-generation-hands-on-tutorial/cover.webp"], "url": "https://aifrontierpost.com/articles/flux-1-dev-local-image-generation-hands-on-tutorial/"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Can I use FLUX.1 [dev] in a commercial product?", "acceptedAnswer": {"@type": "Answer", "text": "Not under the weights' license alone. FLUX.1 [dev] is released under a Non-Commercial license, so running the model as part of a commercial product needs a license from Black Forest Labs. Images you generate can be used for personal, scientific, and commercial purposes as described in that license \u2014 read it on the model page before you rely on it. The [schnell] variant is the exception: it is Apache 2.0."}}, {"@type": "Question", "name": "How much GPU memory do I need to run FLUX.1 [dev]?", "acceptedAnswer": {"@type": "Answer", "text": "A 24GB card (RTX 4090 class) runs the model in VRAM comfortably \u2014 the bfloat16 weights alone are about 24GB. On smaller cards, enable_model_cpu_offload() trades speed for lower VRAM, sequential offload with VAE slicing and tiling goes further, and the diffusers docs show an FP8 path with optimum-quanto that fits under 16GB."}}, {"@type": "Question", "name": "FLUX.1 [dev] or FLUX.1 [schnell] \u2014 which should I use?", "acceptedAnswer": {"@type": "Answer", "text": "Use [dev] for final renders and [schnell] for iterating. [dev] is guidance-distilled and runs 50 steps at guidance_scale 3.5 for the best quality; [schnell] is timestep-distilled, needs just 4 steps at guidance_scale 0, and is Apache 2.0 licensed. Same prompt, same seed, different trade-off \u2014 that is the whole difference."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "FLUX.1 [dev]: generate images on your own GPU \u2014 hands-on with Black Forest Labs' open-weights model", "description": "FLUX.1 [dev] (black-forest-labs/FLUX.1-dev) is a 12-billion-parameter open-weights image model you can run on your own GPU. This guide installs it with diffusers, generates a first image, tunes guidance and steps, and covers the faster FLUX.1 [schnell] variant \u2014 plus the hardware it really needs.", "step": [{"@type": "HowToStep", "name": "Step 1 \u2014 accept the license and log in to Hugging Face", "text": "Accept the FLUX.1 [dev] license on the model page and log in with huggingface-cli so the gated download works."}, {"@type": "HowToStep", "name": "Step 2 \u2014 install diffusers and PyTorch", "text": "Create a virtual environment, install diffusers, and confirm your GPU is visible to PyTorch."}, {"@type": "HowToStep", "name": "Step 3 \u2014 generate your first image", "text": "Run the model card's sample code to generate a 1024\u00d71024 image of a cat holding a legible sign."}, {"@type": "HowToStep", "name": "Step 4 \u2014 tune guidance, steps, and the seed", "text": "Adjust guidance_scale, num_inference_steps, and the seed one at a time to control the output."}, {"@type": "HowToStep", "name": "Step 5 \u2014 go faster with FLUX.1 [schnell]", "text": "Switch to the timestep-distilled variant for 4-step generation while iterating on prompts."}, {"@type": "HowToStep", "name": "Step 6 \u2014 fit it on a smaller GPU", "text": "Use sequential CPU offload with VAE slicing and tiling, or the FP8 path, to run on less than 24GB."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>FLUX.1 [dev]: generate images on your own GPU — hands-on with Black Forest Labs&#x27; open-weights model</h1>
+<p class="lede">In September we compared Midjourney, GPT Image 2.5, and Flux — and Flux came out ahead on photorealistic lighting and detail. The catch: the Flux that won that comparison, Flux 2, only runs through an API, and Flux 3, launched in October, is API-only too, with open weights promised in the coming weeks. FLUX.1 [dev] is the exception: a 12-billion-parameter model from Black Forest Labs with open weights you can download and run on your own GPU, free, with no per-image bill. This guide runs it end to end with Hugging Face diffusers — install, first image, tuning, the fast variant, and the low-VRAM path.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · November 5, 2026 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> FLUX.1 [dev] is Black Forest Labs' 12-billion-parameter open-weights image model, and it runs on your own GPU with Hugging Face diffusers. Install diffusers, accept the model's license on Hugging Face, and generate 1024×1024 images with the model card's sample code. A 24GB GPU runs it in VRAM; CPU offload and an FP8 path cover smaller cards.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> FLUX.1 [dev], by Black Forest Labs — <code>black-forest-labs/FLUX.1-dev</code> on Hugging Face. The official inference repo is <code>black-forest-labs/flux</code> (26,042 GitHub stars, Apache-2.0 license).</li><li><b>What:</b> a 12-billion-parameter rectified flow transformer that generates images from text descriptions. Open weights under the FLUX.1 [dev] Non-Commercial License.</li><li><b>Defaults:</b> the model card's sample code generates a 1024×1024 image at <code>guidance_scale=3.5</code>, 50 inference steps, <code>max_sequence_length=512</code>, seed 0.</li><li><b>Hardware:</b> about 24GB of bfloat16 weights — a 24GB GPU (RTX 4090 class) runs it in VRAM. <code>enable_model_cpu_offload()</code> trades speed for lower VRAM, and the diffusers docs show an FP8 path under 16GB.</li><li><b>Fast variant:</b> FLUX.1 [schnell] is timestep-distilled, Apache 2.0, and needs just 4 steps at <code>guidance_scale=0</code> and <code>max_sequence_length=256</code>.</li><li><b>Status:</b> Flux 2 and Flux 3 are API products for now — Flux 3 launched October 2 with open weights promised in the coming weeks. FLUX.1 [dev] is the open-weights Flux you can run locally today.</li></ul>
+<p>If you read our <a href="/articles/ai-image-tools-2026-compared/">September comparison of Midjourney, GPT Image 2.5, and Flux</a>, you know Flux won on photorealistic lighting and detail — this is the hands-on sequel: run the winning model on your own machine. Six steps: accept the license, install diffusers, generate a first image with the model card's own code, tune the three knobs that matter, switch to the fast [schnell] variant for iteration, and squeeze the model onto a smaller GPU. Nothing here needs an API key or a subscription — the only account is a free Hugging Face login, and the only bill is electricity.</p>
+<h2>What you'll need</h2>
+<ul>
+<li>A machine with Python 3.10 or newer and an NVIDIA GPU. A 24GB card (RTX 4090 class) runs the model in VRAM comfortably; smaller cards work with CPU offload in Step 6, slower.</li>
+<li>About 25GB of free disk for the model weights, plus room for PyTorch and the two text encoders.</li>
+<li>A free Hugging Face account. FLUX.1 [dev] is gated: you accept its Non-Commercial license on the model page before the download works.</li>
+</ul>
+<h2>Step 1: Accept the license and log in to Hugging Face</h2>
+<p>Open <a href="https://huggingface.co/black-forest-labs/FLUX.1-dev">the FLUX.1 [dev] model page</a>, sign in, and accept the license. The weights are gated behind that click — the download below fails without it. Then log in from your terminal so the download can use your account:</p>
+<pre><code>huggingface-cli login</code></pre>
+<p>Paste a read token from your Hugging Face settings when prompted. If you would rather not store a login, set the <code>HF_TOKEN</code> environment variable to the same token instead — either way, the token only ever goes to Hugging Face.</p>
+<h2>Step 2: Install diffusers and PyTorch</h2>
+<p>Make a virtual environment and install diffusers. The model card's own instructions are one line:</p>
+<pre><code>python3 -m venv flux-env
+source flux-env/bin/activate
+pip install -U diffusers</code></pre>
+<p>That pulls in PyTorch, transformers, and accelerate as dependencies — no separate install needed. Confirm the install and that your GPU is visible:</p>
+<pre><code>python -c "import diffusers, torch; print(diffusers.__version__, torch.__version__, torch.cuda.is_available())"</code></pre>
+<p>You want <code>True</code> at the end. If it prints <code>False</code>, your PyTorch build has no CUDA support — install the CUDA build from PyTorch's own install page for your driver version and try again.</p>
+<h2>Step 3: Generate your first image</h2>
+<p>This is the model card's sample code, unchanged. It loads the pipeline in bfloat16, offloads to CPU where needed, and generates a 1024×1024 image from a prompt:</p>
+<pre><code>import torch
+from diffusers import FluxPipeline
+
+pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16)
+
+pipe.enable_model_cpu_offload() #save some VRAM by offloading the model to CPU. Remove this if you have enough GPU power
+
+prompt = "A cat holding a sign that says hello world"
+image = pipe(
+    prompt,
+    height=1024,
+    width=1024,
+    guidance_scale=3.5,
+    num_inference_steps=50,
+    max_sequence_length=512,
+    generator=torch.Generator("cpu").manual_seed(0)
+).images[0]
+
+image.save("flux-dev.png")</code></pre>
+<p>Save it as <code>flux.py</code> and run <code>python flux.py</code>. The first run downloads roughly 24GB of weights, so it takes a while; later runs reuse the cache. Generation itself takes a few minutes on an offloaded setup, well under a minute with the model fully in VRAM. The result is <code>flux-dev.png</code> — and the prompt is a deliberate test: a cat holding a sign with legible text. Readable in-image text is one of the things Flux is known for, and it is the fastest way to tell a good run from a bad one.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/flux-1-dev-local-image-generation-hands-on-tutorial/img2.webp" alt="Colourful buttons on a wooden floor spelling out the word DEV, a FLUX.1 sample image showing legible in-image text"><figcaption>Buttons spelling “DEV” on a wooden floor. Legible in-image text is one of FLUX.1's signature strengths — the model card's own sample grid shows it off. Sample outputs: Black Forest Labs.</figcaption></figure>
+<h2>Step 4: Tune guidance, steps, and the seed</h2>
+<p>Three knobs control the output, and the model card's values are the sane defaults:</p>
+<ul>
+<li><b><code>guidance_scale</code> (3.5):</b> how literally the image follows the prompt. Raise it and the image sticks closer to your words; lower it and the model takes more freedom.</li>
+<li><b><code>num_inference_steps</code> (50):</b> how many refinement passes the model makes. The card's 50 is the quality default — fewer steps are faster and rougher.</li>
+<li><b><code>generator=torch.Generator("cpu").manual_seed(0)</code>:</b> the seed. Same prompt plus same seed gives the same image, every time. Change the number to explore variations of the same prompt.</li>
+</ul>
+<p>Two more worth knowing: <code>max_sequence_length</code> caps how much of a long prompt the text encoder reads (512 by default), and <code>height</code>/<code>width</code> set the aspect — the diffusers docs use 768×1360 for a landscape frame, for example. Change one knob at a time and keep the seed fixed, or you will not know which change did what. If legible text inside images is your main interest rather than general generation, <a href="/articles/moss-image-text-rendering-layout-hands-on-tutorial/">our hands-on guide to MOSS-Image</a> covers a model built specifically for text rendering and layout.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/flux-1-dev-local-image-generation-hands-on-tutorial/img3.webp" alt="A close-up of a yellow crocheted toy duck with visible yarn texture, a FLUX.1 sample image showing fine material detail"><figcaption>A crocheted duck, down to the yarn. The 12-billion-parameter model holds fine material texture well at 1024×1024 — try a close-up prompt of your own and compare. Sample outputs: Black Forest Labs.</figcaption></figure>
+<h2>Step 5: Go faster with FLUX.1 [schnell]</h2>
+<p>Fifty steps is slow when you are iterating on a prompt. FLUX.1 [schnell] is the timestep-distilled sibling: same family, Apache 2.0 license, and it needs just 4 steps. The diffusers docs give its exact recipe — <code>guidance_scale</code> must be 0 and <code>max_sequence_length</code> no more than 256:</p>
+<pre><code>import torch
+from diffusers import FluxPipeline
+
+pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-schnell", torch_dtype=torch.bfloat16)
+pipe.enable_model_cpu_offload()
+
+prompt = "A cat holding a sign that says hello world"
+image = pipe(
+    prompt,
+    height=1024,
+    width=1024,
+    guidance_scale=0.0,
+    num_inference_steps=4,
+    max_sequence_length=256,
+    generator=torch.Generator("cpu").manual_seed(0)
+).images[0]
+
+image.save("flux-schnell.png")</code></pre>
+<p>Use [schnell] for prompt iteration and [dev] for the final render — that is the practical split. It is a separate download of roughly the same size, so budget the disk.</p>
+<h2>Step 6: Fit it on a smaller GPU</h2>
+<p>If your card has less than 24GB, do not try to load the whole pipeline into VRAM. Two moves from the diffusers docs cover it. First, keep <code>enable_model_cpu_offload()</code> from Step 3 — it is already in the code. For tighter cards, switch to sequential offload and let the VAE work in tiles:</p>
+<pre><code>pipe.enable_sequential_cpu_offload()
+pipe.vae.enable_slicing()
+pipe.vae.enable_tiling()</code></pre>
+<p>That is the documented low-VRAM path: slower, but it runs. The docs also show an FP8 path using the <code>optimum-quanto</code> library that fits the model under 16GB. Expect minutes per image on these paths, not seconds — the model is 12 billion parameters, and there is no free lunch, only trade-offs between memory, speed, and quality.</p>
+<h2>What you built</h2>
+<p>A local image generator: a prompt in, a PNG out, no account beyond Hugging Face, no per-image bill, and reproducible results from fixed seeds. You have the quality path ([dev], 50 steps), the fast path ([schnell], 4 steps), and the low-VRAM path (offload plus tiling) — the same three choices you will reach for in every local image project after this one.</p>
+<h2>Honest limitations</h2>
+<p>Four things to know before you build on this. First, the license: the weights are under a Non-Commercial license, so running the model inside a commercial product needs a license from Black Forest Labs — check the license on the model page before you ship anything. Second, it is heavy: a ~24GB download and minutes per image on offloaded hardware. Third, this is not Flux 2 or Flux 3 — their multi-step region editing and 4K outputs are API-only for now; if you need those, the API is the only route, and <a href="/articles/flux-3-image-black-forest-labs-launch/">Flux 3's launch</a> is where we covered them. Fourth, prompt following is not perfect — the model card itself warns outputs may not match the prompt, so iterate with seeds rather than trusting the first render. And the usual model-card caveat applies: as a statistical model trained on internet-scale data, it can amplify existing biases.</p>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Can I use FLUX.1 [dev] in a commercial product?</h3><p>Not under the weights&#x27; license alone. FLUX.1 [dev] is released under a Non-Commercial license, so running the model as part of a commercial product needs a license from Black Forest Labs. Images you generate can be used for personal, scientific, and commercial purposes as described in that license — read it on the model page before you rely on it. The [schnell] variant is the exception: it is Apache 2.0.</p><h3>How much GPU memory do I need to run FLUX.1 [dev]?</h3><p>A 24GB card (RTX 4090 class) runs the model in VRAM comfortably — the bfloat16 weights alone are about 24GB. On smaller cards, enable_model_cpu_offload() trades speed for lower VRAM, sequential offload with VAE slicing and tiling goes further, and the diffusers docs show an FP8 path with optimum-quanto that fits under 16GB.</p><h3>FLUX.1 [dev] or FLUX.1 [schnell] — which should I use?</h3><p>Use [dev] for final renders and [schnell] for iterating. [dev] is guidance-distilled and runs 50 steps at guidance_scale 3.5 for the best quality; [schnell] is timestep-distilled, needs just 4 steps at guidance_scale 0, and is Apache 2.0 licensed. Same prompt, same seed, different trade-off — that is the whole difference.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/memt-1-0-memory-native-model-tutorial/">Give your chatbot a memory that outlives the chat: hands-on with MemT-1.0</a></li><li><a href="/articles/polystra-large-ai-models-own-pc-hands-on-tutorial/">Run huge open models on your own PC: a hands-on guide to PolyStrata</a></li><li><a href="/articles/frametell-ai-explainer-videos-director-agent-tutorial/">Turn one sentence into an explainer video: a hands-on guide to Frametell&#x27;s director agent</a></li><li><a href="/articles/moss-image-text-rendering-layout-hands-on-tutorial/">Render text-perfect images on your own GPU: a hands-on guide to MOSS-Image</a></li></ul></section>
+<div class="post-engage"><div class="reactions" data-reactions="flux-1-dev-local-image-generation-hands-on-tutorial"></div><div class="comments" data-comments="flux-1-dev-local-image-generation-hands-on-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
