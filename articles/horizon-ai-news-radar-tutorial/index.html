@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Horizon hands-on: your own AI news radar, from install to your first daily briefing — AI Frontier Post</title>
+<meta name="description" content="Horizon is a self-hosted Python tool that pulls Hacker News, RSS, Reddit and GitHub into one place, scores every item with a model you choose, and writes a ranked daily briefing. This guide installs it, wires up a model, and produces a real briefing — every command verified.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/horizon-ai-news-radar-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Horizon hands-on: your own AI news radar, from install to your first daily briefing">
+<meta property="og:description" content="Horizon is a self-hosted Python tool that pulls Hacker News, RSS, Reddit and GitHub into one place, scores every item with a model you choose, and writes a ranked daily briefing. This guide installs it, wires up a model, and produces a real briefing — every command verified.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/horizon-ai-news-radar-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/horizon-ai-news-radar-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-07">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Horizon hands-on: your own AI news radar, from install to your first daily briefing">
+<meta name="twitter:description" content="Horizon is a self-hosted Python tool that pulls Hacker News, RSS, Reddit and GitHub into one place, scores every item with a model you choose, and writes a ranked daily briefing. This guide installs it, wires up a model, and produces a real briefing — every command verified.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/horizon-ai-news-radar-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Horizon hands-on: your own AI news radar, from install to your first daily briefing", "description": "Horizon is a self-hosted Python tool that pulls Hacker News, RSS, Reddit and GitHub into one place, scores every item with a model you choose, and writes a ranked daily briefing. This guide installs it, wires up a model, and produces a real briefing — every command verified.", "datePublished": "2026-11-07", "dateModified": "2026-11-07", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/horizon-ai-news-radar-tutorial/"}, "image": "https://aifrontierpost.com/articles/horizon-ai-news-radar-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Horizon hands-on: your own AI news radar, from install to your first daily briefing", "description": "Horizon is a self-hosted Python tool that pulls Hacker News, RSS, Reddit and GitHub into one place, scores every item with a model you choose, and writes a ranked daily briefing. This guide installs it, wires up a model, and produces a real briefing \u2014 every command verified.", "step": [{"@type": "HowToStep", "name": "Install Horizon", "text": "Clone Thysrael/Horizon and install with uv sync, or pip install -e .; verify with horizon --help."}, {"@type": "HowToStep", "name": "Pick a model and store the key", "text": "Put the provider API key in .env and point ai.api_key_env at the variable name, or use Ollama locally with no key."}, {"@type": "HowToStep", "name": "Tell it what to read", "text": "Configure sources (Hacker News, RSS), a profile, and a score threshold in data/config.json."}, {"@type": "HowToStep", "name": "Run your first briefing", "text": "Run uv run horizon --hours 24 and confirm the briefing lands in data/summaries/."}, {"@type": "HowToStep", "name": "Read the briefing", "text": "Open the dated Markdown file: ranked list with scores, then summary, background, impact, and discussion per item."}, {"@type": "HowToStep", "name": "Make it yours", "text": "Adjust profiles, thresholds, digest caps, and sources; add GitHub, Reddit, or Telegram."}, {"@type": "HowToStep", "name": "Automate it", "text": "Enable the shipped GitHub Actions daily workflow or a local cron line so the briefing arrives every morning."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a paid API key to use Horizon?", "acceptedAnswer": {"@type": "Answer", "text": "No \u2014 but you need a model from somewhere. Ollama runs a local model with no key at all, and ChatGPT subscribers can use the openai-chatgpt provider with their plan instead of an API key. If you use a hosted provider (OpenAI, Anthropic, Gemini, DeepSeek, MiniMax, DashScope, Doubao, Azure), that provider's key goes in .env. The docs' throttling guidance is written for free-tier models capped around 15 requests a minute \u2014 set throttle_sec to 4.5 to stay under the cap."}}, {"@type": "Question", "name": "How much does a daily briefing cost?", "acceptedAnswer": {"@type": "Answer", "text": "Roughly three short model calls per item \u2014 one to score, two to enrich \u2014 plus one dedup call per run, so a 20-item day is about sixty calls. With a cheap model that is cents per day; the exact figure depends on the model and how much content each item carries. Horizon prints a per-provider token-usage summary at the end of every run, so you can measure it on your own sources instead of trusting an estimate."}}, {"@type": "Question", "name": "Why did my briefing come back empty?", "acceptedAnswer": {"@type": "Answer", "text": "Horizon writes a file either way. The usual causes, in order: the --hours window covered a period with nothing new (an RSS feed whose newest entry is 30 hours old yields zero items in a 24-hour window), the profile threshold is higher than anything scored, or the model was unreachable \u2014 and a model outage does not fail the run, it just leaves every item unscored, so check the log for APIConnectionError before assuming a quiet news day."}}, {"@type": "Question", "name": "Can it read X / Twitter?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, through an Apify token set in .env; the docs put the free tier at $5 a month of credit, roughly 20,000 tweets. Without the token the source is skipped. Hacker News, RSS, Reddit, Telegram, and GitHub need no token at all, though a GitHub token raises the rate limit from 60 to 5,000 requests an hour."}}, {"@type": "Question", "name": "How is this different from asking ChatGPT for a morning briefing?", "acceptedAnswer": {"@type": "Answer", "text": "Ownership and auditability. Your sources, your scoring rubric, your archive, your choice of model \u2014 and the output is a Markdown file you can grep, version, and publish, not a chat transcript. The trade-off is setup: you maintain the config and the model key instead of outsourcing both to a chatbot."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Horizon hands-on: your own AI news radar, from install to your first daily briefing</h1>
+<p class="lede">Horizon is a self-hosted Python tool that pulls Hacker News, RSS, Reddit and GitHub into one place, scores every item with a model you choose, and writes a ranked daily briefing. This guide installs it, wires up a model, and produces a real briefing — every command verified.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 7, 2026 · 9 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Horizon (Thysrael/Horizon, MIT) is a self-hosted Python tool that pulls Hacker News, RSS, Reddit, Telegram, GitHub, and more into one place, scores every item 0–10 with a model you choose, and writes a ranked daily briefing as Markdown. It had 13,017 stars on November 7, 2026, up from about 12,300 on November 4. This guide installs it with uv sync, wires up a model, and runs a real briefing — four Hacker News items fetched, scored, enriched, and rendered in about eight seconds.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> Horizon (Thysrael/Horizon), an AI-powered news radar, MIT licensed, created February 2026.</li><li><b>What:</b> Fetches from Hacker News, RSS, Reddit, Telegram, X, GitHub, OpenBB, OSS Insight, GDELT, and Google News; scores each item 0–10 against a profile rubric; enriches survivors with summary, background, impact, and community-discussion blocks; writes a dated Markdown briefing.</li><li><b>When:</b> Verified November 7, 2026: commit 5dcbfbe, version 0.1.0, Python 3.12.3, uv sync and pip installs both working, full pipeline run exit 0 in 8.4s, briefing written to data/summaries/horizon-2026-11-07-en.md.</li><li><b>Requirement:</b> Python 3.11+ and about 300 MB disk. No GPU, no model download, no account with the project; a model API key, a ChatGPT plan, or a local Ollama model is needed for scoring.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/horizon-ai-news-radar-tutorial/cover.webp" alt="A laptop on a desk at dawn, glowing streams from news feed icons flowing into a single ranked briefing on its screen"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<p>Every morning the same pile is waiting: Hacker News, a dozen RSS feeds, a few subreddits, GitHub releases. Reading all of it takes an hour; skimming it takes twenty minutes and still leaves the feeling that the one important item slipped past. Horizon is a self-hosted Python tool that does the triage for you. It pulls Hacker News, RSS, Reddit, Telegram, GitHub, and more into one place, scores every item 0–10 with a model you choose, and writes a ranked daily briefing as plain Markdown — with a short summary, background, likely impact, and the best of the community discussion attached to each item that makes the cut.</p>
+<p>The project is <a href="https://github.com/Thysrael/Horizon" rel="nofollow">Thysrael/Horizon</a>, and it is having a week: about 12,300 stars on November 4 and over 13,000 by November 7, a spot on GitHub's weekly trending list, 1,866 forks, and 346 commits since February 2026. The pitch is specific — profiles that score different kinds of content by different rubrics, enrichment that adds context instead of just summarizing, and output you own as Markdown files rather than a feed locked inside someone else's app. This guide installs it, wires up a model, and produces a real briefing — every command below was run against the repository as it stood on November 7, 2026.</p>
+<h2 id="what-you-need">What you need<a class="anchor" href="#what-you-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or newer.</strong> The project declares <code>requires-python = "&gt;=3.11"</code>. The verification run used Python 3.12.3.</li>
+<li><strong>Git and uv</strong> (or pip as a fallback). The README's install path is <code>uv sync</code>; both paths are verified below.</li>
+<li><strong>A model to do the scoring.</strong> Horizon talks to Anthropic, OpenAI, Gemini, DeepSeek, MiniMax, DashScope, Doubao, Azure OpenAI, and Ollama — or to a ChatGPT plan through its <code>openai-chatgpt</code> provider, which uses saved OAuth credentials instead of an API key. You need one of these; the scoring is the whole product. A local Ollama model works with no key at all.</li>
+<li><strong>About 300 MB of disk</strong> for the checkout plus dependencies. No GPU, no model download, no account with the project.</li>
+<li><strong>Linux or macOS</strong> for the commands below. Windows works through the same Python install; the Docker path in the README is the alternative there.</li></ul>
+<p>The license is MIT. Horizon keeps its state — fetched items, history, and generated briefings — in a <code>data/</code> directory inside the checkout, and it never sends anything anywhere except to the model provider you configure and the sources you list.</p>
+<h2 id="step-1-install">Step 1: Install<a class="anchor" href="#step-1-install" aria-label="Link to section">#</a></h2>
+<p>Clone the repository and install with uv, exactly as the README prescribes:</p>
+<pre><code class="language-bash">git clone https://github.com/Thysrael/Horizon.git
+cd Horizon
+uv sync</code></pre>
+<p><code>uv sync</code> resolves the lockfile and builds a <code>.venv</code> in the project directory. In this run it installed the full dependency set — httpx, feedparser, the Anthropic and OpenAI SDKs, trafilatura, and the rest — without errors. If you would rather not install uv, the pip path works too:</p>
+<pre><code class="language-bash">python3 -m venv venv
+./venv/bin/pip install -e .
+./venv/bin/horizon --help</code></pre>
+<p>Either way, confirm the entry point answers:</p>
+<pre><code class="language-bash">uv run horizon --help</code></pre>
+<pre><code>  _    _            _
+ | |  | |          (_)
+ | |__| | ___  _ __ _ ___  ___  _ __
+ |  __  |/ _ \| '__| |_  / / _ \| '_ \
+ | |  | | (_) | |  | |/ / | (_) | | | |
+ |_|  |_|\___/|_|  |_/___| \___/|_| |_|
+
+  AI-Driven Information Aggregation System
+
+usage: horizon [-h] [--hours HOURS] [-d PATH] [-c PATH] [-l LEVEL]
+
+Horizon - AI-Driven Information Aggregation System
+
+options:
+  -h, --help            show this help message and exit
+  --hours HOURS         Force fetch from last N hours
+  -d PATH, --data-dir PATH
+                        Path to the data directory (default: 'data')
+  -c PATH, --config PATH
+                        Path to config file (default: &lt;data-dir&gt;/config.json)
+  -l LEVEL, --log-level LEVEL
+                        Logging level (default: WARNING)</code></pre>
+<p>Four flags is the whole CLI. <code>--hours</code> sets how far back to fetch, <code>-d</code> and <code>-c</code> relocate the data directory and config file, and <code>-l</code> controls log verbosity. There are companion entry points — <code>horizon-wizard</code> for interactive setup, <code>horizon-chatgpt</code> for the ChatGPT-plan provider, <code>horizon-mcp</code> for the MCP server — but the core loop is the single <code>horizon</code> command.</p>
+<h2 id="step-2-pick-a-model">Step 2: Pick a model and put the key in .env<a class="anchor" href="#step-2-pick-a-model" aria-label="Link to section">#</a></h2>
+<p>Horizon's one rule about secrets is easy to get wrong: <code>ai.api_key_env</code> is the <em>name</em> of an environment variable, never the key itself. Put the key in <code>.env</code> in the repository root, then point the config at the variable name. For OpenAI:</p>
+<pre><code class="language-bash">OPENAI_API_KEY=sk-your-key-here</code></pre>
+<p>The same pattern holds for every provider — <code>ANTHROPIC_API_KEY</code>, <code>GOOGLE_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, <code>MINIMAX_API_KEY</code>, <code>DASHSCOPE_API_KEY</code>, <code>DOUBAO_API_KEY</code>, <code>AZURE_OPENAI_API_KEY</code>. If you put a value that looks like a key into <code>api_key_env</code> itself, Horizon refuses to start and tells you so.</p>
+<p>The no-key option is Ollama. Point the provider at a local model and leave the key empty:</p>
+<pre><code class="language-json">{
+  "ai": {
+    "provider": "ollama",
+    "model": "llama3.1",
+    "api_key_env": "",
+    "throttle_sec": 0
+  }
+}</code></pre>
+<p>Omit <code>base_url</code> and Horizon uses Ollama's OpenAI-compatible endpoint at <code>http://localhost:11434/v1</code>; set it explicitly for a remote server. The docs' own example uses <code>llama3.1</code> as the model. A local model is slower and weaker at scoring than a frontier API model, but it costs nothing per run and keeps everything on your machine. A third option needs no API key either: eligible ChatGPT subscribers can run <code>uv run horizon-chatgpt login</code> and select a model from their plan, then use the <code>openai-chatgpt</code> provider.</p>
+<p>One setting matters if your model has a strict per-minute cap: <code>throttle_sec</code> pauses between scored items. The docs suggest <code>4.5</code> as a starting point for free-tier models capped around 15 requests per minute, and <code>0</code> when you have headroom. Scoring runs one item at a time by default; <code>analysis_concurrency</code> and <code>enrichment_concurrency</code> raise throughput if your endpoint allows it.</p>
+<h2 id="step-3-tell-it-what-to-read">Step 3: Tell it what to read<a class="anchor" href="#step-3-tell-it-what-to-read" aria-label="Link to section">#</a></h2>
+<p>Copy the shipped example and trim it to two sources for the first run:</p>
+<pre><code class="language-bash">cp data/config.example.json data/config.json</code></pre>
+<p>Then replace the <code>ai</code> and <code>sources</code> sections with a minimal config. This is the exact config the verification run used, with an OpenAI-compatible provider:</p>
+<pre><code class="language-json">{
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4",
+    "api_key_env": "OPENAI_API_KEY",
+    "temperature": 0.3,
+    "max_tokens": 4096,
+    "throttle_sec": 0,
+    "analysis_concurrency": 1,
+    "enrichment_concurrency": 1
+  },
+  "processing": {
+    "default_profile": "tech-news",
+    "profile_settings": {
+      "tech-news": {
+        "threshold": 7.0,
+        "topic_dedup": true
+      }
+    },
+    "profiles_dir": "profiles"
+  },
+  "sources": {
+    "hackernews": {
+      "enabled": true,
+      "fetch_top_stories": 5,
+      "min_score": 100,
+      "profile": "tech-news"
+    },
+    "rss": [
+      {
+        "name": "Simon Willison",
+        "url": "https://simonwillison.net/atom/everything/",
+        "enabled": true,
+        "category": "ai-tools",
+        "profile": "tech-news"
+      }
+    ]
+  }
+}</code></pre>
+<p>Three things in this config do the real work. The <code>profile</code> on each source routes items straight to the <code>tech-news</code> profile — without it, Horizon asks the model to classify each item into a profile first. The <code>threshold</code> of 7.0 is the cut line: the tech-news rubric scores 9–10 for groundbreaking work, 7–8 for high-value developments, 5–6 for interesting but not urgent items, 3–4 for routine updates, and 0–2 for noise, and only items at or above the threshold reach the briefing. And <code>topic_dedup</code> merges items covering the same event so one story does not occupy three slots.</p>
+<p>Run Horizon from the repository root. That matters: the profiles live in <code>profiles/</code> next to the code, and the loader resolves that path from your working directory. Running from anywhere else fails with <code>No profiles found</code>. The same applies to <code>.env</code> — it is loaded from the directory you launch from.</p>
+<h2 id="step-4-run-your-first-briefing">Step 4: Run your first briefing<a class="anchor" href="#step-4-run-your-first-briefing" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">uv run horizon --hours 24</code></pre>
+<p>The run fetches, scores, dedupes, enriches, and renders in one pass. Here is the console output of the verification run, verbatim except for the local data path:</p>
+<pre><code>🌅 Horizon - Starting aggregation...
+
+📅 Fetching content since: 2026-11-06 23:30:33
+
+🔍 Fetching from Hacker News...
+🔍 Fetching from RSS Feeds...
+🔍 Fetching from Reddit...
+   Found 0 items from Reddit
+🔍 Fetching from Telegram...
+   Found 0 items from Telegram
+   Found 0 items from RSS Feeds
+   Found 4 items from Hacker News
+📥 Fetched 4 items from all sources
+🤖 Analyzing content with AI...
+🤖 Analyzed 4 items with AI
+⭐️ Selected 4 items with profile filters
+📚 Enriching with background knowledge...
+   Enriched 4/4 items
+
+💾 Saved EN summary to:
+data/summaries/horizon-2026-11-07-en.md
+
+📄 Copied EN summary to GitHub Pages:
+docs/_posts/2026-11-07-summary-en.md
+
+✅ Horizon completed successfully!</code></pre>
+<p>Two details in that output deserve attention. First, the RSS feed returned zero items — not because the feed failed (it answered HTTP 200) but because its newest entry was about 30 hours old and the <code>--hours 24</code> window only covers the last day. The window is a filter, not a failure mode. Second, the run ends with a token-usage summary broken down by provider, so the cost of a briefing is visible rather than a surprise on an invoice. A run costs roughly three model calls per item — one to score, two to enrich — plus one dedup call, so a 20-item day is on the order of sixty short calls.</p>
+<h2 id="step-5-read-the-briefing">Step 5: Read the briefing<a class="anchor" href="#step-5-read-the-briefing" aria-label="Link to section">#</a></h2>
+<p>Open <code>data/summaries/horizon-2026-11-07-en.md</code>. The file opens with a one-line count, then a ranked list with each item's score, then the full entries grouped by profile. The verification run's file began like this:</p>
+<pre><code class="language-markdown"># Horizon Daily - 2026-11-07
+
+&gt; From 4 items, 4 important content pieces were selected
+
+---
+
+**Technology News**
+1. [The end of Microsoft Research's AI Frontiers group](#item-tech-news-1) ⭐️ 8.0/10
+2. [Show HN: Coldframe, a honeypot that poses as a supermarket fridge controller](#item-tech-news-2) ⭐️ 8.0/10
+3. [What I run on my $10 USD OpenStick homelab](#item-tech-news-3) ⭐️ 8.0/10
+4. [Apple's grey list: Words and phrases your iPhone won't help you spell](#item-tech-news-4) ⭐️ 8.0/10</code></pre>
+<p>Each entry then carries four blocks defined by the tech-news profile: a two-to-four-sentence summary that leads with what actually changed, a background block explaining the prerequisite context, an impact block stating one concrete consequence, and a community-discussion block distilling the best of the comments — plus the source, author, timestamp, discussion link, and tags. That is the difference between Horizon and a prettier RSS reader: the briefing is not a list of links, it is a list of verdicts with the reasoning attached. The project's own README shows the same structure on a real day's output, with scores from 9.0 down to 7.0:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/horizon-ai-news-radar-tutorial/img2.webp" alt="A ranked daily briefing listing sixteen stories with orange score badges from 9.0 down to 7.0"><figcaption>Horizon's ranked daily briefing, from the project's README (Thysrael/Horizon, MIT). Scores are the model's 0–10 verdicts, not click counts.</figcaption></figure>
+<p>And a single enriched item reads like a short reported piece rather than a summary — summary first, then background, references, and a discussion section that attributes opinions instead of presenting them as fact:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/horizon-ai-news-radar-tutorial/img3.webp" alt="One enriched briefing item with a title, a 7.0 score badge, a summary paragraph, a source line, and a Background section"><figcaption>One enriched item from the project's README example: summary, source line, background, and references. The discussion block follows below the crop.</figcaption></figure>
+<p>The same run also copies the briefing into <code>docs/_posts/</code>, which is the input for the optional GitHub Pages site — the project publishes its own daily briefings that way. If you run with a second language configured, a <code>-zh</code> file is generated alongside the <code>-en</code> one.</p>
+<h2 id="step-6-make-it-yours">Step 6: Make it yours<a class="anchor" href="#step-6-make-it-yours" aria-label="Link to section">#</a></h2>
+<p>The default config is a starting point, not the product. Four profiles ship with the repository: <code>tech-news</code> for events and context, <code>tech-blog</code> for engineering deep dives with background and takeaways, <code>finance-news</code> for market-moving items, and <code>ai-creator</code> for material aimed at people who make things with AI. Each profile is a folder under <code>profiles/</code> with its own matching prompt, scoring rubric, and enrichment blocks — editing <code>profiles/tech-news/analysis.md</code> changes what the model rewards, no Python required.</p>
+<p>Three adjustments cover most real setups. First, lower the threshold if your briefing comes back thin: a <code>tech-news</code> threshold of 6.0 instead of 7.0 admits the solid-but-not-urgent items. Second, cap the digest so one busy topic cannot crowd out the rest — the README's digest section sets <code>max_items</code> and per-category limits, for example five AI items and five finance items per day. Third, add sources. The full list is Hacker News, RSS/Atom, Reddit, Telegram, X, GitHub user events and repo releases, OpenBB financial news, OSS Insight, GDELT, and Google News. GitHub works without a token at 60 requests an hour and 5,000 with one; X needs an Apify token, whose free tier the docs put at $5 a month of credit, roughly 20,000 tweets.</p>
+<p>Two more capabilities are worth knowing before you invest in the setup. Horizon can run as an MCP server (<code>horizon-mcp</code>), so an AI assistant can configure sources, customize profiles, and trigger runs for you — the repository even ships an agent skill for it (<code>npx skills add Thysrael/Horizon --skill horizon -g</code>). And the enrichment blocks can call tools: the <code>background</code> block may run a web search or a history search over your earlier briefings, so a follow-up story can cite what your own digest said about the previous development.</p>
+<h2 id="step-7-automate-it">Step 7: Automate it<a class="anchor" href="#step-7-automate-it" aria-label="Link to section">#</a></h2>
+<p>A briefing you have to remember to run is a briefing you will stop running. The repository ships a disabled GitHub Actions workflow at <code>.github/workflows/daily-summary.yml.disabled</code>: it checks out the code, installs Python 3.12 and uv 0.11.26, runs <code>uv sync</code>, copies <code>data/config.github.json</code> over <code>data/config.json</code>, runs <code>uv run horizon --hours 24</code> with API keys from repository secrets, and publishes <code>docs/</code> to the <code>gh-pages</code> branch. To use it, fill in <code>data/config.github.json</code> with your sources and provider, add the matching secrets, and rename the file to <code>daily-summary.yml</code>. The default schedule is <code>0 23 * * *</code> UTC with a manual trigger enabled.</p>
+<p>If you would rather keep it on your own machine, a cron line does the same job without GitHub:</p>
+<pre><code class="language-bash">0 7 * * * cd /home/you/Horizon &amp;&amp; uv run horizon --hours 24 &gt;&gt; ~/horizon.log 2&gt;&amp;1</code></pre>
+<p>Either way, the briefing lands in <code>data/summaries/</code> every morning. The history search enrichment reads those files back, so the archive is not just output — it is the memory the next briefing reasons over.</p>
+<h2 id="when-to-use-horizon">When to use Horizon — and when not to<a class="anchor" href="#when-to-use-horizon" aria-label="Link to section">#</a></h2>
+<p>Horizon earns its keep when you follow many sources and want a defensible shortlist rather than another inbox. Against a plain RSS reader, the difference is the scoring and enrichment: the reader shows you everything; Horizon shows you the four things worth your time and tells you why. Against asking ChatGPT or Claude for a morning briefing, the difference is ownership: your sources, your rubric, your archive, your choice of model — and a Markdown file you can grep, unlike a chat transcript. Against a hosted aggregator, the difference is that nothing about your reading habits leaves your machine except the scoring calls.</p>
+<p>It is the wrong tool in three cases. If you only follow two or three feeds, a reader is faster and the scoring adds nothing. If you need real-time alerts, a daily batch is the wrong shape — Horizon is a digest, not a pager. And if you cannot give it a competent model, do not expect much: the whole pipeline is one scoring call and two enrichment calls per item, so a weak model produces weak verdicts, and a local model small enough to run on a laptop will score noticeably worse than a frontier API model. The honest test is a week of briefings against your own judgment; the threshold and the profile rubric are the dials, and both are one edit away.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<ul><li><strong>The briefing is empty.</strong> Horizon writes a file either way. If it says no items met the threshold, check three things in order: the <code>--hours</code> window (a quiet feed with nothing new in 24 hours yields zero items, as the RSS feed did in the verification run), the profile threshold, and whether the model is actually reachable. A model outage does not fail the run — the verification run against an unreachable local endpoint still exited 0 with an empty briefing — so check the log for <code>APIConnectionError</code> before assuming a quiet news day.</li>
+<li><strong><code>No profiles found</code> on startup.</strong> You launched from outside the repository root. <code>cd</code> into the checkout, or set <code>processing.profiles_dir</code> to the absolute path of its <code>profiles/</code> folder.</li>
+<li><strong><code>Missing API key</code> on startup.</strong> You put the key itself in <code>api_key_env</code>, or the variable is not in <code>.env</code>. The field holds a variable <em>name</em>; the secret lives in <code>.env</code> or the shell.</li>
+<li><strong>Rate-limit errors mid-run.</strong> Set <code>throttle_sec</code> to 4.5 for free-tier models capped near 15 requests a minute, and keep <code>analysis_concurrency</code> at 1 until you know the endpoint tolerates parallel calls.</li>
+<li><strong>X returns nothing.</strong> The X source needs an Apify token in <code>.env</code>; without it the source is skipped silently.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Horizon does one job and does it in the open: it turns a pile of feeds into a short, scored, explained briefing you can read in five minutes and audit in full. The install is a clone and a <code>uv sync</code>; the config is one JSON file; the output is Markdown in a folder you control. The quality of the result tracks the model you point it at, and the two dials that matter — the profile rubric and the threshold — are plain text you can edit. Set it up tonight, read tomorrow's briefing against your own sense of what mattered, and adjust the threshold once. That loop is the whole product.</p>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a paid API key to use Horizon?</h3><p>No — but you need a model from somewhere. Ollama runs a local model with no key at all, and ChatGPT subscribers can use the openai-chatgpt provider with their plan instead of an API key. If you use a hosted provider (OpenAI, Anthropic, Gemini, DeepSeek, MiniMax, DashScope, Doubao, Azure), that provider's key goes in .env. The docs' throttling guidance is written for free-tier models capped around 15 requests a minute — set throttle_sec to 4.5 to stay under the cap.</p><h3>How much does a daily briefing cost?</h3><p>Roughly three short model calls per item — one to score, two to enrich — plus one dedup call per run, so a 20-item day is about sixty calls. With a cheap model that is cents per day; the exact figure depends on the model and how much content each item carries. Horizon prints a per-provider token-usage summary at the end of every run, so you can measure it on your own sources instead of trusting an estimate.</p><h3>Why did my briefing come back empty?</h3><p>Horizon writes a file either way. The usual causes, in order: the --hours window covered a period with nothing new (an RSS feed whose newest entry is 30 hours old yields zero items in a 24-hour window), the profile threshold is higher than anything scored, or the model was unreachable — and a model outage does not fail the run, it just leaves every item unscored, so check the log for APIConnectionError before assuming a quiet news day.</p><h3>Can it read X / Twitter?</h3><p>Yes, through an Apify token set in .env; the docs put the free tier at $5 a month of credit, roughly 20,000 tweets. Without the token the source is skipped. Hacker News, RSS, Reddit, Telegram, and GitHub need no token at all, though a GitHub token raises the rate limit from 60 to 5,000 requests an hour.</p><h3>How is this different from asking ChatGPT for a morning briefing?</h3><p>Ownership and auditability. Your sources, your scoring rubric, your archive, your choice of model — and the output is a Markdown file you can grep, version, and publish, not a chat transcript. The trade-off is setup: you maintain the config and the model key instead of outsourcing both to a chatbot.</p></section>
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/Thysrael/Horizon" rel="nofollow">Thysrael/Horizon — GitHub repository (README, quick start, install, configuration, sources)</a></li><li><a href="https://thysrael.github.io/Horizon/" rel="nofollow">Horizon documentation — configuration guide, providers, profiles, scoring, scrapers</a></li><li><a href="https://github.com/Thysrael/Horizon/blob/main/docs/configuration.md" rel="nofollow">Horizon configuration guide — AI providers, Ollama setup, throttling, GitHub Actions workflow</a></li><li><a href="https://github.com/trending?since=weekly" rel="nofollow">GitHub Trending — weekly (Horizon listed in week 45 of 2026)</a></li><li><a href="https://explainx.ai/blog/horizon-thysrael-open-source-ai-news-radar-daily-briefings-profiles-mcp-github-trending-2026" rel="nofollow">ExplainX — Horizon AI News Radar: setup, cost and risks (12.3k stars, November 4, 2026)</a></li></ul></section>
+
+
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/freellmapi-free-llm-router-tutorial/">One endpoint for every free model: hands-on with FreeLLMAPI, the self-hosted LLM router</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/deep-research-agent-evidence-engine/">Build a deep-research agent that never hallucinates its sources</a></li><li><a href="/articles/litellm-gateway-tutorial/">One API for every LLM: run LiteLLM as your AI gateway</a></li></ul></section>
+
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="horizon-ai-news-radar-tutorial"></div><div class="comments" data-comments="horizon-ai-news-radar-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
