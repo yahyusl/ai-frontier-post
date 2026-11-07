@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API — AI Frontier Post</title>
+<meta name="description" content="OpenAI’s GPT-6.1 Terra is the fast, cheap vision model of the GPT-6 family — $1 per million input tokens, a 1.05M-token context window, and tool calling through the Responses API. This guide makes your first call, feeds it a photo, forces structured JSON out of it, and wires up web search and your own functions — every snippet verified against the official docs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gpt-6-1-terra-responses-api-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API">
+<meta property="og:description" content="OpenAI’s GPT-6.1 Terra is the fast, cheap vision model of the GPT-6 family — $1 per million input tokens, a 1.05M-token context window, and tool calling through the Responses API. This guide makes your first call, feeds it a photo, forces structured JSON out of it, and wires up web search and your own functions — every snippet verified against the official docs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gpt-6-1-terra-responses-api-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gpt-6-1-terra-responses-api-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-07">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API">
+<meta name="twitter:description" content="OpenAI’s GPT-6.1 Terra is the fast, cheap vision model of the GPT-6 family — $1 per million input tokens, a 1.05M-token context window, and tool calling through the Responses API. This guide makes your first call, feeds it a photo, forces structured JSON out of it, and wires up web search and your own functions — every snippet verified against the official docs.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/gpt-6-1-terra-responses-api-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API", "description": "OpenAI’s GPT-6.1 Terra is the fast, cheap vision model of the GPT-6 family — $1 per million input tokens, a 1.05M-token context window, and tool calling through the Responses API. This guide makes your first call, feeds it a photo, forces structured JSON out of it, and wires up web search and your own functions — every snippet verified against the official docs.", "datePublished": "2026-11-07", "dateModified": "2026-11-07", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/gpt-6-1-terra-responses-api-tutorial/"}, "image": "https://aifrontierpost.com/articles/gpt-6-1-terra-responses-api-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API", "description": "OpenAI’s GPT-6.1 Terra is the fast, cheap vision model of the GPT-6 family — $1 per million input tokens, a 1.05M-token context window, and tool calling through the Responses API. This guide makes your first call, feeds it a photo, forces structured JSON out of it, and wires up web search and your own functions — every snippet verified against the official docs.", "step": [{"@type": "HowToStep", "name": "Make your first request", "text": "Call the Responses API with model gpt-6.1-terra, first with curl and then with the OpenAI Python SDK."}, {"@type": "HowToStep", "name": "Send it an image", "text": "Pass a photo as an input_image block, by public URL or as a base64 data URL, and pick a detail level."}, {"@type": "HowToStep", "name": "Pick a reasoning effort", "text": "Choose among none, low, medium, high, xhigh, and max; start at medium and raise it only when the quality gain is worth the tokens."}, {"@type": "HowToStep", "name": "Get structured JSON back", "text": "Use responses.parse with a Pydantic model so the catalog match comes back as typed data."}, {"@type": "HowToStep", "name": "Add web search", "text": "Declare the hosted web_search tool and read the url_citation annotations it returns."}, {"@type": "HowToStep", "name": "Wire up your own function", "text": "Run the five-step function-calling loop and pass the full response, reasoning items included, back with the tool results."}, {"@type": "HowToStep", "name": "Price the workflow", "text": "Apply the $1 input / $5 output rates, the cache prices, and the long-context multiplier to your token counts."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API</h1>
+<p class="lede">OpenAI’s GPT-6.1 Terra is the fast, cheap vision model of the GPT-6 family — $1 per million input tokens, a 1.05M-token context window, and tool calling through the Responses API. This guide makes your first call, feeds it a photo, forces structured JSON out of it, and wires up web search and your own functions — every snippet verified against the official docs.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 7, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> GPT-6.1 Terra (<code>gpt-6.1-terra</code>) is OpenAI’s fast, efficient vision model, released October 26, 2026: $1 per million input tokens, a 1.05M-token context window, six reasoning effort levels, and tool calling through the Responses API. This guide makes a first call, sends it a photo, returns structured JSON with Pydantic, adds web search, wires up a real function, and prices the whole workflow — every snippet verified against OpenAI’s own docs.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Model:</b> <code>gpt-6.1-terra</code>, released October 26, 2026 — fast, efficient visual reasoning, precise computer use, clear writing.</li><li><b>Price:</b> $1 per million input tokens, $5 per million output tokens; cached input $0.05; prompts over 272K input tokens cost 2x input and 1.5x output.</li><li><b>Limits:</b> 1,050,000-token context window, 128,000 max output tokens, June 1, 2026 knowledge cutoff; text and image in, text out.</li><li><b>Tools need Responses:</b> tool calling works only through the Responses API — Chat Completions supports Terra but without tools.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/gpt-6-1-terra-responses-api-tutorial/cover.webp" alt="A glowing neural network reads product photos and technical drawings, connecting them to structured data panels"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<p>OpenAI released GPT-6.1 Terra on October 26, 2026, and it fills a gap the GPT-6 family had left open: a fast, cheap model that can actually <em>see</em>. The model ID is <code>gpt-6.1-terra</code>, it costs $1 per million input tokens and $5 per million output tokens, and it takes a 1,050,000-token context window with up to 128,000 output tokens. OpenAI positions it for visual reasoning, precise computer use, and clear, natural writing — matching product photos to catalog entries, interpreting technical drawings, acting on application screens, and drafting and revising text.</p>
+<p>That combination matters because it changes what a cheap API call can do. The previous generation's budget tier could read text and call tools, but serious image work meant paying flagship prices. Terra brings image input, six reasoning effort levels, and the full hosted-tool set — web search, file search, code interpreter, computer use, MCP — to a dollar-per-million-token price point. This guide builds the workflow OpenAI names first: a product-photo-to-catalog matcher. By the end you will have made your first call, fed the model a photo, forced structured JSON out of it, given it web search, wired up one of your own functions, and worked out exactly what it costs to run.</p>
+<h2 id="what-you-need">What you&#x27;ll need<a class="anchor" href="#what-you-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>An OpenAI API account with billing enabled.</strong> Terra has no free tier — the model page lists the Free tier as not supported. A ChatGPT Plus or Pro plan gives you Terra inside ChatGPT Work and Codex, but not an API key. Create the key at <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a> and add a payment method.</li><li><strong>Python 3.10 or later</strong>, plus the official SDK: <code>pip install openai pydantic</code>. Every snippet in this guide was verified with <code>openai</code> 3.46.0.</li><li><strong>Your key as an environment variable:</strong> <code>export OPENAI_API_KEY="sk-..."</code>. The SDK reads it automatically; never paste a key into source code.</li><li><strong>A photo to test with.</strong> Any product photo works — a chair, a shoe, a circuit board. The examples below use a public artwork URL from OpenAI&#x27;s own docs for the first image test, then a local file for the real workflow.</li></ul>
+<h2 id="1-first-request">Step 1: Your first request<a class="anchor" href="#1-first-request" aria-label="Link to section">#</a></h2>
+<p>Terra works on the Responses API, Chat Completions, and Batch — but tool calling requires the Responses API, so this guide uses Responses throughout. Start with curl to prove your key and access work before writing any Python:</p>
+<pre><code class="language-bash">curl https://api.openai.com/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-6.1-terra",
+    "input": "Write a one-line commit message for a fix to a broken pagination link"
+  }'</code></pre>
+<p>A working key returns a JSON response object with an <code>id</code> starting <code>resp_</code>, a <code>status</code> of <code>completed</code>, and the message in <code>output</code>. An <code>invalid_api_key</code> error means the key is wrong; a <code>model_not_found</code> error means the project attached to the key has no access to Terra. The Python version is the same call through the SDK:</p>
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI()  # reads OPENAI_API_KEY from the environment
+
+response = client.responses.create(
+    model="gpt-6.1-terra",
+    input="Write a one-line commit message for a fix to a broken pagination link",
+)
+
+print(response.output_text)
+print(response.usage)  # input_tokens, output_tokens, total_tokens</code></pre>
+<p>Two details worth knowing now. First, the model string is exactly <code>gpt-6.1-terra</code> — there is one snapshot and it is also the default. <code>gpt-6.1-sol</code> is a different model with different pricing; the names are not interchangeable. Second, responses are stored by default (<code>store</code> defaults to <code>true</code>) for at least 30 days, which is what makes multi-turn continuation with <code>previous_response_id</code> work. Pass <code>store=False</code> if you do not want a response retained.</p>
+<h2 id="2-image-input">Step 2: Send it an image<a class="anchor" href="#2-image-input" aria-label="Link to section">#</a></h2>
+<p>Terra accepts text and image input and returns text — no audio or video input. Images arrive as <code>input_image</code> content blocks, either as a public URL or as a base64 data URL. The URL form, taken from OpenAI&#x27;s images guide:</p>
+<pre><code class="language-python">response = client.responses.create(
+    model="gpt-6.1-terra",
+    input=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "what's in this image?"},
+                {
+                    "type": "input_image",
+                    "image_url": "https://api.nga.gov/iiif/a2e6da57-3cd1-4235-b20e-95dcaefed6c8/full/!800,800/0/default.jpg",
+                },
+            ],
+        }
+    ],
+)
+print(response.output_text)</code></pre>
+<p>For your own photos, base64 is the practical path — no public hosting needed:</p>
+<pre><code class="language-python">import base64
+from openai import OpenAI
+
+client = OpenAI()
+
+with open("chair.jpg", "rb") as f:
+    image_b64 = base64.b64encode(f.read()).decode()
+
+response = client.responses.create(
+    model="gpt-6.1-terra",
+    input=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "Describe this chair in detail: material, color, style, condition."},
+                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{image_b64}", "detail": "high"},
+            ],
+        }
+    ],
+)
+print(response.output_text)</code></pre>
+<p>The <code>detail</code> parameter controls preprocessing: <code>low</code>, <code>high</code>, <code>original</code>, or <code>auto</code> (the default). Use <code>high</code> for ordinary photo analysis and <code>original</code> for dense, spatially sensitive work — OCR, small-object detection, computer use — where resizing would destroy the detail you need. Supported formats are PNG, JPEG, WEBP, and non-animated GIF; a single request can carry up to 1,500 images and a 512 MB total payload. Images count as input tokens and are billed at the input rate, so a 20-photo comparison costs roughly 20 photos' worth of tokens before a word of output.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/gpt-6-1-terra-responses-api-tutorial/img2.webp" alt="A photograph of a wooden chair flows through a glowing neural network into a structured data card"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="3-reasoning-effort">Step 3: Pick a reasoning effort<a class="anchor" href="#3-reasoning-effort" aria-label="Link to section">#</a></h2>
+<p>Terra supports six reasoning effort levels: <code>none</code>, <code>low</code>, <code>medium</code> (the default), <code>high</code>, <code>xhigh</code>, and <code>max</code>. It is one of the few GPT-6 models that supports <code>none</code> — Astra and Sol do not. OpenAI&#x27;s own guidance is to start at <code>medium</code> and raise the effort only when the improvement in quality is worth the added time and tokens. In practice:</p>
+<div class="table-wrap"><table><thead><tr><th>Effort</th><th>Use it for</th></tr></thead><tbody><tr><td><code>none</code></td><td>Instant, mechanical work: rewrites, formatting, one-line classifications</td></tr><tr><td><code>low</code></td><td>Simple lookups and descriptions where speed matters more than nuance</td></tr><tr><td><code>medium</code></td><td>The default. Photo matching, drafting, everyday analysis</td></tr><tr><td><code>high</code></td><td>Ambiguous images, fine distinctions between similar products, multi-step checks</td></tr><tr><td><code>xhigh</code> / <code>max</code></td><td>Hard visual reasoning — dense technical drawings, tiny differences, contested matches</td></tr></tbody></table></div>
+<pre><code class="language-python">response = client.responses.create(
+    model="gpt-6.1-terra",
+    input=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "Compare this chair against the catalog entry CHR-0042. List every visible difference."},
+                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{image_b64}", "detail": "high"},
+            ],
+        }
+    ],
+    reasoning={"effort": "high"},
+)
+print(response.output_text)</code></pre>
+<p>Effort and verbosity are separate knobs. <code>reasoning.effort</code> controls how hard the model thinks; <code>verbosity</code> (<code>low</code>, <code>medium</code>, <code>high</code>, default <code>medium</code>) controls how long the answer is. A <code>high</code> effort with <code>low</code> verbosity gives you careful thinking in a short answer — the right combination for a matcher that has to be both accurate and cheap to read.</p>
+<h2 id="4-structured-outputs">Step 4: Get structured JSON back, every time<a class="anchor" href="#4-structured-outputs" aria-label="Link to section">#</a></h2>
+<p>A catalog matcher that returns prose is a demo; one that returns JSON is a system. Structured Outputs constrains the model to a JSON Schema you supply, so required keys are never omitted and enum values are never invented. The cleanest way to use it in Python is <code>client.responses.parse</code> with a Pydantic model — the SDK builds the schema from the class and hands you a parsed object:</p>
+<pre><code class="language-python">from openai import OpenAI
+from pydantic import BaseModel
+
+client = OpenAI()
+
+
+class CatalogMatch(BaseModel):
+    sku: str
+    name: str
+    confidence: float
+    match_reason: str
+    differences: list[str]
+
+
+response = client.responses.parse(
+    model="gpt-6.1-terra",
+    input=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "Match this photo to a catalog entry. Return the SKU, name, a confidence score, why it matches, and every visible difference."},
+                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{image_b64}", "detail": "high"},
+            ],
+        }
+    ],
+    text_format=CatalogMatch,
+)
+
+match = response.output_parsed
+print(match.sku, match.confidence)
+print(match.differences)</code></pre>
+<p><code>output_parsed</code> is a real <code>CatalogMatch</code> instance, not a dict — your downstream code can trust the field types. Three things to know about this step. First, the first request you make with any schema carries extra latency while the API processes it; repeat requests with the same schema do not. Second, a response can still come back incomplete: check <code>response.status</code> and, if it is <code>incomplete</code> with reason <code>max_output_tokens</code>, raise your cap and retry. Third, refusals are programmatically detectable — a refusal item appears in the output instead of text — so handle that case rather than parsing an empty string. If you prefer raw JSON Schema over Pydantic, the same constraint is available through <code>text={"format": {"type": "json_schema", "name": "catalog_match", "schema": {...}, "strict": True}}</code> on <code>responses.create</code>.</p>
+<h2 id="5-web-search">Step 5: Give it web search for anything after its cutoff<a class="anchor" href="#5-web-search" aria-label="Link to section">#</a></h2>
+<p>Terra&#x27;s knowledge cutoff is June 1, 2026. Anything newer — a price change, a recalled batch, a model that launched last week — needs the web. The hosted <code>web_search</code> tool runs server-side; you declare it and the model decides when to use it:</p>
+<pre><code class="language-python">response = client.responses.create(
+    model="gpt-6.1-terra",
+    input="Has the manufacturer recalled or repriced the CHR-0042 lounge chair since June 2026? Check current sources.",
+    tools=[{"type": "web_search"}],
+)
+print(response.output_text)</code></pre>
+<p>Search results come back with citations. Each <code>output_text</code> part carries an <code>annotations</code> list, and <code>url_citation</code> annotations hold the source URL and title — collect them and show them to the user instead of letting the model&#x27;s claims stand uncited:</p>
+<pre><code class="language-python">for item in response.output:
+    if item.type == "message":
+        for part in item.content:
+            if part.type == "output_text":
+                for ann in part.annotations:
+                    if ann.type == "url_citation":
+                        print(ann.title, "-", ann.url)</code></pre>
+<p>Web search is a hosted tool, so there is a fee per tool call on top of tokens — check the pricing page for the current rate before wiring it into a high-volume loop. The same <code>tools</code> list is where the other hosted tools live: <code>file_search</code>, <code>code_interpreter</code>, <code>image_generation</code>, <code>hosted_shell</code>, <code>apply_patch</code>, <code>skills</code>, <code>computer_use</code>, and <code>mcp</code>. All of them require the Responses API; none of them work through Chat Completions with this model.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/gpt-6-1-terra-responses-api-tutorial/img3.webp" alt="A glowing orb exchanges circular arrows with a magnifying glass, a gear, and a database, illustrating the tool-use loop"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="6-function-calling">Step 6: Wire up one of your own functions<a class="anchor" href="#6-function-calling" aria-label="Link to section">#</a></h2>
+<p>Hosted tools cover the generic cases; your own data needs your own functions. The loop has five steps: declare the tool, send the prompt, read the <code>function_call</code> item, run your code, and send the result back with the matching <code>call_id</code>. Here the model looks up a catalog price from a local dictionary:</p>
+<pre><code class="language-python">import json
+from openai import OpenAI
+
+client = OpenAI()
+
+tools = [
+    {
+        "type": "function",
+        "name": "lookup_catalog_price",
+        "strict": True,
+        "description": "Look up the catalog price of a product by SKU.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sku": {"type": "string", "description": "Catalog SKU, e.g. CHR-0042"},
+            },
+            "required": ["sku"],
+            "additionalProperties": False,
+        },
+    },
+]
+
+
+def lookup_catalog_price(sku):
+    prices = {"CHR-0042": 1299.00, "CHR-0017": 899.00}
+    return json.dumps({"sku": sku, "price_usd": prices.get(sku)})
+
+
+input_list = [{"role": "user", "content": "What does the walnut lounge chair in this photo cost?"}]
+
+response = client.responses.create(
+    model="gpt-6.1-terra",
+    tools=tools,
+    input=input_list,
+)
+
+# Keep everything the model returned, including reasoning items,
+# then append the result of each function call.
+input_list += response.output
+for item in response.output:
+    if item.type == "function_call" and item.name == "lookup_catalog_price":
+        args = json.loads(item.arguments)
+        result = lookup_catalog_price(args["sku"])
+        input_list.append(
+            {
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": result,
+            }
+        )
+
+response = client.responses.create(
+    model="gpt-6.1-terra",
+    tools=tools,
+    input=input_list,
+)
+print(response.output_text)</code></pre>
+<p>The line that beginners most often get wrong is <code>input_list += response.output</code>. For reasoning models, the reasoning items in the response must be passed back along with the tool outputs — drop them and the next call loses the thread of what the model was thinking. The same loop handles multiple calls in one turn: iterate over every <code>function_call</code> item, execute each, and append each result before the second request. Keep the number of functions small and their descriptions precise — function definitions count against your context and are billed as input tokens, and accuracy falls as the tool list grows. OpenAI&#x27;s guidance is to stay under about 20 functions per turn and defer the rest with <code>tool_search</code>.</p>
+<h2 id="7-cost">Step 7: Know what it costs before you scale<a class="anchor" href="#7-cost" aria-label="Link to section">#</a></h2>
+<p>Terra&#x27;s pricing, from the official model page (standard tier, per million tokens):</p>
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Price</th></tr></thead><tbody><tr><td>Input</td><td>$1.00</td></tr><tr><td>Cached input</td><td>$0.05</td></tr><tr><td>Cache write, 30-minute retention</td><td>$1.25</td></tr><tr><td>Cache write, 12-hour retention</td><td>$2.50</td></tr><tr><td>Output</td><td>$5.00</td></tr></tbody></table></div>
+<p>Three modifiers change the bill. Requests with more than 272,000 input tokens are priced at 2x input and cache rates and 1.5x output for the full request. Batch and Flex prices are 50% lower than Standard. Fast mode costs 2x Standard, and regional processing adds a 10% premium where available. A worked example for the matcher: 1,000 requests, each with 2,000 input tokens and 400 output tokens, comes to 2,000,000 input tokens ($2.00) plus 400,000 output tokens ($2.00) — $4.00 for a thousand matches. Put the repeated catalog context behind prompt caching and the input side of that bill drops to the $0.05 cached rate on repeat requests. Watch the two quiet cost drivers: image tokens, which scale with image size and detail level, and reasoning tokens, which count as output tokens — a <code>max</code> effort setting on a hard image can cost several times the visible answer.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>Terra is one of four GPT-6 models, and the choice is about the job, not the leaderboard:</p>
+<div class="table-wrap"><table><thead><tr><th>Model</th><th>Reach for it when</th></tr></thead><tbody><tr><td><strong>GPT-6.1 Terra</strong></td><td>Visual reasoning, computer use, clear writing, high volume at low cost — this guide</td></tr><tr><td><strong>GPT-6.1 Sol</strong></td><td>Complex coding and professional work where you want near-Astra quality at a lower price</td></tr><tr><td><strong>GPT-6 Astra</strong></td><td>The hardest reasoning, coding, and professional work; multi-step workflows across code, browsers, and software</td></tr><tr><td><strong>GPT-6 Luna</strong></td><td>Focused, high-volume tasks where speed and cost matter most</td></tr></tbody></table></div>
+<p>The API choice matters as much as the model. Use the Responses API for anything involving tools, reasoning effort, or multi-turn state — it is the only interface where Terra can call tools. Use Chat Completions only for plain text or image in, text out, with no tools. If you are migrating from GPT-5.6 Terra, compare both models on representative images and workflows at the same reasoning effort, and move any Chat Completions tool calls to the Responses API — Terra does not support tool calling through Chat Completions at all.</p>
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<ol><li><strong>One model string, one API.</strong> <code>gpt-6.1-terra</code> on the Responses API is the whole setup — tools, reasoning, and images all live there.</li><li><strong>Images are just content blocks.</strong> <code>input_image</code> with a URL or a base64 data URL, <code>detail: "high"</code> for analysis, <code>"original"</code> when spatial precision matters.</li><li><strong>Start at <code>medium</code> effort.</strong> Raise it only when the quality gain is worth the time and the output tokens.</li><li><strong>Force JSON with <code>responses.parse</code>.</strong> A Pydantic model turns the matcher from a demo into a component your code can trust.</li><li><strong>Pass the whole response back.</strong> <code>input_list += response.output</code> before appending tool results — reasoning items included.</li><li><strong>Do the cost math first.</strong> At $1 in / $5 out, a thousand catalog matches cost about $4 — until long context, <code>max</code> effort, or uncached images multiply it.</li></ol>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul>
+<li><a href="https://platform.openai.com/docs/models/gpt-6.1-terra">GPT-6.1 Terra model page (OpenAI)</a> — model ID, pricing, rate limits, supported tools, reasoning effort levels, read November 7, 2026.</li>
+<li><a href="https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra">Using GPT-6 (OpenAI)</a> — Terra positioning, migration guidance from GPT-5.6 Terra, reasoning effort advice, read November 7, 2026.</li>
+<li><a href="https://platform.openai.com/docs/api-reference/responses/create">Create a model response (OpenAI API reference)</a> — request parameters, <code>reasoning.effort</code>, <code>text.format</code>, <code>store</code> default, read November 7, 2026.</li>
+<li><a href="https://platform.openai.com/docs/guides/structured-outputs">Structured model outputs (OpenAI)</a> — <code>responses.parse</code> with Pydantic, <code>text.format</code> JSON Schema, refusal and incomplete handling, read November 7, 2026.</li>
+<li><a href="https://platform.openai.com/docs/guides/images">Images and vision (OpenAI)</a> — <code>input_image</code> URL and base64 forms, detail levels, format and size limits, read November 7, 2026.</li>
+<li><a href="https://platform.openai.com/docs/guides/function-calling">Function calling (OpenAI)</a> — the five-step tool loop, <code>function_call_output</code> with <code>call_id</code>, passing reasoning items back, read November 7, 2026.</li>
+</ul>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/openai-agents-api-hands-on-tutorial/">Stop writing your own agent loop: a hands-on tutorial for OpenAI’s Agents API</a></li><li><a href="/articles/rag-reranker-cross-encoder-tutorial/">Rerankers for RAG: how a cross-encoder gets the right chunk to the top, measured end-to-end</a></li><li><a href="/articles/rag-chunking-strategies-measured/">Stop guessing your chunk size: fixed, recursive, and semantic chunking, measured on real retrieval</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li></ul></section>
+
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="gpt-6-1-terra-responses-api-tutorial"></div><div class="comments" data-comments="gpt-6-1-terra-responses-api-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
