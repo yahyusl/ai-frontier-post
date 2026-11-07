@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Kill every system ad on your Android phone — no root: hands-on with android-ad-cleaner — AI Frontier Post</title>
+<meta name="description" content="android-ad-cleaner (rddmwmddr/android-ad-cleaner, MIT, 6,745 GitHub stars) strips system ads, hot search, and marketing push notifications from Xiaomi, OPPO, vivo, Honor, and Huawei phones — no root, fully reversible. This guide runs it end to end: adb setup, a backup snapshot, the per-model recipe, and notification-channel cleanup.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Kill every system ad on your Android phone — no root: hands-on with android-ad-cleaner">
+<meta property="og:description" content="android-ad-cleaner (rddmwmddr/android-ad-cleaner, MIT, 6,745 GitHub stars) strips system ads, hot search, and marketing push notifications from Xiaomi, OPPO, vivo, Honor, and Huawei phones — no root, fully reversible. This guide runs it end to end: adb setup, a backup snapshot, the per-model recipe, and notification-channel cleanup.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-06">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Kill every system ad on your Android phone — no root: hands-on with android-ad-cleaner">
+<meta name="twitter:description" content="android-ad-cleaner (rddmwmddr/android-ad-cleaner, MIT, 6,745 GitHub stars) strips system ads, hot search, and marketing push notifications from Xiaomi, OPPO, vivo, Honor, and Huawei phones — no root, fully reversible. This guide runs it end to end: adb setup, a backup snapshot, the per-model recipe, and notification-channel cleanup.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Kill every system ad on your Android phone — no root: hands-on with android-ad-cleaner", "description": "android-ad-cleaner (rddmwmddr/android-ad-cleaner, MIT, 6,745 GitHub stars) strips system ads, hot search, and marketing push notifications from Xiaomi, OPPO, vivo, Honor, and Huawei phones — no root, fully reversible. This guide runs it end to end: adb setup, a backup snapshot, the per-model recipe, and notification-channel cleanup.", "datePublished": "2026-11-06", "dateModified": "2026-11-06", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/"}, "image": ["https://aifrontierpost.com/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/cover.webp"], "url": "https://aifrontierpost.com/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need to root my phone to remove system ads?", "acceptedAnswer": {"@type": "Answer", "text": "No. android-ad-cleaner works entirely through adb and the settings screens the manufacturer already exposes. It never uses pm uninstall or pm disable-user, never modifies the system partition, and never installs a module. Root is not required and not used."}}, {"@type": "Question", "name": "Can I undo everything if something breaks?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The backup command snapshots the settings, app lists, and notification channels first; unsuspend restores suspended packages, chan-on restores the marketing channels from channels.tsv, and quickapp on restores quick apps. Only the in-app toggles need switching back by hand, following the same checklist paths."}}, {"@type": "Question", "name": "My exact model isn’t in the tested table — will it still work?", "acceptedAnswer": {"@type": "Answer", "text": "Partly. The devices command shows whether a per-model script exists; without one, the tool still runs the generic check, backup, and channel scan, and the repo ships manual checklists per brand. If a settings page moved in your system version, that step is skipped rather than tapped blindly — and the repo’s guide explains how to write a recipe for a new model."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Kill every system ad on your Android phone — no root: hands-on with android-ad-cleaner", "description": "android-ad-cleaner (rddmwmddr/android-ad-cleaner, MIT, 6,745 GitHub stars) strips system ads, hot search, and marketing push notifications from Xiaomi, OPPO, vivo, Honor, and Huawei phones — no root, fully reversible. This guide runs it end to end: adb setup, a backup snapshot, the per-model recipe, and notification-channel cleanup.", "step": [{"@type": "HowToStep", "name": "Step 1 — Install adb and clone the repo", "text": "Install Google’s platform-tools, clone rddmwmddr/android-ad-cleaner, and install its Python dependencies."}, {"@type": "HowToStep", "name": "Step 2 — Enable USB debugging and connect", "text": "Turn on developer mode and USB debugging, plug the phone in, and confirm it appears in the devices list."}, {"@type": "HowToStep", "name": "Step 3 — Check read-only and back up", "text": "Run the read-only check, then snapshot the phone’s settings, apps, and notification channels."}, {"@type": "HowToStep", "name": "Step 4 — Run your model’s recipe", "text": "Run the per-model recipe that opens each system app’s settings and switches the ad toggles off."}, {"@type": "HowToStep", "name": "Step 5 — Switch off marketing notification channels", "text": "Scan the marketing notification channels and switch them off from the saved list, keeping alerts intact."}, {"@type": "HowToStep", "name": "Step 6 — Finish and switch developer mode off", "text": "Deal with quick apps, wrap up, and turn developer mode off from the computer."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Kill every system ad on your Android phone — no root: hands-on with android-ad-cleaner</h1>
+<p class="lede">Your Xiaomi, OPPO, or vivo phone ships with ads baked into the system apps — the browser, the app store, the weather widget, even the settings search. android-ad-cleaner, a Python tool that gained 6,745 GitHub stars in under two weeks, switches them off through the settings screens the manufacturers already expose: no root, no uninstalled packages, and a backup snapshot first so every change can be undone. This guide runs it end to end.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · November 6, 2026 · 8 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> android-ad-cleaner (rddmwmddr/android-ad-cleaner, MIT, 6,745 stars) removes system ads, hot search, news recommendations, and marketing push notifications from Xiaomi, OPPO, vivo, Honor, and Huawei phones over adb — no root, no deleted packages, and every change backed up first. This guide installs adb, connects the phone, runs the read-only check and backup, then runs the per-model recipe and silences the marketing notification channels.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> android-ad-cleaner by rddmwmddr — <a href="https://github.com/rddmwmddr/android-ad-cleaner">rddmwmddr/android-ad-cleaner</a> on GitHub, MIT license.</li><li><b>What:</b> Version 0.3.2 (released November 5, 2026); a Python tool plus a Mac/Windows desktop client that turns off system ads, hot search, news recommendations, and marketing push notifications.</li><li><b>Momentum:</b> 6,745 stars and 603 forks on November 6, 2026; created October 24, 2026 — about 6,700 stars in under two weeks.</li><li><b>Method:</b> adb plus a uiautomator2 engine that opens the manufacturers’ own settings pages and flips the toggles; per-model recipes hold the exact taps. It never uses <code>pm uninstall</code> or <code>pm disable-user</code> and never touches the system partition. A backup snapshot runs before any change.</li><li><b>Scope:</b> Xiaomi HyperOS, OPPO/OnePlus/realme ColorOS, vivo/iQOO OriginOS, Honor MagicOS, Huawei HarmonyOS, Meizu Flyme; Samsung One UI only partly covered.</li><li><b>Verified results:</b> OPPO Find X9 Pro — 165 settings verified, 60 marketing channels all closed; OnePlus 13T — 76 ad-tracking items; Xiaomi 17 Ultra — nine sections, 176-second re-run. From the repo’s tested-models table.</li></ul>
+<p>Ask a Xiaomi, OPPO, or vivo owner what annoys them most about their phone and the answer is rarely the hardware. It is the ads: promo banners in the file manager, hot search terms in the browser, &#x27;recommendations&#x27; in the app store, marketing pushes from the weather app. These are not third-party apps you can uninstall. They are toggles buried three menus deep in system apps — and the manufacturers keep moving them with every update.</p>
+<p>android-ad-cleaner attacks exactly that gap. Released October 24, 2026 by rddmwmddr, it is a Python tool — plus a point-and-click desktop client — that drives your phone&#x27;s own settings over adb and switches the ad toggles off for you, model by model. In under two weeks it has picked up 6,745 GitHub stars. No root, no deleted packages, no modified system partition: it only touches settings the phone already exposes, and it takes a backup snapshot before changing anything. This guide runs it end to end.</p>
+<h2>What you&#x27;ll need</h2>
+<ul>
+<li>A computer — macOS, Windows, or Linux — and a USB cable that transfers data, not a charge-only cable.</li>
+<li>Python 3.9 or later on the computer.</li>
+<li>adb — Google&#x27;s platform-tools.</li>
+<li>An Android phone from Xiaomi (HyperOS), OPPO / OnePlus / realme (ColorOS), vivo / iQOO (OriginOS), Honor (MagicOS), Huawei (HarmonyOS), or Meizu (Flyme). Samsung One UI is only partly covered so far. The tool works over adb only — phones on HarmonyOS NEXT, which uses Huawei&#x27;s HDC instead of adb, are not supported.</li>
+<li>A few minutes per phone. The repo&#x27;s own test runs take roughly three to nine minutes depending on the model.</li>
+</ul>
+<h2>Step 1: Install adb and clone the tool</h2>
+<p>Install adb first. On macOS:</p>
+<pre><code>brew install android-platform-tools</code></pre>
+<p>On Windows, download platform-tools from Google, extract it to <code>C:\platform-tools</code>, and add that folder to PATH. On Linux:</p>
+<pre><code>sudo apt install adb</code></pre>
+<p>Check it works:</p>
+<pre><code>adb version</code></pre>
+<p>Then clone the tool and install its Python dependencies:</p>
+<pre><code>git clone https://github.com/rddmwmddr/android-ad-cleaner
+cd android-ad-cleaner
+pip3 install -r requirements.txt</code></pre>
+<h2>Step 2: Turn on developer mode and USB debugging, and connect</h2>
+<p>On the phone, open Settings, go to About phone, and tap Build number seven times — the exact path varies by brand, and the repo&#x27;s docs walk through five brands with screenshots. Then, in Developer options, switch USB debugging on.</p>
+<p>Plug the phone in and tap Allow on the authorisation prompt. Then list the connected devices:</p>
+<pre><code>python3 tool/run.py devices</code></pre>
+<p>Each line shows the serial number, the model name and code, the system version, and whether a per-model script exists for that phone. The serial number is the handle every later command uses. If you would rather not plug in, the same page covers wireless debugging: same Wi-Fi, Developer options → Wireless debugging → pair with a six-digit code (<code>adb pair</code>), then <code>adb connect</code>. If you want to see what else adb reveals about your phone, our <a href="/articles/noir-android-privacy-audit-adb-hands-on-tutorial/">hands-on NOIR audit walks an Android phone over adb looking for data leaks</a>.</p>
+<h2>Step 3: Run the read-only check, then take a backup snapshot</h2>
+<p>First, a read-only pass — nothing changes:</p>
+<pre><code>python3 tool/run.py -s &lt;serial&gt; check</code></pre>
+<p>Then the snapshot, before a single toggle moves:</p>
+<pre><code>python3 tool/run.py -s &lt;serial&gt; backup</code></pre>
+<p>The snapshot lands in <code>backups/&lt;model&gt;-&lt;time&gt;/</code>: the phone&#x27;s settings, its app lists, its notification channels, and the stay-on value. This is what makes the whole process reversible, so do not skip it.</p>
+<h2>Step 4: Run your model&#x27;s recipe</h2>
+<p>One command does the work:</p>
+<pre><code>python3 tool/run.py -s &lt;serial&gt; recipe</code></pre>
+<p>Behind it, the engine opens each system app&#x27;s settings page and flips the ad toggles, following a per-model script in <code>recipes/&lt;brand&gt;-&lt;model&gt;/recipe.py</code> — which app to open, which words to tap, which switches to turn off. If a settings page has moved in your system version, that step is skipped rather than tapped blindly. The repo&#x27;s tested-models table gives a sense of the scale: an OPPO Find X9 Pro run verified 165 settings and closed 60 marketing channels, a OnePlus 13T run closed 76 ad-tracking items, and a Xiaomi 17 Ultra run finished nine sections in 176 seconds on a re-run.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/img2.webp" alt="An Android phone connected by USB cable to a laptop showing a terminal window"><figcaption>The CLI route: one command per stage, from check to finish. Illustration: AI Frontier Post.</figcaption></figure>
+<p>If your exact model has no script, the tool says so and still runs the generic parts — and the repo ships manual per-brand checklists for doing the same toggles by hand, plus a guide to writing a recipe for a new model.</p>
+<h2>Step 5: Switch off the marketing notification channels</h2>
+<p>The recipe handles the in-app toggles. The push spam needs a second pass — notification channels:</p>
+<pre><code>python3 tool/run.py -s &lt;serial&gt; chan-scan</code></pre>
+<p>That lists the marketing channels. Then switch them off from the list:</p>
+<pre><code>python3 tool/run.py -s &lt;serial&gt; chan-off backups/&lt;model&gt;-&lt;time&gt;/channels.tsv</code></pre>
+<p>Channels go off one by one, not the whole app: the weather app&#x27;s &#x27;content and marketing&#x27; channel closes while its weather alerts stay on. The list of what was closed is saved to <code>channels.tsv</code> — that file is also the restore list.</p>
+<h2>Step 6: Quick apps, finish, and switch developer mode off</h2>
+<p>Some brands preload quick apps — mini-apps that run without installing. Detect them, then close them:</p>
+<pre><code>python3 tool/run.py -s &lt;serial&gt; quickapp        # detect quick apps
+python3 tool/run.py -s &lt;serial&gt; quickapp off     # close them</code></pre>
+<p>Then wrap up:</p>
+<pre><code>python3 tool/run.py -s &lt;serial&gt; finish
+python3 tool/run.py -s &lt;serial&gt; dev-off --yes   # switch developer mode off from the computer; the phone disconnects after this step</code></pre>
+<p>Done. If you ever want anything back, the restore is one command per change type: <code>unsuspend</code> brings back suspended ad packages, <code>chan-on backups/&lt;model&gt;-&lt;time&gt;/channels.tsv</code> reopens the marketing channels, and <code>quickapp on</code> restores quick apps. Only the in-app toggles need switching back by hand, following the same checklist paths.</p>
+<h2>The no-terminal route</h2>
+<p>If the command line is not your thing, the same project ships a desktop client — version 0.3.2, released November 5, 2026 — for Mac (Apple silicon and Intel, signed and notarised) and Windows 10/11 (installer or portable zip), downloadable from the repo&#x27;s Releases page. Plug the phone in and click through: connect, detect, choose what to switch off. Old versions do not auto-update, so re-download for a new release; existing backups are kept.</p>
+<p>There is also an AI-agent route. The README ships a prompt to hand to a coding agent such as Claude Code, Codex, Cursor, Trae, or WorkBuddy:</p>
+<pre><code>Please clone https://github.com/rddmwmddr/android-ad-cleaner, read AGENTS.md in the repo,
+then help me remove ads from this phone connected to the computer.
+Tell me what you are going to change before each step.</code></pre>
+<p>The agent reads the repo&#x27;s own operating notes and drives the same commands, asking before each change. And with only the phone in hand, any chat AI can walk you through the manual checklist instead. If you like the idea of an AI agent driving your phone, our <a href="/articles/mika-on-device-android-ai-agent-tutorial/">hands-on guide to Mika — an on-device Android AI agent</a> is the same instinct applied to everything else on the device.</p>
+<h2>What you built</h2>
+<p>A phone whose system apps stop advertising at you: no more promo banners in the file manager and app store, no hot search, no marketing pushes — with weather alerts and other useful notifications intact, and a backup snapshot plus restore commands if anything needs to go back.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial/img3.webp" alt="A hand holding a smartphone with a clean, minimal home screen"><figcaption>The result: a home screen and notification shade with nothing to sell you. Illustration: AI Frontier Post.</figcaption></figure>
+<h2>Honest limitations</h2>
+<p>First, scope. The recipes target the Chinese builds of these phones — HyperOS, ColorOS, OriginOS, MagicOS — where the ads live. Global ROMs have fewer ads to begin with and fewer tested recipes, so check the tested-models table for your exact model and system version before starting. Samsung is barely covered: one &#x27;ads&#x27; section on a Galaxy Note10+ so far.</p>
+<p>Second, moving targets. Manufacturers rename and move settings pages with every update; a step whose entry point moved is skipped, not forced. Re-running after an update is the fix, and the repo&#x27;s table marks which models are fully re-verified and which are partial.</p>
+<p>Third, it is toggles, not uninstalls. Suspended ad packages stay on the phone, greyed out; without a computer the only way back is a factory reset — or borrowing a computer for one adb command (<code>adb -s &lt;serial&gt; shell pm unsuspend --user 0 &lt;package&gt;</code>).</p>
+<p>Fourth, language. The tool&#x27;s own docs are in Chinese — README, guides, per-model checklists. The commands are the same in any language, but reading the per-model notes needs translation; the desktop client is the friendlier route if that is a barrier.</p>
+<p>Finally, foldables must stay folded during a run — the engine misreads the split-screen layout when the phone is open. The same strip-the-manufacturer-extras instinct applies to the TV: our <a href="/articles/cleanyourtv-debloat-android-tv-apple-tv-home-hands-on-tutorial/">CleanYourTV guide does the equivalent job for Android TV</a>.</p>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need to root my phone to remove system ads?</h3><p>No. android-ad-cleaner works entirely through adb and the settings screens the manufacturer already exposes. It never uses pm uninstall or pm disable-user, never modifies the system partition, and never installs a module. Root is not required and not used.</p><h3>Can I undo everything if something breaks?</h3><p>Yes. The backup command snapshots the settings, app lists, and notification channels first; unsuspend restores suspended packages, chan-on restores the marketing channels from channels.tsv, and quickapp on restores quick apps. Only the in-app toggles need switching back by hand, following the same checklist paths.</p><h3>My exact model isn’t in the tested table — will it still work?</h3><p>Partly. The devices command shows whether a per-model script exists; without one, the tool still runs the generic check, backup, and channel scan, and the repo ships manual checklists per brand. If a settings page moved in your system version, that step is skipped rather than tapped blindly — and the repo’s guide explains how to write a recipe for a new model.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/noir-android-privacy-audit-adb-hands-on-tutorial/">Audit your Android phone for leaks: hands-on with NOIR over adb</a></li><li><a href="/articles/cleanyourtv-debloat-android-tv-apple-tv-home-hands-on-tutorial/">CleanYourTV: debloat your Android TV and get an Apple TV-style home screen — hands-on</a></li><li><a href="/articles/dsh-go-deepseek-harness-android-phone-hands-on-tutorial/">DSH Go: run DeepSeek Harness on your Android phone — hands-on</a></li><li><a href="/articles/mika-on-device-android-ai-agent-tutorial/">Give your Android phone an agent that works in the background: hands-on with Mika</a></li></ul></section>
+<div class="post-engage"><div class="reactions" data-reactions="android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial"></div><div class="comments" data-comments="android-ad-cleaner-remove-system-ads-no-root-hands-on-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
