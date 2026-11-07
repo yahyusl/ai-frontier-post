@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Month-long coding sessions on a 100K context window: hands-on with billion-context — AI Frontier Post</title>
+<meta name="description" content="billion-context is a local proxy that sits between your coding agent and the model API, folding consumed conversation into summaries the model itself writes — so one session can run for weeks. This guide installs 0.1.212, proves the proxy rewrites requests, and shows how to read its cache report.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/billion-context-month-long-coding-sessions-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Month-long coding sessions on a 100K context window: hands-on with billion-context">
+<meta property="og:description" content="billion-context is a local proxy that sits between your coding agent and the model API, folding consumed conversation into summaries the model itself writes — so one session can run for weeks. This guide installs 0.1.212, proves the proxy rewrites requests, and shows how to read its cache report.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/billion-context-month-long-coding-sessions-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/billion-context-month-long-coding-sessions-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-07">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Month-long coding sessions on a 100K context window: hands-on with billion-context">
+<meta name="twitter:description" content="billion-context is a local proxy that sits between your coding agent and the model API, folding consumed conversation into summaries the model itself writes — so one session can run for weeks. This guide installs 0.1.212, proves the proxy rewrites requests, and shows how to read its cache report.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/billion-context-month-long-coding-sessions-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Month-long coding sessions on a 100K context window: hands-on with billion-context", "description": "billion-context is a local proxy that sits between your coding agent and the model API, folding consumed conversation into summaries the model itself writes — so one session can run for weeks. This guide installs 0.1.212, proves the proxy rewrites requests, and shows how to read its cache report.", "datePublished": "2026-11-07", "dateModified": "2026-11-07", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/billion-context-month-long-coding-sessions-tutorial/"}, "image": "https://aifrontierpost.com/articles/billion-context-month-long-coding-sessions-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Month-long coding sessions on a 100K context window: hands-on with billion-context", "description": "billion-context is a local proxy that sits between your coding agent and the model API, folding consumed conversation into summaries the model itself writes \u2014 so one session can run for weeks. This guide installs 0.1.212, proves the proxy rewrites requests, and shows how to read its cache report.", "step": [{"@type": "HowToStep", "name": "Install bili", "text": "Install billion-context 0.1.212 from npm and run the doctor check."}, {"@type": "HowToStep", "name": "Start the proxy", "text": "Start bili on port 8787 and verify the health endpoint."}, {"@type": "HowToStep", "name": "Route a client through it", "text": "Prefix the client's base URL with the proxy origin plus /bili/."}, {"@type": "HowToStep", "name": "Prove the machinery", "text": "Send a request through the proxy to a stand-in upstream and inspect the rewrite."}, {"@type": "HowToStep", "name": "Use it with a real client", "text": "Launch or plug in a real coding agent and let the model compress as context grows."}, {"@type": "HowToStep", "name": "Read cache health and manage sessions", "text": "Check /acp-cache, list and export sessions, and read the log."}, {"@type": "HowToStep", "name": "Tune it", "text": "Adjust the growth threshold, retention, and update behavior."}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does bili need my API key?", "acceptedAnswer": {"@type": "Answer", "text": "No. Your key stays with the client or gateway; the dummy key rides through the proxy untouched. The proxy fingerprints only a 12-hex SHA-256 of the authorization header family for key-switch attribution \u2014 the raw key is never stored."}}, {"@type": "Question", "name": "Which clients does it work with?", "acceptedAnswer": {"@type": "Answer", "text": "Pi, OpenCode, Claude Code, Codex, Gemini CLI, dsh, Kimi Code, Hermes, Z.ai, Aider, Copilot CLI, Amp, Crush, Zed, Goose, Kiro, and more \u2014 over twenty clients across the launcher, native plugin, and URL-change modes. Any client with an OpenAI- or Anthropic-compatible base URL works through the /bili/ prefix."}}, {"@type": "Question", "name": "Does compression change what my agent remembers?", "acceptedAnswer": {"@type": "Answer", "text": "No. Your client's stored history file is never rewritten; only the traffic sent to the model shrinks. Summaries are written by the model, kept in the conversation, and reversible with the decompress tool."}}, {"@type": "Question", "name": "What does it cost?", "acceptedAnswer": {"@type": "Answer", "text": "Nothing for the software \u2014 MIT licensed plus an attribution term, running on your own machine. The savings are model tokens: the project reports a healthy session holds a 95\u201397% prefix-cache hit rate with compression costing at most 2%. Measure your own sessions with /acp-cache rather than trusting the headline 5\u00d7 figure."}}, {"@type": "Question", "name": "What if the proxy breaks mid-session?", "acceptedAnswer": {"@type": "Answer", "text": "Model traffic goes direct and uncompressed until the host restarts \u2014 the proxy cannot block requests to protect itself. The web UI shows a staleness banner when the running version is behind the installed one, and /__bili/status reports the same for scripting."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Month-long coding sessions on a 100K context window: hands-on with billion-context</h1>
+<p class="lede">billion-context is a local proxy that sits between your coding agent and the model API, folding consumed conversation into summaries the model itself writes — so one session can run for weeks. This guide installs 0.1.212, proves the proxy rewrites requests, and shows how to read its cache report.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 7, 2026 · 12 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> billion-context (ranxianglei/billion-context, MIT plus an attribution term) is a local proxy that sits between your coding agent and the model API: it rewrites each request, injects six context-management tools, and lets the model fold consumed conversation into summaries it writes itself. It has 4,515 stars as of November 7, 2026, with 185 gained today. This guide installs 0.1.212, starts the proxy on port 8787, proves the request rewrite against a local stand-in server, and shows how to read the cache report that says whether the savings are real.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Who:</b> billion-context (ranxianglei/billion-context), a context-compression proxy for coding agents, MIT licensed plus an attribution term.</li><li><b>What:</b> A local proxy on port 8787 that rewrites requests in flight, injects compress/decompress/search_context/acp_status/acp_cache/acp_read_original_image tools, and folds consumed conversation into model-written summaries.</li><li><b>When:</b> Verified November 7, 2026: package 0.1.212, Node v24.22.1, doctor verdict ok with registry match, health endpoint ok:true, full request-rewrite proof against a local stand-in upstream, sessions list/export and cache report returning live data.</li><li><b>Requirement:</b> Node.js 22+ and about 50 MB disk. No GPU, no model download, no account with the project; a model API key or subscription is needed for real use, not for the verification in this guide.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/billion-context-month-long-coding-sessions-tutorial/cover.webp" alt="A laptop terminal sending a glowing stream of conversation through a circular gateway that compresses it into stacked summary layers heading toward model servers"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<p>Long coding-agent sessions die the same way every time: the conversation grows until it no longer fits the model's context window, the client summarizes or truncates it, and the agent forgets the decisions that matter. billion-context attacks that failure from a different place. It is a small local proxy that sits between your coding agent and the model API, rewrites every request in flight, and hands the model tools to fold consumed conversation into summaries it writes itself. The client's history file is never touched; what shrinks is the traffic on the wire.</p>
+<p>The project is <a href="https://github.com/ranxianglei/billion-context" rel="nofollow">ranxianglei/billion-context</a>, and it is having a week: 4,515 stars on GitHub, 185 of them gained today, 8,021 commits across 205 releases, and a spot on GitHub's daily trending list. The pitch is specific — month-long single sessions, billions of tokens through one context window, 5× fewer tokens, and a 100K-token window being enough — and the repository backs it with a paper, a 1,500-item third-party benchmark, and a 4.5-month longitudinal study. This guide installs version 0.1.212, starts the proxy, proves with a local stand-in server that it rewrites requests and injects its compression tools, and shows how to read the cache report that tells you whether any of it is actually saving tokens.</p>
+<h2 id="what-you-need">What you need<a class="anchor" href="#what-you-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Node.js 22 or newer.</strong> The proxy uses Node's built-in SQLite engine; the docs warn it crashes under Node 20. The sandbox used Node v24.22.1.</li>
+<li><strong>A coding agent that talks to a model API</strong> — Claude Code, Codex, OpenCode, Pi, Gemini CLI, Aider, and about twenty others are supported. You do not need a new agent; the proxy wraps the one you have.</li>
+<li><strong>A model API key or subscription</strong> for real use. The verification in this guide uses a local stand-in server instead, so you can prove the machinery works before spending anything.</li>
+<li><strong>About 50 MB of disk</strong> for the package (47.5 MB unpacked) plus a few megabytes for session state. No GPU, no model download, no account with the project.</li>
+<li><strong>Linux or macOS</strong> for the commands below; Windows uses the default npm prefix instead of <code>--prefix=~/.local</code>.</li></ul>
+<p>License is MIT plus one attribution term, stated in the README. The proxy listens on port 8787 on loopback by default and has no authentication — keep it that way; the docs are explicit that the port should only ever be exposed on a trusted network.</p>
+<h2 id="step-1-install-bili">Step 1: Install bili<a class="anchor" href="#step-1-install-bili" aria-label="Link to section">#</a></h2>
+<p>Install from npm with a user-level prefix — no <code>sudo</code>, no npm config changes:</p>
+<pre><code class="language-bash">npm install -g billion-context --prefix=~/.local</code></pre>
+<p>The <code>bili</code> command lands in <code>~/.local/bin</code>, which is already on <code>PATH</code> on most distributions. If your shell cannot find it, add <code>export PATH="$HOME/.local/bin:$PATH"</code> to <code>~/.bashrc</code> or <code>~/.zshrc</code>. On nvm or Homebrew Node the default prefix is already user-owned, so a plain <code>npm install -g billion-context</code> works. The package keeps <code>bili-proxy</code> as an alias for the same command.</p>
+<p>Confirm the install and ask the tool to audit its own setup:</p>
+<pre><code class="language-bash">bili --version
+bili doctor</code></pre>
+<p>In this run, both answered exactly as documented:</p>
+<pre><code class="language-bash">$ bili --version
+0.1.212 (daa082ea)
+
+$ bili doctor
+bili doctor — billion-context (running v0.1.212)
+generated 2026-11-07T17:22:21.150Z
+
+global
+  form          npm — /dev/shm/bili-test/lib/node_modules/billion-context
+  versions      disk 0.1.212   registry[latest] 0.1.212
+  last check    never
+  verdict       ok
+  advisory      none
+
+lanes
+  pi           absent   not installed
+  omp          absent   not installed
+  claude       absent   not installed
+  codex        absent   not installed
+  opencode     absent   not installed
+  dsh          absent   not installed
+  kimi         absent   not installed
+  hermes       absent   not installed
+  zcode        absent   not installed
+
+processes
+  none registered
+
+summary: 0 ok, 0 stale, 0 frozen, 0 broken, 9 absent; processes: 0 live, 0 zombie</code></pre>
+<p>Doctor checks the installed version against the npm registry, lists every supported client lane and whether that client is installed, and reports live proxy processes. Nine lanes "absent" here simply means none of those clients are installed in this sandbox — doctor is reporting state, not failure. (One sandbox note: this machine's <code>/tmp</code> was full and its home-disk quota was tripping, so the verification install used a scratch prefix, <code>--prefix=/dev/shm/bili-test</code>, and a scratch home directory. The commands in this guide use the documented defaults; nothing about the tool's behavior depended on the prefix.)</p>
+<h2 id="step-2-start-the-proxy">Step 2: Start the proxy and prove it is alive<a class="anchor" href="#step-2-start-the-proxy" aria-label="Link to section">#</a></h2>
+<p>Start the proxy with no arguments. It reads <code>~/.config/billion-context/billion-context.json</code>, creating an empty one on first run, and binds port 8787 on loopback:</p>
+<pre><code class="language-bash">bili</code></pre>
+<p>The first lines of the log tell you what it set up:</p>
+<pre><code>2026-11-07T17:23:02.173 [info] [acp-config] created empty config at ~/.config/billion-context/billion-context.json
+2026-11-07T17:23:02.788 [info] [storage] unified FULL mode ENABLED (storage.unified=full ...)
+2026-11-07T17:23:02.935 [info] [log] writing to ~/.local/state/billion-context/bili.log</code></pre>
+<p>Now check the health endpoint — this is the check the Docker image's own healthcheck uses:</p>
+<pre><code class="language-bash">curl -s http://localhost:8787/__bili/health</code></pre>
+<pre><code class="language-json">{"ok":true,"upstream":"https://api.anthropic.com","version":"0.1.212","commit":"daa082ea","instanceId":"6f294685-84a9-456c-9ee5-1b2171a2b9fd","pid":85289,"startedAt":1794072182422,"blindTunnels":{"total":0,"hosts":{}},"auxProxy":"http://hatch-runtime:b8c6117c804340dcb7f805a546756b16@hatch-egress-proxy:3128/","auxProxySource":"HTTPS_PROXY","watchdog":{"armed":false,"watchers":[]}}</code></pre>
+<p><code>ok: true</code> is the answer you want. The default upstream is Anthropic's API; it changes to whatever your client actually points at once traffic flows. Two more endpoints are worth knowing now, before any request exists: <code>curl -s http://localhost:8787/__bili/stats</code> returns the live session list (empty at this point), and opening <code>http://localhost:8787/</code> in a browser returns the web UI — an overview dashboard, session list with per-session detail, live logs, a config editor, and an upstream connectivity test. All three answered in this run.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/billion-context-month-long-coding-sessions-tutorial/img2.webp" alt="Diagram of a coding agent client on the left connected through a central proxy gateway with a compression loop to a model API server on the right"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-3-route-a-client-through-it">Step 3: Route a client through it — the /bili/ URL change<a class="anchor" href="#step-3-route-a-client-through-it" aria-label="Link to section">#</a></h2>
+<p>billion-context offers three ways in: a native plugin, a launcher, and a URL change. The URL change is the most universal and the easiest to reason about, so start there. Prefix your client's existing base URL with the proxy origin plus <code>/bili/</code>. The full upstream URL is embedded in the path, so the proxy knows where to forward without any configuration:</p>
+<pre><code class="language-bash"># Before
+https://api.openai.com/v1
+
+# After
+http://localhost:8787/bili/https://api.openai.com/v1</code></pre>
+<p>In practice that means setting one environment variable before launching your client, depending on which API shape it speaks:</p>
+<pre><code class="language-bash"># OpenAI-compatible clients
+export OPENAI_BASE_URL=http://localhost:8787/bili/https://api.openai.com/v1
+
+# Anthropic clients (e.g. Claude Code)
+export ANTHROPIC_BASE_URL=http://localhost:8787/bili/https://api.anthropic.com</code></pre>
+<p>The same prefix works for a self-hosted gateway: point bili at the gateway and the gateway at your accounts, and compression happens before routing — the docs give the example <code>http://localhost:8787/bili/http://127.0.0.1:3425</code> for a gateway on port 3425, and note that loopback destinations work out of the box. To undo it, remove the prefix; traffic goes direct again immediately. Unrecognized endpoints forward unchanged, so a request the proxy does not understand is passed through rather than broken.</p>
+<p>The other two modes, for when you want the proxy managed for you:</p>
+<pre><code class="language-bash"># Launcher: starts a proxy and the client together, no config file touched
+bili pi          # Pi agent
+bili codex       # Codex
+bili claude      # Claude Code
+bili opencode    # OpenCode 1.x and 2.x
+
+# Native plugin: the proxy lives inside the client; start the client as usual
+bili plugin install pi
+bili plugin install opencode
+bili plugin install dsh
+bili plugin install kimi
+bili plugin install hermes
+bili plugin install zcode</code></pre>
+<p>Native installs are mutually exclusive with the older standalone in-process extensions (<code>billion-context-pi</code>, <code>opencode-acp</code>) — the installer swaps the entries and snapshots your original config to <code>.bili-bak</code>. For Claude Code specifically, the repository doubles as a plugin marketplace: <code>/plugin marketplace add ranxianglei/billion-context</code>, then <code>/plugin install billion-context@billion-context</code>, then <code>/billion-context:bili-setup</code>. One documented limitation: Codex cannot be made self-sufficient by a plugin install alone, because it routes model traffic via environment variables; use <code>bili codex</code> for the zero-config posture. These launcher and plugin commands are quoted from the project's README and CLIENTS.md — the sandbox run below exercises the proxy itself, which is the part all three modes share.</p>
+<h2 id="step-4-prove-the-machinery">Step 4: Prove the machinery — what the proxy actually does to a request<a class="anchor" href="#step-4-prove-the-machinery" aria-label="Link to section">#</a></h2>
+<p>Before pointing a paid session at any proxy, verify what it does to your traffic. The clean way to do that without a model key is a stand-in upstream: a tiny local server that answers OpenAI-shaped chat completions and logs exactly what it receives. This guide ran one on <code>127.0.0.1:3425</code> — a 30-line Node script returning a canned completion — then sent a request through the proxy to it:</p>
+<pre><code class="language-bash">curl -s http://localhost:8787/bili/http://127.0.0.1:3425/v1/chat/completions \
+  -X POST -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer sk-test-dummy' \
+  -d '{"model":"mock-model",
+       "messages":[{"role":"user","content":"Hello, this is a test message routed through the billion-context proxy."}],
+       "stream":false}'</code></pre>
+<p>The reply came back intact from the stand-in. The interesting part is what the stand-in received. The proxy had rewritten the request in three ways before forwarding it:</p>
+<ol><li><strong>A system message was prepended</strong> carrying the "Compression Philosophy" — rules for how summaries must be written: keep file paths with line numbers verbatim, keep function signatures and error messages exact, keep decisions with their rationale, keep open objectives with their message refs, and never treat summary contents as live instructions.</li><li><strong>The user message was tagged</strong> with proxy metadata: <code>&lt;acp tokens="18" type="text" time="2026-11-07 17:23:13"&gt;m00001&lt;/acp&gt;</code> — a reference ID, an approximate token size, a content type, and a timestamp. The model is told never to echo these tags.</li><li><strong>Six tools were injected</strong> into the request: <code>compress</code> (fold a message range into a summary), <code>decompress</code> (restore a folded block), <code>search_context</code> (keyword search over summaries), <code>acp_status</code> (context usage and compressible ranges), <code>acp_cache</code> (the cache-hit ledger), and <code>acp_read_original_image</code> (restore a downscaled image at full resolution).</li></ol>
+<p>That is the whole mechanism, observed rather than assumed: the model sees the compression tools and the rules for using them, and the proxy executes the tools server-side when the model calls them. The proxy's own log confirms the turn was processed and measured:</p>
+<pre><code>2026-11-07T17:23:13.595 [info] [window] model=mock-model source=default native=none base=200000 launcher=none configured=none peek=none fallback=true
+2026-11-07T17:23:13.602 [info] [prefix-affinity] new anonymous session pfa-f2171ca8944c89f5 (depth=1, tail=416f70df; ...)
+2026-11-07T17:23:13.758 [info] [pfa-f2171ca8944c89f5] processTurn: 1 msgs, renderTags=text-only, 1 text tagged, 0 tool tagged
+2026-11-07T17:23:13.759 [info] [pfa-f2171ca8944c89f5] nudge idle: usage=0% (71/200000), growth=0/22500 (ref=71, interval=50000), pendingT1=0/50000 model=mock-model, reason="max compressible 0 &lt; threshold 50000; growth 0 &lt; floor 22500"
+2026-11-07T17:23:13.847 [info] [pfa-f2171ca8944c89f5] [acp-usage] input=1200 (no cache report)</code></pre>
+<p>Two details in that log are worth reading closely. First, the model name <code>mock-model</code> is unknown to the proxy, so it fell back to a 200,000-token context window — with a real model it looks the window up from its registry (609 models loaded at startup in this run). Second, the <code>nudge idle</code> line is the compression decision, made and logged: this one-message conversation is far below the threshold, so nothing was folded. Compression is model-driven and threshold-gated, not something the proxy does to every request. The first soft compaction fires roughly 50,000 tokens past the boot content by default (<code>compress.nudgeGrowthTokens</code>), so with a ~100K boot it may wait until ~200K; a hard preflight backstop fires when the input alone exceeds the window. A one-message mock conversation cannot trigger a fold, and this guide does not pretend otherwise — the fold itself is the model's job, and what is verified here is that the model is given the tools, the rules, and the thresholds to do it.</p>
+<p>The stats endpoint recorded the session as structured data:</p>
+<pre><code class="language-json">{
+  "id": "pfa-f2171ca8944c89f5",
+  "protocol": "openai",
+  "upstream": "http://127.0.0.1:3425",
+  "label": "prefix-affinity 416f70df",
+  "title": "Hello, this is a test message routed through the billion-…",
+  "requests": 1,
+  "contextTokens": 1200,
+  "inputTokens": 1200,
+  "cachedTokens": 0,
+  "outputTokens": 25,
+  "contextWindow": 200000,
+  "lastModel": "mock-model"
+}</code></pre>
+<p>One behavior to know: each bare <code>curl</code> invocation started its own session, because curl carries no conversation identity. A real agent client keeps one conversation in one session — the proxy keys sessions on conversation-prefix affinity — so do not expect curl to reproduce multi-turn session behavior. Use it the way this guide does: to prove the rewrite, the injection, and the recording.</p>
+<h2 id="step-5-use-it-with-a-real-client">Step 5: Use it with a real client<a class="anchor" href="#step-5-use-it-with-a-real-client" aria-label="Link to section">#</a></h2>
+<p>With the proxy proven, the real workflow is unremarkable, which is the point. Start the proxy (or use a launcher, which starts it for you), point your client at it, and work as usual. As context grows, the model is nudged in ~50K-token steps to compress consumed ranges; when it calls <code>compress</code>, the proxy folds those ranges server-side and keeps the summaries in history until the model asks to restore them with <code>decompress</code>. Folds are incremental and reversible, and the summaries are written in small ranges so the provider's prefix cache stays intact — that cache behavior is where the token savings actually come from, and it is what the next step measures.</p>
+<p>Three things behave differently from your client's built-in summarizer, and all three are deliberate. First, compression shrinks what is <em>sent to the model</em>, not your client's stored history file — the docs flag this as the most common surprise, and note that on some hosts the local history file keeps growing, so starting a fresh session is the practical convergence path when it gets heavy. Second, the proxy never rewrites your history; it rebuilds every outgoing request from live blocks plus summaries. Third, native auto-compaction in the host must stay off while bili is active — the OpenCode installer disables it for you — because two compressors fighting over one history produces double compression.</p>
+<p>Run the proxy as a service if it will live on the machine: a Dockerfile ships at the repository root, built on <code>node:24-slim</code>, which installs the published npm package and runs the proxy on 8787 with four mounted volumes for config, session state, cache, and logs. The Docker path was not run in this sandbox (no Docker daemon here); the commands are quoted from the README's "Running in Docker" section.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/billion-context-month-long-coding-sessions-tutorial/img3.webp" alt="Diagram of a long row of small conversation message blocks folding through a gauge into a few dense summary blocks"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<h2 id="step-6-read-cache-health">Step 6: Read cache health and manage sessions<a class="anchor" href="#step-6-read-cache-health" aria-label="Link to section">#</a></h2>
+<p>A compression proxy that you cannot measure is a superstition. billion-context gives you three readouts, and you should use all of them on your first long session.</p>
+<p><strong>The in-client report.</strong> In a client with the native plugin, <code>/acp-cache</code> prints a text summary in the client itself, headed by a link to the web version: a GRAND LEDGER (totals plus hit percentage with a HEALTHY verdict), FOLD ECONOMICS (per-fold tokens saved and paid-back verdicts), and LINE ITEMS (anomalies only — hits under 85% or misses of 5,000 tokens or more). The project's rule of thumb, from the README: a healthy session keeps a 95–97% prefix-cache hit rate, and compression itself costs at most 2%. Sustained lower hit rates are attributed in order: upstream cache TTL expiry, a model switch, or a bili bug. The same report is available over HTTP at <code>GET /__bili/cache-report</code>; in this run it returned a JSON report for the mock session with a grand ledger, miss breakdown, and per-fold economics, all zeros — the mock upstream reports no cache, so there was nothing to attribute.</p>
+<p><strong>The session list and export.</strong> <code>bili sessions ls</code> lists persisted sessions with size and status:</p>
+<pre><code class="language-bash">$ bili sessions ls
+ID                    LABEL                     SIZE     LAST-UPDATED             STATUS
+--------------------  ------------------------  -------  -----------------------  ------
+pfa-90cd3230a360c714  prefix-affinity 8f80023b  5.7 KiB  2026-11-07 17:23:30 UTC  active
+pfa-f2171ca8944c89f5  prefix-affinity 416f70df  5.3 KiB  2026-11-07 17:23:14 UTC  active</code></pre>
+<p><code>bili export &lt;session-id&gt;</code> renders a session as a Markdown handoff — title, protocol, upstream, request count, context tokens, compression blocks, and the folded conversation as the model saw it — which is the artifact you paste into a fresh session or a bug report. Sessions live in <code>~/.local/share/billion-context/</code> (SQLite-backed); older sessions archive automatically after <code>storage.archiveAfterDays</code> (default 365), and <code>bili sessions archive</code>, <code>bili sessions restore</code>, <code>bili sessions rm</code>, and <code>bili storage gc</code> cover the rest of the lifecycle.</p>
+<p><strong>The log.</strong> Every request logs an <code>[acp-usage]</code> line — <code>round N input=X cached=Y (cache hit Z%)</code> — to <code>~/.local/state/billion-context/bili.log</code> (auto-rotating at 10 MB). If you want per-request detail without opening the web UI, <code>bili --debug</code> logs every <code>processTurn</code>, the nudge decision, client headers, and SSE rewrites.</p>
+<h2 id="step-7-tune-it">Step 7: Tune it<a class="anchor" href="#step-7-tune-it" aria-label="Link to section">#</a></h2>
+<p>Defaults are sane; three knobs cover most real setups. All live in <code>~/.config/billion-context/billion-context.json</code>, which you can also edit in the web UI's config editor, and every one of them is also available as a flag or environment variable — flags override env vars, which override the config file.</p>
+<pre><code class="language-bash"># Start on a different port (default 8787)
+bili --port 9000
+
+# Listen on all interfaces for agents on other machines (loopback-only by default)
+bili --host 0.0.0.0
+
+# Forward without compression — smoke-test mode
+bili --passthrough
+
+# Verbose logging: every processTurn, nudge decision, and SSE rewrite
+bili --debug
+
+# Use a different config file
+bili --config ~/my-bili.json
+
+# Check and install a newer version now (bypasses the update throttle)
+bili update</code></pre>
+<p>For earlier or later compaction, lower <code>compress.nudgeGrowthTokens</code> in the config — the README's worked example trims the system prompt, disables unneeded tools, prunes skills, and drops the growth step to ~50K to make the first compaction fire sooner; it also mentions a lean mode for the same purpose. For retention, <code>storage.archiveAfterDays</code> (default 365) controls when sessions move to the archive. For updates, the proxy checks npm on startup and every 3 minutes, but a discovered version is not applied immediately: each instance draws one random moment inside a 15-minute to 48-hour stagger window, and critical-defect advisories arrive through a separate channel that can force-install a fix — or a rollback — even with auto-update off. Disable the updater entirely with <code>"autoUpdate": false</code> or <code>ACP_AUTO_UPDATE=0</code>.</p>
+<p>Two operational notes from the README that will save you a debugging session. First, a long-lived standalone proxy can hold stale DNS after a WSL, VPN, or TUN topology change — every model request then answers HTTP 502 <code>tunnel_destination_denied</code> with detail <code>unresolvable</code>, while a fresh <code>bili</code> resolves the same host fine. Restart the proxy process itself; restarting only the client re-adopts the same wedged proxy. Second, if you run the proxy on <code>0.0.0.0</code>, remember there is no authentication: the management endpoints (<code>/__bili/*</code>) stay loopback-only, but the proxy port itself must sit behind a firewall or on a trusted LAN.</p>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>What it does</th><th>Use it when</th></tr></thead><tbody><tr><td><strong>billion-context</strong></td><td>Local proxy; model-driven incremental compression of the live conversation, prefix-cache friendly</td><td>One session must run for days or weeks — a big refactor, a migration, a long debugging thread — and you pay per token</td></tr><tr><td><strong>Built-in auto-compaction</strong></td><td>Your client's own summarizer condenses the conversation when the window fills</td><td>Sessions are hours, not days; you want zero setup and accept a coarse, one-shot summary</td></tr><tr><td><strong>Cross-session memory (e.g. claude-mem)</strong></td><td>Captures session activity and injects relevant context into future sessions</td><td>The problem is continuity <em>between</em> sessions, not size <em>within</em> one</td></tr><tr><td><strong>Fresh session + handoff</strong></td><td>You export a summary and start over</td><td>The work has a natural break, or you want a clean, human-reviewed handoff</td></tr><tr><td><strong>Bigger context windows</strong></td><td>Use a 1M-token model and stop worrying</td><td>Someone else pays the token bill, or sessions are short enough that re-sending the full history is cheap</td></tr></tbody></table></div>
+<p>The honest comparison is cost versus control. A 1M-token window solves the capacity problem by brute force and bills you for every token on every request; billion-context solves the cost problem by shrinking what is sent, and its own numbers say a healthy session holds a 95–97% prefix-cache hit rate with compression costing at most 2%. The project's reported benchmark results — first place on ContextBench at 0.3097 Utilized F1 with 58.3% lower cost than full context, 16.6% over the best RAG arm on LongMemEval-S, and 100% survival on a 1.48M-token MemoryAgentBench run where full context failed 199 of 199 cases — are the project's own figures from a 1,500-item third-party evaluation in the repository, not independent verification. Treat them as the claim to test against your own <code>/acp-cache</code> report, which is the measurement that matters for your sessions. The paper in the repo reports a 4.5-month longitudinal study — 174,327 model calls, 18.76B cumulative input tokens, zero window violations on 204,800-token models, marathon sessions of 8,584–12,049 calls — which at least establishes that the mechanism has been run hard, by its author, over months.</p>
+<p>Do not use it as a memory system. It does not remember facts across sessions, it does not build a knowledge base, and it will not rescue a session whose early decisions were wrong — it preserves them faithfully, in summary form. If that is what you need, the blog's <a href="/articles/claude-mem-persistent-memory-tutorial/">claude-mem hands-on</a> covers the persistent-memory side of the problem.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Long agent sessions fail on context economics, not on capability, and billion-context is the most direct fix available: a 47 MB local proxy, one npm install, no new agent to learn, no account, and a mechanism you can verify in ten minutes with a stand-in server before any real token is spent. Install 0.1.212, start the proxy, point your client at <code>http://localhost:8787/bili/…</code>, and let the model fold its own conversation. Then read the <code>/acp-cache</code> report after your first long session. If the hit rate sits at 95% or better and the folds are paying for themselves, keep it running; if it does not, the same report tells you whether the cause is TTL expiry, a model switch, or the tool itself — and removing it is one URL prefix.</p>
+<p>Verified in this run: npm install of billion-context 0.1.212; <code>bili --version</code> and <code>bili doctor</code> (verdict ok, registry match); <code>bili start</code> on port 8787 with health endpoint returning <code>ok: true</code>; an OpenAI-shaped request routed through <code>/bili/</code> to a local stand-in upstream, with the proxy's request rewrite, six injected tools, session record, and <code>[acp-usage]</code> log line all observed; <code>bili sessions ls</code>, <code>bili export</code>, the web UI, and <code>/__bili/cache-report</code> all returning live data. Not run here: an actual compression fold, which is model-driven and needs a real session past the ~50K-token growth threshold, and the Docker deployment, which needs a Docker daemon. Both are documented in the README and stated as such above.</p>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Does bili need my API key?</h3><p>No. Your key stays with the client or gateway; the dummy key rides through the proxy untouched. The proxy fingerprints only a 12-hex SHA-256 of the authorization header family for key-switch attribution — the raw key is never stored.</p><h3>Which clients does it work with?</h3><p>Pi, OpenCode, Claude Code, Codex, Gemini CLI, dsh, Kimi Code, Hermes, Z.ai, Aider, Copilot CLI, Amp, Crush, Zed, Goose, Kiro, and more — over twenty clients across the launcher, native plugin, and URL-change modes. Any client with an OpenAI- or Anthropic-compatible base URL works through the /bili/ prefix.</p><h3>Does compression change what my agent remembers?</h3><p>No. Your client's stored history file is never rewritten; only the traffic sent to the model shrinks. Summaries are written by the model, kept in the conversation, and reversible with the decompress tool.</p><h3>What does it cost?</h3><p>Nothing for the software — MIT licensed plus an attribution term, running on your own machine. The savings are model tokens: the project reports a healthy session holds a 95–97% prefix-cache hit rate with compression costing at most 2%. Measure your own sessions with /acp-cache rather than trusting the headline 5× figure.</p><h3>What if the proxy breaks mid-session?</h3><p>Model traffic goes direct and uncompressed until the host restarts — the proxy cannot block requests to protect itself. The web UI shows a staleness banner when the running version is behind the installed one, and /__bili/status reports the same for scripting.</p></section>
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/ranxianglei/billion-context" rel="nofollow">ranxianglei/billion-context — GitHub repository (README, install, quick start, proxy flags, FAQ, configuration)</a></li><li><a href="https://www.npmjs.com/package/billion-context" rel="nofollow">billion-context — npm package (version 0.1.212, unpacked size, dependencies)</a></li><li><a href="https://github.com/ranxianglei/billion-context/tree/master/benchmarks/third-party-1500" rel="nofollow">billion-context — third-party 1,500-item benchmark evaluation (ContextBench, LongMemEval-S, MemoryAgentBench)</a></li><li><a href="https://github.com/trending?since=daily" rel="nofollow">GitHub Trending — daily (billion-context listed, November 7, 2026)</a></li></ul></section>
+
+
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/claude-mem-persistent-memory-tutorial/">Stop re-explaining your project to Claude Code: hands-on with claude-mem</a></li><li><a href="/articles/worktrunk-parallel-ai-agents-git-worktrees-tutorial/">Run five coding agents in parallel without merge chaos: hands-on with Worktrunk</a></li><li><a href="/articles/nanobot-lightweight-personal-agent-tutorial/">Nanobot hands-on: run a 4,000-line personal agent on your own machine</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li></ul></section>
+
+
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="billion-context-month-long-coding-sessions-tutorial"></div><div class="comments" data-comments="billion-context-month-long-coding-sessions-tutorial"></div></div>
+
+
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
