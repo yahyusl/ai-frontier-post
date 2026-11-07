@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build an MCP server in TypeScript: your own tools, wired into Claude Code — AI Frontier Post</title>
+<meta name="description" content="MCP&#x27;s TypeScript SDK split into server and client packages in v2. This guide builds a real notes server with the new API — four tools, a resource, and a prompt — tests it with a real client and the Inspector, and wires it into Claude Code.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/typescript-mcp-server-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Build an MCP server in TypeScript: your own tools, wired into Claude Code">
+<meta property="og:description" content="MCP&#x27;s TypeScript SDK split into server and client packages in v2. This guide builds a real notes server with the new API — four tools, a resource, and a prompt — tests it with a real client and the Inspector, and wires it into Claude Code.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/typescript-mcp-server-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/typescript-mcp-server-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-07">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Build an MCP server in TypeScript: your own tools, wired into Claude Code">
+<meta name="twitter:description" content="MCP&#x27;s TypeScript SDK split into server and client packages in v2. This guide builds a real notes server with the new API — four tools, a resource, and a prompt — tests it with a real client and the Inspector, and wires it into Claude Code.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/typescript-mcp-server-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build an MCP server in TypeScript: your own tools, wired into Claude Code", "description": "MCP's TypeScript SDK split into server and client packages in v2. This guide builds a real notes server with the new API — four tools, a resource, and a prompt — tests it with a real client and the Inspector, and wires it into Claude Code.", "datePublished": "2026-11-07", "dateModified": "2026-11-07", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/typescript-mcp-server-tutorial/"}, "image": "https://aifrontierpost.com/articles/typescript-mcp-server-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build an MCP server in TypeScript: your own tools, wired into Claude Code", "description": "Build a notes MCP server with the TypeScript SDK v2, test it with a real client and the Inspector, wire it into Claude Code, and serve it over HTTP.", "step": [{"@type": "HowToStep", "name": "Install the v2 packages", "text": "Scaffold the project with type=module and install @modelcontextprotocol/server 2.4.0, zod 4.6.7, and tsx 4.21.0."}, {"@type": "HowToStep", "name": "Build the server factory and the first tool", "text": "Write src/notes-server.ts with storage helpers and register add-note with a Zod input schema and a structured output schema."}, {"@type": "HowToStep", "name": "Add search, list, and delete", "text": "Register search-notes, list-notes with a defaulted limit, and delete-note with the isError result pattern."}, {"@type": "HowToStep", "name": "Add a resource and a prompt", "text": "Register the notes://all resource and the weekly-review prompt template."}, {"@type": "HowToStep", "name": "Prove it works with a real client", "text": "Drive the server with a scripted client over stdio: list, call, and deliberately call wrong, and read the exact outputs."}, {"@type": "HowToStep", "name": "Drive it by hand in the Inspector", "text": "Launch the MCP Inspector, connect, and call the tools, resource, and prompt from its web UI."}, {"@type": "HowToStep", "name": "Wire it into Claude Code", "text": "Register the server with claude mcp add and let the model pick your tools from their descriptions."}, {"@type": "HowToStep", "name": "Serve the same factory over HTTP", "text": "Mount the factory on Streamable HTTP with createMcpHandler and host/origin validation, and verify it with an HTTP client."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build an MCP server in TypeScript: your own tools, wired into Claude Code</h1>
+<p class="lede">Most MCP tutorials still teach the old SDK — one package, one API, superseded in July 2026. Version 2 split the TypeScript SDK into server and client packages and changed how tools are registered. This guide builds a real notes server with the new API, proves it works with a real client and the Inspector, and wires it into Claude Code.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 7, 2026 · 17 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> The MCP TypeScript SDK v2 (released July 27, 2026) split the old <code>@modelcontextprotocol/sdk</code> package into <code>@modelcontextprotocol/server</code> and <code>@modelcontextprotocol/client</code>. This guide builds a notes server with the v2 API (server 2.4.0, zod 4.6.7, tsx 4.21.0): four tools, one resource, and one prompt backed by a JSON file. Every call was verified end to end with a scripted client over stdio and Streamable HTTP, in the MCP Inspector 2.14.0, and the server registers in Claude Code with one command.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> A notes MCP server in TypeScript: <code>add-note</code>, <code>search-notes</code>, <code>list-notes</code>, <code>delete-note</code>, the <code>notes://all</code> resource, and the <code>weekly-review</code> prompt — all backed by a plain <code>notes.json</code> file.</li><li><b>Versions:</b> <code>@modelcontextprotocol/server</code> 2.4.0 and <code>@modelcontextprotocol/client</code> 2.4.0 (both published October 23, 2026), zod 4.6.7, tsx 4.21.0, Inspector 2.14.0, <code>@modelcontextprotocol/node</code> 2.1.2. Node.js 20 or later.</li><li><b>Verified:</b> November 7, 2026: the install, the server, a scripted client over stdio (all four tools, the resource, the prompt, and the validation rejections), the Inspector launch, and the Streamable HTTP mount all executed on this machine. Host steps (Claude Code, VS Code, Cursor) follow the SDK's own host guide; the server they attach to is the one proven here.</li><li><b>Requirement:</b> Node.js 20+ and about 30 minutes. No API key, no account, no build step. Claude Code (or VS Code / Cursor) is optional, for Step 7 only.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/typescript-mcp-server-tutorial/cover.webp" alt="Illustration of a chat assistant panel connected through a terminal to a server rack"><figcaption>AI-generated illustration: a chat assistant, a terminal, and a server rack — the host, the code, and the server this tutorial builds.</figcaption></figure>
+</header>
+<div class="article-body"><p>If you followed any MCP tutorial written before the summer, you learned an API that is now the legacy one. On July 27, 2026 the TypeScript SDK shipped v2: the single <code>@modelcontextprotocol/sdk</code> package split into <code>@modelcontextprotocol/server</code> and <code>@modelcontextprotocol/client</code>, the registration calls changed, and the old package moved to a maintenance line that implements the 2025-11-25 spec and gets bug fixes only. Most tutorials, snippets, and AI-generated starter code still teach v1. This guide builds a server the v2 way — and ends with a real server you can keep using, not a weather demo.</p>
+<p>What you will build is a notes server: four tools (<code>add-note</code>, <code>search-notes</code>, <code>list-notes</code>, <code>delete-note</code>), one resource (<code>notes://all</code>), and one prompt (<code>weekly-review</code>), all backed by a plain JSON file on your disk. Notes are the right shape for a first server — the state is visible, the tools are genuinely useful, and every failure mode shows up in the open: bad input, missing records, a client that sends the wrong type. By the end you will have driven the server three ways: from a scripted client over stdio, from the MCP Inspector's web UI, and from Claude Code, where the model picks your tools on its own. The same factory then serves over Streamable HTTP, so the server works for remote clients too.</p>
+<p>Everything below was run, not read off a README: the install, the server, the client calls, the validation errors, the Inspector launch, and the HTTP mount all executed on this machine against the exact versions pinned in Step 1. Where a step depends on a screen rather than a command — the Inspector's clicks, Claude Code's approval prompt — the article says so, and quotes the SDK's own host guide for the exact command.</p>
+<h2 id="what-you-need">What you&#x27;ll need<a class="anchor" href="#what-you-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li>Node.js 20 or later. This guide ran against Node v24.22.1 and npm 10.9.4. No other runtime, no build step, no API key, no account — the whole server runs on your machine.</li>
+<li>About 30 minutes. The server itself is one file; the verification is where the time goes, and it is the part that makes the difference between a server that works and one you only believe works.</li>
+<li>Pinned versions, verified November 7, 2026: <code>@modelcontextprotocol/server</code> 2.4.0, <code>@modelcontextprotocol/client</code> 2.4.0 (for the test client), <code>zod</code> 4.6.7, <code>tsx</code> 4.21.0, <code>@modelcontextprotocol/inspector</code> 2.14.0, <code>@modelcontextprotocol/node</code> 2.1.2 (for the HTTP step only). If you install latest and get a newer minor version, the API below should still hold — v2 is the stable line — but re-check the docs if a call is not where this guide left it.</li>
+<li>Optional, for Step 7: Claude Code installed and authenticated, or VS Code 1.99+ with the GitHub Copilot extension, or Cursor. Everything before Step 7 works without any host.</li>
+</ul>
+<p>The moving parts, before any code:</p>
+<div class="table-wrap"><table><thead><tr><th>Piece</th><th>What it is</th><th>What it does here</th></tr></thead><tbody><tr><td><strong>Host</strong></td><td>The app with the model in it — Claude Code, VS Code, the Inspector</td><td>Launches your server, lists its tools, sends the model&#x27;s tool calls</td></tr><tr><td><strong>Server</strong></td><td>Your program, <code>src/index.ts</code></td><td>Registers tools, a resource, and a prompt; validates every call; reads and writes <code>notes.json</code></td></tr><tr><td><strong>Transport</strong></td><td>stdio first, Streamable HTTP in Step 8</td><td>Carries JSON-RPC messages between host and server</td></tr><tr><td><strong>State</strong></td><td><code>notes.json</code> in the project root</td><td>Plain JSON array — visible, deletable, committable, no database to run</td></tr></tbody></table></div>
+<p>One rule governs the whole build: <strong>stdout belongs to the protocol</strong>. An stdio server speaks JSON-RPC on stdin and stdout, so a single <code>console.log</code> in your code corrupts the message stream and the host drops the connection. Log with <code>console.error</code>, which goes to stderr and never touches the protocol. You will see this rule twice more below — once when it saves you, once when it bites.</p>
+<h2 id="1-install">Step 1: Scaffold the project and install the v2 packages<a class="anchor" href="#1-install" aria-label="Link to section">#</a></h2>
+<p>Create the project and install the server package, Zod, and tsx — the runner that executes TypeScript directly, so there is no build step:</p>
+<pre><code class="language-bash">mkdir notes-mcp &amp;&amp; cd notes-mcp
+npm init -y
+npm pkg set type=module
+npm install @modelcontextprotocol/server@2.4.0 zod@4.6.7 tsx@4.21.0
+mkdir src</code></pre>
+<p>Two details matter here. First, <code>type=module</code>: the SDK ships ES modules only, and without it Node will refuse the imports with an unhelpful error. Second, the package name: <code>@modelcontextprotocol/server</code>, not <code>@modelcontextprotocol/sdk</code>. The old name still installs — it is the v1 maintenance line, currently 1.32.2 — and if you copy it from an older tutorial you will get the old API with it: <code>server.tool()</code> instead of <code>registerTool()</code>, a manual transport instead of <code>serveStdio</code>, and no 2026-07-28 spec support. If a tutorial you are following imports from <code>@modelcontextprotocol/sdk</code>, it is teaching v1.</p>
+<p>Confirm the install landed:</p>
+<pre><code class="language-bash">node -e "console.log(require('./package.json').dependencies)"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-bash">{ '@modelcontextprotocol/server': '^2.4.0', tsx: '^4.21.0', zod: '^4.6.7' }</code></pre>
+<p>Zod deserves a sentence, because v2 changed the deal. The server package depends on Zod 4 itself, and tool schemas use <strong>Standard Schema</strong> — you can bring Zod v4, Valibot, ArkType, or any compatible library. This guide uses Zod v4, imported as <code>import * as z from 'zod/v4'</code>. That <code>/v4</code> path is load-bearing: plain <code>zod</code> still resolves to the v3-compatible entry in some setups, and the v4 import is what the SDK's own docs use. One schema is all you write per tool; the SDK derives the JSON Schema the model sees, validates arguments before your handler runs, and infers your handler's argument types from it.</p>
+<h2 id="2-first-tool">Step 2: The server factory and your first tool<a class="anchor" href="#2-first-tool" aria-label="Link to section">#</a></h2>
+<p>The v2 shape is a <strong>factory</strong>: a function that builds and returns a fresh <code>McpServer</code>. The factory matters because the same function serves stdio in this step and HTTP in Step 8 — one server definition, two transports. Create <code>src/notes-server.ts</code> with the storage helpers and the first tool:</p>
+<pre><code class="language-typescript">import { McpServer } from '@modelcontextprotocol/server';
+import * as z from 'zod/v4';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const DATA_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'notes.json'
+);
+
+interface Note {
+  id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  createdAt: string;
+}
+
+async function loadNotes(): Promise&lt;Note[]&gt; {
+  try {
+    return JSON.parse(await readFile(DATA_FILE, 'utf8')) as Note[];
+  } catch {
+    return [];
+  }
+}
+
+async function saveNotes(notes: Note[]): Promise&lt;void&gt; {
+  await mkdir(path.dirname(DATA_FILE), { recursive: true });
+  await writeFile(DATA_FILE, JSON.stringify(notes, null, 2), 'utf8');
+}
+
+function renderNote(n: Note): string {
+  const tags = n.tags.length ? ` [${n.tags.join(', ')}]` : '';
+  return `## ${n.title} (${n.id})${tags}\n${n.body}\n— saved ${n.createdAt}`;
+}
+
+function createServer(): McpServer {
+  const server = new McpServer({ name: 'notes', version: '1.0.0' });
+
+  server.registerTool(
+    'add-note',
+    {
+      title: 'Add a note',
+      description:
+        'Save a short note with a title, body, and optional tags. Returns the note id.',
+      inputSchema: z.object({
+        title: z.string().min(1).describe('Short title for the note'),
+        body: z.string().min(1).describe('The note content'),
+        tags: z.array(z.string()).optional().describe('Optional tags, e.g. ["ideas", "mcp"]')
+      }),
+      outputSchema: z.object({ id: z.string(), title: z.string() })
+    },
+    async ({ title, body, tags = [] }) =&gt; {
+      const notes = await loadNotes();
+      const note: Note = {
+        id: randomUUID(),
+        title,
+        body,
+        tags,
+        createdAt: new Date().toISOString()
+      };
+      notes.push(note);
+      await saveNotes(notes);
+      const output = { id: note.id, title: note.title };
+      return {
+        content: [{ type: 'text', text: `Saved note "${title}" with id ${note.id}.` }],
+        structuredContent: output
+      };
+    }
+  );
+
+  return server;
+}
+
+export { createServer };</code></pre>
+<p>Three things to notice. First, <code>registerTool</code> takes a name, a config, and an async handler — and the config's <code>description</code> is not decoration. It is the text the model reads when deciding which tool answers a question, so write it as an instruction to a model, not a comment to a human: what the tool does, what it returns, when to use it. A vague description is how a model picks the wrong tool. Second, <code>outputSchema</code> with <code>structuredContent</code> is v2's typed output: the handler returns both a human-readable text block and a machine-readable object, and the SDK validates the object against the schema. A host that understands structured content can use the id directly instead of parsing it out of a sentence. Third, <code>DATA_FILE</code> resolves from the server file's own location, not the working directory — hosts launch servers from wherever they please, and a path relative to <code>process.cwd()</code> is the classic way to lose your data file.</p>
+<p>Now the entry point, <code>src/index.ts</code> — four lines, and the whole stdio story:</p>
+<pre><code class="language-typescript">import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { createServer } from './notes-server.js';
+
+void serveStdio(createServer);
+console.error('notes MCP server running on stdio');</code></pre>
+<p><code>serveStdio</code> owns the transport: it reads requests on stdin, writes responses to stdout, and calls your factory to build the instance that serves the connection. The banner goes to stderr, on purpose. Run it:</p>
+<pre><code class="language-bash">npx tsx src/index.ts</code></pre>
+<p>Expected output — one line on stderr, then silence:</p>
+<pre><code class="language-bash">notes MCP server running on stdio</code></pre>
+<p>Silence is correct. An stdio server waits on stdin for a client to start the conversation. Stop it with <code>Ctrl+C</code>. If you see anything else — a crash, a second line, an ESM error — fix it here, where you can read the error, before any host is involved. A server that does not print exactly this line and wait is a server no host can attach to.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/typescript-mcp-server-tutorial/img2.webp" alt="Illustration of a laptop chat assistant connected through a small local server to a filing cabinet of notes"><figcaption>AI-generated illustration: the host, the server, and the notes file — the three pieces of this tutorial.</figcaption></figure>
+<h2 id="3-more-tools">Step 3: The rest of the tools — search, list, delete<a class="anchor" href="#3-more-tools" aria-label="Link to section">#</a></h2>
+<p>Add the remaining three tools inside <code>createServer</code>, before <code>return server</code>. Search first — it is the tool you will actually call ten times a day:</p>
+<pre><code class="language-typescript">  server.registerTool(
+    'search-notes',
+    {
+      title: 'Search notes',
+      description:
+        'Search saved notes by keyword across titles, bodies, and tags. Returns matching notes.',
+      inputSchema: z.object({
+        query: z.string().min(1).describe('Keyword to search for')
+      })
+    },
+    async ({ query }) =&gt; {
+      const q = query.toLowerCase();
+      const hits = (await loadNotes()).filter((n) =&gt;
+        [n.title, n.body, n.tags.join(' ')].join(' ').toLowerCase().includes(q)
+      );
+      if (hits.length === 0) {
+        return { content: [{ type: 'text', text: `No notes match "${query}".` }] };
+      }
+      return {
+        content: [{ type: 'text', text: hits.map(renderNote).join('\n\n') }]
+      };
+    }
+  );
+
+  server.registerTool(
+    'list-notes',
+    {
+      title: 'List notes',
+      description: 'List the most recently saved notes, newest first.',
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(50).default(10).describe('How many notes to return (1-50)')
+      })
+    },
+    async ({ limit }) =&gt; {
+      const notes = await loadNotes();
+      const recent = [...notes].reverse().slice(0, limit);
+      if (recent.length === 0) {
+        return { content: [{ type: 'text', text: 'No notes saved yet. Use add-note first.' }] };
+      }
+      return {
+        content: [{ type: 'text', text: recent.map(renderNote).join('\n\n') }]
+      };
+    }
+  );
+
+  server.registerTool(
+    'delete-note',
+    {
+      title: 'Delete a note',
+      description: 'Delete a saved note by its id.',
+      inputSchema: z.object({
+        id: z.string().describe('The id returned by add-note')
+      })
+    },
+    async ({ id }) =&gt; {
+      const notes = await loadNotes();
+      const kept = notes.filter((n) =&gt; n.id !== id);
+      if (kept.length === notes.length) {
+        return {
+          content: [{ type: 'text', text: `No note with id ${id}.` }],
+          isError: true
+        };
+      }
+      await saveNotes(kept);
+      return { content: [{ type: 'text', text: `Deleted note ${id}.` }] };
+    }
+  );</code></pre>
+<p><code>list-notes</code> shows two Zod behaviors worth knowing. <code>.default(10)</code> makes <code>limit</code> optional at the call site — a client can omit it entirely — while the handler always receives a number. And <code>.min(1).max(50)</code> is enforced by the SDK before your handler runs: call it with 99 and the model gets a readable rejection instead of your code deciding what to do with a nonsense value. You will see the exact rejection text in Step 5.</p>
+<p><code>delete-note</code> shows the error pattern: return <code>isError: true</code> with a plain-text explanation. Do not throw. A thrown exception becomes a protocol-level error the model cannot read and react to; an <code>isError</code> result is a normal result the model can see, understand, and recover from — ask for the id again, list the notes, pick the right one. Reserve exceptions for bugs. Missing records, bad ids, empty searches: those are results, not crashes.</p>
+<h2 id="4-resource-prompt">Step 4: A resource and a prompt — the other two primitives<a class="anchor" href="#4-resource-prompt" aria-label="Link to section">#</a></h2>
+<p>Tools are the headliner, but MCP has two more primitives, and a server that only has tools is leaving the obvious uses on the table. <strong>Resources</strong> expose read-only data the client can surface without a model deciding to call anything — the host can read them, attach them to context, or show them to the user. <strong>Prompts</strong> are reusable templates that turn a server's data into a ready-made request. Add both inside <code>createServer</code>, after the tools:</p>
+<pre><code class="language-typescript">  server.registerResource(
+    'all-notes',
+    'notes://all',
+    {
+      title: 'All notes',
+      description: 'Every saved note, rendered as Markdown.',
+      mimeType: 'text/markdown'
+    },
+    async (uri) =&gt; ({
+      contents: [
+        {
+          uri: uri.href,
+          text: (await loadNotes()).map(renderNote).join('\n\n') || 'No notes saved yet.'
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    'weekly-review',
+    {
+      title: 'Weekly review',
+      description: 'Ask the model to review your notes and pull out themes and open loops.',
+      argsSchema: z.object({
+        focus: z.string().optional().describe('Optional area to focus on, e.g. "project ideas"')
+      })
+    },
+    async ({ focus }) =&gt; {
+      const notes = await loadNotes();
+      const focusLine = focus ? ` Focus on: ${focus}.` : '';
+      return {
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: `Review my notes below and pull out the main themes, anything that looks unfinished, and the three most useful next steps.${focusLine}\n\n${notes.map(renderNote).join('\n\n') || 'No notes saved yet.'}`
+            }
+          }
+        ]
+      };
+    }
+  );</code></pre>
+<p>The resource URI scheme is yours to choose — <code>notes://all</code> is a custom scheme, and MCP does not care what it is as long as it is a valid URI. The <code>mimeType</code> tells the client what it is getting; <code>text/markdown</code> is the honest label for rendered notes. The prompt's <code>argsSchema</code> works like a tool's <code>inputSchema</code> — same Zod, same validation — and the callback returns messages, not content. Note the deliberate choice in the prompt: the notes travel <em>inside</em> the message text. A prompt is a template; it assembles the request, and the model reads it like any user message. That is also the security boundary to respect: anything your prompt inlines becomes model-visible context, so never put secrets in a resource or a prompt template.</p>
+<p>Your server is now complete: four tools, one resource, one prompt, one JSON file. Before any host touches it, prove it works — that is Step 5, and it is the step most tutorials skip.</p>
+<h2 id="5-test-client">Step 5: Prove it works with a real client<a class="anchor" href="#5-test-client" aria-label="Link to section">#</a></h2>
+<p>A server you have only run and stared at is unverified. The rigorous check is a client that speaks the protocol: initialize, list, call, and deliberately call wrong. Install the client package and save this as <code>verify-client.mjs</code> in the project root:</p>
+<pre><code class="language-bash">npm install @modelcontextprotocol/client@2.4.0</code></pre>
+<pre><code class="language-javascript">import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+
+const transport = new StdioClientTransport({
+  command: 'npx',
+  args: ['tsx', 'src/index.ts'],
+  stderr: 'pipe'
+});
+transport.stderr?.on('data', (d) =&gt; process.stderr.write(`[server stderr] ${d}`));
+
+const client = new Client({ name: 'verify-client', version: '1.0.0' }, { capabilities: {} });
+await client.connect(transport);
+
+const tools = await client.listTools();
+console.log('TOOLS:', JSON.stringify(tools.tools.map((t) =&gt; t.name)));
+
+const added = await client.callTool({
+  name: 'add-note',
+  arguments: { title: 'MCP v2 check', body: 'The TypeScript SDK split into server and client packages.', tags: ['mcp', 'verify'] }
+});
+console.log('ADD-NOTE:', JSON.stringify(added.content), 'structured:', JSON.stringify(added.structuredContent));
+const id = added.structuredContent.id;
+
+await client.callTool({
+  name: 'add-note',
+  arguments: { title: 'Second note', body: 'Search should find this by keyword zebra.' }
+});
+
+const listed = await client.callTool({ name: 'list-notes', arguments: {} });
+console.log('LIST-NOTES:', listed.content[0].text.slice(0, 120));
+
+const found = await client.callTool({ name: 'search-notes', arguments: { query: 'zebra' } });
+console.log('SEARCH zebra:', found.content[0].text.slice(0, 80));
+
+const badTitle = await client.callTool({ name: 'add-note', arguments: { title: '', body: 'x' } });
+console.log('EMPTY-TITLE isError:', badTitle.isError, '| text:', JSON.stringify(badTitle.content));
+
+const badLimit = await client.callTool({ name: 'list-notes', arguments: { limit: 99 } });
+console.log('LIMIT-99 isError:', badLimit.isError, '| text:', JSON.stringify(badLimit.content));
+
+const deleted = await client.callTool({ name: 'delete-note', arguments: { id } });
+console.log('DELETE:', JSON.stringify(deleted.content[0].text), 'isError:', deleted.isError);
+
+const resources = await client.listResources();
+console.log('RESOURCES:', JSON.stringify(resources.resources.map((r) =&gt; r.uri)));
+const res = await client.readResource({ uri: 'notes://all' });
+console.log('READ notes://all:', res.contents[0].text.slice(0, 80));
+
+const prompts = await client.listPrompts();
+console.log('PROMPTS:', JSON.stringify(prompts.prompts.map((p) =&gt; p.name)));
+const prompt = await client.getPrompt({ name: 'weekly-review', arguments: { focus: 'project ideas' } });
+console.log('GET weekly-review:', prompt.messages[0].content.text.slice(0, 100));
+
+await client.close();</code></pre>
+<p>Run it from a clean state — delete <code>notes.json</code> first so the outputs match — and this is what a working server produces. These are the real outputs from this guide's run (your UUIDs and timestamps will differ):</p>
+<pre><code class="language-bash">node verify-client.mjs</code></pre>
+<pre><code class="language-text">[server stderr] notes MCP server running on stdio
+TOOLS: ["add-note","search-notes","list-notes","delete-note"]
+ADD-NOTE: [{"type":"text","text":"Saved note \"MCP v2 check\" with id fcc71114-2d88-4fb9-bfce-d3da539bfde1."}] structured: {"id":"fcc71114-2d88-4fb9-bfce-d3da539bfde1","title":"MCP v2 check"}
+LIST-NOTES: "## Second note (d4996867-9234-49b6-8b93-9802bfc04551)\nSearch should find this by keyword zebra.\n— saved 2026-11-07T23:22:37.990Z"
+SEARCH zebra: "## Second note (d4996867-9234-49b6-8b93-9802bfc04551)\nSearch should find this by keyword zebra."
+EMPTY-TITLE isError: true | text: [{"type":"text","text":"Input validation error: Invalid arguments for tool add-note: title: Too small: expected string to have &gt;=1 characters"}]
+LIMIT-99 isError: true | text: [{"type":"text","text":"Input validation error: Invalid arguments for tool list-notes: limit: Too big: expected number to be &lt;=50"}]
+DELETE: "Deleted note fcc71114-2d88-4fb9-bfce-d3da539bfde1." isError: undefined
+RESOURCES: ["notes://all"]
+READ notes://all: "## Second note (d4996867-9234-49b6-8b93-9802bfc04551)\nSearch should find this by keyword zebra."
+PROMPTS: ["weekly-review"]
+GET weekly-review: "Review my notes below and pull out the main themes, anything that looks unfinished, and the three most useful next steps. Focus on: project ideas."</code></pre>
+<p>Read the two error lines closely, because they are the whole point of schema validation. The SDK rejected the empty title and the out-of-range limit <em>before your handler ran</em> — no note was saved, no code of yours executed — and returned a message a model can act on: which field, which rule, which value. The client does not throw for these; it returns a result with <code>isError: true</code>, which is the correct MCP behavior — a validation failure is a result the model reads, not a crash. (A genuinely unknown tool is different: calling <code>no-such-tool</code> makes the client throw <code>Tool no-such-tool not found</code>.)</p>
+<p>Two more things this run proves. First, the JSON Schema the model sees is derived from your Zod schema, not handwritten: <code>listTools</code> shows <code>add-note</code>'s schema with <code>minLength: 1</code> on title and body, <code>required: ["title", "body"]</code>, and <code>$schema: https://json-schema.org/draft/2020-12/schema</code>. What you declare is what the model gets. Second, <code>list-notes</code> with no arguments returned the notes newest-first — the <code>.default(10)</code> fired, and the second note came first. Check <code>notes.json</code> on disk afterwards: it holds exactly the surviving note, formatted JSON, human-readable. If any line of this output differs on your machine, stop and fix the server — a host will only make the same failure harder to see.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/typescript-mcp-server-tutorial/img3.webp" alt="Illustration of a developer inspecting a small server with a magnifying glass while green checkmarks float above it"><figcaption>AI-generated illustration: the verification step — a client that calls every tool, including the wrong calls, before any host is involved.</figcaption></figure>
+<h2 id="6-inspector">Step 6: Drive it by hand in the MCP Inspector<a class="anchor" href="#6-inspector" aria-label="Link to section">#</a></h2>
+<p>The scripted client proves the protocol. The Inspector proves the server behaves for a human: it is a local web app that launches your server, connects over stdio, and lets you call tools from a form. No install step — <code>npx</code> fetches it:</p>
+<pre><code class="language-bash">npx @modelcontextprotocol/inspector npx tsx src/index.ts</code></pre>
+<p>It prints a URL with an auth token and opens a browser tab. On this machine it started as version 2.14.0 and served its UI at <code>http://127.0.0.1:6274</code> — the exact token is yours, per run, and the startup log also warns that its secrets fall back to an unencrypted file when no OS keychain is available, which is expected on a headless machine and worth knowing on a shared one. In the tab, click <strong>Connect</strong>, open the <strong>Tools</strong> tab, select <code>add-note</code>, fill in a title and body, and run it. The text block in the result is the same content a model receives when it calls your tool — which is the point of the exercise: you are reading the tool's output the way the model will.</p>
+<p>Try the failure cases here too, because the form makes them visible: call <code>add-note</code> with an empty title and watch the validation error come back as a result; call <code>list-notes</code> with limit 99 and watch the same <code>Too big: expected number to be &lt;=50</code> rejection. Then check the <strong>Resources</strong> tab — <code>notes://all</code> reads back every note as Markdown — and the <strong>Prompts</strong> tab, where <code>weekly-review</code> renders the assembled message with your notes inlined. If a tool misbehaves in the Inspector, the problem is in your server, not the host; fix it here, where the feedback loop is seconds.</p>
+<h2 id="7-claude-code">Step 7: Wire it into Claude Code<a class="anchor" href="#7-claude-code" aria-label="Link to section">#</a></h2>
+<p>Now the payoff: the model calls your tools without you naming them. From the project root, register the server with Claude Code. The command below is from the SDK's own host guide — the server it attaches to is the one you just proved works, which is why the order matters:</p>
+<pre><code class="language-bash">claude mcp add notes -- npx tsx src/index.ts</code></pre>
+<p>Everything after <code>--</code> is the launch command: the host spawns it as a child process and talks to it over stdin and stdout, exactly like your test client did. Verify inside a Claude Code session in that directory with <code>/mcp</code>: <code>notes</code> should show as connected, with <code>add-note</code>, <code>search-notes</code>, <code>list-notes</code> and <code>delete-note</code> listed under it. Then ask something the server — and only the server — can answer:</p>
+<pre><code class="language-text">Save a note that the MCP v2 server tutorial is done, then search my notes for "zebra".</code></pre>
+<p>Claude Code stops to show the calls it wants to make and waits for your approval — approve, and the handler you wrote runs; the answer in the chat is written from the text block it returned. Nothing in the prompt named the tools. The model picked <code>add-note</code> and then <code>search-notes</code> from their names, their descriptions, and the JSON Schema the SDK derived from your <code>inputSchema</code>. That is the moment the description-writing advice from Step 2 stops being abstract: a vague description is a tool the model never picks, or picks for the wrong job.</p>
+<p>To share the server with a team, register it at project scope instead — the command writes a <code>.mcp.json</code> at the repository root, which you commit:</p>
+<pre><code class="language-bash">claude mcp add --scope project notes -- npx tsx src/index.ts</code></pre>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "notes": {
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"]
+    }
+  }
+}</code></pre>
+<p>Two scope notes. Project-scope servers ask each teammate for a one-time approval the first time their session loads them — a cloned repository cannot pre-approve its own servers — and a committed <code>.mcp.json</code> must never hold secrets: use <code>${VAR}</code> references in <code>command</code>, <code>args</code> or <code>env</code> and keep the values out of git. The same launch command works in the other hosts, only the file changes: VS Code takes <code>.vscode/mcp.json</code> with a <code>servers</code> key and <code>"type": "stdio"</code>, Cursor takes <code>.cursor/mcp.json</code> with the same <code>mcpServers</code> shape as above. If a host does not see your tools, run the launch command by hand first — <code>npx tsx src/index.ts</code> should print the one stderr line and wait. Anything else is the bug, and it has one of three causes: the process exits, something besides JSON-RPC reaches stdout, or the chat is not in agent mode.</p>
+<h2 id="8-http">Step 8: Serve the same factory over HTTP<a class="anchor" href="#8-http" aria-label="Link to section">#</a></h2>
+<p>stdio is the right transport when one host launches one server on one machine. When many clients need one endpoint — a team server, a deployed service — serve the same factory over Streamable HTTP. The factory pattern from Step 2 pays off here: no server code changes, only a new entry point. Install the Node middleware package and create <code>src/http.ts</code>:</p>
+<pre><code class="language-bash">npm install @modelcontextprotocol/node@2.1.2</code></pre>
+<pre><code class="language-typescript">import { createMcpHandler } from '@modelcontextprotocol/server';
+import {
+  toNodeHandler,
+  localhostHostValidation,
+  localhostOriginValidation
+} from '@modelcontextprotocol/node';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer } from './notes-server.js';
+
+const handler = createMcpHandler(createServer);
+const nodeHandler = toNodeHandler(handler);
+const validateHost = localhostHostValidation();
+const validateOrigin = localhostOriginValidation();
+
+const server = createHttpServer((req, res) =&gt; {
+  if (!validateHost(req, res) || !validateOrigin(req, res)) return;
+  void nodeHandler(req, res);
+});
+
+server.listen(3000, '127.0.0.1', () =&gt; {
+  console.error('notes MCP server running on http://127.0.0.1:3000/mcp');
+});
+
+process.on('SIGINT', async () =&gt; {
+  await handler.close();
+  process.exit(0);
+});</code></pre>
+<p><code>createMcpHandler</code> takes your factory and returns a handler whose <code>fetch</code> is a web-standard <code>(Request) =&gt; Promise&lt;Response&gt;</code>. The factory runs once per HTTP request — a fresh instance serves every request, and no state lives on the instance between requests, which is what makes the endpoint stateless and horizontally scalable. The two validators in front of it are not optional decoration: the handler itself validates no <code>Host</code> header, no <code>Origin</code> header, and no token. On a localhost bind the Host check is what stops DNS rebinding — a malicious page resolving its own domain to 127.0.0.1 so the browser treats your local server as same-origin. The framework mounts (Express, Fastify, Hono) arm both checks by default; on plain <code>node:http</code> you compose them by hand, as above. Bind loopback explicitly — <code>'127.0.0.1'</code>, never <code>'0.0.0.0'</code> — unless you have thought about who can reach the port.</p>
+<p>Start it and drive it with a client over HTTP:</p>
+<pre><code class="language-bash">npx tsx src/http.ts</code></pre>
+<pre><code class="language-bash">notes MCP server running on http://127.0.0.1:3000/mcp</code></pre>
+<pre><code class="language-javascript">import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+
+const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1:3000/mcp'));
+const client = new Client({ name: 'verify-http', version: '1.0.0' }, { capabilities: {} });
+await client.connect(transport);
+console.log('HTTP TOOLS:', JSON.stringify((await client.listTools()).tools.map((t) =&gt; t.name)));
+const added = await client.callTool({ name: 'add-note', arguments: { title: 'HTTP note', body: 'Served over Streamable HTTP.' } });
+console.log('HTTP ADD:', JSON.stringify(added.content), JSON.stringify(added.structuredContent));
+await client.close();</code></pre>
+<p>Real output from this guide's run: the same four tools, the same structured result — <code>HTTP ADD: [{"type":"text","text":"Saved note \"HTTP note\" with id c52c863d-de33-4b06-bcfe-73d6a6cfb378."}] {"id":"c52c863d-de33-4b06-bcfe-73d6a6cfb378","title":"HTTP note"}</code> — over a plain HTTP POST to <code>/mcp</code>. (A GET to the endpoint answers 405: it is a POST-only endpoint, not a page.) A remote host registers this server with <code>"type": "http"</code> and the URL instead of a launch command — and that is where authentication enters the picture: the handler passes <code>authInfo</code> through to your factory, but it verifies no token itself, so a bearer check belongs in front of the handler before anything else. Do not expose an unauthenticated MCP endpoint to the internet; the tools it exposes run with whatever your handlers can do.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Best for</th><th>Costs</th></tr></thead><tbody><tr><td><strong>stdio, v2 SDK (this guide)</strong></td><td>One host on your machine; local tools, files, and CLIs; the default for personal servers</td><td>One process per host; no remote access; the host owns the server&#x27;s lifetime</td></tr><tr><td><strong>Streamable HTTP, v2 SDK</strong></td><td>One endpoint many clients share; a team server; a deployed service</td><td>You own auth, host/origin validation, and deployment; stateless per request, so shared state needs a store</td></tr><tr><td><strong>v1 <code>@modelcontextprotocol/sdk</code></strong></td><td>Maintaining a server you already shipped on v1</td><td>Maintenance line: 2025-11-25 spec only, no 2026-07-28 support planned, bug fixes for at least six months after the v2 release (2026-07-27)</td></tr><tr><td><strong>Python + FastMCP</strong></td><td>Your stack is Python; you want the fastest path to a server in that ecosystem</td><td>A second SDK to learn; see this blog&#x27;s FastMCP tutorial for the Python path</td></tr><tr><td><strong>A ready-made server</strong></td><td>The tool already exists — filesystem, GitHub, Postgres, web search</td><td>None — don&#x27;t build what you can install; build when the capability is yours and no server exposes it</td></tr></tbody></table></div>
+<p>The decision that matters most is the last row. An MCP server is worth building when it exposes <em>your</em> system — your notes, your database, your internal API, your CLI — to a model that otherwise cannot reach it. It is not worth building as a wrapper around a public API that already has an official server, and it is not a substitute for a real API: if the underlying system has no stable interface, the server inherits that instability and hands it to the model. Build the server when the capability is yours, the interface is stable, and the model genuinely needs to call it rather than read about it.</p>
+<h2 id="troubleshooting">Troubleshooting: the failures you will actually hit<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Server exits immediately when launched</td><td>Import error, wrong package name, or a crash in the factory</td><td>Run <code>npx tsx src/index.ts</code> by hand and read stderr — fix it there before any host is involved</td></tr><tr><td>Host connects, then drops the connection</td><td>Something besides JSON-RPC reached stdout</td><td>Find the <code>console.log</code> and make it <code>console.error</code>; stdout belongs to the protocol</td></tr><tr><td><code>Cannot find module '@modelcontextprotocol/server'</code></td><td>The v1 package name was installed instead</td><td><code>npm install @modelcontextprotocol/server</code> — the v1 package is <code>@modelcontextprotocol/sdk</code></td></tr><tr><td><code>ERR_MODULE_NOT_FOUND</code> or ESM complaints</td><td>Missing <code>"type": "module"</code></td><td><code>npm pkg set type=module</code>; the SDK ships ES modules only</td></tr><tr><td><code>zod/v4</code> import fails</td><td>Zod too old — the server package depends on Zod ^4.2.0</td><td><code>npm install zod@^4.6.7</code>; import from <code>'zod/v4'</code>, not plain <code>'zod'</code></td></tr><tr><td>Host never lists your tools</td><td>Config not reloaded, or the chat is not in agent mode</td><td>Restart the host after changing config; check <code>/mcp</code> in Claude Code; confirm agent mode in Copilot Chat</td></tr><tr><td><code>Input validation error: ...</code> on a tool call</td><td>The call really is invalid — that is the SDK working</td><td>Fix the arguments, not the schema; the message names the field and the rule</td></tr><tr><td>Inspector warns about unencrypted secret storage</td><td>No OS keychain on a headless machine</td><td>Expected; set <code>MCP_INSPECTOR_SECRET_STORE</code> or accept the file fallback on a machine only you use</td></tr></tbody></table></div>
+<h2 id="v1-to-v2">Coming from v1: what changed<a class="anchor" href="#v1-to-v2" aria-label="Link to section">#</a></h2>
+<p>If you have a v1 server, the migration is mechanical, and the SDK ships a migration guide and a codemod for it. The shape of the change:</p>
+<ul>
+<li><strong>Packages split.</strong> <code>npm install @modelcontextprotocol/sdk zod</code> becomes <code>npm install @modelcontextprotocol/server zod</code> for a server, plus <code>@modelcontextprotocol/client</code> for a client. The old package stays installable as the 1.x maintenance line.</li>
+<li><strong>Registration is explicit.</strong> Tools, resources, and prompts register with <code>registerTool</code>, <code>registerResource</code>, and <code>registerPrompt</code>, each taking a config object with a Zod schema (<code>inputSchema</code>, <code>argsSchema</code>) instead of a raw shape. The SDK derives the JSON Schema, validates, and infers types from that one schema.</li>
+<li><strong>Serving is a factory call.</strong> <code>serveStdio(createServer)</code> replaces the manual transport-and-connect wiring for stdio; <code>createMcpHandler(createServer)</code> replaces the per-request <code>StreamableHTTPServerTransport</code> setup for HTTP.</li>
+<li><strong>Schemas are Standard Schema.</strong> Zod v4 is the documented path (<code>import * as z from 'zod/v4'</code>), but Valibot, ArkType, or any Standard Schema library works.</li>
+<li><strong>The spec moved.</strong> v1 implements the MCP spec up to 2025-11-25; v2 implements the 2026-07-28 spec, and support for the newer spec is not planned for v1. If your server uses sampling, elicitation, or tasks, read the migration guide before you move — those are the areas where the surface changed most.</li>
+</ul>
+<p>None of this breaks a v1 server today. The maintenance line receives bug fixes and security updates for at least six months after the v2 release. But every new tutorial, example, and host integration is written against v2, and the gap only grows — build new servers on v2, and migrate old ones when you next touch them.</p>
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>You now have a server that is small enough to hold in your head and real enough to keep using: four tools, a resource, and a prompt, all verified against a real client before any host touched them. The habits that matter are the ones this guide forced: pin the versions, run the server by hand, drive it with a client that also calls it wrong, and read the validation errors as the feature they are. The SDK will keep moving — v2 is the stable line now, and the next spec revision will move something again — but the shape is stable: one factory, one schema per tool, stdout for the protocol and stderr for everything else. Build your next server the same way, with your own system behind it: the notes were the demo, the pattern is the point.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/typescript-sdk">MCP TypeScript SDK repository (modelcontextprotocol/typescript-sdk)</a> — README: v2 as the stable release line, split packages, 13,730 stars, license; read November 7, 2026.</li>
+<li><a href="https://ts.sdk.modelcontextprotocol.io/v2/">MCP TypeScript SDK v2 documentation</a> — landing page: <code>serveStdio</code>, <code>registerTool</code>, Standard Schema; read November 7, 2026.</li>
+<li><a href="https://ts.sdk.modelcontextprotocol.io/v2/get-started/first-server.html">Build your first server (v2 docs)</a> — install, <code>registerTool</code> with Zod v4, <code>serveStdio</code>, stdout rule, Inspector command; read November 7, 2026.</li>
+<li><a href="https://ts.sdk.modelcontextprotocol.io/v2/get-started/real-host.html">Plug into a real host (v2 docs)</a> — <code>claude mcp add</code>, VS Code <code>.vscode/mcp.json</code>, Cursor <code>.cursor/mcp.json</code>, host troubleshooting; read November 7, 2026.</li>
+<li><a href="https://ts.sdk.modelcontextprotocol.io/v2/serving/http.html">Serve over HTTP (v2 docs)</a> — <code>createMcpHandler</code>, <code>toNodeHandler</code>, host/origin validation, <code>authInfo</code> pass-through; read November 7, 2026.</li>
+<li><a href="https://ts.sdk.modelcontextprotocol.io/">MCP TypeScript SDK v1 documentation</a> — v1 as the maintenance line, 2025-11-25 spec, six-month support window; read November 7, 2026.</li>
+<li><a href="https://www.npmjs.com/package/@modelcontextprotocol/server">npm: @modelcontextprotocol/server</a> — version 2.4.0, published October 23, 2026; zod ^4.2.0 dependency; read via the npm registry November 7, 2026.</li>
+<li><a href="https://scalar.com/learn/mcp/mcp-server-configuration">MCP server configuration (Scalar)</a> — Claude Code <code>.mcp.json</code> scopes, <code>mcpServers</code> key, <code>${VAR}</code> expansion; checked against vendor documentation September 2026.</li>
+</ul>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li><li><a href="/articles/build-mcp-agent-tutorial/">Build your first MCP-powered agent: tools, servers, and safety rails</a></li><li><a href="/articles/claude-code-hooks-complete-guide/">Claude Code hooks: the complete hands-on guide to deterministic agent control</a></li><li><a href="/articles/openai-agents-sdk-multi-agent-tutorial/">Build a working multi-agent system with the OpenAI Agents SDK: tools, handoffs, guardrails, and offline tests</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="typescript-mcp-server-tutorial"></div><div class="comments" data-comments="typescript-mcp-server-tutorial"></div></div>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
