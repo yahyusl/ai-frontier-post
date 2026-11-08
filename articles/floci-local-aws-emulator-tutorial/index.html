@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run AWS on your laptop for free: hands-on with Floci, the LocalStack replacement — AI Frontier Post</title>
+<meta name="description" content="LocalStack’s free edition is gone — auth tokens, frozen updates. Floci is the MIT-licensed replacement: 128 AWS services on localhost:4566, no account, no token. This guide installs it three ways, runs a five-service pipeline against it, and shows where it stops being AWS.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/floci-local-aws-emulator-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Run AWS on your laptop for free: hands-on with Floci, the LocalStack replacement">
+<meta property="og:description" content="LocalStack’s free edition is gone — auth tokens, frozen updates. Floci is the MIT-licensed replacement: 128 AWS services on localhost:4566, no account, no token. This guide installs it three ways, runs a five-service pipeline against it, and shows where it stops being AWS.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/floci-local-aws-emulator-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/floci-local-aws-emulator-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-08">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Run AWS on your laptop for free: hands-on with Floci, the LocalStack replacement">
+<meta name="twitter:description" content="LocalStack’s free edition is gone — auth tokens, frozen updates. Floci is the MIT-licensed replacement: 128 AWS services on localhost:4566, no account, no token. This guide installs it three ways, runs a five-service pipeline against it, and shows where it stops being AWS.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/floci-local-aws-emulator-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run AWS on your laptop for free: hands-on with Floci, the LocalStack replacement", "description": "LocalStack’s free edition is gone — auth tokens, frozen updates. Floci is the MIT-licensed replacement: 128 AWS services on localhost:4566, no account, no token. This guide installs it three ways, runs a five-service pipeline against it, and shows where it stops being AWS.", "datePublished": "2026-11-08", "dateModified": "2026-11-08", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/floci-local-aws-emulator-tutorial/"}, "image": "https://aifrontierpost.com/articles/floci-local-aws-emulator-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Run AWS on your laptop for free: hands-on with Floci, the LocalStack replacement", "description": "Install Floci three ways, prove S3 works with the AWS CLI, run a five-service S3, SQS, DynamoDB, SSM and Secrets Manager pipeline in Python, turn on persistent storage, isolate two accounts, run it from pytest with Testcontainers, and migrate a LocalStack setup to it.", "step": [{"@type": "HowToStep", "name": "Install Floci", "text": "Install Floci with the official CLI, with Docker Compose, or as a standalone native binary, and confirm it answers on port 4566."}, {"@type": "HowToStep", "name": "Prove S3 works", "text": "Create a bucket with the AWS CLI, upload a file, download it back, and compare the contents."}, {"@type": "HowToStep", "name": "Run five services in one script", "text": "Run a Python script that exercises S3, SQS, DynamoDB, SSM Parameter Store and Secrets Manager against the local endpoint and prints what each one returns."}, {"@type": "HowToStep", "name": "Inspect it in the web console", "text": "Open the Floci web console at /_floci/ui and check the health endpoint."}, {"@type": "HowToStep", "name": "Make state survive a restart", "text": "Set FLOCI_STORAGE_MODE to hybrid, restart Floci, and confirm the bucket and table are still there."}, {"@type": "HowToStep", "name": "Isolate two accounts", "text": "Use two 12-digit access key IDs to create the same queue name in two isolated accounts."}, {"@type": "HowToStep", "name": "Run it from pytest", "text": "Start an isolated Floci instance from a test with the testcontainers-floci package."}, {"@type": "HowToStep", "name": "Migrate from LocalStack", "text": "Swap the image, translate the environment variables, and keep init scripts and health checks working."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run AWS on your laptop for free: hands-on with Floci, the LocalStack replacement</h1>
+<p class="lede">LocalStack’s free edition is gone — auth tokens, frozen updates. Floci is the MIT-licensed replacement: 128 AWS services on localhost:4566, no account, no token. This guide installs it three ways, runs a five-service pipeline against it, and shows where it stops being AWS.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · November 8, 2026 · 18 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Floci (<code>floci-io/floci</code>, MIT, just over 31,000 stars) is a local AWS emulator that answers real AWS API calls on <code>http://localhost:4566</code>. Install it with the <code>floci</code> CLI, with Docker Compose, or as a standalone binary; point the AWS CLI, boto3, Terraform, or your test suite at it with throwaway credentials; and get S3, SQS, DynamoDB, Lambda, RDS, and 123 more services with no account and no bill. This guide installs 2.4.0, proves the S3 round trip, runs one Python script against five services, turns on persistent storage, isolates two accounts, wires it into pytest, and migrates a LocalStack setup — with the honest limits at the end.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> <code>floci-io/floci</code> — a free, MIT-licensed local AWS emulator; the AWS member of the Floci emulator family (Azure on :4577, GCP on :4588, OCI on :4599).</li><li><b>Versions:</b> Floci 2.4.0 (released October 31, 2026); Docker 23.0+ for the container route; AWS CLI v2; Python 3.10+ with boto3 1.43.x for the demo script.</li><li><b>Verified:</b> November 8, 2026: every install command, flag, environment variable, default, and service claim in this guide was checked against the project README and the official installation docs. The demo script compiles, and every boto3 operation it calls was checked against boto3 1.43.126’s service models. Floci itself could not be executed in this sandbox — it needs Docker or Java and neither is available here, and the 2.4.0 GitHub release lists no binary assets (see Step 1) — so the run outputs shown are the README’s own documented outputs, not captured transcripts. Nothing here is a fabricated run.</li><li><b>Requirement:</b> Docker 23+ (recommended route) or a Linux/macOS/Windows machine for the native binary; about 30 minutes; $0 and no AWS account.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/floci-local-aws-emulator-tutorial/cover.webp" alt="Illustration of a laptop on a desk at night with a small glowing cloud of server racks and database cylinders floating above the keyboard"><figcaption>AI-generated illustration: the whole cloud, shrunk to fit above a keyboard — that is the pitch.</figcaption></figure>
+</header>
+<div class="article-body"><p>For years the standard answer to “how do I test AWS code without touching AWS?” was LocalStack Community Edition: one container, port 4566, throwaway credentials, done. That answer expired on March 23, 2026, when LocalStack shipped version 2026.03.0, archived the Community repositories, and made the unified image refuse to start without an auth token tied to a registered account. A free Hobby plan still exists for non-commercial use, and commercial use starts at $39 a month — but the thing developers actually relied on, a free emulator with no account in the loop, was gone.</p>
+<p>Floci is the project that filled the hole, and the numbers explain why it is the one to learn. It launched in February 2026, passed 31,000 GitHub stars by early November, and topped GitHub Trending on November 3–4. It is a single program — a Quarkus app compiled to a GraalVM native image — that listens on the same port 4566 and answers the same AWS API calls: S3, SQS, SNS, DynamoDB, Lambda, IAM, KMS, Secrets Manager, Step Functions, EventBridge, API Gateway, Cognito, CloudFormation, and 115 more, 128 services in total according to the project’s site. No account, no auth token, no telemetry, no feature gates. The license is MIT, which means the “community edition sunset” that killed its predecessor cannot happen to it the same way: anyone can fork it and keep shipping it.</p>
+<p>This guide does the whole loop end to end. You will install Floci three ways and pick one, prove S3 works with the AWS CLI, run a single Python script that exercises five services as one small order pipeline, look at the result in the web console, make the state survive a restart, isolate two accounts from each other, start Floci from inside a pytest run, and migrate an existing LocalStack setup. It ends with the limits — the services that need Docker to be real, the ones that are stubs, and the ways an emulator can still lie to you.</p>
+
+<h2 id="what-you-need">What you&#x27;ll need<a class="anchor" href="#what-you-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Docker 23.0 or later</strong> and Docker Compose v2, for the recommended route. The image layers are compressed with zstd, which older Docker engines cannot pull. If you have no Docker at all, the native-binary route in Step 1 covers you — but read the caveat there first.</li>
+<li><strong>AWS CLI v2</strong> for the Step 2 checks. Install it from your distribution or the official installer; <code>aws --version</code> should print a 2.x version.</li>
+<li><strong>Python 3.10 or later</strong> and boto3 for the Step 3 script: <code>pip install boto3</code>. This guide verified against boto3 1.43.126.</li>
+<li><strong>About 30 minutes.</strong> The install takes five; the rest is learning which parts of AWS are real on your laptop and which parts are a polite fiction.</li>
+<li><strong>Nothing from Amazon.</strong> No account, no access keys, no credit card. The credentials in this guide are literally the word <code>test</code>.</li>
+</ul>
+
+<h2 id="1-install">Step 1: Install Floci — three ways in<a class="anchor" href="#1-install" aria-label="Link to section">#</a></h2>
+<p>Floci runs three ways: the official CLI, a Docker image, or a standalone native binary. They all serve the same emulator on the same port. Pick the one that matches your machine; the rest of the guide is identical whichever you choose.</p>
+<p><strong>Route A — the CLI (fastest if you have Docker).</strong> The <code>floci</code> CLI manages all four emulators (AWS, Azure, GCP, OCI) from one tool:</p>
+<pre><code class="language-bash">curl -fsSL https://floci.io/install.sh | sh
+floci start &amp;&amp; eval $(floci env)</code></pre>
+<p><code>floci start</code> pulls the image, starts the container, mounts your Docker socket, and waits until the server is healthy. <code>eval $(floci env)</code> exports the endpoint and throwaway credentials into your shell, so every AWS command after it talks to localhost. If something does not start, <code>floci doctor</code> checks Docker, ports, and your environment and tells you which one is at fault. Stop it with <code>floci stop</code>; start it again and you get a clean cloud.</p>
+<p><strong>Route B — Docker Compose (best for a project).</strong> This is the route to commit to a repo, because the whole setup is one file:</p>
+<pre><code class="language-yaml">services:
+  floci:
+    image: floci/floci:latest
+    ports:
+      - "4566:4566"</code></pre>
+<pre><code class="language-bash">docker compose up -d</code></pre>
+<p>Then configure your shell by hand, since Compose does not do it for you:</p>
+<pre><code class="language-bash">export AWS_ENDPOINT_URL=http://localhost:4566
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test</code></pre>
+<p>Two details matter here. First, pin the image in a real project — <code>floci/floci:2.4.0</code> instead of <code>latest</code> — so a teammate checking out the repo next month gets the emulator you tested against, not whatever shipped since. Second, the plain Compose file above only gives you the in-process services. Lambda, RDS, ElastiCache, MSK, ECS, EC2, EKS, OpenSearch, and the other container-backed services need the Docker socket, and they need to run as root inside the container:</p>
+<pre><code class="language-yaml">services:
+  floci:
+    image: floci/floci:latest
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    user: root</code></pre>
+<p>Without the socket, those services keep their control plane — you can create an RDS instance, for example — but start no containers, and Lambda invocations fail outright. Floci logs one warning at startup naming every affected service when Docker is unreachable, so check the first lines of the log before you conclude a service is broken.</p>
+<p><strong>Route C — the native binary (no Docker at all).</strong> Every release is documented as attaching a standalone executable per platform; the Linux x86_64 asset is <code>floci-aws-linux-amd64</code>:</p>
+<pre><code class="language-bash">VERSION=2.4.0   # the release to install
+ASSET=floci-aws-linux-amd64
+curl -fsSLO "https://github.com/floci-io/floci/releases/download/$VERSION/$ASSET"
+curl -fsSLO "https://github.com/floci-io/floci/releases/download/$VERSION/sha256sums.txt"
+sha256sum --ignore-missing -c sha256sums.txt
+mkdir -p ~/.local/bin
+install -m 755 "$ASSET" ~/.local/bin/floci-aws
+~/.local/bin/floci-aws</code></pre>
+<p>The binary is named <code>floci-aws</code> because <code>floci</code> is the CLI. It needs glibc 2.34 or newer (Ubuntu 22.04, Debian 12, RHEL 9, Amazon Linux 2023) and it listens on <code>127.0.0.1:4566</code> rather than all interfaces. One honest caveat, verified while writing this guide: the 2.4.0 release page on GitHub lists no attached binaries as of November 8, 2026, despite the docs saying every release ships them. If the download 404s for you too, use Route A or B and check the next release — the docs and the release artifacts are out of sync right now, and the Docker routes are the ones the project actually ships on every release.</p>
+<p>Whichever route you took, prove the emulator is up before you go further:</p>
+<pre><code class="language-bash">curl -s http://localhost:4566/_floci/health</code></pre>
+<p>That is the readiness endpoint Floci’s own Makefile waits on. A healthy instance answers; an unhealthy one means the container is still starting or the port is taken — <code>floci doctor</code> will say which.</p>
+
+<h2 id="2-first-bucket">Step 2: Your first bucket — the S3 round trip<a class="anchor" href="#2-first-bucket" aria-label="Link to section">#</a></h2>
+<p>With the environment loaded, the AWS CLI works exactly as it would against real AWS, except the endpoint flag and the credentials:</p>
+<pre><code class="language-bash">aws s3 mb s3://my-bucket
+echo "hello from floci" &gt; hello-floci.txt
+aws s3 cp hello-floci.txt s3://my-bucket/
+aws s3 cp s3://my-bucket/hello-floci.txt hello-back.txt
+cat hello-back.txt</code></pre>
+<p>The expected output, from the project’s own quick start:</p>
+<pre><code class="language-text">make_bucket: my-bucket
+upload: ./hello-floci.txt to s3://my-bucket/hello-floci.txt
+download: s3://my-bucket/hello-floci.txt to ./hello-back.txt
+hello from floci</code></pre>
+<p>Two things are worth noticing. First, <code>aws s3 mb</code> is the only command that does not need <code>--endpoint-url</code> when <code>AWS_ENDPOINT_URL</code> is exported — the CLI reads the variable for every service, so the four <code>export</code> lines in Step 1 are doing the work for the whole session. Second, nothing here touched Amazon: the bucket, the object, and the download all happened inside the process on your machine, and <code>floci stop</code> would throw them away. That disposability is the point — it is also the reason Step 5 exists.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/floci-local-aws-emulator-tutorial/img2.webp" alt="Diagram of the Floci architecture: a laptop terminal connects to a central Floci box on port 4566, which connects to S3, DynamoDB and SQS"><figcaption>AI-generated illustration: one process, one port, every service behind it — the whole emulator is the box in the middle.</figcaption></figure>
+<p>S3 in Floci is in-process, and it is one of the more complete emulations: versioning, multipart upload, pre-signed URLs, Object Lock, and event notifications all work. That is the shape of the whole project — the services that can be implemented as state machines over HTTP run inside the binary, and the services that need a real engine run a real container behind the same port. The next step uses the in-process half; Step 8 of the limits section tells you where the boundary is.</p>
+
+<h2 id="3-five-services">Step 3: Five services, one script — a small order pipeline<a class="anchor" href="#3-five-services" aria-label="Link to section">#</a></h2>
+<p>A bucket proves the emulator answers. A pipeline proves it is useful. The script below is the smallest honest version of a real order flow: an order lands as JSON in S3, a message about it goes onto an SQS queue, the order is recorded in DynamoDB, and the app’s config and a database password come from SSM Parameter Store and Secrets Manager. Save it as <code>floci_pipeline.py</code>:</p>
+<pre><code class="language-python">"""Floci end-to-end demo: S3 + SQS + DynamoDB + SSM + Secrets Manager.
+
+Every call here is a standard boto3 operation pointed at the local
+Floci endpoint (http://localhost:4566). Run it after `floci start`
+(or the Docker Compose stack) with the environment from `floci env`
+loaded. No AWS account, no real credentials: test/test.
+"""
+
+import json
+
+import boto3
+
+ENDPOINT = "http://localhost:4566"
+REGION = "us-east-1"
+CREDS = {"aws_access_key_id": "test", "aws_secret_access_key": "test"}
+
+s3 = boto3.client("s3", endpoint_url=ENDPOINT, region_name=REGION, **CREDS)
+sqs = boto3.client("sqs", endpoint_url=ENDPOINT, region_name=REGION, **CREDS)
+dynamodb = boto3.client("dynamodb", endpoint_url=ENDPOINT, region_name=REGION, **CREDS)
+ssm = boto3.client("ssm", endpoint_url=ENDPOINT, region_name=REGION, **CREDS)
+secrets = boto3.client("secretsmanager", endpoint_url=ENDPOINT, region_name=REGION, **CREDS)
+
+# --- S3: bucket + object -------------------------------------------------
+s3.create_bucket(Bucket="floci-demo-orders")
+order = {"order_id": "ord-1001", "customer": "ada", "total": 42.5, "items": 3}
+s3.put_object(
+    Bucket="floci-demo-orders",
+    Key="orders/ord-1001.json",
+    Body=json.dumps(order),
+    ContentType="application/json",
+)
+print("S3:", s3.get_object(Bucket="floci-demo-orders", Key="orders/ord-1001.json")["Body"].read().decode())
+
+# --- SQS: queue + message ------------------------------------------------
+queue_url = sqs.create_queue(QueueName="orders")["QueueUrl"]
+sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps({"order_id": "ord-1001"}))
+msg = sqs.receive_message(QueueUrl=queue_url, MaxNumberOfMessages=1)["Messages"][0]
+print("SQS:", msg["Body"])
+
+# --- DynamoDB: table + item ----------------------------------------------
+dynamodb.create_table(
+    TableName="orders",
+    AttributeDefinitions=[{"AttributeName": "pk", "AttributeType": "S"}],
+    KeySchema=[{"AttributeName": "pk", "KeyType": "HASH"}],
+    BillingMode="PAY_PER_REQUEST",
+)
+dynamodb.get_waiter("table_exists").wait(TableName="orders")
+dynamodb.put_item(
+    TableName="orders",
+    Item={
+        "pk": {"S": "ord-1001"},
+        "customer": {"S": "ada"},
+        "total": {"N": "42.5"},
+        "status": {"S": "received"},
+    },
+)
+item = dynamodb.get_item(TableName="orders", Key={"pk": {"S": "ord-1001"}})["Item"]
+print("DynamoDB:", {k: list(v.values())[0] for k, v in item.items()})
+
+# --- SSM Parameter Store + Secrets Manager --------------------------------
+ssm.put_parameter(Name="/demo/app/message", Value="hello from floci", Type="String", Overwrite=True)
+print("SSM:", ssm.get_parameter(Name="/demo/app/message")["Parameter"]["Value"])
+
+secrets.create_secret(Name="demo/db-password", SecretString="not-a-real-password")
+print("Secrets Manager:", secrets.get_secret_value(SecretId="demo/db-password")["SecretString"])
+
+print("All five services answered. That is your local AWS.")</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">python3 floci_pipeline.py</code></pre>
+<p>The waiter on the DynamoDB table is deliberate, not decorative. On real AWS a table takes seconds to become active and <code>put_item</code> before that fails; Floci answers fast enough that you might never notice, but the waiter makes the script correct against both, which is the whole point of writing code against an emulator — the same script should run unchanged against the real account later. The same reasoning applies to the <code>endpoint_url</code> on every client: in production code that value comes from an environment variable (<code>AWS_ENDPOINT_URL</code>), and the only difference between local and real is whether the variable is set.</p>
+<p>Three boto3 details in the script are easy to get wrong. First, SQS returns the queue URL from <code>create_queue</code> — you cannot guess it, because Floci builds it as <code>http://localhost:4566/000000000000/orders</code>, with the default account ID in the middle. Second, DynamoDB items are typed: <code>{"S": "ada"}</code> and <code>{"N": "42.5"}</code> are not optional decoration, they are the wire format, and Floci validates them the way AWS does. Third, the SSM example is the README’s own — <code>put_parameter</code> with <code>Overwrite=True</code> followed by <code>get_parameter</code> — because it is the shortest proof that the parameter store keeps state between calls.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/floci-local-aws-emulator-tutorial/img3.webp" alt="Diagram of the demo pipeline: upload to S3, message to SQS, write to DynamoDB, read it back"><figcaption>AI-generated illustration: the pipeline from Step 3 — four calls, four services, one local endpoint.</figcaption></figure>
+<p>What you have at this point is a local AWS account with a bucket, a queue, a table, a parameter, and a secret in it — created by the same SDK calls your production code uses. That is the test that matters: if the code works here, the wiring is right, and the only thing left to verify against real AWS is behavior the emulator cannot promise, which the limits section covers.</p>
+
+<h2 id="4-console">Step 4: Look at it — the web console<a class="anchor" href="#4-console" aria-label="Link to section">#</a></h2>
+<p>Floci ships a browser console for inspecting the resources in your local emulator. Open it at:</p>
+<pre><code class="language-text">http://localhost:4566/_floci/ui</code></pre>
+<p>Nothing runs at boot: the first request pulls the console image, starts it as a sidecar container on Floci’s Docker network, and redirects your browser once the sidecar reports healthy. That means the console needs the Docker socket mounted — the Compose file with the <code>/var/run/docker.sock</code> volume from Step 1 — and it will not work at all on the native-binary route without Docker. The sidecar is <code>floci/floci-ui:0.7.0</code>, its port is published by Docker on 4500, and its logs are streamed into CloudWatch Logs under <code>/floci/ui</code>, which is a nice touch: the console’s own logs are visible through the emulator it inspects.</p>
+<p>Two console behaviors are worth knowing before you rely on it. First, the sidecar stops when Floci stops unless you set <code>FLOCI_SERVICES_UI_KEEP_RUNNING_ON_SHUTDOWN=true</code>. Second, the console is not fixed to the one Floci ships: any console implementing the Floci console contract runs with nothing but an image name, via <code>FLOCI_SERVICES_UI_IMAGE</code>. That is a small detail, but it tells you something about how the project is built — the console is a client of the same HTTP API your code uses, not a privileged back door into the emulator’s state.</p>
+
+<h2 id="5-persistence">Step 5: Make state survive a restart<a class="anchor" href="#5-persistence" aria-label="Link to section">#</a></h2>
+<p>By default Floci keeps everything in memory. Stop the container and the bucket, the queue, and the table from Step 3 are gone — which is exactly what you want in CI, and exactly what you do not want while developing. Floci trades speed for durability with <code>FLOCI_STORAGE_MODE</code>:</p>
+<table>
+<thead><tr><th>Mode</th><th>Behavior</th><th>Best for</th></tr></thead>
+<tbody>
+<tr><td><strong><code>memory</code></strong></td><td>Entirely in RAM; data is lost when the container stops</td><td>CI and ephemeral tests</td></tr>
+<tr><td><strong><code>persistent</code></strong></td><td>Loaded at startup and flushed to disk immediately on every write</td><td>Simple local state preservation</td></tr>
+<tr><td><strong><code>hybrid</code></strong></td><td>In-memory performance with periodic async flushing every 5 seconds</td><td>Local development</td></tr>
+<tr><td><strong><code>wal</code></strong></td><td>Write-ahead log; every mutation is logged before responding</td><td>Maximum durability</td></tr>
+</tbody>
+</table>
+<p>For day-to-day development, <code>hybrid</code> is the right default — state survives a restart, and the 5-second flush window costs almost nothing:</p>
+<pre><code class="language-yaml">services:
+  floci:
+    image: floci/floci:2.4.0
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+    environment:
+      - FLOCI_STORAGE_MODE=hybrid</code></pre>
+<p>Restart and check:</p>
+<pre><code class="language-bash">docker compose restart
+aws s3 ls
+aws dynamodb list-tables</code></pre>
+<p>The bucket and the table should both still be there. If you are coming from LocalStack, the equivalent of <code>PERSISTENCE=1</code> is <code>FLOCI_STORAGE_MODE=persistent</code> — Floci translates the old variable automatically, which is one of several translations in Step 8. With the native binary, persistent state goes to your user data directory (<code>~/.local/share/floci-aws</code> on Linux) rather than the working directory, and <code>FLOCI_STORAGE_PERSISTENT_PATH</code> overrides it. One warning from the docs: two persistent binaries must not share a state path — give each its own <code>FLOCI_STORAGE_PERSISTENT_PATH</code>, or they will write the same state files.</p>
+
+<h2 id="6-multi-account">Step 6: Two accounts, one emulator<a class="anchor" href="#6-multi-account" aria-label="Link to section">#</a></h2>
+<p>Real AWS work is multi-account, and Floci isolates accounts with no extra setup. If your access key ID is exactly 12 digits, Floci uses it as the account ID, and resources created by one account are invisible to another:</p>
+<pre><code class="language-bash">AWS_ACCESS_KEY_ID=111111111111 aws sqs create-queue --queue-name orders
+AWS_ACCESS_KEY_ID=222222222222 aws sqs create-queue --queue-name orders</code></pre>
+<p>Both commands succeed, and each account sees only its own queue — same name, two queues, no collision. Any other key format, such as <code>test</code> or an <code>AKIA…</code> key, falls back to <code>FLOCI_DEFAULT_ACCOUNT_ID</code>, which defaults to <code>000000000000</code> (that is the account ID in the SQS queue URL from Step 3). STS temporary credentials are routed too: credentials from <code>AssumeRole</code> resolve to the assumed role’s account, so the cross-account assume-role-then-provision pattern works locally. That is the kind of thing that is painful to test against real AWS — it needs two accounts, an IAM trust policy, and a reason to get it wrong in production — and trivial here.</p>
+
+<h2 id="7-testcontainers">Step 7: Start Floci from inside your tests<a class="anchor" href="#7-testcontainers" aria-label="Link to section">#</a></h2>
+<p>A shared emulator on port 4566 is fine for development. For tests it is the wrong shape: tests share state, leak into each other, and fight over the port. Floci’s answer is Testcontainers modules that start an isolated instance per test run and stop it afterwards. The Python module is <code>testcontainers-floci</code> 0.1.1:</p>
+<pre><code class="language-bash">pip install testcontainers-floci</code></pre>
+<pre><code class="language-python">import boto3
+from floci import FlociContainer
+
+def test_s3_create_bucket():
+    with FlociContainer() as floci:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=floci.get_endpoint(),
+            region_name=floci.get_region(),
+            aws_access_key_id=floci.get_access_key(),
+            aws_secret_access_key=floci.get_secret_key(),
+        )
+        s3.create_bucket(Bucket="my-bucket")</code></pre>
+<p>The container starts, the test creates a bucket against it, and the <code>with</code> block tears the whole cloud down. No shared state, no manual daemon, no port conflicts. The same modules exist for Java (<code>io.floci:testcontainers-floci</code> 1.14.0 for Testcontainers 1.x, 2.15.0 for Testcontainers 2.x and Spring Boot 4.x), Node.js (<code>@floci/testcontainers</code> 0.1.0), and .NET; Go is in progress. In CI the same idea works as a service container — the project’s own docs show a GitHub Actions job with <code>image: floci/floci</code> on port 4566 and <code>AWS_ENDPOINT_URL</code> set, so every job gets an isolated cloud and teardown is free.</p>
+<p>The compatibility numbers behind this are worth a line, because they are the reason to trust the Testcontainers route for real test suites: the project reports 2,576 automated compatibility tests across 5 SDKs (Java 1,326; Node.js 449; Python 311; Go 157; AWS CLI 205) and 3 IaC tools (Terraform 67, OpenTofu 41, CDK 20). Those are the project’s own figures, run against its own emulator — but the breadth is the point. A test that passes against Floci’s boto3 surface has been exercised by the same suite that checks the Java and Go surfaces too.</p>
+
+<h2 id="8-migrate">Step 8: Migrate from LocalStack in one diff<a class="anchor" href="#8-migrate" aria-label="Link to section">#</a></h2>
+<p>If you already run LocalStack, Floci is designed as a drop-in replacement: the port, the credentials, the SDK configuration, and the CLI endpoint pattern all work the same way. The migration is mostly one line:</p>
+<pre><code class="language-yaml"># Before
+image: localstack/localstack
+# After, standard image
+image: floci/floci:latest
+# After, if init scripts need AWS CLI or boto3
+image: floci/floci:latest-compat</code></pre>
+<p>Use the <code>latest-compat</code> variant only if your init scripts call the AWS CLI or boto3 from inside the container; the standard image is identical in startup time and memory. LocalStack environment variables are translated automatically:</p>
+<table>
+<thead><tr><th>LocalStack</th><th>Floci equivalent</th></tr></thead>
+<tbody>
+<tr><td><code>LOCALSTACK_HOST</code></td><td><code>FLOCI_HOSTNAME</code></td></tr>
+<tr><td><code>PERSISTENCE=1</code></td><td><code>FLOCI_STORAGE_MODE=persistent</code></td></tr>
+<tr><td><code>LAMBDA_DOCKER_NETWORK</code></td><td><code>FLOCI_SERVICES_LAMBDA_DOCKER_NETWORK</code></td></tr>
+<tr><td><code>LAMBDA_REMOVE_CONTAINERS=1</code></td><td><code>FLOCI_SERVICES_LAMBDA_EPHEMERAL=true</code></td></tr>
+<tr><td><code>DEBUG=1</code></td><td><code>QUARKUS_LOG_LEVEL=DEBUG</code></td></tr>
+</tbody>
+</table>
+<p>Init scripts mounted under <code>/etc/localstack/init/</code> run unchanged, the <code>/_localstack/init</code> and <code>/_localstack/health</code> endpoints are still served, and the log ends with a LocalStack-style <code>Ready.</code> line — so tooling that watches the log for it, such as Testcontainers’ default wait strategy for <code>LocalStackContainer</code>, works unchanged. Set <code>LOCALSTACK_PARITY=false</code> to opt out of the automatic translation if you would rather see Floci’s own behavior. The honest version of “drop-in” is that the wire protocol and the port are the same, and the project went out of its way to keep the migration surface small — but read the limits section before you assume every LocalStack workflow ports without a second look.</p>
+
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<table>
+<thead><tr><th>Approach</th><th>Use it when</th><th>What it costs you</th></tr></thead>
+<tbody>
+<tr><td><strong><code>floci</code> CLI</strong></td><td>Day-to-day development on a machine with Docker; you want start/stop/env in three commands</td><td>One more CLI to install; Docker still required underneath</td></tr>
+<tr><td><strong>Docker Compose</strong></td><td>The setup lives in a repo and teammates or CI must reproduce it exactly</td><td>You manage the env vars and the socket mount yourself; pin the tag</td></tr>
+<tr><td><strong>Native binary</strong></td><td>No Docker, or you want the fastest start with nothing to pull</td><td>Container-backed services degrade without Docker; check the release actually ships the binary</td></tr>
+<tr><td><strong>Testcontainers</strong></td><td>Tests that need an isolated cloud per run with no shared state</td><td>A container start per test run; Docker required</td></tr>
+<tr><td><strong>Stay on LocalStack</strong></td><td>You need LocalStack Pro’s paid breadth, or your workflow depends on a Pro-only service</td><td>Auth token, account, and paid tiers for commercial use</td></tr>
+</tbody>
+</table>
+<p>If you only adopt one of these, adopt the Compose file. It is the only route that is version-pinned, reproducible by a teammate, and identical in CI — and the <code>floci start</code> CLI is the same emulator underneath it for the days you just want to poke at something quickly. The native binary is the right answer on machines without Docker, with the caveat in Step 1. Testcontainers is the right answer inside a test suite, and the wrong answer everywhere else: an emulator that starts per test is a tool, not a development environment.</p>
+
+<h2 id="limits">What Floci is not — the honest limits<a class="anchor" href="#limits" aria-label="Link to section">#</a></h2>
+<p>An emulator earns trust by saying where it stops, and Floci’s docs are unusually candid about it. Three limits matter most.</p>
+<p><strong>Without Docker, a third of the catalog degrades.</strong> Lambda, ECS, CodeBuild, Batch, SageMaker, Amazon MQ, Managed Flink, Redshift, the RDS Data API, Athena, the ECR registry, CodeArtifact, and Verified Permissions fail the request that needs a container; RDS, ElastiCache, MemoryDB, OpenSearch, Neptune, DocumentDB, MSK, EKS, Timestream, and EC2 keep their control plane but start no containers. If your workflow is “Lambda reads from SQS and writes to DynamoDB,” you need the socket mount from Step 1 — the in-process half alone will not run it.</p>
+<p><strong>Some services are stubs, and the docs label them as such.</strong> Bedrock Runtime returns dummy responses; Transcribe jobs complete immediately with no real audio processing; Textract returns dummy block data. That is fine for testing that your code calls the API and handles the response shape — it is not a test of the model, the transcription, or the extraction. The same applies to the headline performance figures: the project advertises ~24 ms startup and ~13 MiB idle memory against ~3.3 s and ~143 MiB for LocalStack Community. Those are the project’s own figures, and at least one independent hands-on check measured closer to ~130 ms than 24 ms. Fast either way — just not literally 24 ms on every machine.</p>
+<p><strong>Passing against an emulator does not prove the code behaves the same on real AWS.</strong> IAM evaluation, eventual consistency, throttling, service quotas, and regional behavior are all approximated or absent. Use Floci for what it is good at — the inner loop, the wiring, the test suite — and keep a real-account smoke test for the things only AWS can tell you. The emulator makes the cheap mistakes cheap; it does not make them impossible.</p>
+
+<h2 id="troubleshooting">Troubleshooting: the failures you will actually hit<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong><code>floci start</code> fails or the health check never answers.</strong> Run <code>floci doctor</code> — it checks Docker, ports, and your environment. The most common cause is Docker not running, or port 4566 already taken by an old LocalStack container.</li>
+<li><strong><code>docker pull floci/floci:latest</code> fails on old Docker.</strong> The image layers use zstd compression, which needs Docker 23.0+. Upgrade Docker, or use the native binary route.</li>
+<li><strong>Lambda invocations fail but S3 works.</strong> Lambda needs the Docker socket. Add the <code>/var/run/docker.sock</code> volume and <code>user: root</code> from Step 1, and check the startup log for the warning naming the affected services.</li>
+<li><strong>Your data vanished after a restart.</strong> The default storage mode is <code>memory</code>. Set <code>FLOCI_STORAGE_MODE=hybrid</code> and mount a data volume, as in Step 5.</li>
+<li><strong>The native binary download 404s.</strong> The docs say every release ships binaries, but the 2.4.0 release page listed none when this guide was written. Use the Docker route and check the next release.</li>
+<li><strong>Two accounts see each other’s resources.</strong> Account isolation only kicks in for exactly-12-digit access key IDs. <code>test</code> falls back to the shared default account <code>000000000000</code>.</li>
+<li><strong>The web console never loads.</strong> The console is a sidecar container: it needs the Docker socket mounted, and it pulls its image on first use. On a machine without Docker it will not start.</li>
+<li><strong>A test passes locally and fails in CI.</strong> Check the image tag: <code>latest</code> in CI may be a newer Floci than the one on your laptop. Pin the version in both places.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>The interesting thing about Floci is not the star count or the startup time. It is that the free local cloud exists again, under a license that cannot be taken back the way LocalStack Community was. A 31,000-star project with 128 services, no account, no token, and no paid tier is a piece of infrastructure you can build a workflow on without checking the pricing page first — and the migration from the thing it replaces is, deliberately, a one-line diff.</p>
+<p>Install it with Compose, pin the version, put the S3 round trip in your onboarding docs, and run your test suite against it in CI. Keep the limits in mind — Docker-backed services need the socket, some AI services are stubs, and the emulator is not AWS — and it will do the job it is for: making the cheap mistakes cheap, on your own machine, before a real account ever sees them.</p>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2>
+<h3>Is Floci really free?</h3>
+<p>Yes. MIT-licensed, no account, no auth token, no telemetry, no paid tier or feature gates. Every supported service is available to everyone, and the source is on GitHub at <code>floci-io/floci</code> if you want to verify that rather than take the project’s word for it.</p>
+<h3>Do I need Docker?</h3>
+<p>For the recommended routes, yes — Docker 23.0+ for the image or the CLI. The native binary runs without Docker, but every container-backed service (Lambda, RDS, ElastiCache, MSK, ECS, EC2, EKS, OpenSearch, and more) degrades or fails without a Docker daemon to run against.</p>
+<h3>How is Floci different from LocalStack?</h3>
+<p>Same port (4566), same wire protocol, same SDK configuration — that is the point. The differences are the license (MIT vs. LocalStack’s restricted terms after the Community sunset), the price (free with no account vs. auth token and paid tiers for commercial use), and the size: a ~90 MB image and ~40 MB native binary against LocalStack’s ~1 GB image. LocalStack Pro still covers more services; Floci covers 128 and counting.</p>
+<h3>Can I use Floci in CI?</h3>
+<p>Yes — that is one of its main uses. Run it as a service container in GitHub Actions (the project’s docs show the job definition), or start an isolated instance per test run with the Testcontainers modules for Python, Java, Node.js, and .NET. There are no CI quotas or credits.</p>
+<h3>Does Floci work with Terraform and the CDK?</h3>
+<p>Yes. Terraform, OpenTofu, and the CDK all work by pointing the AWS provider at <code>http://localhost:4566</code>, and the project’s compatibility suite covers all three (67 Terraform tests, 41 OpenTofu, 20 CDK). There is a dedicated Terraform guide in the project docs.</p>
+<h3>What about Azure, GCP, and OCI?</h3>
+<p>The same team ships sister emulators: <code>floci-az</code> on port 4577 (32 services), <code>floci-gcp</code> on port 4588 (28 services), and <code>floci-oci</code> on port 4599 (11 services). One CLI — <code>floci az start</code>, <code>floci gcp start</code>, <code>floci oci start</code> — manages all four.</p>
+</section>
+
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul>
+<li><a href="https://github.com/floci-io/floci" rel="nofollow">floci-io/floci — GitHub repository</a> — README: quick start, service list, Docker integration, storage modes, multi-account isolation, SDK examples, Testcontainers, compatibility tests, migration guide; 31,068 stars, MIT; read November 8, 2026.</li>
+<li><a href="https://floci.io/floci/getting-started/installation/#native-binary" rel="nofollow">Installation — Floci docs</a> — Docker, native binary (asset names, checksum verification, glibc 2.34+ requirement, Docker-optional behavior, state paths), build from source; read November 8, 2026.</li>
+<li><a href="https://floci.io/" rel="nofollow">floci.io</a> — CLI install, <code>floci start</code> / <code>floci env</code> / <code>floci doctor</code>, 128 AWS services, sister emulators and ports; read November 8, 2026.</li>
+<li><a href="https://github.com/floci-io/floci/releases/tag/2.4.0" rel="nofollow">Release 2.4.0 — floci-io/floci</a> — changelog, October 31, 2026; no binary assets attached as of November 8, 2026; read November 8, 2026.</li>
+<li><a href="http://dev.to/shaam_ai/floci-the-free-open-source-localstack-alternative-that-runs-aws-on-your-laptop-2026-2dp8" rel="nofollow">Floci: The Free, Open-Source LocalStack Alternative — dev.to</a> — LocalStack Community sunset (March 23, 2026, version 2026.03.0), independent startup measurement (~130 ms vs. the advertised 24 ms); read November 8, 2026.</li>
+<li><a href="https://zolna.uk/blog/floci-free-open-source-local-aws-emulator" rel="nofollow">Open-source Floci runs a local copy of AWS services on your own machine — zolna.uk</a> — service model (real Docker containers vs. stubs), 2,576 compatibility tests, Bedrock Runtime dummy responses; read November 8, 2026.</li>
+</ul></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/litellm-gateway-tutorial/">One API for every LLM: run LiteLLM as your AI gateway</a></li><li><a href="/articles/openwebui-013-local-ai-workspace-tutorial/">Your own ChatGPT, with a computer attached: hands-on with Open WebUI 0.13</a></li><li><a href="/articles/freellmapi-free-llm-router-tutorial/">One endpoint for every free model: hands-on with FreeLLMAPI, the self-hosted LLM router</a></li><li><a href="/articles/deploy-rag-chatbot-production-free-tier/">From notebook to production: deploy your RAG chatbot on a free tier</a></li></ul></section>
+
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="floci-local-aws-emulator-tutorial"></div><div class="comments" data-comments="floci-local-aws-emulator-tutorial"></div></div>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/category/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
