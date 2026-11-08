@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Fine-tune Qwen3 with QLoRA: the complete Unsloth tutorial for one GPU — AI Frontier Post</title>
+<meta name="description" content="Take Qwen3-4B-Instruct-2507, add a few hundred of your own examples, and train a LoRA adapter on a single GPU — then export it to GGUF and run it in Ollama. Every step verified against Unsloth's own notebook.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/qlora-fine-tune-qwen3-unsloth-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Fine-tune Qwen3 with QLoRA: the complete Unsloth tutorial for one GPU">
+<meta property="og:description" content="Take Qwen3-4B-Instruct-2507, add a few hundred of your own examples, and train a LoRA adapter on a single GPU — then export it to GGUF and run it in Ollama. Every step verified against Unsloth's own notebook.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/qlora-fine-tune-qwen3-unsloth-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/qlora-fine-tune-qwen3-unsloth-tutorial/cover.webp">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="900">
+<meta property="article:published_time" content="2026-11-08">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Fine-tune Qwen3 with QLoRA: the complete Unsloth tutorial for one GPU", "description": "Take Qwen3-4B-Instruct-2507, add a few hundred of your own examples, and train a LoRA adapter on a single GPU \u2014 then export it to GGUF and run it in Ollama. Every step verified against Unsloth's own notebook.", "datePublished": "2026-11-08", "dateModified": "2026-11-08", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/qlora-fine-tune-qwen3-unsloth-tutorial/"}, "image": "https://aifrontierpost.com/articles/qlora-fine-tune-qwen3-unsloth-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to fine-tune Qwen3-4B?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Unsloth needs an NVIDIA GPU with CUDA. A free Colab T4 (15 GB) runs the exact configuration in this tutorial; CPU-only training of a 4B model is not practical. Locally, any 16 GB NVIDIA card works."}}, {"@type": "Question", "name": "How much training data do I need?", "acceptedAnswer": {"@type": "Answer", "text": "For a format or style task, 200-1,000 clean examples in one consistent voice beat 10,000 noisy ones. Hold out 20 examples you never train on and use them to test. If you have no data yet, Unsloth's notebook trains on mlabonne/FineTome-100k as a drop-in."}}, {"@type": "Question", "name": "Will fine-tuning teach the model new facts?", "acceptedAnswer": {"@type": "Answer", "text": "No - that is retrieval's job. Fine-tuning changes how the model behaves: tone, format, and the shape of its answers. Facts that change, or that need citing, belong in RAG; behavior belongs in the weights."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Fine-tune Qwen3 with QLoRA: the complete Unsloth tutorial for one GPU</h1>
+<p class="lede">Take Qwen3-4B-Instruct-2507, add a few hundred of your own examples, and train a LoRA adapter on a single GPU — then export it to GGUF and run it in Ollama. Every step verified against Unsloth's own notebook.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 8, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> QLoRA plus Unsloth lets you fine-tune Qwen3-4B-Instruct-2507 on a single GPU: load the 4B model in 4-bit, attach rank-32 LoRA adapters, train on your own ShareGPT conversations with response-only loss, and export to GGUF for Ollama. The full pipeline - setup, data, training, testing, export - is below, with every version pinned and the data formatting verified against the real tokenizer.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Base model:</b> Qwen3-4B-Instruct-2507 - 4.0B parameters, 36 layers, 262,144-token native context, non-thinking mode; MMLU-Pro 69.6, GPQA 62.0 on the model card.</li><li><b>QLoRA:</b> frozen 4-bit base weights plus 16-bit adapters - you train roughly 1% of the parameters, and Unsloth's own notebook for this model runs on a free Colab T4 (15 GB).</li><li><b>Versions that work together:</b> transformers==4.57.6, trl==0.22.2, datasets==4.3.0 - the exact pins from Unsloth's Qwen3 notebook.</li><li><b>Data format:</b> ShareGPT {"conversations": [...]}. The rendered example in Step 4 was verified against the real tokenizer: 73 tokens for the refund-policy example, 56-73 across the four samples.</li><li><b>Export:</b> save_pretrained keeps just the adapter; save_pretrained_merged builds a full 16-bit or 4-bit model; save_pretrained_gguf with q4_k_m gives a ~2.5 GB file Ollama can run.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/qlora-fine-tune-qwen3-unsloth-tutorial/cover.webp" alt="A graphics card glowing on a dark desk, with luminous neural-network streams rising from it"></figure>
+<div class="article-body"><p>Two years ago, fine-tuning a language model meant a GPU cluster, a training framework you had to babysit, and a budget line. Today you can take a strong 4-billion-parameter instruct model, teach it your own data on one consumer GPU — or a free Colab notebook — and run the result locally, offline, in Ollama. The three pieces that make that possible are QLoRA, which shrinks training memory by quantizing the base model to 4-bit; Unsloth, which makes that training roughly twice as fast; and Qwen3-4B-Instruct-2507, a small open model that punches well above its size.</p>
+<p>This tutorial does the whole job end to end, with nothing skipped: you will set up the environment, load the model, build a dataset in the format the trainer expects, train a LoRA adapter, test it against the base model, and export it to GGUF so it runs in Ollama. Every command and parameter below is taken from Unsloth&#x27;s own Qwen3 (4B) notebook and the Qwen3 model card, and the data-formatting step was verified against the real Qwen3 tokenizer before publication.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<p>The setup is deliberately boring — boring is what makes a tutorial reproducible.</p>
+<ul><li><strong>A GPU with at least 15 GB of VRAM.</strong> A free Google Colab T4 works: Unsloth&#x27;s own notebook for this exact model runs on one. Locally, any NVIDIA card with 16 GB or more (RTX 4060 Ti 16 GB, RTX 3090, RTX 4090) is comfortable. CPU-only training is not practical for a 4B model.</li><li><strong>Python 3.11–3.13 and a CUDA 12.4 or newer driver</strong> if you train locally. On Colab, the runtime already has both.</li><li><strong>A Hugging Face account (optional).</strong> Qwen3-4B-Instruct-2507 is ungated, so you can download it without a token. You only need an account if you want to push your adapter to the Hub.</li><li><strong>Your data.</strong> A few hundred question-and-answer pairs in your own voice, format, or domain. This tutorial uses a small support-FAQ example; the format is the same whether you have 50 examples or 50,000.</li><li><strong>Cost: $0 on Colab&#x27;s free tier.</strong> The demo run in Step 5 takes a few minutes. A real run over a few thousand short examples is tens of minutes.</li></ul>
+<h2 id="how-qlora-works">How QLoRA works — the 60-second version<a class="anchor" href="#how-qlora-works" aria-label="Link to section">#</a></h2>
+<p>Full fine-tuning updates every weight in the model. For a 4B model that means optimizer states alone need tens of gigabytes — out of reach for a single consumer card. LoRA (Hu et al., Microsoft, 2021) freezes the base model and trains two small matrices per layer whose product approximates the update. You train roughly 1% of the parameters and get most of the quality.</p>
+<p>QLoRA (Dettmers et al., 2023) adds one more idea: load the frozen base model in 4-bit NF4 precision, keep the small adapters in 16-bit, and page optimizer states to CPU if memory gets tight. The 4B model&#x27;s weights shrink from about 8 GB in 16-bit to about 2.5 GB in 4-bit, and the whole training run fits on a card you can buy off the shelf. Unsloth&#x27;s contribution is systems work: hand-written kernels that make the same training run roughly twice as fast as stock PEFT.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/qlora-fine-tune-qwen3-unsloth-tutorial/img2.webp" alt="Diagram of QLoRA: frozen blue base-model layers with small amber trainable adapter layers attached, training data flowing into the adapters only"><figcaption>QLoRA: the blue base-model layers stay frozen in 4-bit; only the small amber adapter layers learn. Illustration: AI Frontier Post.</figcaption></figure>
+<p>One thing to get straight before you start: fine-tuning teaches a model <em>how</em> to behave — tone, format, style, the shape of a good answer. It does not reliably teach it <em>facts</em>. If your data is "here are 500 facts the model should know," what you actually want is retrieval (RAG). If your data is "here are 500 examples of how answers in my domain should sound," fine-tuning is the right tool.</p>
+<div class="table-wrap"><table><thead><tr><th>Your problem</th><th>Right tool</th><th>Why</th></tr></thead><tbody><tr><td>One-off or rare questions</td><td>A better prompt</td><td>Cheapest, fastest, no training</td></tr><tr><td>Answers must cite current or private documents</td><td>RAG</td><td>Facts that change belong in retrieval, not weights</td></tr><tr><td>Consistent format, tone, or style</td><td>Fine-tuning</td><td>Behavior is what training changes</td></tr><tr><td>New skill: tool calls, classification, a house style</td><td>Fine-tuning</td><td>Hundreds of examples beat pages of prompting</td></tr><tr><td>The model must know new facts <em>and</em> behave differently</td><td>Both</td><td>Fine-tune the behavior, retrieve the facts</td></tr></tbody></table></div>
+<h2 id="step-1-set-up-the-environment">Step 1 — Set up the environment<a class="anchor" href="#step-1-set-up-the-environment" aria-label="Link to section">#</a></h2>
+<p>There are two paths, and they converge at Step 2. Pick one.</p>
+<p><strong>Path A: Google Colab (free, no setup).</strong> Open a new notebook, set Runtime → Change runtime type → GPU (a T4 on the free tier), and run Unsloth&#x27;s install cell. These are the exact pinned versions from Unsloth&#x27;s Qwen3 notebook — pin them, because Unsloth moves fast and unpinned installs are the most common source of broken runs:</p>
+<pre><code class="language-python">%%capture
+import os
+if "COLAB_" not in "".join(os.environ.keys()):
+    !pip install unsloth  # Do this in local &amp; cloud setups
+else:
+    !pip install sentencepiece protobuf "datasets==4.3.0" "huggingface_hub&gt;=0.34.0" hf_transfer
+    !pip install --no-deps unsloth_zoo bitsandbytes accelerate peft trl triton unsloth
+    !unsloth install-kernels
+    !pip install --no-deps --upgrade "torchao&gt;=0.16.0"
+!pip install transformers==4.57.6
+!pip install --no-deps trl==0.22.2</code></pre>
+<p><strong>Path B: your own machine.</strong> Create a virtual environment, install PyTorch for your CUDA version first (see pytorch.org), then install Unsloth and the same pinned trainer versions:</p>
+<pre><code class="language-bash">python3 -m venv qlora-env
+source qlora-env/bin/activate
+pip install --upgrade pip
+pip install unsloth
+pip install transformers==4.57.6
+pip install --no-deps trl==0.22.2 datasets==4.3.0</code></pre>
+<p>Confirm the GPU is visible before going further:</p>
+<pre><code class="language-bash">nvidia-smi</code></pre>
+<p>You should see your card listed with its memory — a T4 shows about 15 GB. If <code>nvidia-smi</code> is not found, your driver or CUDA install is the problem, not Unsloth; fix that first.</p>
+<h2 id="step-2-load-qwen3-in-4-bit">Step 2 — Load Qwen3-4B in 4-bit<a class="anchor" href="#step-2-load-qwen3-in-4-bit" aria-label="Link to section">#</a></h2>
+<p>The base model is <code>unsloth/Qwen3-4B-Instruct-2507</code>: the updated non-thinking Qwen3-4B, 4.0 billion parameters across 36 layers, with a 262,144-token native context. On the model card&#x27;s own benchmarks it scores 69.6 on MMLU-Pro and 62.0 on GPQA — strong for a model this size — and it is an instruct model, so it already knows how to hold a conversation. Your examples only have to teach it the specifics. Start from an instruct model, never a base model, for this kind of task.</p>
+<pre><code class="language-python">from unsloth import FastLanguageModel  # import unsloth FIRST, before trl/transformers
+import torch
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name = "unsloth/Qwen3-4B-Instruct-2507",
+    max_seq_length = 2048,  # Choose any for long context!
+    load_in_4bit = True,    # 4-bit quantization to reduce memory (this is the QLoRA part)
+    load_in_8bit = False,   # A bit more accurate, uses 2x memory
+    full_finetuning = False,
+    # token = "YOUR_HF_TOKEN",  # Only for gated models; Qwen3 is ungated
+)</code></pre>
+<p>What each setting does: <code>max_seq_length=2048</code> caps the context the trainer will use — plenty for short Q&amp;A data, and shorter sequences train faster. <code>load_in_4bit=True</code> loads the frozen weights in 4-bit NF4. Unsloth also publishes a pre-quantized version, <code>unsloth/Qwen3-4B-Instruct-2507-unsloth-bnb-4bit</code>, which downloads faster and skips a conversion step; either name works in the same call.</p>
+<p>When the load finishes, Unsloth prints a banner with the GPU, the torch and CUDA versions, and the free memory. If it reports "QLoRA and full finetuning all not selected. Switching to 16bit LoRA," your <code>load_in_4bit</code> flag did not take — re-check the call before training.</p>
+<h2 id="step-3-attach-the-lora-adapters">Step 3 — Attach the LoRA adapters<a class="anchor" href="#step-3-attach-the-lora-adapters" aria-label="Link to section">#</a></h2>
+<p>Now add the trainable adapters. This is the exact configuration from Unsloth&#x27;s notebook:</p>
+<pre><code class="language-python">model = FastLanguageModel.get_peft_model(
+    model,
+    r = 32,  # Choose any number &gt; 0! Suggested 8, 16, 32, 64, 128
+    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+                      "gate_proj", "up_proj", "down_proj",],
+    lora_alpha = 32,
+    lora_dropout = 0,  # Supports any, but = 0 is optimized
+    bias = "none",     # Supports any, but = "none" is optimized
+    # [NEW] "unsloth" uses 30% less VRAM, fits 2x larger batch sizes!
+    use_gradient_checkpointing = "unsloth",  # True or "unsloth" for very long context
+    random_state = 3407,
+    use_rslora = False,  # We support rank stabilized LoRA
+    loftq_config = None, # And LoftQ
+)</code></pre>
+<p>The two numbers that matter are <code>r</code> and <code>lora_alpha</code>. Rank (<code>r</code>) is the size of the adapter matrices: higher rank can capture more complex behavior but trains more parameters and uses more memory. The notebook default of 32 is a good middle ground for a 4B model on a T4. A good rule: <code>r=16</code> for a pure format task on a small dataset, <code>r=32</code> as the default, <code>r=64</code> when you are teaching a genuinely new skill with thousands of examples. Keep <code>lora_alpha</code> equal to <code>r</code> unless you have a reason not to. <code>target_modules</code> puts adapters on every attention and MLP projection — the standard choice, and the one that performs best in practice.</p>
+<p>Next, set the chat template so your data is formatted exactly the way Qwen3 expects:</p>
+<pre><code class="language-python">from unsloth.chat_templates import get_chat_template
+tokenizer = get_chat_template(
+    tokenizer,
+    chat_template = "qwen3-instruct",
+)</code></pre>
+<p>This matters more than it looks. If the template is wrong, the model trains on text that looks nothing like what it sees at inference time, and the fine-tune quietly underperforms. The <code>qwen3-instruct</code> template renders conversations with <code>&lt;|im_start|&gt;</code> and <code>&lt;|im_end|&gt;</code> markers — you will see the exact output in the next step.</p>
+<h2 id="step-4-build-your-dataset">Step 4 — Build your dataset<a class="anchor" href="#step-4-build-your-dataset" aria-label="Link to section">#</a></h2>
+<p>Unsloth&#x27;s trainer expects ShareGPT format: a list of conversations, each a list of <code>role</code>/<code>content</code> turns. Write your data as one JSON object per line in <code>data.jsonl</code>. Here is a small example in the format this tutorial verifies — a support assistant that answers in short, factual sentences and always states the numbers:</p>
+<pre><code class="language-json">{"conversations": [{"role": "user", "content": "What is your refund policy for annual plans?"}, {"role": "assistant", "content": "Annual plans can be refunded in full within the first 30 days. After 30 days, we refund the unused months on a pro-rata basis, minus a $15 processing fee. Monthly plans are not refundable once the billing period has started."}]}
+{"conversations": [{"role": "user", "content": "How do I reset my password if I no longer have access to my email?"}, {"role": "assistant", "content": "If you can't access your email, use the account recovery form and provide your order number and the last four digits of the card on file. Our team verifies the details manually and replies within one business day with a reset link."}]}
+{"conversations": [{"role": "user", "content": "Do you ship to Canada?"}, {"role": "assistant", "content": "Yes, we ship to Canada. Standard shipping takes 5-8 business days and costs $12. Express shipping takes 2-3 business days and costs $25. Orders over $75 ship free with standard shipping."}]}
+{"conversations": [{"role": "user", "content": "Can I change my plan mid-cycle?"}, {"role": "assistant", "content": "Yes. Upgrades apply immediately and we charge only the prorated difference. Downgrades take effect at the start of your next billing cycle, so you keep your current features until then."}]}</code></pre>
+<p>Four examples demonstrate the format; they are not a training set. For a real run, aim for 200–1,000 clean examples. Quality beats quantity here: one inconsistent answer style teaches the model to be inconsistent. Keep answers in a single voice, keep them the same length, and hold out 20 examples you never train on — those are your test set in Step 6. If you do not have your own data yet, Unsloth&#x27;s notebook trains on <code>mlabonne/FineTome-100k</code>, a general instruction dataset you can load with one line and use as a drop-in while you build your own.</p>
+<p>Load the file, normalize it, and render it through the chat template:</p>
+<pre><code class="language-python">from datasets import load_dataset
+from unsloth.chat_templates import standardize_data_formats
+
+dataset = load_dataset("json", data_files="data.jsonl", split="train")
+dataset = standardize_data_formats(dataset)
+
+def formatting_prompts_func(examples):
+   convos = examples["conversations"]
+   texts = [tokenizer.apply_chat_template(convo, tokenize = False, add_generation_prompt = False) for convo in convos]
+   return { "text" : texts, }
+
+dataset = dataset.map(formatting_prompts_func, batched = True)</code></pre>
+<p>Before training, look at one rendered example. This is the single most useful debugging step in the whole tutorial — if the markers are wrong here, nothing downstream can fix it. Rendered through the real Qwen3-4B-Instruct-2507 tokenizer, the first example above comes out as exactly this:</p>
+<pre><code class="language-text">&lt;|im_start|&gt;user
+What is your refund policy for annual plans?&lt;|im_end|&gt;
+&lt;|im_start|&gt;assistant
+Annual plans can be refunded in full within the first 30 days. After 30 days, we refund the unused months on a pro-rata basis, minus a $15 processing fee. Monthly plans are not refundable once the billing period has started.&lt;|im_end|&gt;</code></pre>
+<p>That rendering — verified against the real tokenizer before publication — is 73 tokens. The four examples run 56–73 tokens, averaging about 66, so <code>max_seq_length=2048</code> leaves enormous headroom. Check your own data the same way: if your longest example is close to your <code>max_seq_length</code>, raise it or shorten the examples, because the trainer truncates silently.</p>
+<h2 id="step-5-train">Step 5 — Train<a class="anchor" href="#step-5-train" aria-label="Link to section">#</a></h2>
+<p>Now the trainer. This is TRL&#x27;s <code>SFTTrainer</code> with Unsloth&#x27;s patched model — the exact configuration from the notebook:</p>
+<pre><code class="language-python">from trl import SFTTrainer, SFTConfig
+trainer = SFTTrainer(
+    model = model,
+    tokenizer = tokenizer,
+    train_dataset = dataset,
+    eval_dataset = None,  # Can set up evaluation!
+    args = SFTConfig(
+        dataset_text_field = "text",
+        per_device_train_batch_size = 2,
+        gradient_accumulation_steps = 4,  # Use GA to mimic batch size!
+        warmup_steps = 5,
+        # num_train_epochs = 1,  # Set this for 1 full training run.
+        max_steps = 60,
+        learning_rate = 2e-4,  # Reduce to 2e-5 for long training runs
+        logging_steps = 1,
+        optim = "adamw_8bit",
+        weight_decay = 0.001,
+        lr_scheduler_type = "linear",
+        seed = 3407,
+        report_to = "none",  # Use TrackIO/WandB etc
+    ),
+)</code></pre>
+<p>Two settings deserve attention. <code>per_device_train_batch_size=2</code> with <code>gradient_accumulation_steps=4</code> gives an effective batch size of 8 — the gradients accumulate over four small batches before each update, which is how you get stable training on a card that cannot fit a large batch. And <code>max_steps=60</code> is the notebook&#x27;s demo setting: 60 steps to prove the pipeline works. For a real run, comment out <code>max_steps</code> and uncomment <code>num_train_epochs=1</code>, and drop the learning rate toward 2e-5 if you train for more than a couple of epochs — 2e-4 is a good starting rate for a short run, and too hot for a long one.</p>
+<p>One more call before training: tell the trainer to compute loss only on the assistant&#x27;s replies, not on the user&#x27;s questions. Training on the questions teaches the model to predict questions, which is wasted capacity:</p>
+<pre><code class="language-python">from unsloth.chat_templates import train_on_responses_only
+trainer = train_on_responses_only(trainer)
+trainer_stats = trainer.train()</code></pre>
+<p>The 60-step demo takes a few minutes on a T4. Watch the loss column, not any single value: in Unsloth&#x27;s own notebook run the loss bounces between roughly 0.4 and 1.3 across the 60 steps and trends downward. What you are checking for is a downward trend and no <code>nan</code>. A loss that climbs, or flatlines at a high value from step one, usually means the learning rate is wrong or the data is not in the format you think it is — go back to Step 4 and print a rendered example. When training finishes, check the memory the run actually used:</p>
+<pre><code class="language-python">used_memory = round(torch.cuda.max_memory_reserved() / 1024 / 1024 / 1024, 3)
+print(f"Peak reserved memory = {used_memory} GB.")</code></pre>
+<h2 id="step-6-test-the-adapter">Step 6 — Test the adapter against the base model<a class="anchor" href="#step-6-test-the-adapter" aria-label="Link to section">#</a></h2>
+<p>Never ship a fine-tune you have not chatted with. Run the same prompts through the model now, and compare the answers with the held-out examples from Step 4:</p>
+<pre><code class="language-python">messages = [
+    {"role" : "user", "content" : "Do you ship to Canada?"}
+]
+text = tokenizer.apply_chat_template(
+    messages,
+    tokenize = False,
+    add_generation_prompt = True,  # Must add for generation
+)
+
+from transformers import TextStreamer
+_ = model.generate(
+    **tokenizer(text, return_tensors = "pt").to("cuda"),
+    max_new_tokens = 1000,  # Increase for longer outputs!
+    temperature = 0.7, top_p = 0.8, top_k = 20,  # For non thinking
+    streamer = TextStreamer(tokenizer, skip_prompt = True),
+)</code></pre>
+<p>The sampling settings are Qwen&#x27;s own recommendation for this instruct model: temperature 0.7, top_p 0.8, top_k 20. Test with the questions you held out, not the ones you trained on — the model will parrot training examples, which tells you nothing. What you want to see is the <em>style</em> generalizing: short, factual answers with the numbers stated, on questions it has never seen. If it answers in the base model&#x27;s voice instead, the most likely cause is too few examples or too few steps; if it repeats itself or rambles, check that the chat template was applied (Step 3) and that the generation prompt ends with <code>&lt;|im_start|&gt;assistant</code>.</p>
+<h2 id="step-7-export-and-run-it-in-ollama">Step 7 — Export it and run it in Ollama<a class="anchor" href="#step-7-export-and-run-it-in-ollama" aria-label="Link to section">#</a></h2>
+<p>Training produces an adapter, not a model you can chat with directly. You have three ways out, and the right one depends on where the model will live.</p>
+<p><strong>Save just the adapter</strong> — smallest option, and the one to use if you will keep training or swap adapters on the same base model:</p>
+<pre><code class="language-python">model.save_pretrained("qwen_lora")  # Local saving
+tokenizer.save_pretrained("qwen_lora")
+# model.push_to_hub("your_name/qwen_lora", token = "YOUR_HF_TOKEN")  # Online saving</code></pre>
+<p><strong>Merge the adapter into a full model</strong> — one self-contained model directory, for serving with vLLM or SGLang:</p>
+<pre><code class="language-python">model.save_pretrained_merged("qwen_finetune_16bit", tokenizer, save_method = "merged_16bit",)
+# Or the 4-bit merged version:
+model.save_pretrained_merged("qwen_finetune_4bit", tokenizer, save_method = "merged_4bit",)</code></pre>
+<p><strong>Export to GGUF for local use</strong> — the path this tutorial recommends for running the model on your own machine. Unsloth converts natively; <code>q4_k_m</code> is the recommended quantization (it keeps half of the attention and feed-forward weights at higher precision), and the default is <code>q8_0</code>:</p>
+<pre><code class="language-python">model.save_pretrained_gguf("qwen_finetune", tokenizer, quantization_method = "q4_k_m")</code></pre>
+<p>That writes <code>qwen_finetune.Q4_K_M.gguf</code> into the current directory. The conversion clones llama.cpp and takes a few minutes. Then import it into Ollama with a one-line Modelfile:</p>
+<pre><code class="language-text">FROM ./qwen_finetune.Q4_K_M.gguf
+PARAMETER temperature 0.7
+PARAMETER top_p 0.8
+PARAMETER top_k 20</code></pre>
+<pre><code class="language-bash">ollama create qwen3-support -f Modelfile
+ollama run qwen3-support</code></pre>
+<p>The Modelfile bakes in Qwen&#x27;s recommended sampling settings, so every chat with <code>qwen3-support</code> uses them. The GGUF file is about 2.5 GB — small enough to run on a laptop with no GPU at all, and to share with a colleague as a single file.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/qlora-fine-tune-qwen3-unsloth-tutorial/img3.webp" alt="Workflow illustration: documents, a graphics card training a model, a packaged file, and a laptop chat window connected by a flowing line"><figcaption>The full pipeline: your data, one GPU, an exported GGUF, and a local chat in Ollama. Illustration: AI Frontier Post.</figcaption></figure>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Three decisions define the run, and each has a clear default.</p>
+<p><strong>Adapter, merged model, or GGUF?</strong> Keep the adapter if you are still iterating — it is a few hundred megabytes and you can keep training it. Merge to 16-bit when you want to serve the model behind an API with vLLM. Export to GGUF when you want to run it locally in Ollama or llama.cpp. Most solo projects end at GGUF, because that is where the model becomes something you can actually use every day.</p>
+<p><strong>Which rank?</strong> Rank 16 for a format or style task on a few hundred examples; 32 as the default; 64 when you have thousands of examples and a real skill to teach. Higher rank is not automatically better — it mostly buys capacity you will not use on a small dataset, and it costs memory and time.</p>
+<p><strong>4B or bigger?</strong> Unsloth&#x27;s sizing for QLoRA is roughly 5 GB of VRAM for a 4B model, 6 GB for 8B, 8.5 GB for 14B, and 22 GB for 27B, before headroom for activations at longer sequences. The 4B fits a free Colab T4 with room to spare; the 8B is the step up when the 4B&#x27;s answers are consistently too shallow, and it still fits a 24 GB card. Do not jump to a bigger model to fix a data problem — fix the data first.</p>
+<p><strong>QLoRA or full fine-tuning?</strong> Full fine-tuning updates every weight and needs roughly an order of magnitude more memory — a 4B full fine-tune is a datacenter-GPU job, not a consumer card. QLoRA gets you most of the quality for this kind of behavioral training at a fraction of the memory. Reserve full fine-tuning for continued pretraining on a new domain, not for teaching a style.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Symptom</th><th>Most likely cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>CUDA out of memory</code> on load</td><td>Sequence length or batch too large for the card</td><td>Lower <code>max_seq_length</code> to 1024, drop <code>per_device_train_batch_size</code> to 1, or use the pre-quantized <code>-unsloth-bnb-4bit</code> model name</td></tr><tr><td>Install fails with version conflicts</td><td>Unpinned trl/transformers vs. Unsloth</td><td>Reinstall with the exact pins from Step 1: <code>transformers==4.57.6</code>, <code>trl==0.22.2</code></td></tr><tr><td>Loss is <code>nan</code> or climbs</td><td>Learning rate too high, or bad data</td><td>Drop the learning rate to 2e-5, and print a rendered example to check the format</td></tr><tr><td>Model answers in the base voice</td><td>Too few examples or too few steps</td><td>More data first, then more epochs; check the held-out test, not training examples</td></tr><tr><td>Model repeats itself or never stops</td><td>Chat template missing or wrong</td><td>Re-run <code>get_chat_template(tokenizer, chat_template="qwen3-instruct")</code> and verify the rendered text ends with <code>&lt;|im_end|&gt;</code></td></tr><tr><td>GGUF export is slow</td><td>Normal — it clones llama.cpp and converts</td><td>Wait it out; a 4B model takes a few minutes, not seconds</td></tr><tr><td><code>ImportError</code> on <code>from unsloth import FastLanguageModel</code></td><td>Import order or a broken install</td><td>Import Unsloth before trl/transformers, and reinstall with <code>pip install --upgrade --force-reinstall --no-cache-dir unsloth unsloth_zoo</code></td></tr></tbody></table></div>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Fine-tuning a capable model on your own data is no longer a research project. The recipe is short: load Qwen3-4B-Instruct-2507 in 4-bit, attach rank-32 LoRA adapters, format your data as ShareGPT conversations, train with response-only loss, and export to GGUF for Ollama. The whole thing runs on a free Colab T4, and the part that determines the result is not the GPU — it is the dataset. Write 200 clean examples in one consistent voice, hold out 20 for testing, and the model will sound like you. Write 2,000 sloppy ones, and no rank or learning rate will save it.</p>
+<p><em>Sources: Unsloth&#x27;s Qwen3 (4B) Instruct notebook (<a href="https://github.com/unslothai/notebooks/blob/main/nb/Qwen3_(4B)-Instruct.ipynb" rel="nofollow">github.com/unslothai/notebooks</a>) — install pins, model loading, LoRA configuration, training configuration, inference, and GGUF export; the <a href="https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507" rel="nofollow">Qwen3-4B-Instruct-2507 model card on Hugging Face</a> — architecture, 262K context, benchmark figures, and sampling recommendations; Ollama&#x27;s Modelfile documentation (<a href="https://github.com/ollama/ollama" rel="nofollow">github.com/ollama/ollama</a>) — <code>FROM</code>, <code>ollama create</code>, and <code>ollama run</code>; and the verification runs quoted in Step 4 (chat-template rendering and token counts against the real Qwen3 tokenizer, November 8, 2026). LoRA: Hu et al., arXiv:2106.09685. QLoRA: Dettmers et al., arXiv:2305.14314.</em></p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="qlora-fine-tune-qwen3-unsloth-tutorial"></div><div class="comments" data-comments="qlora-fine-tune-qwen3-unsloth-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/indextts-25-voice-cloning-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Clone a voice on your own machine: a hands-on guide to IndexTTS 2.5</h3><div class="meta">November 8, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/kornia-differentiable-computer-vision-tutorial/"><span class="chip">Tutorials</span><h3>Differentiable computer vision, batched: hands-on with Kornia 0.9</h3><div class="meta">November 8, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/floci-local-aws-emulator-tutorial/"><span class="chip">Tutorials</span><h3>Run AWS on your laptop for free: hands-on with Floci, the LocalStack replacement</h3><div class="meta">November 8, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/astryx-design-system-agent-ready-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Meta's Astryx: the design system built for coding agents</h3><div class="meta">November 8, 2026 · 13 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to fine-tune Qwen3-4B?</h3><p>Yes. Unsloth needs an NVIDIA GPU with CUDA. A free Colab T4 (15 GB) runs the exact configuration in this tutorial; CPU-only training of a 4B model is not practical. Locally, any 16 GB NVIDIA card works.</p><h3>How much training data do I need?</h3><p>For a format or style task, 200-1,000 clean examples in one consistent voice beat 10,000 noisy ones. Hold out 20 examples you never train on and use them to test. If you have no data yet, Unsloth's notebook trains on mlabonne/FineTome-100k as a drop-in.</p><h3>Will fine-tuning teach the model new facts?</h3><p>No - that is retrieval's job. Fine-tuning changes how the model behaves: tone, format, and the shape of its answers. Facts that change, or that need citing, belong in RAG; behavior belongs in the weights.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/lora-fine-tuning-one-gpu/">Fine-tune a model with LoRA on a single GPU</a></li><li><a href="/articles/qwen3-8-27b-local-setup/">Qwen3.8-27B on your own hardware: the complete local setup guide</a></li><li><a href="/articles/quantization-explained-4bit/">Quantization, demystified: how 4-bit models keep their smarts</a></li><li><a href="/articles/soup-fine-tune-llm-one-yaml-tutorial/">Soup hands-on: fine-tune an LLM from a single YAML file, from first config to a working adapter</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
