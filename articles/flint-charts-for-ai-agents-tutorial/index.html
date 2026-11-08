@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Charts your coding agent can actually draw: hands-on with Microsoft Flint 1.0 — AI Frontier Post</title>
+<meta name="description" content="Your coding agent can write a chart spec, but the chart it draws is usually wrong — wrong type, unreadable labels, no interaction. Microsoft’s Flint 1.0 is a visualization language built for agents: one semantic spec compiles to five backends, with 14 themes and 23 interaction presets — this guide wires in its MCP server, renders a first chart, and compiles the same spec three ways, every step verified.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/flint-charts-for-ai-agents-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Charts your coding agent can actually draw: hands-on with Microsoft Flint 1.0">
+<meta property="og:description" content="Your coding agent can write a chart spec, but the chart it draws is usually wrong — wrong type, unreadable labels, no interaction. Microsoft’s Flint 1.0 is a visualization language built for agents: one semantic spec compiles to five backends, with 14 themes and 23 interaction presets — this guide wires in its MCP server, renders a first chart, and compiles the same spec three ways, every step verified.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/flint-charts-for-ai-agents-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/flint-charts-for-ai-agents-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-08">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Charts your coding agent can actually draw: hands-on with Microsoft Flint 1.0">
+<meta name="twitter:description" content="Your coding agent can write a chart spec, but the chart it draws is usually wrong — wrong type, unreadable labels, no interaction. Microsoft’s Flint 1.0 is a visualization language built for agents: one semantic spec compiles to five backends, with 14 themes and 23 interaction presets — this guide wires in its MCP server, renders a first chart, and compiles the same spec three ways, every step verified.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/flint-charts-for-ai-agents-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Charts your coding agent can actually draw: hands-on with Microsoft Flint 1.0", "description": "Your coding agent can write a chart spec, but the chart it draws is usually wrong — wrong type, unreadable labels, no interaction. Microsoft’s Flint 1.0 is a visualization language built for agents: one semantic spec compiles to five backends, with 14 themes and 23 interaction presets — this guide wires in its MCP server, renders a first chart, and compiles the same spec three ways, every step verified.", "datePublished": "2026-11-08", "dateModified": "2026-11-08", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/flint-charts-for-ai-agents-tutorial/"}, "image": "https://aifrontierpost.com/articles/flint-charts-for-ai-agents-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Charts your coding agent can actually draw: hands-on with Microsoft Flint 1.0", "description": "Wire Microsoft Flint 1.0's MCP server into an agent, validate and render a first chart, compile the same spec with the library and CLI, and restyle it with themes and interactions.", "step": [{"@type": "HowToStep", "name": "Run the MCP server and prove it answers", "text": "Start flint-chart-mcp with npx and drive it over stdio with a scripted JSON-RPC client: initialize, then list its nine tools."}, {"@type": "HowToStep", "name": "Wire it into your agent", "text": "Register the server in Claude Code, Claude Desktop, Cursor, or VS Code with the standard MCP client config, and confirm the agent calls the tools instead of guessing."}, {"@type": "HowToStep", "name": "Write your first spec", "text": "Save chart.json: GitHub star counts as a Bar Chart with Category and Quantity semantic types, the economist theme, and a click-highlight interaction."}, {"@type": "HowToStep", "name": "Validate before you render", "text": "Call validate_chart and read the verdict — then fix the interaction the validator rejects and re-validate clean."}, {"@type": "HowToStep", "name": "Render it", "text": "Call render_chart for SVG and PNG, and inspect the actual chart the server produced from the spec."}, {"@type": "HowToStep", "name": "Compile the same spec three ways", "text": "Assemble it with the flint-chart library to Vega-Lite and ECharts, and with the flint-chart CLI — working around the 1.0.1 symlink bug."}, {"@type": "HowToStep", "name": "Themes and interactions", "text": "Switch the theme across the 14 presets, extend one with a brand color, and pick interaction presets that fit the chart type."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Charts your coding agent can actually draw: hands-on with Microsoft Flint 1.0</h1>
+<p class="lede">Ask your coding agent for a chart and it will happily comply. What you get back is usually a chart-shaped disappointment: a bar chart for a time series, a pie chart with eleven slices, axis labels that overlap into mush. Microsoft’s Flint 1.0 is a visualization language built for agents — one semantic spec compiles to five backends — and this guide wires its MCP server into your agent and renders a first chart from real data.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 8, 2026 · 11 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Microsoft’s Flint 1.0 (October 19, 2026) is a visualization language for AI agents: one semantic spec — data, semantic types, chart type, theme, interaction — compiles to Vega-Lite, ECharts, Chart.js, Plotly, or native Excel. This guide wires the MCP server (flint-chart-mcp 1.0.1) into an agent, validates and renders a bar chart of GitHub stars with it, compiles the same spec with the library and the CLI, and documents the CLI’s 1.0.1 symlink bug. No API key or account; rendering is local.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> Microsoft Flint 1.0: a visualization language that lets AI agents create charts from one semantic spec (<code>ChartAssemblyInput</code>), rendered through an MCP server, an npm library, or a CLI.</li><li><b>Versions:</b> <code>flint-chart</code> 1.0.1 and <code>flint-chart-mcp</code> 1.0.1 (npm, November 8, 2026). Node.js 18 or later; this guide used Node v24.22.1.</li><li><b>Verified:</b> November 8, 2026: the MCP server driven over stdio with a scripted JSON-RPC client (initialize, all nine tools, SVG and PNG renders), the library compile to Vega-Lite and ECharts, the CLI compile to SVG and PNG, and the theme and interaction presets. Host steps (Claude Code, Claude Desktop, Cursor) follow the server’s own README; the server they attach to is the one proven here.</li><li><b>Requirement:</b> Node.js 18+ and about 30 minutes. No API key, no account, no model bill. An MCP client is optional, for Step 2 only.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/flint-charts-for-ai-agents-tutorial/cover.webp" alt="Illustration of a robot assistant beside a laptop with glowing bar, line, and pie charts floating above it"><figcaption>AI-generated illustration: a robot assistant and a laptop with glowing charts — the agent, and the charts it will learn to draw.</figcaption></figure>
+</header>
+<div class="article-body"><p>Ask your coding agent for a chart and it will happily comply. What you get back is usually a chart-shaped disappointment: a bar chart for a time series, a pie chart with eleven slices, axis labels that overlap into mush, a legend that explains nothing. The model knows the charting library's syntax. It does not know which chart to draw, how to lay it out, or when the thing it just produced is wrong.</p>
+<p>Microsoft's Flint is a visualization language built for exactly this gap. Instead of asking the model to emit raw Vega-Lite or ECharts JSON — a large, fiddly schema it will get subtly wrong — you give it one small semantic spec: the data, what each field <em>means</em>, the chart type, a theme, and an interaction. Flint's compiler resolves the rest: scales, axes, formatting, colors, layout. The same spec renders on five backends — Vega-Lite, ECharts, Chart.js, Plotly, and native Excel charts — and ships as an MCP server your agent can call directly.</p>
+<p>Flint 1.0 landed on October 19, 2026. This guide wires its MCP server into your agent, renders a first chart from real data, validates the spec the way the server does, and compiles the same spec three ways — library, CLI, and MCP — with every step run on this machine on November 8, 2026. No API key, no account, no model bill: the server renders locally, in process, and your data never leaves your machine.</p>
+
+<h2 id="what-you-need">What you&#x27;ll need<a class="anchor" href="#what-you-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Node.js 18 or later</strong> and npm. This guide used Node v24.22.1 and npm 10.9.4. Check yours with <code>node --version</code>.</li>
+<li><strong>A text editor</strong> and a terminal. About 30 minutes.</li>
+<li><strong>An MCP client for Step 2</strong> — Claude Code, Claude Desktop, Cursor, or VS Code. Optional: everything else in this guide runs without an agent, through the same protocol, so you can verify the server before you hand it to one.</li>
+<li><strong>Nothing else.</strong> No API key, no account, no paid model. Flint is MIT-licensed, and the MCP server's rendering runs locally in process.</li>
+</ul>
+
+<h2 id="1-mcp-server">Step 1: Run the MCP server and prove it answers<a class="anchor" href="#1-mcp-server" aria-label="Link to section">#</a></h2>
+<p>Flint ships two npm packages: <code>flint-chart</code> (the library) and <code>flint-chart-mcp</code> (the MCP server). Both are at version 1.0.1. Start with the server — it needs no install:</p>
+<pre><code class="language-bash">npx -y flint-chart-mcp</code></pre>
+<p>The server starts on stdio and says so on stderr:</p>
+<pre><code class="language-text">flint-chart-mcp 1.0.1 ready on stdio (backends: vegalite, echarts, chartjs; local files readable on request)</code></pre>
+<p>Before trusting any MCP server, make it answer a question with no agent in the loop. The MCP protocol over stdio is newline-delimited JSON-RPC, so a short script can drive it directly. Send <code>initialize</code>:</p>
+<pre><code class="language-json">{"jsonrpc": "2.0", "id": 1, "method": "initialize",
+ "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "probe", "version": "1.0.0"}}}</code></pre>
+<p>The server answers with its identity and its instructions:</p>
+<pre><code class="language-json">{"result": {"protocolVersion": "2025-06-18",
+  "serverInfo": {"name": "flint-chart-mcp", "version": "1.0.1"},
+  "instructions": "Flint compiles one semantic chart spec (ChartAssemblyInput) into Vega-Lite, ECharts, or Chart.js..."}}</code></pre>
+<p>Then list the tools. There are nine:</p>
+<pre><code class="language-text">render_chart, compile_chart, validate_chart, list_chart_types,
+list_interaction_presets, get_flint_skill, list_themes, validate_board, show</code></pre>
+<p>That list is the whole surface, and it is deliberately small. Most chart MCP servers expose one tool per chart type — 26 or more — because every chart has a different schema. Flint has one schema (<code>ChartAssemblyInput</code>) spanning its chart types, so the server exposes a handful of tools that all take the same spec. <code>show</code> opens a live chart card in hosts with MCP App UIs (Claude Desktop); <code>render_chart</code> is the fallback that returns a static PNG or SVG. The server keeps nothing between calls — every tool rebuilds the chart from the spec it is given — and it renders locally, so the rows you pass never leave your machine.</p>
+
+<h2 id="2-wire-into-agent">Step 2: Wire it into your agent<a class="anchor" href="#2-wire-into-agent" aria-label="Link to section">#</a></h2>
+<p>Registration is the standard MCP client config. In Claude Code, Claude Desktop, Cursor, or VS Code, add a server named <code>flint</code>:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "flint": {
+      "command": "npx",
+      "args": ["-y", "flint-chart-mcp"]
+    }
+  }
+}</code></pre>
+<p>In Claude Code the same registration is one command:</p>
+<pre><code class="language-bash">claude mcp add flint -- npx -y flint-chart-mcp</code></pre>
+<p>Restart the client, then ask it something that forces a tool call rather than a guess: <q>List Flint's chart types for the Vega-Lite backend.</q> The server returns a 28,350-character catalog — 39 chart types on Vega-Lite alone, each with its encoding channels and the interaction presets it supports. If the agent answers from memory instead, it has not picked up the server; the tools-list probe in Step 1 is the ground truth that the server works, and a fresh client restart is the usual fix.</p>
+<p>Two options worth knowing before you hand the server to an agent. By default the server can read any local file your agent references in <code>data.url</code> — a relative path resolves against the working directory, an absolute path is read as given, and remote URLs are never fetched. For an untrusted deployment, pass <code>--disable-file-reference</code> and it accepts only inline <code>data.values</code>. And you can gate the exposed backends at deploy time with <code>FLINT_MCP_BACKENDS=vegalite,echarts npx -y flint-chart-mcp</code>.</p>
+
+<h2 id="3-first-spec">Step 3: Write your first spec<a class="anchor" href="#3-first-spec" aria-label="Link to section">#</a></h2>
+<p>Every Flint chart is one JSON object with four parts: the data, the semantic types, the chart spec, and optional theme and interaction specs. Here is the one this guide renders, saved as <code>chart.json</code>. The data is real: GitHub star counts, in thousands, for the most-starred AI repositories in the November 6, 2026 GitHub AI Radar report (Caveman's count cross-checked against its repository page, 118,194 stars).</p>
+<pre><code class="language-json">{
+  "data": {"values": [
+    {"Repo": "ECC", "Stars": 298.3},
+    {"Repo": "hermes-agent", "Stars": 261.1},
+    {"Repo": "firecrawl", "Stars": 199.2},
+    {"Repo": "ComfyUI", "Stars": 145.4},
+    {"Repo": "graphify", "Stars": 143.4},
+    {"Repo": "MoneyPrinterTurbo", "Stars": 140.1},
+    {"Repo": "caveman", "Stars": 118.2},
+    {"Repo": "claude-mem", "Stars": 113.8}
+  ]},
+  "semantic_types": {"Repo": "Category", "Stars": "Quantity"},
+  "chart_spec": {
+    "chartType": "Bar Chart",
+    "encodings": {"x": "Stars", "y": "Repo"}
+  },
+  "theme_spec": "economist",
+  "interaction_spec": {"interactions": [{"type": "click-highlight"}]}
+}</code></pre>
+<p>Read it field by field, because this is the whole mental model:</p>
+<ul>
+<li><strong><code>data.values</code></strong> — the rows, inline. You can also point at a local <code>.json</code>, <code>.csv</code>, or <code>.tsv</code> file with <code>data.url</code>; the server never fetches remote URLs.</li>
+<li><strong><code>semantic_types</code></strong> — what each field <em>means</em>. <code>Repo</code> is a <code>Category</code>, <code>Stars</code> is a <code>Quantity</code>. There are 44 registered semantic types (<code>YearMonth</code>, <code>Temperature</code>, <code>Delta</code>, <code>Rank</code>, and more), and the compiler uses them to infer parsing, scales, axes, formatting, and colors. This is the part the model usually gets wrong when it writes raw chart JSON — and the part Flint makes explicit.</li>
+<li><strong><code>chart_spec</code></strong> — the chart type (<code>Bar Chart</code>) and the encodings (<code>x</code> is Stars, <code>y</code> is Repo). The compiler adapts sizing, spacing, labels, and legends to the data; the same spec renders across backends.</li>
+<li><strong><code>theme_spec</code></strong> — <code>economist</code>, one of 14 preset themes. Geometry, typography, and color are reusable specs that apply across chart types; you can extend a preset and override only your brand color (Step 7).</li>
+<li><strong><code>interaction_spec</code></strong> — <code>click-highlight</code>: click a bar to emphasize it and mute the rest. One of 23 interaction presets — but not every preset fits every chart, which is what Step 4 is for.</li>
+</ul>
+<figure class="inline-art"><img class="story-image" src="/articles/flint-charts-for-ai-agents-tutorial/img2.webp" alt="Illustration of one document flowing into a central compiler hub that fans out to five chart panels"><figcaption>AI-generated illustration: one Flint spec in, a compiled chart out on any of five backends — the compiler, not the model, resolves scales, axes, and layout.</figcaption></figure>
+<p>The point of the exercise is the direction of the work. Without Flint, your agent writes a 200-line Vega-Lite spec and you debug it. With Flint, your agent writes a 20-line semantic spec and the compiler does the 200 lines — deterministically, the same way every time.</p>
+
+<h2 id="4-validate">Step 4: Validate before you render<a class="anchor" href="#4-validate" aria-label="Link to section">#</a></h2>
+<p>Flint's most useful habit is one most chart tools skip: it validates the spec and tells you what is wrong <em>before</em> anything is drawn. Call <code>validate_chart</code> with the spec's fields and the backend:</p>
+<pre><code class="language-json">{"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+ "params": {"name": "validate_chart",
+            "arguments": {"data": {"values": [...]}, "semantic_types": {"Repo": "Category", "Stars": "Quantity"},
+                          "chart_spec": {"chartType": "Bar Chart", "encodings": {"x": "Stars", "y": "Repo"}},
+                          "theme_spec": "economist",
+                          "interaction_spec": {"interactions": [{"type": "click-highlight"}]},
+                          "backend": "vegalite"}}}</code></pre>
+<p>Note the shape: the tool takes the spec's fields spread at the top level of <code>arguments</code> — <code>data</code>, <code>chart_spec</code>, <code>theme_spec</code> — not nested under a <code>spec</code> key. Passing a nested <code>spec</code> object fails with <code>MCP error -32602: Required at data, Required at chart_spec</code>, which is the mistake I made on the first attempt. The response, when the shape is right:</p>
+<pre><code class="language-json">{"backend": "vegalite", "chartType": "Bar Chart", "valid": true,
+ "warnings": [], "errors": [],
+ "computedSize": {"width": 395, "height": 272}}</code></pre>
+<p>Valid, no warnings, and the compiler even tells you the size it computed. The validator also catches the kind of mistake that silently produces a bad chart. My first draft of this spec used <code>inspect-index</code> — hover to read values at an index — as the interaction. The validator returned <code>valid: true</code> but with a warning:</p>
+<pre><code class="language-text">Interaction "inspect-index" requires an index axis shared by the series;
+Bar Chart has none. The interaction was dropped.</code></pre>
+<p>That is the guardrail working: <code>inspect-index</code> belongs on line and area charts, where an index axis exists. A bar chart's supported interactions are a different set — <code>click-highlight</code>, <code>axis-highlight</code>, <code>select</code>, <code>lasso-select</code>, <code>brush-x</code>, and 16 more, 21 in total — which is exactly what <code>list_chart_types</code> reports per chart type. Swapping in <code>click-highlight</code> cleared the warning. Treat the validator as the spec's linter: run it first, read the warnings, and only then render.</p>
+
+<h2 id="5-render">Step 5: Render it<a class="anchor" href="#5-render" aria-label="Link to section">#</a></h2>
+<p>With a clean validation, render. <code>render_chart</code> takes the same arguments plus a format:</p>
+<pre><code class="language-json">{"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+ "params": {"name": "render_chart",
+            "arguments": {"data": {"values": [...]}, "semantic_types": {"Repo": "Category", "Stars": "Quantity"},
+                          "chart_spec": {"chartType": "Bar Chart", "encodings": {"x": "Stars", "y": "Repo"}},
+                          "theme_spec": "economist",
+                          "interaction_spec": {"interactions": [{"type": "click-highlight"}]},
+                          "backend": "vegalite", "format": "svg"}}}</code></pre>
+<p>The SVG came back as 10,418 characters of self-contained markup, 522 by 349 pixels. Asking for <code>format: "png"</code> instead returned a 17,555-byte PNG with valid PNG magic bytes. Both renders happened in process, on this machine, with no network call. This is the SVG the server produced from the spec in Step 3 — the actual artifact, not a mockup:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/flint-charts-for-ai-agents-tutorial/chart.svg" alt="Horizontal bar chart of GitHub stars for eight AI repositories, rendered by Flint in the Economist theme"><figcaption>Rendered by Flint's Vega-Lite backend from the spec in Step 3: eight repositories, values printed on the bars, Economist theme. The small red mark at the top left is in the server's own output.</figcaption></figure>
+<p>Eight bars, values printed on the marks, the Economist theme's typography and grid. The chart is not beautiful by accident — the theme decided the fonts (Helvetica Neue), the grid color, and the label placement. Change one string in the spec and the whole look changes; that is Step 7.</p>
+
+<h2 id="6-compile-three-ways">Step 6: Compile the same spec three ways — no agent needed<a class="anchor" href="#6-compile-three-ways" aria-label="Link to section">#</a></h2>
+<p>The MCP server is the convenient path, but the compiler underneath is a plain npm library, and it also ships as a CLI. All three take the same <code>chart.json</code>. Use the library when you are building an app; the CLI when you want a file; the MCP server when you want an agent to do it.</p>
+<p><strong>The library.</strong> Install it and compile in Node:</p>
+<pre><code class="language-bash">npm install flint-chart</code></pre>
+<pre><code class="language-javascript">import { assembleVegaLite } from 'flint-chart/vegalite';
+import { assembleECharts } from 'flint-chart/echarts';
+import { validateChart } from 'flint-chart/validate';
+import { readFileSync } from 'node:fs';
+
+const spec = JSON.parse(readFileSync('chart.json', 'utf8'));
+console.log(validateChart(spec, 'vegalite'));
+// { backend: 'vegalite', chartType: 'Bar Chart', valid: true,
+//   warnings: [], errors: [], computedSize: { width: 395, height: 272 } }
+
+const vl = assembleVegaLite(spec);   // a layered Vega-Lite spec, 8 data values
+const ec = assembleECharts(spec);    // an ECharts option: series[0].type === 'bar'</code></pre>
+<p>The Vega-Lite output is a layered spec carrying the Economist theme in its config — fonts, grid colors, label sizes — and the ECharts output is a ready-to-mount option object with a <code>bar</code> series and a value x-axis. One spec, two backends, one function call apart. The package also exports <code>assembleChartjs</code>, <code>assemblePlotly</code>, and <code>assembleExcel</code> for the other backends, plus <code>listThemePresets()</code> (14 themes) and <code>listInteractionPresets()</code> (23 presets) for discovery.</p>
+<p><strong>The CLI.</strong> The MCP package also installs a <code>flint-chart</code> command that compiles a saved spec to an image with no agent and no code:</p>
+<pre><code class="language-bash">flint-chart compile chart.json --format svg
+flint-chart compile chart.json --backend echarts --format png --output chart.png
+cat chart.json | flint-chart compile - --format svg &gt; chart.svg</code></pre>
+<p>The first command reports <code>Wrote vegalite · svg · 522×349px → chart.svg</code> and writes a 10,418-byte SVG — the same bytes the MCP server returned. But there is a catch, and it cost me twenty minutes: <strong>in version 1.0.1, the documented command silently does nothing when run through npx or npm's <code>.bin</code> symlink.</strong> It exits 0, prints nothing, and writes no file. The cause is in the CLI's entry check in <code>dist/flint-chart.js</code>: it compares the invoked path against its own real path, and the symlink npm creates does not resolve to it, so <code>main()</code> never runs. The workaround is to invoke the real file directly:</p>
+<pre><code class="language-bash">node ./node_modules/flint-chart-mcp/dist/flint-chart.js compile chart.json --format svg --output chart.svg</code></pre>
+<p>That is the one genuine bug I hit in this guide, and it only affects the CLI binary — the MCP server works exactly as documented through npx (Step 1 proved it). If you run the documented command and nothing happens, this is why; use the real path until a fixed release lands. The Chart.js backend, note, renders PNG only — asking it for SVG fails, because its engine has no SVG output.</p>
+
+<h2 id="7-themes-interactions">Step 7: Themes and interactions<a class="anchor" href="#7-themes-interactions" aria-label="Link to section">#</a></h2>
+<p>With the pipeline working, the fun part is cheap: change strings, not code. <code>list_themes</code> returns the 14 shipped presets:</p>
+<pre><code class="language-text">nyt, economist, swiss, nature, mckinsey, datawrapper, powerbi,
+powerbi-light, pop, cartoon, apple, de-stijl, bbc, material</code></pre>
+<p>Swap <code>theme_spec</code> to <code>nyt</code> and re-validate — it validates clean — and the same eight bars come back in New York Times style: a headline that states the finding, values printed on the marks, series named at their own ends. A brand adjustment is an extension, not a rewrite:</p>
+<pre><code class="language-json">{
+  "theme_spec": {
+    "extends": "economist",
+    "id": "our-brand",
+    "ink": { "series": { "single": "#6b3fa0" } }
+  }
+}</code></pre>
+<p>That spec — extending <code>economist</code> with a single purple series color — also validates clean and assembles to the same eight values. Keep the override small; the preset does the rest.</p>
+<p>Interactions work the same way, with one rule: <strong>the preset has to fit the chart.</strong> <code>list_interaction_presets</code> returns all 23, each with what it does, what it needs from the chart, and the options it accepts. On this bar chart, <code>click-highlight</code> and <code>brush-x</code> (drag an interval along the x-axis to select a range of star counts) both fit; <code>inspect-index</code> does not, and the validator says so instead of silently drawing nothing. For a line chart with a time axis, <code>inspect-index</code> is the right call — hover to read values at each month. When a chart needs more than one view, <code>validate_board</code> checks a whole dashboard of charts — headline, layout, and the links between them — without drawing anything.</p>
+
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<table>
+<thead><tr><th>Path</th><th>Use it when</th><th>What you get</th></tr></thead>
+<tbody>
+<tr><td><strong>MCP server</strong></td><td>You live in an agent chat and want charts on demand</td><td>Nine tools; the agent authors, validates, and renders the spec. <code>show</code> opens a live card in MCP App hosts.</td></tr>
+<tr><td><strong>Library</strong> (<code>flint-chart</code>)</td><td>You are building an app or dashboard</td><td><code>assembleVegaLite</code> / <code>assembleECharts</code> / <code>assemblePlotly</code> / <code>assembleChartjs</code> / <code>assembleExcel</code> — one spec, five backends, plus React and vanilla JS embedding.</td></tr>
+<tr><td><strong>CLI</strong> (<code>flint-chart compile</code>)</td><td>You want a file, no agent and no code</td><td>SVG or PNG from a saved spec JSON. Mind the 1.0.1 symlink bug in Step 6.</td></tr>
+<tr><td><strong>Excel backend</strong></td><td>The chart belongs in a report or spreadsheet</td><td><code>assembleExcel</code> produces a native, editable Excel chart spec. Rendering it needs an Office.js host, so no <code>.xlsx</code> was produced in this guide.</td></tr>
+</tbody>
+</table>
+<p>If you only do one of these, do the MCP server. It is the path where Flint's design pays off most: the agent stops writing chart-library JSON it half-remembers, and starts writing a twenty-line semantic spec the compiler can check.</p>
+
+<h2 id="troubleshooting">Troubleshooting: the failures you will actually hit<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>The CLI exits 0 and writes nothing.</strong> You ran it through npx or <code>node_modules/.bin</code> — the 1.0.1 symlink bug from Step 6. Invoke the real file with <code>node</code> and the path.</li>
+<li><strong><code>MCP error -32602: Required at data, Required at chart_spec</code>.</strong> You nested the spec under a <code>spec</code> key. The tools take the spec's fields spread at the top level of <code>arguments</code>.</li>
+<li><strong>A warning says an interaction was dropped.</strong> Read it — it names the preset and the reason, usually that the chart type has no axis the preset needs. Check <code>list_chart_types</code> for the presets your chart type actually supports.</li>
+<li><strong>Chart.js refuses SVG.</strong> By design: that backend renders PNG only. Ask for <code>format: "png"</code>.</li>
+<li><strong>The agent answers from memory instead of calling the tools.</strong> Restart the client after adding the server, and ask for something only the tools can answer — <q>list Flint's chart types</q> or <q>what themes ship with Flint?</q></li>
+<li><strong>Your CSV is not being read.</strong> <code>data.url</code> accepts local files only; remote URLs are never fetched. Pass the rows inline with <code>data.values</code>, or point at a local file.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>Agents are going to draw most of the charts from now on — in notebooks, in dashboards, in chat. The question is whether the chart they draw is a guess in a big schema or a checked spec in a small one. Flint 1.0 makes it the second: one semantic spec, a compiler that resolves the details, a validator that catches the mismatches, and five backends that all agree on what the chart is. Wire the MCP server into your agent, keep <code>validate_chart</code> in the loop, and the charts stop being the part of the agent's output you quietly fix by hand.</p>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2>
+<h3>Do I need an API key or an account to use Flint?</h3>
+<p>No. Both packages are free and MIT-licensed, and the MCP server renders locally in process. Your data goes from your machine to the rendering code on your machine — nothing is uploaded.</p>
+<h3>Which charting backends does one spec support?</h3>
+<p>Five: Vega-Lite, ECharts, Chart.js, Plotly, and native Excel charts. The MCP server exposes three of them (Vega-Lite, ECharts, Chart.js); the library adds Plotly and Excel. The project reports 52 chart types across the five backends; the Vega-Lite backend lists 39.</p>
+<h3>Can Flint read my spreadsheet or CSV?</h3>
+<p>Yes, as a local file: pass <code>data.url</code> pointing at a <code>.json</code>, <code>.csv</code>, or <code>.tsv</code> file, or paste the rows inline as <code>data.values</code>. Remote URLs are never fetched. Pass <code>--disable-file-reference</code> to the server to reject file references entirely.</p>
+<h3>Why did the CLI do nothing when I ran it?</h3>
+<p>Version 1.0.1 has a bug: run through npx or npm's <code>.bin</code> symlink, the <code>flint-chart</code> CLI exits 0 without running, because its entry check compares the invoked path against its real path. Run the real file directly with <code>node ./node_modules/flint-chart-mcp/dist/flint-chart.js compile …</code>. The MCP server is unaffected.</p>
+<h3>Does Flint replace Vega-Lite or ECharts?</h3>
+<p>No — it compiles to them. Flint is the authoring layer: you write the semantic spec, and the compiler produces the backend-native spec. If you already have Vega-Lite or ECharts code, Flint is a way to let an agent generate it reliably rather than a replacement for it.</p>
+</section>
+
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul>
+<li><a href="https://github.com/microsoft/flint-chart" rel="nofollow">microsoft/flint-chart — GitHub repository</a> — README: Flint 1.0 (October 19, 2026), 52 chart types across 5 backends, 14 themes, 23 interaction presets, npm library and MCP server; read November 8, 2026.</li>
+<li><a href="https://github.com/microsoft/flint-chart/blob/main/packages/flint-mcp/README.md" rel="nofollow">flint-chart-mcp README</a> — nine tools, MCP client config, <code>--disable-file-reference</code>, <code>FLINT_MCP_BACKENDS</code>, CLI usage and options; read November 8, 2026.</li>
+<li><a href="https://www.npmjs.com/package/flint-chart" rel="nofollow">npm: flint-chart</a> — version 1.0.1; read via the npm registry November 8, 2026.</li>
+<li><a href="https://www.npmjs.com/package/flint-chart-mcp" rel="nofollow">npm: flint-chart-mcp</a> — version 1.0.1; read via the npm registry November 8, 2026.</li>
+<li><a href="https://microsoft.github.io/flint-chart/" rel="nofollow">Flint project site</a> — gallery, live editor, theme explorer, interaction gallery; read November 8, 2026.</li>
+<li><a href="https://raw.githubusercontent.com/JuliaYu907/github-ai-radar/main/reports/2026-11-06/github_ai_hot_repo_2026-11-06_en.md" rel="nofollow">GitHub AI Repo Trending Report, November 6, 2026</a> — star counts used for the example chart; read November 8, 2026.</li>
+</ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="flint-charts-for-ai-agents-tutorial"></div><div class="comments" data-comments="flint-charts-for-ai-agents-tutorial"></div></div>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
