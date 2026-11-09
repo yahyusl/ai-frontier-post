@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Give ChatGPT your own tools: connect a custom MCP server — AI Frontier Post</title>
+<meta name="description" content="ChatGPT can now call tools you build yourself — no Developer Mode toggle, no waiting list. This guide builds a real MCP server with FastMCP, proves it works, puts it on the public internet, and connects it to ChatGPT, every step verified.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/chatgpt-custom-mcp-server-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Give ChatGPT your own tools: connect a custom MCP server">
+<meta property="og:description" content="ChatGPT can now call tools you build yourself — no Developer Mode toggle, no waiting list. This guide builds a real MCP server with FastMCP, proves it works, puts it on the public internet, and connects it to ChatGPT, every step verified.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/chatgpt-custom-mcp-server-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/chatgpt-custom-mcp-server-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-09">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Give ChatGPT your own tools: connect a custom MCP server">
+<meta name="twitter:description" content="ChatGPT can now call tools you build yourself — no Developer Mode toggle, no waiting list. This guide builds a real MCP server with FastMCP, proves it works, puts it on the public internet, and connects it to ChatGPT, every step verified.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/chatgpt-custom-mcp-server-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Give ChatGPT your own tools: connect a custom MCP server", "description": "ChatGPT can now call tools you build yourself — no Developer Mode toggle, no waiting list. This guide builds a real MCP server with FastMCP, proves it works, puts it on the public internet, and connects it to ChatGPT, every step verified.", "datePublished": "2026-11-09", "dateModified": "2026-11-09", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/chatgpt-custom-mcp-server-tutorial/"}, "image": "https://aifrontierpost.com/articles/chatgpt-custom-mcp-server-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Give ChatGPT your own tools: connect a custom MCP server", "description": "Build a reading-list MCP server with FastMCP, verify it with a client and a raw protocol check, expose it with a free Cloudflare Tunnel, and connect it to ChatGPT through the Plugins flow.", "step": [{"@type": "HowToStep", "name": "Build the server with FastMCP", "text": "Write notes_server.py with three tools — add_note, search_notes, list_notes — backed by a JSON file."}, {"@type": "HowToStep", "name": "Run it and prove the tools work", "text": "Start the server on port 8000 and call every tool with FastMCP's Client, then confirm the raw MCP protocol handshake."}, {"@type": "HowToStep", "name": "Check it with MCP Inspector", "text": "Open the Inspector, connect over Streamable HTTP, and list and call the tools in the web UI."}, {"@type": "HowToStep", "name": "Put it on the public internet", "text": "Expose localhost:8000 with a free Cloudflare Tunnel and note the public HTTPS endpoint."}, {"@type": "HowToStep", "name": "Connect it in ChatGPT", "text": "Add the server as a custom MCP server in Plugins, review the discovered tools, and install it."}, {"@type": "HowToStep", "name": "Use it in a real conversation", "text": "@-mention the plugin in a chat, ask it to save and search notes, and confirm write actions when asked."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Give ChatGPT your own tools: connect a custom MCP server</h1>
+<p class="lede">Until recently, giving ChatGPT a tool you built yourself meant enabling Developer Mode, creating a draft app, and hoping the steps in a six-month-old guide still matched the settings page. OpenAI has since moved custom MCP servers into Plugins: you add a server by URL, ChatGPT scans its tools, and you @-mention it in a chat. This guide builds a real one — a reading-list server with three tools — proves it works, puts it on the public internet, and connects it to ChatGPT.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 9, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> ChatGPT's custom MCP servers now live under Plugins — no Developer Mode toggle. This guide builds a reading-list MCP server with FastMCP 4.1.6 (three tools, JSON-backed), verifies it with FastMCP's own client and a raw HTTP protocol check, exposes it with a free Cloudflare Tunnel, and connects it in ChatGPT, where it answers questions from your own notes. Full MCP needs a Business or Enterprise/Edu workspace; Pro gets read/fetch only.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> A custom MCP server for ChatGPT — a reading-list server (<code>add_note</code>, <code>search_notes</code>, <code>list_notes</code>) built with FastMCP, connected through ChatGPT's Plugins flow.</li><li><b>Plans:</b> Full MCP on ChatGPT web for Business and Enterprise/Edu; Pro can connect custom servers with read/fetch permissions only. Web only — no mobile.</li><li><b>Verified:</b> November 9, 2026 — OpenAI's help-center article on connecting custom MCP servers, read the same day; FastMCP 4.1.6 on Python 3.12.3; server, client test, and raw protocol check all ran; cloudflared 2026.10.7.</li><li><b>Requirement:</b> Python 3.10+, a ChatGPT Business or Enterprise/Edu workspace (Pro works for read-only tools), about 30 minutes, $0 for the server and the tunnel.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/chatgpt-custom-mcp-server-tutorial/cover.webp" alt="Illustration of a chat window plugged into a small server rack with tool icons"><figcaption>AI-generated illustration: a chat window plugged into a small server — ChatGPT on one end, your own tools on the other.</figcaption></figure>
+</header>
+<div class="article-body"><p>ChatGPT already knows a lot. What it does not know is <em>yours</em>: your reading list, your CRM, your internal docs, the database only your team can see. The Model Context Protocol (MCP) is the open standard that closes that gap. Your code exposes tools — small functions with names, descriptions, and typed inputs — and any MCP client can call them. ChatGPT is now one of those clients.</p>
+<p>That last part changed recently, and it is the reason most existing guides are wrong. OpenAI's Developer Mode was the old route: flip a toggle in settings, create a draft app, test it privately. That flow is gone. The Developer Mode documentation page no longer exists, and the help center now says, plainly, that you do not need to turn on Developer Mode first. Custom MCP servers moved into Plugins, with a risk warning to acknowledge instead of a toggle to flip. If a guide tells you to open Settings → Apps → Developer mode, it is describing a product that no longer ships. This tutorial follows the flow that exists today, verified against OpenAI's current help-center article on November 9, 2026.</p>
+<p>The server you will build is deliberately small and genuinely useful: a reading list. Three tools — save a link, search your saved links, list the most recent ones — backed by a plain JSON file. No database, no auth, no framework beyond FastMCP. The point is the wiring, not the app: once ChatGPT can call these three tools, it can call any tool you write the same way.</p>
+<h2 id="what-you-ll-need">What you'll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<p>Everything below is free except the ChatGPT plan itself, and the server costs nothing to run.</p>
+<ul><li><strong>Python 3.10 or newer.</strong> Verified on Python 3.12.3 with FastMCP 4.1.6.</li><li><strong>A ChatGPT workspace on the right plan.</strong> This is the one hard requirement, and it is worth checking before you build anything:</li></ul>
+<div class="table-wrap"><table><thead><tr><th>ChatGPT plan</th><th>Custom MCP servers on the web</th></tr></thead><tbody><tr><td><strong>Business</strong></td><td>Full support — admins and owners create and publish plugins</td></tr><tr><td><strong>Enterprise / Edu</strong></td><td>Full support — plus RBAC to grant creation rights to selected members</td></tr><tr><td><strong>Pro</strong></td><td>Read/fetch only — your server's read tools work, write tools do not</td></tr><tr><td><strong>Free, Go, Plus</strong></td><td>No custom-server flow on the web</td></tr></tbody></table></div>
+<p>OpenAI's help center lists Business and Enterprise/Edu for full MCP and Pro for read/fetch; Free, Go, and Plus get no custom-server option. Workspace admins can further control who may create connections (the <code>Create plugins with MCPs</code> permission) and who may use each published app. Custom servers work on ChatGPT web only — not on mobile.</p>
+<ul><li><strong>cloudflared, the Cloudflare Tunnel client.</strong> Free, no account needed for a quick tunnel. You will use it to give your laptop a public HTTPS address for the ten minutes it takes to connect the server.</li><li><strong>About 30 minutes.</strong> Most of it is the build and the testing; the ChatGPT connection itself takes about two minutes.</li></ul>
+<p>Here is how the pieces fit together. Your FastMCP server exposes three tools over HTTP. A tunnel gives that server a public address. ChatGPT connects to the public address, discovers the tools, and calls them from your chats — reading and writing your <code>notes.json</code> file through your code.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/chatgpt-custom-mcp-server-tutorial/img2.webp" alt="Diagram: ChatGPT connects through the MCP protocol to a FastMCP server with three tools, which reads and writes a notes file"><figcaption>AI-generated illustration: ChatGPT → MCP protocol → your FastMCP server → your notes file. The three chips are the tools this guide builds.</figcaption></figure>
+<h2 id="step-1-build-the-server">Step 1 — Build the server with FastMCP<a class="anchor" href="#step-1-build-the-server" aria-label="Link to section">#</a></h2>
+<p>FastMCP is the Python framework for MCP servers: a <code>FastMCP</code> class, a <code>@mcp.tool</code> decorator, and a <code>run()</code> method that serves the server over stdio or HTTP. Create a project folder and install it:</p>
+<pre><code class="language-bash">mkdir chatgpt-notes-server &amp;&amp; cd chatgpt-notes-server
+python3 -m venv .venv
+source .venv/bin/activate
+pip install fastmcp</code></pre>
+<p>The install lands FastMCP 4.1.6 (verified November 9, 2026). Now write the server. Save this as <code>notes_server.py</code>:</p>
+<pre><code class="language-python">"""Reading-list MCP server: save links you want to read later and search them.
+
+Tools:
+  - add_note(title, url, note="")  -&gt; save a link
+  - search_notes(query)            -&gt; keyword search over saved notes
+  - list_notes(limit=10)           -&gt; most recent notes, newest first
+
+Notes are stored in notes.json next to this file.
+
+Run it:
+  fastmcp run notes_server.py --transport http --port 8000
+  # or: python notes_server.py
+"""
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+from fastmcp import FastMCP
+
+mcp = FastMCP("reading-list")
+
+NOTES_FILE = Path(__file__).with_name("notes.json")
+
+
+def _load_notes() -&gt; list[dict]:
+    if not NOTES_FILE.exists():
+        return []
+    return json.loads(NOTES_FILE.read_text(encoding="utf-8"))
+
+
+def _save_notes(notes: list[dict]) -&gt; None:
+    NOTES_FILE.write_text(json.dumps(notes, indent=2), encoding="utf-8")
+
+
+def _format(note: dict) -&gt; str:
+    lines = [f"- {note['title']} ({note['url']})"]
+    if note.get("note"):
+        lines.append(f"  Note: {note['note']}")
+    lines.append(f"  Saved: {note['saved_at']}")
+    return "\n".join(lines)
+
+
+@mcp.tool
+def add_note(title: str, url: str, note: str = "") -&gt; str:
+    """Save a link to your reading list."""
+    notes = _load_notes()
+    notes.append(
+        {
+            "title": title,
+            "url": url,
+            "note": note,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    _save_notes(notes)
+    return f"Saved '{title}'. You now have {len(notes)} note(s) in your reading list."
+
+
+@mcp.tool
+def search_notes(query: str) -&gt; str:
+    """Search your saved notes by keyword (matches title, URL, or note text)."""
+    q = query.lower()
+    matches = [
+        n
+        for n in _load_notes()
+        if q in n["title"].lower()
+        or q in n["url"].lower()
+        or q in n.get("note", "").lower()
+    ]
+    if not matches:
+        return "No matching notes."
+    return "\n".join(_format(n) for n in matches)
+
+
+@mcp.tool
+def list_notes(limit: int = 10) -&gt; str:
+    """List your most recent saved notes, newest first."""
+    notes = _load_notes()
+    if not notes:
+        return "No notes saved yet."
+    recent = notes[::-1][:limit]
+    return "\n".join(_format(n) for n in recent)
+
+
+if __name__ == "__main__":
+    mcp.run(transport="http", host="127.0.0.1", port=8000)</code></pre>
+<p>Three things in this file do the real work. First, <code>@mcp.tool</code> turns an ordinary function into an MCP tool: the function's name becomes the tool name, its type annotations become the tool's input schema, and its docstring becomes the description ChatGPT sees when it decides which tool to call. Write docstrings as if you were explaining the tool to the model, because that is exactly what happens — the protocol check in Step 2 shows the descriptions arriving verbatim. Second, the tools are deliberately boring: plain functions over a JSON file, no framework magic. That is the whole point of MCP — your business logic stays ordinary code. Third, the <code>__main__</code> block serves the server over HTTP on <code>127.0.0.1:8000</code>. ChatGPT speaks the Streamable HTTP transport, so HTTP is the transport you want; the MCP endpoint will be <code>http://127.0.0.1:8000/mcp</code>.</p>
+<h2 id="step-2-run-and-test">Step 2 — Run it and prove the tools work<a class="anchor" href="#step-2-run-and-test" aria-label="Link to section">#</a></h2>
+<p>Start the server:</p>
+<pre><code class="language-bash">python notes_server.py</code></pre>
+<p>You should see FastMCP's startup banner, then these two lines:</p>
+<pre><code>Starting MCP server 'reading-list' with transport 'http' on http://127.0.0.1:8000/mcp
+INFO:     Uvicorn running on http://127.0.0.1:8000</code></pre>
+<p>A quick smoke test: <code>curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/mcp</code> returns <code>400</code>. That is the server telling you a bare GET is not a valid MCP call — it is not a failure. The real test is a client that speaks the protocol. Save this as <code>test_client.py</code> and run it while the server is up:</p>
+<pre><code class="language-python">"""Smoke test for notes_server.py using FastMCP's own Client.
+
+Expects the server already running at http://127.0.0.1:8000/mcp
+(either `python notes_server.py` or `fastmcp run notes_server.py`).
+
+Run: python test_client.py
+"""
+
+import asyncio
+
+from fastmcp import Client
+
+
+def _text(result) -&gt; str:
+    """Extract the plain-text payload from a CallToolResult."""
+    if hasattr(result, "content") and result.content:
+        return "\n".join(block.text for block in result.content if hasattr(block, "text"))
+    return str(result)
+
+
+async def main() -&gt; None:
+    async with Client("http://127.0.0.1:8000/mcp") as client:
+        tools = await client.list_tools()
+        print("TOOLS:", [t.name for t in tools])
+
+        r1 = await client.call_tool(
+            "add_note",
+            {
+                "title": "FastMCP docs",
+                "url": "https://gofastmcp.com",
+                "note": "Official FastMCP documentation",
+            },
+        )
+        print("ADD 1:", _text(r1))
+
+        r2 = await client.call_tool(
+            "add_note",
+            {
+                "title": "MCP specification",
+                "url": "https://modelcontextprotocol.io",
+                "note": "The open protocol spec",
+            },
+        )
+        print("ADD 2:", _text(r2))
+
+        r3 = await client.call_tool("search_notes", {"query": "fastmcp"})
+        print("SEARCH 'fastmcp':\n" + _text(r3))
+
+        r4 = await client.call_tool("search_notes", {"query": "zzz-no-such-word"})
+        print("SEARCH 'zzz-no-such-word':", _text(r4))
+
+        r5 = await client.call_tool("list_notes", {"limit": 10})
+        print("LIST (limit 10):\n" + _text(r5))
+
+        r6 = await client.call_tool("list_notes", {"limit": 1})
+        print("LIST (limit 1):\n" + _text(r6))
+
+    print("CLIENT TEST DONE")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">python test_client.py</code></pre>
+<p>This is the exact output from the verification run on November 9, 2026:</p>
+<pre><code>TOOLS: ['add_note', 'search_notes', 'list_notes']
+ADD 1: Saved 'FastMCP docs'. You now have 1 note(s) in your reading list.
+ADD 2: Saved 'MCP specification'. You now have 2 note(s) in your reading list.
+SEARCH 'fastmcp':
+- FastMCP docs (https://gofastmcp.com)
+  Note: Official FastMCP documentation
+  Saved: 2026-11-09T17:27:47.895250+00:00
+SEARCH 'zzz-no-such-word': No matching notes.
+LIST (limit 10):
+- MCP specification (https://modelcontextprotocol.io)
+  Note: The open protocol spec
+  Saved: 2026-11-09T17:27:47.995526+00:00
+- FastMCP docs (https://gofastmcp.com)
+  Note: Official FastMCP documentation
+  Saved: 2026-11-09T17:27:47.895250+00:00
+LIST (limit 1):
+- MCP specification (https://modelcontextprotocol.io)
+  Note: The open protocol spec
+  Saved: 2026-11-09T17:27:47.995526+00:00
+CLIENT TEST DONE</code></pre>
+<p>Every behavior you need is in that output: the tool list is exactly the three tools, the count climbs 1 → 2, search finds a match and reports a miss cleanly, and <code>list_notes</code> returns newest first and honors <code>limit=1</code>. Check <code>notes.json</code> on disk — both notes are there with ISO timestamps. The same test passes unchanged if you launch the server through the CLI instead (<code>fastmcp run notes_server.py --transport http --port 8000</code>); note that the CLI imports your server object and does not execute the <code>__main__</code> block, so the transport and port must come from the command line.</p>
+<p>One more check, below the client library, proves the server speaks the protocol rather than just FastMCP's dialect. A raw HTTP check with only the standard library — <code>POST /mcp</code> with an <code>initialize</code> request — returns HTTP 200, a <code>Mcp-Session-Id</code> header, and protocol version <code>2025-03-26</code> with <code>serverInfo</code> naming <code>reading-list</code> 4.1.6. A follow-up <code>tools/list</code> call returns all three tools with correct input schemas (<code>title</code> and <code>url</code> required for <code>add_note</code>, <code>note</code> defaulting to <code>""</code>, <code>limit</code> an integer defaulting to 10). Two details matter if you ever debug the raw protocol: every call after <code>initialize</code> must carry the <code>Mcp-Session-Id</code> header, and each tool's <code>outputSchema</code> is wrapped as <code>{"result": {"type": "string"}}</code> — clients still receive plain text, so nothing changes for the reader. One gotcha to file away: after installing FastMCP 4.1.6, <code>import httpx</code> fails — the HTTP library ships as <code>httpx2</code> (import name <code>httpx2</code>). Use FastMCP's <code>Client</code> or the standard library for HTTP checks, as this guide does.</p>
+<h2 id="step-3-inspector">Step 3 — Check it with MCP Inspector<a class="anchor" href="#step-3-inspector" aria-label="Link to section">#</a></h2>
+<p>The client test proves the tools work. The Inspector proves a human can see them — and it is the same check OpenAI's own developer docs tell you to run before connecting a server to ChatGPT. With the server still running, launch it:</p>
+<pre><code class="language-bash">npx @modelcontextprotocol/inspector@latest</code></pre>
+<p>The command prints a local URL (on port 6274 by default). Open it in your browser and the Inspector's web UI appears. Set <strong>Transport Type</strong> to <strong>Streamable HTTP</strong>, enter <code>http://127.0.0.1:8000/mcp</code> as the URL, and click <strong>Connect</strong>. Then open <strong>List Tools</strong>: you should see <code>add_note</code>, <code>search_notes</code>, and <code>list_notes</code>, each with the description from its docstring and its input schema. Pick <code>add_note</code>, fill in a title and URL, and call it — the result comes back in the UI, and the note lands in <code>notes.json</code>. If the Inspector cannot connect, the server is not actually reachable at that URL — fix that now, because ChatGPT will hit the same wall in Step 5. The Inspector version verified for this guide is 2.14.0 (<code>--version</code>), run through <code>npx</code> with no global install.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/chatgpt-custom-mcp-server-tutorial/img3.webp" alt="Four-step workflow: build the server, test it, expose it through a tunnel, connect it in ChatGPT"><figcaption>AI-generated illustration: the four steps in this guide — build, test, expose, connect.</figcaption></figure>
+<h2 id="step-4-public-url">Step 4 — Put it on the public internet<a class="anchor" href="#step-4-public-url" aria-label="Link to section">#</a></h2>
+<p>ChatGPT cannot reach your laptop. Its help center is explicit: a local MCP server cannot be connected directly, and custom servers must live at a public HTTPS endpoint. The fastest way to get one is a Cloudflare Tunnel — a single command that gives <code>localhost:8000</code> a public address, no account and no DNS changes required.</p>
+<p>Install <code>cloudflared</code>, the tunnel client. On Linux, the download below fetches the latest release binary (version 2026.10.7 was verified for this guide):</p>
+<pre><code class="language-bash">curl -sL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x /tmp/cloudflared
+/tmp/cloudflared --version
+# cloudflared version 2026.10.7 (built 2026-10-30-17:05 UTC)</code></pre>
+<p>On macOS, install it with Homebrew (<code>brew install cloudflared</code>); on Windows, use the installer from Cloudflare's download page. Then, with your server still running on port 8000, start the tunnel:</p>
+<pre><code class="language-bash">cloudflared tunnel --url http://localhost:8000</code></pre>
+<p>Cloudflared prints a URL like <code>https://abcdef-1234.trycloudflare.com</code> — that is your server's public address. Your MCP endpoint is that URL with <code>/mcp</code> appended: <code>https://abcdef-1234.trycloudflare.com/mcp</code>. Keep both the server and the tunnel running; when either stops, the public address stops answering. Two things to know before you rely on this address: a quick tunnel is for experimenting — Cloudflare says so itself when the tunnel starts, and it offers no uptime guarantee — and the address is random and temporary. For anything permanent, create a named tunnel (<code>cloudflared tunnel login</code>, then <code>create</code> and <code>route dns</code>), which gives you a stable hostname on your own domain.</p>
+<p>If your server must never touch the public internet — it sits on a company network, for example — OpenAI's alternative is the <strong>Secure MCP Tunnel</strong>: it connects a private server to ChatGPT without exposing it publicly. In the Plugins flow in Step 5, choose <strong>Tunnel</strong> instead of entering a URL, then select an available tunnel or enter its tunnel ID. The setup lives in OpenAI's Secure MCP Tunnel guide; the rest of this tutorial is the same either way, because ChatGPT sees the same tools either way.</p>
+<h2 id="step-5-connect-chatgpt">Step 5 — Connect it in ChatGPT<a class="anchor" href="#step-5-connect-chatgpt" aria-label="Link to section">#</a></h2>
+<p>This is the part the old guides get wrong, so follow the current flow exactly. It was verified against OpenAI's help-center article "Connecting custom MCP servers in ChatGPT" on November 9, 2026. You do <em>not</em> need to turn on Developer Mode first.</p>
+<ol><li>Open ChatGPT on the web and go to <strong>Plugins</strong>.</li><li>Select the <strong>plus button</strong>, then <strong>Add custom MCP server</strong>.</li><li>Enter a name — <code>Reading List</code> — and optionally a description.</li><li>Under <strong>Connection</strong>, enter your server's public HTTPS MCP endpoint URL: <code>https://abcdef-1234.trycloudflare.com/mcp</code> (your own tunnel address, with <code>/mcp</code> on the end). Or select <strong>Tunnel</strong> and enter a Secure MCP Tunnel ID.</li><li>Configure authentication. This server has none, so leave it as no-authentication.</li><li>Review the risk warning and select the <strong>I understand and want to continue</strong> checkbox.</li><li>Select <strong>Create as a plugin</strong>, then review the discovered tools and metadata. You should see <code>add_note</code>, <code>search_notes</code>, and <code>list_notes</code> — the same three tools from Step 2.</li></ol>
+<p>That is the whole connection. If you are a workspace admin or owner, the plugin is now a draft you can publish for the workspace from the Admin Console (Plugins → Manage Legacy Apps → Drafts → Publish); Enterprise and Edu admins can also use role-based access control to decide who may create connections and who may use each app. On a Business workspace, only admins and owners can create and publish these plugins at all — if the option is missing, that is the first thing to check.</p>
+<h2 id="step-6-use-it">Step 6 — Use it in a real conversation<a class="anchor" href="#step-6-use-it" aria-label="Link to section">#</a></h2>
+<p>Install the plugin, start a new conversation, type <code>@</code> in the prompt box, and select <strong>Reading List</strong>. App selection applies to the message where you use it, not the whole conversation — @-mention the plugin again whenever a follow-up needs a fresh tool call. Try these, in order:</p>
+<pre><code>Save this to my reading list: "The Model Context Protocol" at https://modelcontextprotocol.io, note "the open protocol spec"</code></pre>
+<p>ChatGPT should call <code>add_note</code> — and pause to ask for your confirmation first. Write actions get a confirmation prompt based on the app's permissions and the action's context; that is expected, not an error. Confirm it, then check <code>notes.json</code>: the note is there. Now try the read side:</p>
+<pre><code>What have I saved about FastMCP?</code></pre>
+<p>ChatGPT calls <code>search_notes</code> with <code>fastmcp</code> and answers from your file, not from its training data. Finally:</p>
+<pre><code>List my five most recent saved notes.</code></pre>
+<p>That is <code>list_notes</code> with <code>limit=5</code>. You have just given ChatGPT a memory it did not have — one that lives in a file on your machine, under your control, through an interface any MCP client can use. The same three-step shape (build a tool, verify it, connect it) scales to the interesting version of this idea: a server that wraps your CRM, your docs, your database. The protocol does not care what the tool does; it only cares that the tool is honest about its inputs.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>ChatGPT reaches MCP servers more than one way now. Pick by where you work and who the server is for:</p>
+<div class="table-wrap"><table><thead><tr><th>Route</th><th>Best for</th><th>What to know</th></tr></thead><tbody><tr><td><strong>Web plugin (this guide)</strong></td><td>Teams and individuals on Business / Enterprise / Edu who want the server in every chat</td><td>Public HTTPS URL required; admins publish for the workspace; web only</td></tr><tr><td><strong>Developer Mode (legacy)</strong></td><td>Nobody, now — it was the old toggle path</td><td>The docs page no longer exists; the Plugins flow replaced it. Do not follow old guides</td></tr><tr><td><strong>ChatGPT desktop app</strong></td><td>People who live in the macOS / Windows app</td><td>The app can connect MCP servers, including ones running locally; check Settings in the app for the current flow</td></tr><tr><td><strong>Responses API</strong></td><td>Developers building their own apps and agents</td><td>Pass the MCP server as a tool to the API instead of connecting it to ChatGPT's chat UI</td></tr><tr><td><strong>Secure MCP Tunnel</strong></td><td>Servers on private or company networks</td><td>No public exposure; pick Tunnel in the Plugins flow and enter the tunnel ID</td></tr></tbody></table></div>
+<p>If you only need this for yourself, the web plugin route is the right default: it is the flow OpenAI documents, it works from any browser, and the tunnel keeps your server private except for the one endpoint ChatGPT calls. Reach for the Responses API when you are building a product rather than chatting — our hands-on guide to GPT-6.1 Terra with the Responses API covers that side.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<ul><li><strong>ChatGPT does not see a tool you just added.</strong> After an admin first approves a connection, ChatGPT uses a frozen snapshot of the server's tools — later changes are not applied automatically. An admin must refresh the tool list from the workspace app settings. New actions arrive disabled by default and need to be enabled, and a tool whose definition changed incompatibly can error until the snapshot is refreshed.</li><li><strong>Connection failed, or the server is unreachable.</strong> The URL must be a public HTTPS endpoint. <code>localhost</code> will never work from ChatGPT's side, and a quick tunnel stops answering the moment <code>cloudflared</code> exits. Confirm the tunnel process is still running and the URL still loads.</li><li><strong>Only the read tools work.</strong> Pro plans connect custom servers with read/fetch permissions only. Write tools such as <code>add_note</code> need a Business or Enterprise/Edu workspace.</li><li><strong>The option to add a server is missing.</strong> Check two things: your plan, and your workspace permissions. Creating connections requires the <code>Create plugins with MCPs</code> permission; on Business workspaces only admins and owners hold it by default. Custom servers are web-only, so the option will not appear on mobile.</li><li><strong>ChatGPT loses access after a while.</strong> If your server uses OAuth, confirm the provider issues refresh tokens — for OpenID Connect, include the <code>offline_access</code> scope and verify it is advertised in the provider's discovery endpoints. Without refresh tokens, ChatGPT can lose access when the original authorization expires and users must reauthenticate.</li><li><strong>ChatGPT asks for confirmation on every write.</strong> That is by design. Confirmation depends on the app's permissions, the action's context, and its potential impact, and especially risky actions may be blocked rather than offered for approval. Enterprise admins can configure which actions an app may take, before and after publishing.</li><li><strong>Should you connect a server someone else built?</strong> Only one you trust, and only after vetting it. OpenAI's warning is blunt: connecting to unsafe or untrusted MCP servers may increase exposure to security risks, including prompt injection — a server can return tool output crafted to steer the model. You are responsible for verifying that any app is safe and appropriate before you publish its connection.</li></ul>
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>The durable skill in this guide is not FastMCP and not the tunnel — it is the shape of the workflow. Build a small server that does one honest thing, prove it works with a real client and a raw protocol check, give it a public address, and connect it through the flow OpenAI documents today. Everything after that is just more tools on the same server. And if you take one thing from the current state of the docs, let it be this: the Developer Mode guides are history. The next time a setup post tells you to flip a toggle that no longer exists, check the date — then check the help center.</p>
+<h2 id="verification-note">Verification note<a class="anchor" href="#verification-note" aria-label="Link to section">#</a></h2>
+<p>Verified November 9, 2026: FastMCP 4.1.6 on Python 3.12.3; the server in Step 1 ran and every tool was called through FastMCP's Client with the output shown in Step 2; a raw HTTP protocol check confirmed <code>initialize</code> (HTTP 200, protocol <code>2025-03-26</code>) and <code>tools/list</code> returning all three tools; the <code>fastmcp run</code> CLI launch was tested the same way; MCP Inspector 2.14.0 was run through <code>npx</code>; cloudflared 2026.10.7 was installed from the release binary and its <code>tunnel --url</code> flag verified from its own help output. The ChatGPT connection steps follow OpenAI's help-center article read the same day; the final @-mention test runs in your own workspace, and minting a live tunnel URL needs an unproxied network connection.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul>
+<li><a href="https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt">OpenAI help center — Connecting custom MCP servers in ChatGPT</a> — the Plugins flow, plan rules, Secure MCP Tunnel, frozen tool snapshots, OAuth refresh tokens, and the statement that Developer Mode is not required; read November 9, 2026.</li>
+<li><a href="https://gofastmcp.com/getting-started/quickstart">FastMCP quickstart</a> — the <code>FastMCP</code> class, <code>@mcp.tool</code>, <code>run()</code> transports, the <code>fastmcp run</code> CLI, and HTTP deployment; read November 9, 2026.</li>
+<li><a href="https://developers.openai.com/api/docs/guides/developer-mode">OpenAI developer documentation — Developer Mode guide</a> — returns 404 as of November 9, 2026 and is absent from OpenAI's documentation indexes; the current guidance is the help-center article above. Confirmed by a live-browser read the same day.</li>
+<li>Cloudflare Tunnel — cloudflared 2026.10.7, <code>cloudflared tunnel --help</code> output and quick-tunnel log, run November 9, 2026.</li>
+</ul>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li><li><a href="/articles/typescript-mcp-server-tutorial/">Build an MCP server in TypeScript: your own tools, wired into Claude Code</a></li><li><a href="/articles/build-mcp-agent-tutorial/">Build your first MCP-powered agent: tools, servers, and safety rails</a></li><li><a href="/articles/gpt-6-1-terra-responses-api-tutorial/">GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="chatgpt-custom-mcp-server-tutorial"></div><div class="comments" data-comments="chatgpt-custom-mcp-server-tutorial"></div></div>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
