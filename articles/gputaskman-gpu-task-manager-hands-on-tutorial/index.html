@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>gputaskman hands-on: find out what is really eating your GPU memory — AI Frontier Post</title>
+<meta name="description" content="Task Manager says 15 GB used. gputaskman — Scott Hanselman&#x27;s free, open-source GPU task manager — answers the next question: per-process VRAM, model weights vs KV cache, spill and paged memory, on Windows, Linux, WSL, and macOS.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gputaskman-gpu-task-manager-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="gputaskman hands-on: find out what is really eating your GPU memory">
+<meta property="og:description" content="Task Manager says 15 GB used. gputaskman — Scott Hanselman&#x27;s free, open-source GPU task manager — answers the next question: per-process VRAM, model weights vs KV cache, spill and paged memory, on Windows, Linux, WSL, and macOS.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gputaskman-gpu-task-manager-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gputaskman-gpu-task-manager-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-09">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="gputaskman hands-on: find out what is really eating your GPU memory">
+<meta name="twitter:description" content="Task Manager says 15 GB used. gputaskman — Scott Hanselman&#x27;s free, open-source GPU task manager — answers the next question: per-process VRAM, model weights vs KV cache, spill and paged memory, on Windows, Linux, WSL, and macOS.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/gputaskman-gpu-task-manager-hands-on-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "gputaskman hands-on: find out what is really eating your GPU memory", "description": "Task Manager says 15 GB used. gputaskman — Scott Hanselman's free, open-source GPU task manager — answers the next question: per-process VRAM, model weights vs KV cache, spill and paged memory, on Windows, Linux, WSL, and macOS.", "datePublished": "2026-11-09", "dateModified": "2026-11-09", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/gputaskman-gpu-task-manager-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/gputaskman-gpu-task-manager-hands-on-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a CUDA Toolkit, a model download, or an API key to use gputaskman?", "acceptedAnswer": {"@type": "Answer", "text": "No. NVML ships with the NVIDIA driver, so there is no CUDA Toolkit, no model download, no account, and no API key. Install it with uv tool install gputaskman or pipx install gputaskman, or run the portable Windows ZIP with no Python at all."}}, {"@type": "Question", "name": "Why do gputaskman's numbers differ slightly from nvidia-smi?", "acceptedAnswer": {"@type": "Answer", "text": "They measure the same memory and agree within a few megabytes — the README's spot check read 1.19 GB against 1218 MiB from nvidia-smi. The difference is attribution, not accuracy: gputaskman assigns the bytes to processes and models and splits weights from KV cache, while nvidia-smi reports totals per process. Classifications and GGUF-derived breakdowns are estimates, and the README says so."}}, {"@type": "Question", "name": "Does it work on macOS or in WSL?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, with limits. On Apple Silicon Macs, run it from a clone — there is no portable macOS build yet — and there is no VRAM to split because Apple Silicon shares one memory pool, so it shows a footprint instead. In WSL it reads the Windows host counters through interop; per-process VRAM is matched by inference and marked * for matched, ? for a guess, or n/a when no context could be assigned."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "gputaskman hands-on: find out what is really eating your GPU memory", "description": "Install gputaskman, open the live view, inspect a model to split weights from KV cache, snapshot before and after loading a model, diff the two, and record a session.", "step": [{"@type": "HowToStep", "name": "Install it", "text": "Run uv tool install gputaskman (or pipx install gputaskman); on Windows without Python, download the portable ZIP from the Releases page."}, {"@type": "HowToStep", "name": "Launch the live view", "text": "Run gputaskman or its gtm alias in a terminal about 140 columns wide to see the device header, charts, and process table."}, {"@type": "HowToStep", "name": "Read a process row and inspect a model", "text": "Select a row with Up/Down to open the inspector, which names the model and splits its memory into weights, KV cache, and buffers."}, {"@type": "HowToStep", "name": "Take a JSON snapshot", "text": "Run gputaskman --json > before.json, load a model, then gputaskman --json > after.json."}, {"@type": "HowToStep", "name": "Diff before and after", "text": "Run gputaskman diff before.json after.json to see exactly what the new workload added."}, {"@type": "HowToStep", "name": "Record a session", "text": "Run gputaskman record -o session.jsonl --duration 300 to log one JSON snapshot per second for five minutes."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>gputaskman hands-on: find out what is really eating your GPU memory</h1>
+<p class="lede">Task Manager says your GPU is using 15 GB. It does not say by what — model weights, KV cache, your browser, or the desktop compositor. gputaskman, a free MIT-licensed tool from Scott Hanselman that passed 1,300 stars in its first six days, answers exactly that question: an htop for what's inside your GPU, not just how full it is.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Tutorials &amp; Reviews Lead · November 9, 2026 · 10 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> gputaskman (<a href="https://github.com/shanselman/gputaskman">shanselman/gputaskman</a>, MIT, 1,326 stars in six days) is a terminal UI that shows per-process GPU memory, engine activity, and a weights-vs-KV-cache split for local LLMs. Install it with <code>uv tool install gputaskman</code>, run <code>gputaskman</code>, and you can see which process — and which model — holds each gigabyte. Version 0.3.4, released November 9, 2026.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> gputaskman — “an htop for what's inside your GPU”: per-process VRAM, engine activity, and a weights-vs-KV-cache split for local LLMs.</li><li><b>Repo:</b> shanselman/gputaskman, MIT, created November 3, 2026; 1,326 stars and 64 forks by November 9, 2026.</li><li><b>Version:</b> v0.3.4, released November 9, 2026; 7 releases; Python 3.11+; install with <code>uv tool install gputaskman</code> or <code>pipx install gputaskman</code>.</li><li><b>Spot check:</b> llama-server with Qwen2.5-1.5B Q4_K_M at <code>-ngl 99 -c 4096</code> read 1.19 GB vs 1218 MiB from <code>nvidia-smi</code>; split 935 MB weights + 112 MB KV cache.</li><li><b>Platforms:</b> Windows 10/11 (NVIDIA/AMD), native Linux (NVIDIA/AMD/Intel), WSL, and macOS on Apple Silicon (clone only; no VRAM split on unified memory).</li><li><b>Scripting:</b> <code>gputaskman --once</code> and <code>--json</code> snapshots, <code>gputaskman diff</code> to compare two snapshots, <code>gputaskman record</code> to log a session.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/gputaskman-gpu-task-manager-hands-on-tutorial/cover.webp" alt="A close-up of an NVIDIA graphics card with its cooling fans and shroud"><figcaption>Photo: GPU Mag. A graphics card at work — gputaskman shows which process and which model holds each gigabyte of its memory.</figcaption></figure>
+</header>
+<div class="article-body"><h2>How it works: three measurements, one table</h2>
+<p>Every GPU monitor starts from the same number — total memory used — and stops there. gputaskman keeps going by answering three questions in order: how much is the card using, which process holds it, and what is inside that process. Each question has its own data source, and the tool is unusually honest about which answers are measurements and which are estimates.</p>
+<p>First, the device totals. On NVIDIA cards it reads NVML, the same library <code>nvidia-smi</code> uses, which ships with the driver — no CUDA Toolkit needed. On Windows it reads WDDM counters; on native Linux AMD and Intel cards it reads the kernel's DRM interface, per-process file descriptors in <code>/proc/&lt;pid&gt;/fdinfo</code>. That gives it VRAM used, GPU activity, memory activity, PCIe traffic, temperature, power, and video-engine clocks, drawn as eight history charts.</p>
+<p>Second, per-process attribution. The tool walks each process's mapped files in <code>/proc/&lt;pid&gt;/maps</code> and its command line, and matches the memory against the device counters. A process running a model shows up with its runtime — CUDA, HIP, Vulkan, Direct3D, ggml, ONNX Runtime — instead of a bare PID and a byte count. On Windows the same job is done with WDDM's per-process counters, which is how it can also show spill: GPU memory that lives in system RAM, and paged: memory committed but not resident.</p>
+<p>Third, the model itself. For local LLMs it parses the GGUF file the process mapped, and reads the server's load log when one exists, to split the process's memory into weights, KV cache, and compute buffers. The inspector shows the model name, architecture, quantization, layer count, and the estimated KV cost — the part that grows as your conversation gets longer.</p>
+<p>The concrete test is what sold it. On a bare-metal Linux laptop with an RTX 4050, a llama-server running Qwen2.5-1.5B Q4_K_M at <code>-ngl 99 -c 4096</code> read 1.19 GB in gputaskman against 1218 MiB from <code>nvidia-smi</code> — the same memory, within a rounding error. The diff command put the device change at +1.20 GB against +1224 MiB from <code>nvidia-smi</code>, and the load log gave the exact split: 935 MB of weights, 112 MB of KV cache. While the server generated, the TUI showed 96% GPU load against 95% from <code>nvidia-smi pmon</code>. An Ollama runner with <code>qwen3:0.6b</code> was detected and named the same way, and a Qwen3-4B-Instruct-2507 at <code>-ngl 99 -c 8192</code> on AMD showed 3.95 GB: 2.49 GB of weights plus 1.21 GB of f16 KV cache plus compute buffers, generating at 103 tokens per second.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/gputaskman-gpu-task-manager-hands-on-tutorial/img2.webp" alt="An NVIDIA RTX 6000D graphics card, the kind of local GPU whose memory gputaskman breaks down per process"><figcaption>Photo: Club386. The question gputaskman answers is not how much VRAM your card has, but which process — and which model — holds each gigabyte.</figcaption></figure>
+
+<h2>What you'll need</h2>
+<ul>
+<li>A Windows 10/11 PC with an NVIDIA or AMD GPU and a current driver, a Linux machine with NVIDIA, AMD, or Intel graphics, or a Mac on Apple Silicon (run from a clone; there is no portable macOS build yet).</li>
+<li>Python 3.11 or newer if you install from PyPI — or nothing at all if you take the portable Windows ZIP.</li>
+<li>A terminal about 140 columns wide; the full process table is cramped in anything narrower.</li>
+<li>Something using the GPU to look at: a local LLM server, a training run, or even just a browser with hardware acceleration.</li>
+</ul>
+
+<h2>Step 1 — Install it</h2>
+<p>The fastest route is <code>uv</code>, which keeps the app in an isolated environment. The shorter <code>gtm</code> command comes with the install:</p>
+<pre><code class="language-bash">uv tool install gputaskman
+gputaskman</code></pre>
+<p>With pipx instead:</p>
+<pre><code class="language-bash">pipx install gputaskman
+gputaskman</code></pre>
+<p>On Windows without Python, download the portable ZIP from the Releases page — <code>gputaskman-0.3.4-windows-x64.zip</code> for Intel/AMD PCs — extract the whole ZIP, keeping <code>_internal</code> beside the exe, and run <code>.\gputaskman.exe</code>. The builds are currently unsigned, and each ZIP ships with a <code>.zip.sha256</code> file for integrity checks. Linux users get the same treatment as a tarball: <code>gputaskman-0.3.4-linux-x64.tar.gz</code>, needing glibc 2.35 or newer (Ubuntu 22.04 or Debian 12 and up). Upgrades are <code>uv tool upgrade gputaskman</code> or <code>pipx upgrade gputaskman</code>.</p>
+
+<h2>Step 2 — Open the live view and read a row</h2>
+<p>Run <code>gputaskman</code> (or <code>gtm</code>) and you get a live terminal UI: a device header with VRAM, load, temperature, power and clocks, eight history charts, and a process table. Each row shows the process, its local GPU memory, spill, paged, engine activity, and detected runtime. The keys are single letters:</p>
+<pre><code class="language-bash">Up / Down   select a process and inspect it
+s           cycle sort: VRAM, GPU%, spill, paged, name
+c           cycle all charts or a single metric
+a           switch between top and all collected processes
+m           toggle full diagnostics / slim monitoring
+p           pause / resume collection
+?           explain the counters and their limits
+q           quit</code></pre>
+<p>The <code>m</code> key matters on a small screen. Full diagnostics shows driver and CUDA versions, PCI bus address, PCIe generation and width, and power and clock limits in the header; slim monitoring hides those and keeps the identity, memory bars, utilization, temperature, power, and clocks. Newly loaded models can take about 15 seconds to appear, because model discovery is throttled.</p>
+
+<h2>Step 3 — Inspect a model: weights vs KV cache</h2>
+<p>Select a row with Up/Down and the inspector opens. For an LLM process it names the model, its architecture and quantization, and breaks the memory into weights, estimated KV cost, and buffer sizes from the load log. This is the view that earns the tool its keep: a 7 GB row stops being a mystery and becomes, say, 4 GB of weights and 3 GB of KV cache from a long context window — which tells you whether to shrink the model or shorten the context.</p>
+<p>Try it with a live server. Start an Ollama model or a llama-server, then watch the row appear and the inspector fill in. The README's own scope list names decision models, vision, speech, LLM inference, and training and fine-tuning — including Unsloth — so if you are running a <a href="/articles/qlora-fine-tune-qwen3-unsloth-tutorial/">QLoRA fine-tune with Unsloth</a>, this is the view that shows whether the training run or the base model is holding the memory. The same inspector works for speech and vision workloads, so a local <a href="/articles/indextts-25-voice-cloning-hands-on-tutorial/">voice-cloning run with IndexTTS 2.5</a> shows up as a named model row too, not an anonymous Python process.</p>
+
+<h2>Step 4 — Snapshot, diff, and record</h2>
+<p>The TUI is for watching; the flags are for proving. One-shot text and JSON use the same collector as the live view:</p>
+<pre><code class="language-bash">gputaskman --once                # one text snapshot
+gputaskman --json &gt; before.json  # one JSON snapshot; implies --once
+gputaskman --json &gt; after.json   # after loading a model
+gputaskman diff before.json after.json</code></pre>
+<p><code>diff</code> is the workflow the README's spot checks use: snapshot, start the workload, snapshot again, and read exactly what changed — the Qwen2.5-1.5B check above came out as +1.20 GB against <code>nvidia-smi</code>'s +1224 MiB. For a whole session, record appends one JSON snapshot per second:</p>
+<pre><code class="language-bash">gputaskman record -o session.jsonl --duration 300</code></pre>
+<p>That gives you five minutes of per-second data to graph or grep later — useful when a training run OOMs at 2 a.m. and you want to know what the memory curve looked like before it died. Two more flags cover special setups: <code>--no-host</code> stops WSL from reading Windows host counters, and <code>--gpu N</code> pins one card on a multi-GPU machine (list them first with <code>--list-gpus</code>).</p>
+
+<h2>Why not just nvidia-smi?</h2>
+<p><code>nvidia-smi</code> is accurate and already installed, so the comparison is the right question. Here is what each tool actually tells you:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Question</th><th>gputaskman</th><th>nvidia-smi</th><th>Task Manager</th></tr></thead>
+<tbody>
+<tr><td>How much VRAM is used?</td><td>Yes, per device</td><td>Yes</td><td>Yes, one number</td></tr>
+<tr><td>Which process holds it?</td><td>Yes, with runtime</td><td>Yes, PID only</td><td>Yes, per app</td></tr>
+<tr><td>Which model is loaded?</td><td>Yes, weights vs KV cache</td><td>No</td><td>No</td></tr>
+<tr><td>Spill / paged memory?</td><td>Yes</td><td>No</td><td>Partially</td></tr>
+<tr><td>Scriptable JSON output?</td><td>Yes, plus diff and record</td><td>Yes, XML/CSV</td><td>No</td></tr>
+<tr><td>AMD / Intel / macOS?</td><td>Yes</td><td>NVIDIA only</td><td>Windows only</td></tr>
+</tbody>
+</table></div>
+<p>The honest answer is that the tools agree on the totals — the spot checks above match <code>nvidia-smi</code> within a few megabytes — and gputaskman earns its place on the attribution: which process, which model, and how the bytes split. One reading deserves care: the Spill column is where a buffer currently sits, not proof it was pushed out of VRAM, and the README says to read the DWM, Spill, and Paged section carefully before concluding the compositor is eating your card. A mapped file also does not prove a model is resident on the GPU — the tool says so itself.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/gputaskman-gpu-task-manager-hands-on-tutorial/img3.webp" alt="An NVIDIA RTX 3050 graphics card, a common card for local LLM inference at home"><figcaption>Photo: GameRant. On a card like this, the difference between weights and KV cache is the difference between buying a bigger GPU and shortening your context window.</figcaption></figure>
+
+<h2>The catch</h2>
+<p>The README opens with a warning, and it is worth repeating: this is early, experimental software. Device and process counters are measurements; classifications and GGUF-derived breakdowns are estimates. A PyTorch or CUDA DLL in a process does not prove training, and a mapped file does not prove a model is resident or being exercised.</p>
+<p>Coverage is uneven by platform. The Windows portable builds are unsigned. On macOS there is no VRAM to split — Apple Silicon shares one memory pool — so the tool shows a footprint instead, and other users' processes need <code>sudo</code>. Multi-GPU on Windows and two discrete GPUs are not yet validated. In WSL, per-process VRAM is matched by inference from the Windows host, marked <code>*</code> for matched, <code>?</code> for a guess, and <code>n/a</code> when no context could be assigned — a guess is recomputed every refresh and never counts as evidence for itself. And if you run a model big enough to matter — say, <a href="/articles/colibri-744b-moe-model-own-machine-tutorial/">a 744-billion-parameter model on your own machine</a> — expect the inspector to show you the split, but do not expect it to make the model fit.</p>
+
+<h2>What you built</h2>
+<p>You installed a 30-second answer to the question every local-AI user asks weekly: what is actually using my GPU? The live view tells you in real time, the inspector names the model and splits weights from KV cache, and <code>diff</code> and <code>record</code> turn a hunch into a file you can point at. The next time a load fails with an out-of-memory error, the first command is <code>gputaskman --once</code> — before you blame the model, check whether the browser, the compositor, or yesterday's forgotten server is holding the gigabytes.</p>
+<p>It is built for people who run models on their own hardware: local inference, fine-tuning, speech and vision work, and anyone who has ever watched a training run die and wondered what else was on the card. It is not a cloud tool, not a benchmark, and not a profiler — it measures what is there and labels its guesses as guesses, which is exactly the right honesty for a tool you consult before spending money on a bigger card.</p>
+
+<div class="afp-take" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>AFP take:</b> This is a small, sharp tool that solves a real annoyance for anyone running models locally — and the README's honesty about estimates is the reason to trust it. The weights-vs-KV-cache split is the feature that matters: it turns "out of memory" from a shrug into a decision. Watch whether it stays maintained past the initial star rush; a monitoring tool lives or dies on driver coverage, and WSL matching plus multi-GPU support are still the gaps to close.</div>
+
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a CUDA Toolkit, a model download, or an API key to use gputaskman?</h3><p>No. NVML ships with the NVIDIA driver, so there is no CUDA Toolkit, no model download, no account, and no API key. Install it with uv tool install gputaskman or pipx install gputaskman, or run the portable Windows ZIP with no Python at all.</p><h3>Why do gputaskman&#x27;s numbers differ slightly from nvidia-smi?</h3><p>They measure the same memory and agree within a few megabytes — the README&#x27;s spot check read 1.19 GB against 1218 MiB from nvidia-smi. The difference is attribution, not accuracy: gputaskman assigns the bytes to processes and models and splits weights from KV cache, while nvidia-smi reports totals per process. Classifications and GGUF-derived breakdowns are estimates, and the README says so.</p><h3>Does it work on macOS or in WSL?</h3><p>Yes, with limits. On Apple Silicon Macs, run it from a clone — there is no portable macOS build yet — and there is no VRAM to split because Apple Silicon shares one memory pool, so it shows a footprint instead. In WSL it reads the Windows host counters through interop; per-process VRAM is matched by inference and marked * for matched, ? for a guess, or n/a when no context could be assigned.</p></section>
+<section class="sources" aria-label="Sources" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Sources</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="https://github.com/shanselman/gputaskman" rel="nofollow">shanselman/gputaskman — repository, README, and usage</a></li><li><a href="https://github.com/shanselman/gputaskman/releases" rel="nofollow">gputaskman releases — v0.3.4, published November 9, 2026</a></li><li><a href="https://pypi.org/project/gputaskman/" rel="nofollow">gputaskman on PyPI — install via uv tool install or pipx</a></li></ul></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/qlora-fine-tune-qwen3-unsloth-tutorial/">Fine-tune Qwen3 with QLoRA: the complete Unsloth tutorial for one GPU</a></li><li><a href="/articles/colibri-744b-moe-model-own-machine-tutorial/">Run a 744-billion-parameter model on your own machine: a hands-on guide to Colibri</a></li><li><a href="/articles/indextts-25-voice-cloning-hands-on-tutorial/">Clone a voice on your own machine: a hands-on guide to IndexTTS 2.5</a></li><li><a href="/articles/openjutsu-local-video-character-swap-tutorial/">Swap the lead actor in any video on your own GPU: a hands-on guide to OpenJutsu</a></li></ul></section>
+<div class="post-engage"><div class="reactions" data-reactions="gputaskman-gpu-task-manager-hands-on-tutorial"></div><div class="comments" data-comments="gputaskman-gpu-task-manager-hands-on-tutorial"></div></div>
+</div>
+</article>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
