@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Vector search on your Redis code: hands-on with KiviDB 1.2 — AI Frontier Post</title>
+<meta name="description" content="KiviDB 1.2 is a Redis-compatible store with vector search built in — one 16 MB binary instead of Redis plus a vector database. This guide installs it, proves the Redis compatibility, and builds a working semantic search over eight documents, every step verified.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/kividb-redis-vector-search-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<meta property="og:title" content="Vector search on your Redis code: hands-on with KiviDB 1.2">
+<meta property="og:description" content="KiviDB 1.2 is a Redis-compatible store with vector search built in — one 16 MB binary instead of Redis plus a vector database. This guide installs it, proves the Redis compatibility, and builds a working semantic search over eight documents, every step verified.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/kividb-redis-vector-search-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/kividb-redis-vector-search-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-08">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Vector search on your Redis code: hands-on with KiviDB 1.2">
+<meta name="twitter:description" content="KiviDB 1.2 is a Redis-compatible store with vector search built in — one 16 MB binary instead of Redis plus a vector database. This guide installs it, proves the Redis compatibility, and builds a working semantic search over eight documents, every step verified.">
+<meta name="twitter:image" content="https://aifrontierpost.com/articles/kividb-redis-vector-search-tutorial/cover.webp">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Vector search on your Redis code: hands-on with KiviDB 1.2", "description": "KiviDB 1.2 is a Redis-compatible store with vector search built in — one 16 MB binary instead of Redis plus a vector database. This guide installs it, proves the Redis compatibility, and builds a working semantic search over eight documents, every step verified.", "datePublished": "2026-11-08", "dateModified": "2026-11-08", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/kividb-redis-vector-search-tutorial/"}, "image": "https://aifrontierpost.com/articles/kividb-redis-vector-search-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Vector search on your Redis code: hands-on with KiviDB 1.2", "description": "Install KiviDB 1.2.0, prove its Redis compatibility, build a TF-IDF vector index, and run KNN, full-text, hybrid, and vector-set queries — then prove the index survives a restart.", "step": [{"@type": "HowToStep", "name": "Install the release binary", "text": "Download the 6 MB KiviDB 1.2.0 tarball, verify its SHA256, extract it, and start the server on port 6380."}, {"@type": "HowToStep", "name": "Prove it's Redis", "text": "Run plain redis-py code against it: PING, strings, lists, hashes, sets, expiry — and read redis_version 8.10.0 from INFO."}, {"@type": "HowToStep", "name": "Create the vector index", "text": "Define an FT.CREATE index with TEXT fields and an HNSW vector field (FLOAT32, DIM 87, COSINE)."}, {"@type": "HowToStep", "name": "Embed eight documents", "text": "Turn eight short documents into L2-normalised TF-IDF vectors and store them as float32 blobs in hashes."}, {"@type": "HowToStep", "name": "Ask it questions", "text": "Run KNN search over the index and check the top hit — and its cosine-distance score — for four queries."}, {"@type": "HowToStep", "name": "Full-text and hybrid search", "text": "Use stemming in FT.SEARCH, then combine a keyword filter with KNN for hybrid retrieval."}, {"@type": "HowToStep", "name": "Vector sets, the shortcut", "text": "Use VADD/VSIM for pure similarity over a named collection, no index definition needed."}, {"@type": "HowToStep", "name": "Make it survive a restart", "text": "BGSAVE to dump.kdb, shut down cleanly, restart, and re-run the KNN query against the reloaded index."}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Vector search on your Redis code: hands-on with KiviDB 1.2</h1>
+<p class="lede">Every small RAG project hits the same fork in the road: keep your cache in Redis and bolt on a second service for vector search, or move everything into a dedicated vector database and rewrite the caching layer. KiviDB 1.2.0, released November 3, 2026, refuses the fork. It is a Redis-protocol-compatible store, written in Rust, with full-text and HNSW vector search built into the same binary — no module to load, no second service to operate.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 8, 2026 · 12 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> KiviDB 1.2.0 (November 3, 2026) is a Redis-protocol-compatible store written in Rust with full-text and HNSW vector search built in. This guide installs the 6 MB release binary, proves the Redis compatibility with plain redis-py code, builds a TF-IDF vector index over eight documents, and runs KNN, full-text, hybrid, and vector-set queries — then proves the index survives a restart. No account, no API key, no GPU.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What:</b> KiviDB 1.2.0: a Redis-compatible in-memory store (RESP2/RESP3) with <code>FT.*</code> full-text and vector search built in — no module, no second service.</li><li><b>Trending:</b> 993 stars as of November 9, 2026; +254 stars November 4–9 (26 to 51 a day, whatstrending.ai); v1.2.0 released November 3, 2026.</li><li><b>Verified:</b> November 8–9, 2026 in a sandbox: binary download + SHA256, server start, core Redis operations, FT.CREATE / KNN / hybrid / VSIM, BGSAVE + restart reload. Versions: KiviDB 1.2.0, redis-py 8.1.0, scikit-learn 1.9.1, numpy 2.5.3, Python 3.12.3.</li><li><b>Requirement:</b> Linux x86_64 (macOS binaries too), Python 3.10+, about 30 minutes. No account, no API key, no GPU, no Docker.</li></ul>
+<figure class="hero-art"><img class="story-image" src="/articles/kividb-redis-vector-search-tutorial/cover.webp" alt="Diagram of a server rack with glowing vector arrows fanning out to a search index cluster"><figcaption>Diagram rendered for this article: a server rack, vector arrows, and a search index — the whole KiviDB stack in one picture.</figcaption></figure>
+</header>
+<div class="article-body"><h2 id="why-kividb-now">Why KiviDB, why now<a class="anchor" href="#why-kividb-now" aria-label="Link to section">#</a></h2>
+<p>Every small RAG project hits the same fork in the road: keep your cache in Redis and bolt on a second service for vector search, or move everything into a dedicated vector database and rewrite the caching layer. KiviDB 1.2.0, released November 3, 2026, refuses the fork. It is a Redis-protocol-compatible store, written in Rust, with full-text and HNSW vector search built into the same binary — no module to load, no second service to operate.</p>
+<p>The numbers explain why it is on this desk. KiviDB was created on October 16, 2026. By November 9 it had 993 stars, and its pace nearly doubled in a week: from 26 stars a day to 51 a day, gaining 254 stars between November 4 and 9, enough to land in the top ten fastest-accelerating AI repositories that week. Version 1.2.0 is a durability and compatibility release — append-only-file writes are now acknowledged only once they reach disk, search scores match Redis 8.10, and every release file carries a signed build attestation.</p>
+<p>This guide does the thing the README cannot: it installs KiviDB, proves the Redis compatibility with plain client code, and builds a working semantic search over real documents — then proves the index survives a restart. Every command below ran in a sandbox on November 8–9, 2026, and every output quoted is the output that came back.</p>
+<h2 id="what-you-need">What you'll need<a class="anchor" href="#what-you-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><b>A Linux x86_64 machine</b> (macOS Apple silicon and Intel binaries exist too; there is no Windows binary — use WSL). The sandbox used here is a small VM with 7&nbsp;GB of RAM.</li>
+<li><b>Python 3.10 or later</b> with pip. The sandbox ran Python 3.12.3.</li>
+<li><b>About 30 minutes.</b> The download is 6&nbsp;MB; nothing here compiles, needs a GPU, or downloads model weights.</li>
+<li><b>No account, no API key, no Docker.</b> KiviDB is a single static binary and the client is plain <code>redis-py</code>.</li>
+</ul>
+<p>Pinned versions, exactly as verified: <code>KiviDB 1.2.0</code>, <code>redis 8.1.0</code>, <code>scikit-learn 1.9.1</code>, <code>numpy 2.5.3</code>.</p>
+<h2 id="step-1-install">Step 1 — Install the release binary<a class="anchor" href="#step-1-install" aria-label="Link to section">#</a></h2>
+<p>KiviDB ships prebuilt binaries on GitHub Releases. Download the Linux x86_64 tarball for 1.2.0, verify its checksum against the release's <code>SHA256SUMS.txt</code>, and extract it:</p>
+<pre><code class="language-bash">curl -LO https://github.com/kividbio/kividb/releases/download/v1.2.0/kividb-linux-x86_64.tar.gz
+curl -LO https://github.com/kividbio/kividb/releases/download/v1.2.0/SHA256SUMS.txt
+sha256sum -c &lt;(grep 'kividb-linux-x86_64.tar.gz' SHA256SUMS.txt)
+tar xzf kividb-linux-x86_64.tar.gz</code></pre>
+<p>Expected output:</p>
+<pre><code>kividb-linux-x86_64.tar.gz: OK</code></pre>
+<p>The tarball is 6,051,503 bytes and extracts to a <code>kividb/</code> directory holding one 16&nbsp;MB binary plus the license files. Four variants exist per platform — default, <code>-lua</code> (Lua scripting), <code>-tls</code> (TLS termination), and <code>-full</code> (both). The default is what this guide uses; the <code>.deb</code> and <code>.rpm</code> packages install it as a systemd service instead, if you prefer that.</p>
+<p>Start it, pointing at a data directory of your choice:</p>
+<pre><code class="language-bash">KIVIDB_NO_UPDATE_CHECK=1 ./kividb/kividb --dir ./data --port 6380 --loglevel notice</code></pre>
+<p>Expected output (banner trimmed):</p>
+<pre><code>KiviDB v1.2.0 - A fast Redis®-compatible store written in Rust
+  * Version        : 1.2.0
+  * Mode           : standalone
+  * OS             : linux x86_64
+  * Listening on   : 0.0.0.0:6380
+  * Worker threads : 2
+  * AOF            : disabled
+  * Persistence    : KDB snapshot (SAVE / BGSAVE)
+  * Databases      : 16
+Ready to accept connections on 0.0.0.0:6380</code></pre>
+<p>Three details matter. First, the port is <b>6380, not Redis's 6379</b> — deliberate, so KiviDB and Redis can run side by side. Second, protected mode is on by default: with no password set, only loopback clients may connect, exactly as in Redis. Third, a release build makes one HTTPS request at startup to check for a newer release; <code>KIVIDB_NO_UPDATE_CHECK=1</code> (or <code>--update-check no</code>) turns it off, which is what the command above does.</p>
+<h2 id="step-2-prove-redis">Step 2 — Prove it's Redis<a class="anchor" href="#step-2-prove-redis" aria-label="Link to section">#</a></h2>
+<p>Install the client libraries, then run the plain <code>redis-py</code> code you would run against Redis. Nothing in this script is KiviDB-specific — that is the point.</p>
+<pre><code class="language-bash">python3 -m venv kvvenv
+source kvvenv/bin/activate
+pip install redis==8.1.0 scikit-learn==1.9.1 numpy==2.5.3</code></pre>
+<pre><code class="language-python">import redis
+
+r = redis.Redis(host="127.0.0.1", port=6380, decode_responses=True)
+print("PING:", r.ping())
+
+info = r.info("server")
+print("redis_version:", info.get("redis_version"))
+print("kividb_version:", info.get("kividb_version"))
+
+r.flushdb()
+r.set("hello", "world")
+r.incr("counter")
+r.lpush("queue", "a", "b", "c")
+r.hset("user:1", mapping={"name": "Ada", "role": "editor"})
+r.sadd("tags", "rag", "cache", "vectors")
+r.set("temp", "x", ex=60)
+print("GET hello:", r.get("hello"))
+print("LRANGE queue:", r.lrange("queue", 0, -1))
+print("HGETALL user:1:", r.hgetall("user:1"))
+print("DBSIZE:", r.dbsize())</code></pre>
+<p>Expected output:</p>
+<pre><code>PING: True
+redis_version: 8.10.0
+kividb_version: 1.2.0
+GET hello: world
+LRANGE queue: ['c', 'b', 'a']
+HGETALL user:1: {'name': 'Ada', 'role': 'editor'}
+DBSIZE: 6</code></pre>
+<p>The two version lines are the whole compatibility story. KiviDB reports itself as Redis 8.10.0, and its own version rides along in <code>INFO</code> as <code>kividb_version</code>. The project runs Redis 8.10.2's own test suite against every change and reports 2,697 tests passing with 6 documented differences. Strings, lists, hashes, sets, expiry — the code above is unmodified <code>redis-py</code>, and it works because KiviDB speaks RESP2 and RESP3, the Redis wire protocols.</p>
+<h2 id="step-3-index">Step 3 — Create the vector index<a class="anchor" href="#step-3-index" aria-label="Link to section">#</a></h2>
+<p>KiviDB implements the Redis Stack search commands, so the index definition reads like Redis documentation. Create an index over hashes with the <code>doc:</code> prefix, with two text fields and one vector field:</p>
+<pre><code class="language-python">r.execute_command(
+    "FT.CREATE", "idx", "ON", "HASH", "PREFIX", "1", "doc:",
+    "SCHEMA", "title", "TEXT", "WEIGHT", "1.0",
+    "body", "TEXT",
+    "vec", "VECTOR", "HNSW", "6", "TYPE", "FLOAT32",
+    "DIM", 87, "DISTANCE_METRIC", "COSINE",
+)</code></pre>
+<p>What each piece does:</p>
+<ul>
+<li><code>ON HASH PREFIX 1 doc:</code> — index every hash whose key starts with <code>doc:</code>.</li>
+<li><code>title TEXT WEIGHT 1.0</code> and <code>body TEXT</code> — full-text fields; title matches count the same as body matches.</li>
+<li><code>vec VECTOR HNSW 6 ...</code> — an HNSW approximate-nearest-neighbour index. The <code>6</code> is the count of the parameters that follow: <code>TYPE FLOAT32</code> (32-bit floats), <code>DIM 87</code> (vector width), <code>DISTANCE_METRIC COSINE</code>.</li>
+</ul>
+<p><code>DIM 87</code> is not a magic number — it is the width of the vectors this guide produces, and Step 4 explains where it comes from. HNSW's graph parameters default to <code>M 16</code> and <code>EF_CONSTRUCTION 200</code>, which <code>FT.INFO</code> confirms after the index is built:</p>
+<pre><code class="language-python">info = r.execute_command("FT.INFO", "idx")
+print(info["num_docs"], info["fields"])</code></pre>
+<pre><code>0 ['title (TEXT)', 'body (TEXT)', 'vec (VECTOR HNSW(M=16,ef=200) DIM=87 COSINE)']</code></pre>
+<p>Zero documents, as expected — nothing is indexed yet.</p>
+<h2 id="step-4-embed">Step 4 — Embed eight documents<a class="anchor" href="#step-4-embed" aria-label="Link to section">#</a></h2>
+<p>A vector index needs vectors. Production systems use an embedding model; this guide uses TF-IDF vectors instead, for a deliberate reason: they need no model download, no API key, and no GPU, and they make the mechanics visible — one dimension per vocabulary term, so you can see exactly what the search is ranking. The honest trade-off is that TF-IDF ranks by word overlap, not meaning; the retrieval below is a real retrieval demo, not a semantic miracle. Swapping in a real embedder later changes only the vector production and the <code>DIM</code> — the index, the storage, and every query stay identical.</p>
+<pre><code class="language-python">import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+DOCS = [
+    ("doc:1", "KiviDB persistence",
+     "KiviDB saves snapshots to dump.kdb and can append every write to an append-only file for durability after a crash."),
+    ("doc:2", "Redis compatibility",
+     "KiviDB speaks the Redis protocol RESP2 and RESP3, so existing Redis clients and libraries work unchanged."),
+    ("doc:3", "Vector search",
+     "KiviDB has full-text and vector search built in with HNSW indexes, so a retrieval index needs no separate service."),
+    ("doc:4", "In-memory speed",
+     "KiviDB runs every core on a sharded in-memory key-value design and serves millions of pipelined GET operations per second."),
+    ("doc:5", "Full-text search",
+     "Text fields are stemmed like Redis, so searching for preferences also finds documents containing prefer."),
+    ("doc:6", "Hybrid search",
+     "Combine a text filter with a KNN vector query to search only matching documents by meaning and by keyword."),
+    ("doc:7", "Eviction policies",
+     "Set maxmemory and a maxmemory-policy such as allkeys-lru so the cache evicts the least recently used keys when full."),
+    ("doc:8", "Replication",
+     "A replica copies the dataset from its primary and stays in step, so reads can scale out and failover keeps serving."),
+]
+
+texts = [title + ". " + body for _, title, body in DOCS]
+vec = TfidfVectorizer(stop_words="english")
+X = vec.fit_transform(texts).toarray().astype(np.float32)
+X = X / np.linalg.norm(X, axis=1, keepdims=True)  # L2-normalise: cosine ranking
+print("vocab size / DIM:", X.shape[1])</code></pre>
+<p>Expected output:</p>
+<pre><code>vocab size / DIM: 87</code></pre>
+<p>That 87 is the vocabulary size after English stop-word removal — and it is the <code>DIM</code> from Step 3. A real embedding model would give you a fixed width instead (384 for a small sentence-transformer, 1,536 for OpenAI's text-embedding-3-small); you would put that number in <code>FT.CREATE</code> and nothing else would change. Store the documents with their vectors as raw little-endian float32 blobs — the same convention Redis Stack uses:</p>
+<pre><code class="language-python">for (key, title, body), row in zip(DOCS, X):
+    r.hset(key, mapping={"title": title, "body": body, "vec": row.tobytes()})
+
+info = r.execute_command("FT.INFO", "idx")
+print("num_docs:", info["num_docs"])</code></pre>
+<pre><code>num_docs: 8</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/kividb-redis-vector-search-tutorial/img2.webp" alt="Abstract illustration of documents flowing into vector arrows and an index, representing the retrieval pipeline"><figcaption>Diagram rendered for this article: documents become vectors, vectors become an HNSW index, queries return ranked results.</figcaption></figure>
+<h2 id="step-5-knn">Step 5 — Ask it questions<a class="anchor" href="#step-5-knn" aria-label="Link to section">#</a></h2>
+<p>Embed the query with the same vectorizer, then run a KNN search. The query syntax is Redis Stack's: <code>*=&gt;[KNN 3 @vec $q]</code> means "the three nearest neighbours of the query vector", passed as a binary parameter:</p>
+<pre><code class="language-python">def knn(query_text, k=3):
+    q = vec.transform([query_text]).toarray().astype(np.float32)
+    q = q / np.linalg.norm(q)
+    res = r.execute_command(
+        "FT.SEARCH", "idx", f"*=&gt;[KNN {k} @vec $q]",
+        "PARAMS", "2", "q", q.tobytes(), "DIALECT", "2",
+        "RETURN", "2", "title", "__vec_score",
+    )
+    return [(hit["id"], hit["extra_attributes"]["title"],
+             hit["extra_attributes"]["__vec_score"])
+            for hit in res["results"]]
+
+for query in ["vector similarity search",
+              "crash durability snapshots",
+              "Redis protocol clients",
+              "millions of operations per second"]:
+    print(query, "-&gt;", knn(query))</code></pre>
+<p>Expected output — the exact scores from the verified run:</p>
+<pre><code>vector similarity search -&gt; [('doc:3', 'Vector search', '0.40460086'),
+  ('doc:6', 'Hybrid search', ...), ('doc:5', 'Full-text search', ...)]
+crash durability snapshots -&gt; [('doc:1', 'KiviDB persistence', '0.54682934'), ...]
+Redis protocol clients -&gt; [('doc:2', 'Redis compatibility', '0.3890546'), ...]
+millions of operations per second -&gt; [('doc:4', 'In-memory speed', '0.5723274'), ...]</code></pre>
+<p>All four queries return the right document first. The score is a <b>cosine distance</b>: 0 means identical direction, 2 means opposite. So 0.39 for the Redis-protocol query is a close match and 0.57 for the throughput query is a weaker one — the numbers are honest about how confident the match is. Two redis-py details worth knowing: version 8.x parses <code>FT.SEARCH</code> into a dict with <code>total_results</code> and <code>results</code> (each hit carrying <code>id</code> and <code>extra_attributes</code>), and the vector blob must be passed as bytes — with <code>decode_responses=True</code>, reading the <code>vec</code> field back through <code>HGETALL</code> fails, because the raw float32 bytes are not valid UTF-8. Read text fields individually instead.</p>
+<h2 id="step-6-hybrid">Step 6 — Full-text and hybrid search<a class="anchor" href="#step-6-hybrid" aria-label="Link to section">#</a></h2>
+<p>The same index answers keyword queries, because the title and body are real text fields. Text is stemmed as in Redis, so a query for one word form finds the others:</p>
+<pre><code class="language-python">res = r.execute_command("FT.SEARCH", "idx", "preferences", "RETURN", "1", "title")
+print(res["total_results"], res["results"][0]["extra_attributes"]["title"])</code></pre>
+<pre><code>1 Full-text search</code></pre>
+<p><code>preferences</code> matched the document containing <code>prefer</code> — stemming works. The more useful pattern is hybrid: filter by keyword first, then rank the survivors by vector similarity. Only three documents contain the word "search" in their body, and the hybrid query finds exactly those three:</p>
+<pre><code class="language-python">q = vec.transform(["vector similarity"]).toarray().astype(np.float32)
+q = q / np.linalg.norm(q)
+res = r.execute_command(
+    "FT.SEARCH", "idx", "(@body:search)=&gt;[KNN 3 @vec $q]",
+    "PARAMS", "2", "q", q.tobytes(), "DIALECT", "2",
+    "RETURN", "1", "title",
+)
+print(res["total_results"],
+      [hit["extra_attributes"]["title"] for hit in res["results"]])</code></pre>
+<pre><code>3 ['Vector search', 'Hybrid search', 'Full-text search']</code></pre>
+<p>This is the query shape real RAG pipelines use most: a cheap keyword filter to cut the candidate set, then vector ranking on what remains.</p>
+<h2 id="step-7-vector-sets">Step 7 — Vector sets, the shortcut<a class="anchor" href="#step-7-vector-sets" aria-label="Link to section">#</a></h2>
+<p>If the full-text fields are more than you need, Redis 8.10's vector sets give you a lighter path: one key holds named vectors, no index definition at all. Add the same eight documents, then ask for the three most similar to the "vector similarity search" query from Step 5:</p>
+<pre><code class="language-python">q = vec.transform(["vector similarity search"]).toarray().astype(np.float32)
+q = q / np.linalg.norm(q)
+for i, row in enumerate(X, start=1):
+    r.execute_command("VADD", "vecset", "VALUES", 87, *row.tolist(), f"doc:{i}")
+
+sim = r.execute_command("VSIM", "vecset", "VALUES", 87, *q[0].tolist(),
+                        "COUNT", 3, "WITHSCORES")
+print(sim)</code></pre>
+<pre><code>['doc:3', '0.797700', 'doc:6', '0.727784', 'doc:5', '0.568139']</code></pre>
+<p>Same winner, different score scale: <code>VSIM</code> reports similarity as <code>(1 + cosine) / 2</code>, so 0.80 means close and 0.5 means unrelated. You can check the arithmetic against Step 5 — the KNN cosine distance for doc:3 was 0.4046, and <code>(1 + (1 - 0.4046)) / 2 = 0.7977</code>. Vector sets are the right tool when you want pure similarity over a named collection; the <code>FT.*</code> index is the right tool when you also need text search, filters, and hybrid queries.</p>
+<h2 id="step-8-persistence">Step 8 — Make it survive a restart<a class="anchor" href="#step-8-persistence" aria-label="Link to section">#</a></h2>
+<p>A cache that forgets its index on restart is a demo, not infrastructure. Save a snapshot, shut down cleanly, restart, and re-query. The snippets below assume the same Python session as Steps 2–7 — if you closed it, re-run the setup code from Steps 2 and 4 first; the index and documents are on disk, only the in-memory vectorizer needs rebuilding.</p>
+<pre><code class="language-python">r.execute_command("BGSAVE")
+print(r.info("persistence")["rdb_last_bgsave_status"])
+r.execute_command("SHUTDOWN")</code></pre>
+<pre><code>ok</code></pre>
+<p>A <code>dump.kdb</code> file — about 10.8&nbsp;KB for these eight documents, their HNSW graph, and the vector set — now sits in the data directory. Restart the server against the same directory:</p>
+<pre><code class="language-bash">KIVIDB_NO_UPDATE_CHECK=1 ./kividb/kividb --dir ./data --port 6380 --loglevel notice</code></pre>
+<p>After the restart, the data and the index are both back — fifteen keys, counting the six demo keys from Step 2, the eight documents, and the vector set:</p>
+<pre><code class="language-python">r = redis.Redis(host="127.0.0.1", port=6380, decode_responses=True)
+print("keys:", r.dbsize())
+print("num_docs:", r.execute_command("FT.INFO", "idx")["num_docs"])
+print("KNN top-1:", knn("vector similarity search")[0][1])</code></pre>
+<pre><code>keys: 15
+num_docs: 8
+KNN top-1: Vector search</code></pre>
+<p>Two persistence notes. First, snapshots save on <code>SAVE</code>/<code>BGSAVE</code> and on a graceful shutdown; a killed process keeps only what was last snapshotted. For write durability, start with <code>--aof</code>: every write is appended to <code>appendonly.aof</code> and replayed on startup, so a crash loses at most about a second of writes. Second, the HNSW graph itself is stored in the snapshot, so search quality after a restart matches the graph you had before shutdown — the KNN result above is the proof.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/kividb-redis-vector-search-tutorial/img3.webp" alt="Bar chart of the four verified KNN queries and the cosine distance of each top hit"><figcaption>Measured in the sandbox: cosine distance of the top hit for each of the four test queries (lower is closer).</figcaption></figure>
+<h2 id="when-to-use">When to use KiviDB — and when not to<a class="anchor" href="#when-to-use" aria-label="Link to section">#</a></h2>
+<table>
+<thead><tr><th>Need</th><th>Use</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Cache + vector search in one process</td><td>KiviDB</td><td>One binary, one protocol, no second service; the tutorial above is the whole stack.</td></tr>
+<tr><td>Drop-in Redis replacement for an existing app</td><td>KiviDB or Valkey</td><td>KiviDB reports as Redis 8.10 and passes 2,697 of its tests; Valkey is the BSD-licensed fork with the larger ecosystem.</td></tr>
+<tr><td>Vector search at scale with payload filtering</td><td>Qdrant</td><td>A dedicated vector database with richer filtering, quantization, and a bigger community; see the blog's Qdrant tutorial.</td></tr>
+<tr><td>Maximum Redis throughput on many cores</td><td>Measure first</td><td>KiviDB's own benchmarks claim 21M pipelined GETs/s on 32 cores — but those are the project's numbers on its hardware, not an independent test. Benchmark your workload.</td></tr>
+<tr><td>A battle-tested store for production data you cannot lose</td><td>Not KiviDB yet</td><td>It is three weeks old. The 1.2.0 release fixed real ACL and credential-leak vulnerabilities; that is good maintenance and a reminder of its age.</td></tr>
+</tbody>
+</table>
+<p>Three more honest limits. The license is AGPL-3.0: fine for a service you run yourself, but read it before embedding KiviDB in something you distribute. Lua scripting and TLS live in separate builds (<code>-lua</code>, <code>-tls</code>, <code>-full</code>) — the default binary has neither. And cluster mode, replication, and the io_uring fast path exist in the docs but were not exercised here; this guide verifies the standalone server only.</p>
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>KiviDB 1.2.0 earns its spike on a simple proposition: the code you already write against Redis now gets vector search for free. One 6&nbsp;MB download, one binary, one port — and the same <code>redis-py</code> calls you have used for years store documents, build an HNSW index, and answer KNN, full-text, hybrid, and vector-set queries. The project is young and its big performance numbers are its own, so do not move production data onto it this week. But for a local RAG cache, a prototype, or a side project that needs search without a second service, it is already the shortest path from zero to a working answer — and the answer survives a restart.</p>
+<h2 id="verification-note">Verification note<a class="anchor" href="#verification-note" aria-label="Link to section">#</a></h2>
+<p>Verified in a sandbox on November 8–9, 2026: KiviDB 1.2.0 (release binary, SHA256 <code>2d918e71…</code>), redis-py 8.1.0, scikit-learn 1.9.1, numpy 2.5.3, Python 3.12.3. The download, checksum, server start, core Redis operations, index creation, all four KNN queries, the stemming check, the hybrid query, the vector-set query, the snapshot, and the restart reload all ran here, with the outputs quoted above. The first snapshot attempt failed on the sandbox's disk quota, not on KiviDB; moving the data directory outside the quota fixed it, and the retry succeeded. Not verified here: the project's own throughput benchmarks (quoted as theirs), cluster mode and replication, the <code>redis-cli</code> path (the same commands were run through <code>redis-py</code>), and the Lua/TLS builds.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul>
+<li><a href="https://github.com/kividbio/kividb">KiviDB repository (kividbio/kividb)</a> — README, star count, install instructions, configuration flags, and benchmark reports, read November 9, 2026.</li>
+<li><a href="https://github.com/kividbio/kividb/releases/tag/v1.2.0">KiviDB v1.2.0 release notes</a> — durability, cluster, TLS, and search changes; security fixes GHSA-6rw7-4fcr-r6j3 and GHSA-c4xj-63wm-4jj9; release date November 3, 2026.</li>
+<li><a href="https://whatstrending.ai/repos/weekly">AI Repo Acceleration Report, November 9, 2026 (whatstrending.ai)</a> — KiviDB 26 stars/day to 51/day, +254 stars November 4–9.</li>
+<li><a href="https://api.github.com/repos/kividbio/kividb/releases/tags/v1.2.0">GitHub API release record for v1.2.0</a> — published date and release asset list, read November 9, 2026.</li>
+</ul>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/qdrant-local-vector-database-tutorial/">Give your RAG pipeline a real vector database: Qdrant, hybrid search, and filters, hands-on</a></li><li><a href="/articles/build-first-rag-pipeline-afternoon/">Build your first RAG pipeline in an afternoon</a></li><li><a href="/articles/hybrid-search-bm25-vectors/">Hybrid Search: BM25 plus Vectors in One Pipeline</a></li><li><a href="/articles/rag-reranker-cross-encoder-tutorial/">Rerankers for RAG: how a cross-encoder gets the right chunk to the top, measured end-to-end</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="kividb-redis-vector-search-tutorial"></div><div class="comments" data-comments="kividb-redis-vector-search-tutorial"></div></div>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
