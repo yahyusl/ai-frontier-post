@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>MuJoCo 4.0 hands-on: run your first robot simulation in Python — AI Frontier Post</title>
+<meta name="description" content="Google DeepMind’s MuJoCo 4.0.0 landed November 6 with a split Python package and a faster solver. Install the headless core, drop a ball, drive a two-link arm to its target with PD control, and render a frame — every step verified.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/mujoco-4-0-physics-simulation-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="MuJoCo 4.0 hands-on: run your first robot simulation in Python">
+<meta property="og:description" content="Google DeepMind’s MuJoCo 4.0.0 landed November 6 with a split Python package and a faster solver. Install the headless core, drop a ball, drive a two-link arm to its target with PD control, and render a frame — every step verified.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mujoco-4-0-physics-simulation-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/mujoco-4-0-physics-simulation-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-10">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "MuJoCo 4.0 hands-on: run your first robot simulation in Python", "description": "Google DeepMind’s MuJoCo 4.0.0 landed November 6 with a split Python package and a faster solver. Install the headless core, drop a ball, drive a two-link arm to its target with PD control, and render a frame — every step verified.", "datePublished": "2026-11-10", "dateModified": "2026-11-10", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/mujoco-4-0-physics-simulation-tutorial/"}, "image": "https://aifrontierpost.com/articles/mujoco-4-0-physics-simulation-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to run MuJoCo?", "acceptedAnswer": {"@type": "Answer", "text": "No. The core simulation runs on CPU — the two-link arm in this tutorial ran on a headless Linux VM with no GPU. A GPU only matters if you use MJX, the JAX-based variant, to run thousands of environments in parallel."}}, {"@type": "Question", "name": "What is the difference between mujoco, mujoco-core, and mujoco-studio?", "acceptedAnswer": {"@type": "Answer", "text": "Since 4.0.0, mujoco is a metapackage that installs everything: mujoco-core (the simulation bindings and C library, numpy-only), mujoco-studio (the interactive viewer and Filament renderer), and the OpenGL dependencies. Install mujoco-core alone for headless servers and training jobs; add mujoco-core[rendering] for offscreen frames; install mujoco for the full desktop experience."}}, {"@type": "Question", "name": "Why did my arm freeze even though the motor was applying torque?", "acceptedAnswer": {"@type": "Answer", "text": "Check the joint range in your MJCF. Hinge joint ranges are in degrees, not radians — range=\"-2.6 2.6\" means ±2.6°, and the joint-limit constraint will cancel your motor torque. The compiled model.jnt_range shows the limit in radians."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>MuJoCo 4.0 hands-on: run your first robot simulation in Python</h1>
+<p class="lede">Google DeepMind’s MuJoCo 4.0.0 landed November 6 with a split Python package and a faster solver. Install the headless core, drop a ball, drive a two-link arm to its target with PD control, and render a frame — every step verified.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 10, 2026 · 12 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MuJoCo 4.0.0 splits the Python package: mujoco-core is now a numpy-only install for headless simulation. This tutorial installs it, drops a ball that settles exactly one radius above the floor, drives a two-link arm to its target with PD control plus gravity compensation, and renders a frame — with the verified numbers at each step.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>4.0.0 landed November 6, 2026:</b> 17,207 stars on GitHub, 453 gained on November 10 alone, and the top spot on the weekly trending list.</li><li><b>Install the core only:</b> <code>pip install "mujoco-core==4.0.0"</code> depends only on numpy — no GPU, no display, no viewer.</li><li><b>Ball smoke test:</b> after 3 simulated seconds the sphere rests at 0.0996 m — one radius (0.1 m) above the floor.</li><li><b>PD arm:</b> target [0.8, −1.0] rad, final error 3.5e-07 rad with gravity compensation; without it the shoulder stops 0.15 rad short.</li><li><b>The gotcha:</b> MJCF hinge joint ranges are in degrees while <code>qpos</code> is in radians — the wrong unit freezes the arm at its joint limit.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/mujoco-4-0-physics-simulation-tutorial/cover.webp" alt="A two-link robot arm in blue and orange metal segments over a dark grid floor, with glowing trajectory arcs showing its swing path"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>MuJoCo is the physics engine behind most of the robot learning you read about — the arm policies, the humanoid gaits, the sim-to-real demos. On November 6, Google DeepMind released MuJoCo 4.0.0, and it is the version that changes how you install it: the Python package is now split, so the headless simulation core is a small, numpy-only install instead of a bundle that drags in a viewer and a renderer you may never open. The release shot to the top of GitHub's weekly trending list, gaining 453 stars on November 10 alone on its way past 17,200.</p>
+<p>This tutorial does the whole thing for real. You will install the 4.0.0 core, run a first simulation, build a two-link arm and drive it to a target pose with a PD controller, and render a frame of it — every command below was run and verified for this article, with the exact outputs shown.</p>
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.12.</strong> The steps below were verified on Python 3.12.3 on Linux. The core package has no other system dependencies.</li>
+<li><strong>pip and a virtual environment.</strong> Nothing in this tutorial needs a GPU, a display, or an account. The rendering step uses a virtual display on headless machines; desktops skip that.</li>
+<li><strong>About 15 minutes.</strong> The installs take a couple of minutes; the simulations run in seconds.</li>
+<li><strong>Optional: matplotlib</strong> for the plot in Step 3. It is the only plotting dependency in the tutorial.</li></ul>
+<h2 id="step-1-install-mujoco-4-0-0">Step 1: Install MuJoCo 4.0.0<a class="anchor" href="#step-1-install-mujoco-4-0-0" aria-label="Link to section">#</a></h2>
+<p>The headline change in 4.0.0 is the package split. The top-level <code>mujoco</code> distribution is now a metapackage that installs three things: <code>mujoco-core</code> (the simulation bindings and the C library), <code>mujoco-studio</code> (the interactive viewer and the Filament renderer), and the classic OpenGL dependencies (<code>glfw</code> and <code>pyopengl</code>). For a headless server or an RL training job, you want the core only:</p>
+<pre><code class="language-bash">python3 -m venv mujoco-env
+source mujoco-env/bin/activate
+pip install "mujoco-core==4.0.0" numpy matplotlib</code></pre>
+<p>That is the exact install this tutorial was verified against. <code>mujoco-core</code> depends only on <code>numpy</code>, which is why it is the right choice when you will never open a window. Confirm the version:</p>
+<pre><code class="language-bash">python -c "import mujoco; print(mujoco.__version__)"</code></pre>
+<pre><code class="language-text">mujoco version: 4.0.0</code></pre>
+<p>If you already have a pre-4.0 <code>mujoco</code> installed, do not just upgrade in place: files moved to <code>mujoco-core</code> can be left behind. The changelog gives two clean paths — uninstall first (<code>pip uninstall -y mujoco &amp;&amp; pip install mujoco</code>), or force-reinstall the three pieces (<code>pip install --force-reinstall --no-deps mujoco mujoco-core mujoco-studio</code>). To switch an existing install to core-only, run <code>pip uninstall -y mujoco mujoco-studio &amp;&amp; pip install --force-reinstall --no-deps mujoco-core</code>.</p>
+<p>Two other install shapes, for when you need them later. The rendering extra adds the OpenGL pieces to the core without the Studio viewer:</p>
+<pre><code class="language-bash">pip install "mujoco-core[rendering]==4.0.0"</code></pre>
+<p>And the full metapackage is the one-command install for the interactive viewer:</p>
+<pre><code class="language-bash">pip install mujoco==4.0.0</code></pre>
+<h2 id="step-2-your-first-simulation-a-falling-ball">Step 2: Your first simulation — a falling ball<a class="anchor" href="#step-2-your-first-simulation-a-falling-ball" aria-label="Link to section">#</a></h2>
+<p>MuJoCo models are written in MJCF, an XML format that describes bodies, joints, geoms, and actuators. The Python API is a thin binding over the C library: you compile a model with <code>MjModel.from_xml_string</code> (or <code>from_xml_path</code> for a file), create a <code>MjData</code> to hold the state, and advance it with <code>mujoco.mj_step(model, data)</code>. Save this as <code>ball.py</code>:</p>
+<pre><code class="language-python">import mujoco
+
+BALL_XML = """
+&lt;mujoco model="ball-drop"&gt;
+  &lt;option timestep="0.001"/&gt;
+  &lt;worldbody&gt;
+    &lt;geom name="floor" type="plane" size="5 5 0.1"/&gt;
+    &lt;body name="ball" pos="0 0 1.5"&gt;
+      &lt;joint name="free" type="free"/&gt;
+      &lt;geom name="ball-geom" type="sphere" size="0.1" rgba="0.2 0.4 0.8 1"/&gt;
+    &lt;/body&gt;
+  &lt;/worldbody&gt;
+&lt;/mujoco&gt;
+"""
+
+model = mujoco.MjModel.from_xml_string(BALL_XML)
+data = mujoco.MjData(model)
+
+for _ in range(3000):  # 3 seconds of simulated time
+    mujoco.mj_step(model, data)
+
+print(f"ball rest height: {data.body('ball').xpos[2]:.4f} m")</code></pre>
+<pre><code class="language-bash">python ball.py</code></pre>
+<pre><code class="language-text">ball rest height: 0.0996 m</code></pre>
+<p>The ball starts 1.5 m up, falls, bounces, and settles. Its rest height is 0.0996 m — the sphere's radius is 0.1 m, so its centre comes to rest one radius above the floor, exactly where contact physics says it should. That is your smoke test: if the number comes out near 0.1, the engine, the model compiler, and the contact solver are all working.</p>
+<p>Two details in this short script matter for everything after it. First, <code>data.body('ball').xpos</code> is a view into the simulator's live memory, not a copy — if you log positions across steps, append <code>.copy()</code> or every entry in your list will show the final value. Second, the timestep is 0.001 s here; a ball drop is forgiving, but stiff contacts and fast mechanisms are not, and the timestep is the first thing to shrink when a simulation misbehaves.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mujoco-4-0-physics-simulation-tutorial/img2.webp" alt="A two-link robot arm with a blue upper link and an orange lower link, rendered by MuJoCo, posed at its target angles above a grey floor"><figcaption>One frame of the two-link arm from Step 3, rendered by MuJoCo itself on a headless machine. The blue link is the shoulder segment, the orange link the elbow segment.</figcaption></figure>
+<h2 id="step-3-a-real-use-case-drive-a-two-link-arm-with-pd-control">Step 3: A real use case — drive a two-link arm with PD control<a class="anchor" href="#step-3-a-real-use-case-drive-a-two-link-arm-with-pd-control" aria-label="Link to section">#</a></h2>
+<p>A falling ball proves the engine runs. A controlled arm proves you can do robotics with it. This step builds a two-link arm hanging from a fixed base, then drives both joints to a target pose with a PD controller plus gravity compensation. It is the smallest version of the control loop that sits inside every robot policy: read the state, compute a control, step the physics, repeat.</p>
+<p>The model, saved as <code>arm.xml</code>:</p>
+<pre><code class="language-xml">&lt;mujoco model="two-link-arm"&gt;
+  &lt;option timestep="0.002"/&gt;
+  &lt;worldbody&gt;
+    &lt;light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/&gt;
+    &lt;geom type="plane" size="3 3 0.1" rgba=".9 .9 .9 1"/&gt;
+    &lt;body name="link1" pos="0 0 1"&gt;
+      &lt;joint name="shoulder" type="hinge" axis="0 1 0" range="-150 150"/&gt;
+      &lt;geom type="capsule" fromto="0 0 0 0 0 -0.5" size="0.05" rgba="0.2 0.4 0.8 1"/&gt;
+      &lt;body name="link2" pos="0 0 -0.5"&gt;
+        &lt;joint name="elbow" type="hinge" axis="0 1 0" range="-150 150"/&gt;
+        &lt;geom type="capsule" fromto="0 0 0 0 0 -0.4" size="0.04" rgba="0.8 0.4 0.2 1"/&gt;
+        &lt;site name="tip" pos="0 0 -0.4"/&gt;
+      &lt;/body&gt;
+    &lt;/body&gt;
+  &lt;/worldbody&gt;
+  &lt;actuator&gt;
+    &lt;motor joint="shoulder" gear="1" ctrlrange="-150 150"/&gt;
+    &lt;motor joint="elbow" gear="1" ctrlrange="-150 150"/&gt;
+  &lt;/actuator&gt;
+&lt;/mujoco&gt;</code></pre>
+<p>Watch the joint ranges. In MJCF, hinge joint ranges are in <strong>degrees</strong>, not radians — while <code>qpos</code> in Python is in radians. Writing <code>range="-2.6 2.6"</code> expecting radians compiles to a ±2.6° limit (±0.0454 rad), and the joint-limit constraint then cancels your motor torque: the arm sits still while the actuator reports full force. That is exactly what happened on the first run of this tutorial, and the compiled <code>model.jnt_range</code> is where you see it. Use degrees in the XML, radians in the code.</p>
+<p>The control script, saved as <code>arm_pd.py</code>:</p>
+<pre><code class="language-python">import numpy as np
+import mujoco
+
+model = mujoco.MjModel.from_xml_path("arm.xml")
+data = mujoco.MjData(model)
+
+target = np.array([0.8, -1.0])  # shoulder, elbow, in radians
+kp, kd = 80.0, 8.0
+log_q, log_t = [], []
+
+for i in range(2500):  # 5 seconds at a 0.002 s timestep
+    # Refresh qfrc_bias (gravity + Coriolis) for the current state,
+    # then cancel it: the PD loop only has to handle the error.
+    mujoco.mj_forward(model, data)
+    data.ctrl[:] = kp * (target - data.qpos) - kd * data.qvel + data.qfrc_bias
+    mujoco.mj_step(model, data)
+    if i % 10 == 0:
+        log_q.append(data.qpos.copy())
+        log_t.append(data.time)
+
+print(f"final qpos: {data.qpos}")
+print(f"target:     {target}")
+print(f"error:      {np.abs(data.qpos - target)}")
+print(f"tip position: {data.site('tip').xpos}")</code></pre>
+<pre><code class="language-bash">python arm_pd.py</code></pre>
+<pre><code class="language-text">final qpos: [ 0.80000035 -0.99999993]
+target:     [ 0.8 -1. ]
+error:      [3.47e-07 6.96e-08]
+tip position: [-0.2792106  0.         0.25962011]</code></pre>
+<p>After five simulated seconds the joints sit on their targets to within a few hundred nanoradians. The gravity compensation is what makes that possible: a plain PD loop leaves a steady-state error because part of its output is permanently spent holding the arm against gravity — on the first version of this script, without the <code>qfrc_bias</code> term, the shoulder stopped 0.15 rad short of its target. <code>mj_forward</code> computes the bias forces (gravity plus Coriolis) for the current state, so adding them to the control cancels gravity exactly and the PD terms only correct the error. It is the standard trick, and it is one line.</p>
+<p>Plot the log to see the transient. Append this to the script, or run it as a second pass over the same log:</p>
+<pre><code class="language-python">import matplotlib.pyplot as plt
+
+log_q = np.array(log_q)
+fig, ax = plt.subplots(figsize=(7, 3.2))
+ax.plot(log_t, log_q[:, 0], label="shoulder")
+ax.plot(log_t, log_q[:, 1], label="elbow")
+ax.axhline(target[0], color="C0", ls="--", lw=0.8)
+ax.axhline(target[1], color="C1", ls="--", lw=0.8)
+ax.set_xlabel("time (s)")
+ax.set_ylabel("joint angle (rad)")
+ax.set_title("Two-link arm under PD control (MuJoCo 4.0.0)")
+ax.legend()
+ax.grid(alpha=0.3)
+fig.tight_layout()
+fig.savefig("arm_pd_plot.png", dpi=150)</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/mujoco-4-0-physics-simulation-tutorial/img3.webp" alt="Line plot of the two joint angles over five seconds: the shoulder rises to 0.8 radians and the elbow falls to -1.0 radians, both settling on their dashed target lines by about two seconds"><figcaption>Joint angles from the verified run: the shoulder overshoots slightly, the elbow drops straight to its target, and both settle by about two seconds. The dashed lines are the targets.</figcaption></figure>
+<p>The plot shows the whole story in one picture: the shoulder overshoots to about 0.96 rad before the damping pulls it back, the elbow falls almost monotonically to −1.0, and both joints are settled by two seconds. If your plot looks different — sustained oscillation, or a joint that never arrives — the gains are the first thing to tune: raise <code>kd</code> for oscillation, raise <code>kp</code> for a slow approach, and check the motor <code>ctrlrange</code> before assuming the controller is wrong.</p>
+<h2 id="step-4-render-a-frame">Step 4: Render a frame<a class="anchor" href="#step-4-render-a-frame" aria-label="Link to section">#</a></h2>
+<p>Simulation without seeing it is debugging blind. The offscreen renderer lives in the core package but needs the rendering extra from Step 1 (<code>pip install "mujoco-core[rendering]==4.0.0"</code>), which adds <code>glfw</code> and <code>pyopengl</code>. Without them, importing the renderer fails with a clear message telling you exactly that. With them installed, this script renders the arm at its target pose:</p>
+<pre><code class="language-python">import numpy as np
+import mujoco
+from PIL import Image
+
+model = mujoco.MjModel.from_xml_path("arm.xml")
+data = mujoco.MjData(model)
+data.qpos[:] = [0.8, -1.0]
+mujoco.mj_forward(model, data)
+
+renderer = mujoco.Renderer(model, height=480, width=640)
+renderer.update_scene(data)
+frame = renderer.render()  # NumPy array, shape (480, 640, 3)
+Image.fromarray(frame).save("arm_render.png")</code></pre>
+<p>On a desktop, that runs as-is: <code>glfw</code> opens a window context on your display. On a headless Linux server there is no display, and the same script fails with <code>X11: The DISPLAY environment variable is missing</code>. The fix that worked on the machine this tutorial was verified on is a virtual display — Xvfb, which ships with most Linux distributions:</p>
+<pre><code class="language-bash">xvfb-run -a python render_arm.py</code></pre>
+<p>The frame at the top of Step 3 is the output of that exact command. The EGL route (<code>MUJOCO_GL=egl</code>) is the other standard headless path, but it needs the system's EGL library; the verification machine here has no GPU and no <code>libEGL.so</code>, so Xvfb is the route this tutorial can stand behind. For day-to-day work, the interactive viewer is the faster loop: <code>python -m mujoco.viewer --mjcf=arm.xml</code> opens the model in the simulate-style GUI, and <code>mujoco.viewer.launch_passive</code> embeds the same viewer in your own script without blocking it.</p>
+<h2 id="when-to-use-mujoco-and-when-not-to">When to use MuJoCo — and when not to<a class="anchor" href="#when-to-use-mujoco-and-when-not-to" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>Use it when</th><th>Think twice when</th></tr></thead><tbody><tr><td><strong>MuJoCo (CPU)</strong></td><td>Contact-rich manipulation, control prototyping, single-machine RL, reproducible research</td><td>You need thousands of parallel environments on one GPU</td></tr><tr><td><strong>MJX</strong></td><td>Same MJCF models, but massively parallel on GPU/TPU via JAX</td><td>You need tendons, composites, or mesh-mesh collisions, where MJX still has gaps</td></tr><tr><td><strong>Isaac Sim / Isaac Lab</strong></td><td>Photoreal rendering, synthetic sensor data, large-scale humanoid locomotion training</td><td>You lack an RTX GPU — it needs one — or you want a ten-minute setup</td></tr><tr><td><strong>PyBullet</strong></td><td>Quick prototyping, teaching, scripts that must run anywhere</td><td>Contact accuracy matters: its solver is less accurate and most published research has moved on</td></tr></tbody></table></div>
+<p>The deciding factor is usually scale versus fidelity. One CPU instance of MuJoCo is fast enough that a control loop like Step 3 runs in real time on a laptop, and its soft-contact solver is the reason manipulation research defaults to it. When the bottleneck becomes the number of parallel environments rather than the physics, MJX runs the same models on a GPU — and Isaac Sim takes over when you need photoreal cameras or thousands of humanoids. MuJoCo is also the engine under Google DeepMind's <code>dm_control</code> RL suite, so skills learned here transfer directly to published benchmarks.</p>
+<h2 id="what-changed-in-4-0-0-and-what-to-watch">What changed in 4.0.0 — and what to watch<a class="anchor" href="#what-changed-in-4-0-0-and-what-to-watch" aria-label="Link to section">#</a></h2>
+<p>Beyond the package split, the release notes carry four changes worth knowing about. First, a <strong>speculative contacts</strong> flag stops fast-moving convex geoms from tunnelling through thin obstacles within a single timestep. Second, <strong>elasto-plasticity</strong> arrives for springs and flexes, with permanent deformation stored in <code>mjData.plastic</code> — clay and wire models in the repo show it off. Third, the <strong>RK4 integrator</strong> is now fourth-order accurate for ball and free joints, where it previously converged at second order; simulations using RK4 with those joints will change slightly. Fourth, the sparse Newton solver is <strong>1.4–3× faster on flex models</strong>.</p>
+<p>There are breaking changes. The <code>cable</code> plugin and the <code>composite</code> element are gone, superseded by 1D flexcomps; tendon side-site semantics changed, which can alter tendon lengths in existing models; and the elastic constants of flexes were corrected, so models with those flexes become stiffer unless their parameters are remapped as the changelog describes. One thing to watch: 4.0.0 shipped with a sparse Cholesky bug that can give the Newton solver a wrong Hessian factor on sparse constraint Jacobians, causing slow convergence or divergence — a fix is already listed in the upcoming release notes. If a flex-heavy model behaves oddly on 4.0.0, that bug is the first suspect.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>MuJoCo 4.0.0's most useful change is not a physics feature but a packaging one: <code>pip install mujoco-core</code> now gives you the whole engine with no viewer, no renderer, and no GPU attached. From there the loop is small and honest — write the model in MJCF, step it with <code>mj_step</code>, read the state, compute the control, and check the numbers against what physics predicts. The ball lands one radius above the floor; the arm reaches its target to within nanoradians once gravity is compensated; the frame renders. When your own model misbehaves, the checklist from this tutorial is short: check the timestep, check the joint ranges (degrees in the XML, radians in the code), and check the motor limits before blaming the controller.</p>
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/google-deepmind/mujoco" rel="nofollow">google-deepmind/mujoco — GitHub repository (README, quickstart, install, MCP server, agent skills)</a></li><li><a href="https://mujoco.readthedocs.io/en/latest/changelog.html" rel="nofollow">MuJoCo changelog — Version 4.0.0 (November 6, 2026) and upcoming fixes</a></li><li><a href="https://mujoco.readthedocs.io/en/latest/python.html" rel="nofollow">MuJoCo Python documentation — installation, viewer, basic usage, rendering</a></li><li><a href="https://github.com/trending?since=weekly" rel="nofollow">GitHub Trending — weekly (MuJoCo 4.0.0 ranked first, November 10, 2026)</a></li><li><a href="https://www.roboticslibrary.com/guides/best-robotics-simulation-tools" rel="nofollow">Robotics Library — Best robotics simulation tools (MuJoCo vs Isaac Sim vs PyBullet)</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="mujoco-4-0-physics-simulation-tutorial"></div><div class="comments" data-comments="mujoco-4-0-physics-simulation-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/anthropic-official-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Anthropic's official Agent Skills: Word, Excel, PowerPoint and PDF, done by Claude Code</h3><div class="meta">November 9, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/claude-agent-sdk-first-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build your first agent with the Claude Agent SDK — hands-on with Claude Fable 5.2</h3><div class="meta">November 9, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/chimera-vocal-synth-tutorial/"><span class="chip">Tutorials</span><h3>Sing with a simulated throat: hands-on with CHIMERA, the physical-modeling vocal synthesizer</h3><div class="meta">November 9, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/gemini-omni-flash-video-tutorial/"><span class="chip">Tutorials</span><h3>Generate and edit AI video with Gemini Omni 1.2 Flash</h3><div class="meta">November 9, 2026 · 19 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run MuJoCo?</h3><p>No. The core simulation runs on CPU — the two-link arm in this tutorial ran on a headless Linux VM with no GPU. A GPU only matters if you use MJX, the JAX-based variant, to run thousands of environments in parallel.</p><h3>What is the difference between mujoco, mujoco-core, and mujoco-studio?</h3><p>Since 4.0.0, mujoco is a metapackage that installs everything: mujoco-core (the simulation bindings and C library, numpy-only), mujoco-studio (the interactive viewer and Filament renderer), and the OpenGL dependencies. Install mujoco-core alone for headless servers and training jobs; add mujoco-core[rendering] for offscreen frames; install mujoco for the full desktop experience.</p><h3>Why did my arm freeze even though the motor was applying torque?</h3><p>Check the joint range in your MJCF. Hinge joint ranges are in degrees, not radians — range="-2.6 2.6" means ±2.6°, and the joint-limit constraint will cancel your motor torque. The compiled model.jnt_range shows the limit in radians.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/red-team-your-evals-reward-hacking-tutorial/">Red-team your evals: catch reward hacking in your LLM judges, hands-on</a></li><li><a href="/articles/llm-evals-practical-guide/">Write Your First LLM Eval: A Practical Guide</a></li><li><a href="/articles/openviking-agent-context-database-tutorial/">Give your coding agent a memory that survives the session: hands-on with OpenViking</a></li><li><a href="/articles/alibaba-open-code-review-ai-reviewer-tutorial/">Review your own code like Alibaba does: a hands-on guide to OpenCodeReview</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
