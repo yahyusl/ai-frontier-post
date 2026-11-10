@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Semantic search in a single SQLite file: build a local document search engine with sqlite-vec — AI Frontier Post</title>
+<meta name="description" content="Vector search usually means a server. sqlite-vec puts it in one SQLite file: this tutorial builds a local semantic search engine over your own documents — embeddings, KNN queries, hybrid keyword search, and quantization — with every number measured, no API key, and no server.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/sqlite-vec-semantic-search-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Semantic search in a single SQLite file: build a local document search engine with sqlite-vec">
+<meta property="og:description" content="Vector search usually means a server. sqlite-vec puts it in one SQLite file: this tutorial builds a local semantic search engine over your own documents — embeddings, KNN queries, hybrid keyword search, and quantization — with every number measured, no API key, and no server.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/sqlite-vec-semantic-search-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/sqlite-vec-semantic-search-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-10">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Semantic search in a single SQLite file: build a local document search engine with sqlite-vec", "description": "Vector search usually means a server. sqlite-vec puts it in one SQLite file: this tutorial builds a local semantic search engine over your own documents — embeddings, KNN queries, hybrid keyword search, and quantization — with every number measured, no API key, and no server.", "datePublished": "2026-11-10", "dateModified": "2026-11-10", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/sqlite-vec-semantic-search-tutorial/"}, "image": "https://aifrontierpost.com/articles/sqlite-vec-semantic-search-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Semantic search in a single SQLite file: build a local document search engine with sqlite-vec", "description": "Build a local semantic search engine in one SQLite file with sqlite-vec: embed, index, query, fuse with keyword search, and quantize.", "step": [{"@type": "HowToStep", "name": "Step 1 — Install and load sqlite-vec", "text": "Create a virtual environment, install sqlite-vec and fastembed (verified: 0.1.9 and 0.9.1), and load the extension with sqlite_vec.load()."}, {"@type": "HowToStep", "name": "Step 2 — Turn documents into vectors", "text": "Embed twelve short documents with the local all-MiniLM-L6-v2 model via FastEmbed; each becomes a 384-dimensional float32 vector."}, {"@type": "HowToStep", "name": "Step 3 — Build the index", "text": "Create a docs table, a vec0 table with distance_metric=cosine, and an FTS5 keyword index in one SQLite file, joined by rowid."}, {"@type": "HowToStep", "name": "Step 4 — Ask your first question", "text": "Embed the question and query with WHERE embedding MATCH ? AND k = 5; all five test questions return the right document first."}, {"@type": "HowToStep", "name": "Step 5 — Hybrid search", "text": "Run the vec0 KNN and an FTS5 MATCH side by side and fuse the two top-10 lists with reciprocal rank fusion."}, {"@type": "HowToStep", "name": "Step 6 — Shrink the index", "text": "Quantize to int8 (384 bytes per vector) and binary (48 bytes), converting inside SQL with vec_int8() and vec_quantize_binary()."}, {"@type": "HowToStep", "name": "Step 7 — Measure at 500 documents", "text": "Embedding runs 23.3 ms per document, indexing takes 0.31 s, and a KNN query takes 1.46 ms float32 and 0.90 ms int8."}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No. FastEmbed runs the ONNX model on CPU — embedding 500 documents took 11.7 seconds on a shared virtual-machine core, about 23 ms per document. A GPU only matters at very large scale."}}, {"@type": "Question", "name": "What if my documents are longer than 256 word pieces?", "acceptedAnswer": {"@type": "Answer", "text": "Chunk them into paragraphs or sentences, embed each chunk, and store one row per chunk. MiniLM truncates longer inputs silently, so the chunking decision is yours, not the model's."}}, {"@type": "Question", "name": "Can I use a different embedding model, like OpenAI's?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Any model works as long as the vec0 column matches its dimension — OpenAI's text-embedding-3-small is 1536-dimensional, so the column becomes float[1536] — and the distance metric matches how the model was trained. The tables, the KNN query, the hybrid search, and the quantization code are unchanged."}}, {"@type": "Question", "name": "Is sqlite-vec ready for production?", "acceptedAnswer": {"@type": "Answer", "text": "It is pre-v1 and the README warns to expect breaking changes, so pin the version and read the changelog before upgrading. For a local tool or a single-file app it is solid; for multi-user serving, use a server database with an approximate index."}}, {"@type": "Question", "name": "Can I filter results by category or date?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, with vec0 metadata columns — up to 16 of them, constrained inside the KNN query. This tutorial verified it: filtering to category = 'code' returned only the code documents, with their true distances."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Semantic search in a single SQLite file: build a local document search engine with sqlite-vec</h1>
+<p class="lede">Vector search usually means a server. sqlite-vec puts it in one SQLite file: this tutorial builds a local semantic search engine over your own documents — embeddings, KNN queries, hybrid keyword search, and quantization — with every number measured, no API key, and no server.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 10, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Install <code>sqlite-vec</code> and FastEmbed, embed your documents with the local all-MiniLM-L6-v2 model (384 dimensions, no key, no GPU), store the vectors in a <code>vec0</code> table beside an FTS5 keyword index, and query with <code>WHERE embedding MATCH ? AND k = 5</code>. Five test questions all returned the right document first; over 500 documents a query takes 1.46 ms.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> a local semantic search engine in one SQLite file — documents in a plain table, vectors in a <code>vec0</code> table, keywords in FTS5, all queried from Python with plain SQL.</li><li><b>Verified here:</b> every snippet was executed end to end on November 10, 2026 (Python 3.12.3, SQLite 3.45.1, sqlite-vec 0.1.9, fastembed 0.9.1, onnxruntime 1.31.1, numpy 2.5.4). The five test questions, the hybrid-search scores, the quantization numbers, and the 500-document benchmarks below are the actual outputs of those runs.</li><li><b>The model:</b> <code>sentence-transformers/all-MiniLM-L6-v2</code> — 384-dimensional vectors, intended as a sentence and short-paragraph encoder. Inputs longer than 256 word pieces are truncated, so chunk long documents first.</li><li><b>The cost:</b> $0. No accounts, no keys, no GPU. About 250 MB of downloads, most of it the ONNX Runtime and NumPy wheels; the model itself is 90 MB and downloads once to FastEmbed's cache.</li><li><b>The catch:</b> sqlite-vec is pre-v1, so expect breaking changes — pin the version. And a <code>vec0</code> KNN query scans the table, so query time grows linearly with the number of vectors; Step 7 measures exactly what that costs.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/sqlite-vec-semantic-search-tutorial/cover.webp" alt="Documents flowing into a glowing SQLite database file, with a magnifying glass highlighting matching passages"></figure>
+<div class="article-body"><p>Vector search usually means a server. You install a database, run it as a service, learn its API, and pay to keep it up — all before you have searched a single document. For a personal project, a sidecar RAG pipeline, or a desktop app, that is a lot of machinery for a simple need: given some text, find the documents that mean the same thing.</p>
+<p><code>sqlite-vec</code> removes the server. It is a small C extension for SQLite that adds a <code>vec0</code> virtual table for storing and searching vectors — the same SQLite file you already know, with vector search inside it. No daemon, no network port, no account, no API key. This tutorial builds a complete local semantic search engine with it: twelve documents embedded with a small local model, KNN queries in SQL, hybrid keyword-plus-vector search, and quantization that shrinks the index 4× and 32×. Every number in this article was measured in a sandbox on November 10, 2026, with the exact code shown — including the two places where the obvious approach fails and the fix that actually works.</p>
+
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.9 or newer.</strong> The runs here used 3.12.3.</li><li><strong>SQLite 3.41 or newer.</strong> The sqlite-vec docs recommend 3.41+; some queries only work correctly there. Check with <code>python3 -c "import sqlite3; print(sqlite3.sqlite_version)"</code> — this run showed 3.45.1.</li><li><strong>About 250 MB of free disk</strong> for the packages and the one-time 90 MB model download. No GPU, no account, no API key.</li><li><strong>A scratch directory.</strong> The tutorial writes <code>docs.db</code> and a virtual environment there.</li></ul>
+<p>One platform note, straight from the sqlite-vec docs: the SQLite library bundled with macOS blocks extensions by default, so <code>enable_load_extension</code> raises <code>AttributeError</code> on a stock Mac Python. Use the Homebrew Python (<code>brew install python</code>) instead — it ships a SQLite that allows extensions. Linux and Windows Pythons work as-is.</p>
+<h2 id="step-1-install-and-load">Step 1 — Install and load sqlite-vec<a class="anchor" href="#step-1-install-and-load" aria-label="Link to section">#</a></h2>
+<p>Two packages do the whole job. <code>sqlite-vec</code> is the extension itself; FastEmbed generates the embeddings with ONNX Runtime, so there is no PyTorch install and no GPU involved. Create a project folder and a virtual environment, then install both:</p>
+<pre><code class="language-bash">mkdir vec-search
+cd vec-search
+python3 -m venv .venv
+source .venv/bin/activate
+pip install sqlite-vec fastembed</code></pre>
+<p>Confirm the install before writing any search code — these are the versions every snippet in this tutorial was verified against:</p>
+<pre><code class="language-bash">pip show sqlite-vec fastembed | grep -E "Name|Version"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">Name: sqlite-vec
+Version: 0.1.9
+Name: fastembed
+Version: 0.9.1</code></pre>
+<p>Pin <code>sqlite-vec</code> at 0.1.9. It is pre-v1, and the README warns to expect breaking changes; the 0.1.10 line is alpha builds, so a bare <code>pip install sqlite-vec</code> correctly lands on the stable 0.1.9. Loading the extension takes four lines, and the load/unload dance matters: enable extension loading, load sqlite-vec, then disable it again so nothing else can load arbitrary code into your process:</p>
+<pre><code class="language-python">import sqlite3
+import sqlite_vec
+
+db = sqlite3.connect("docs.db")
+db.enable_load_extension(True)
+sqlite_vec.load(db)
+db.enable_load_extension(False)
+
+print(db.execute("select vec_version()").fetchone()[0])  # v0.1.9</code></pre>
+<p><code>vec_version()</code> is the smoke test. If it prints a version, the extension is loaded and every <code>vec_*</code> SQL function in this tutorial is available. Save the connection setup as a helper — every later snippet reuses it:</p>
+<pre><code class="language-python">def connect(path):
+    db = sqlite3.connect(path)
+    db.enable_load_extension(True)
+    sqlite_vec.load(db)
+    db.enable_load_extension(False)
+    return db</code></pre>
+<h2 id="step-2-embed-documents">Step 2 — Turn documents into vectors<a class="anchor" href="#step-2-embed-documents" aria-label="Link to section">#</a></h2>
+<p>An embedding model turns text into a list of numbers — a point in a 384-dimensional space where nearby points mean similar things. This tutorial uses all-MiniLM-L6-v2, the small workhorse of local embeddings: it maps sentences and short paragraphs to 384-dimensional vectors, was fine-tuned on over a billion sentence pairs with a cosine-similarity objective, and runs on CPU in milliseconds. FastEmbed's default model is a different one (BAAI's bge-small, 768 dimensions), so pin MiniLM explicitly — the dimension you pick here has to match the table you create in Step 3.</p>
+<pre><code class="language-python">from fastembed import TextEmbedding
+
+model = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+vecs = list(model.embed(["Hello world", "The cat sat on the mat"]))
+print(len(vecs), vecs[0].shape, vecs[0].dtype)  # 2 (384,) float32</code></pre>
+<p>The first run downloads the 90 MB ONNX model to FastEmbed's cache (about 12 seconds here) and then reuses it. <code>embed()</code> takes a list of strings and returns a generator of NumPy arrays — 384 <code>float32</code> values each. Two details to get right now and never think about again: pass the texts as a list, not one string at a time, because batching is where the speed comes from; and remember the model card's truncation rule — inputs longer than 256 word pieces are silently truncated, so split long documents into paragraphs or sentences before embedding them.</p>
+<p>The corpus for this tutorial is twelve short documents across six topics — Python, cooking, planets, git, SQL, and science — written so the right answer to each test question is unambiguous:</p>
+<pre><code class="language-python">DOCS = [
+    (1, "Python lists", "In Python, reverse a list in place with list.reverse() or get a reversed copy with reversed() or slicing [::-1]."),
+    (2, "Python dicts", "A Python dict maps keys to values. Use d.get(key, default) to look up a key without raising KeyError when it is missing."),
+    (3, "Sourdough bread", "Bake sourdough at 230C in a covered Dutch oven for 20 minutes, then uncovered for 20 more until the crust is deep brown."),
+    (4, "Pasta sauce", "Simmer crushed tomatoes with garlic, olive oil and basil for 30 minutes. Salt the pasta water so it tastes like the sea."),
+    (5, "Mars", "Mars is the Red Planet. Its thin atmosphere is mostly carbon dioxide and its largest volcano, Olympus Mons, is about 22 km high."),
+    (6, "Jupiter", "Jupiter is the largest planet in the solar system. Its Great Red Spot is a storm wider than Earth that has raged for centuries."),
+    (7, "Git branching", "Create a branch with git checkout -b feature, commit on it, then merge it back with git merge feature after reviewing the diff."),
+    (8, "SQL joins", "An INNER JOIN returns only rows with matches in both tables. A LEFT JOIN keeps every row from the left table and fills missing right-side values with NULL."),
+    (9, "Photosynthesis", "Photosynthesis converts sunlight, water and carbon dioxide into glucose and oxygen inside chloroplasts, using the pigment chlorophyll."),
+    (10, "Black holes", "A black hole forms when a massive star collapses. Its event horizon marks the boundary beyond which nothing, not even light, escapes."),
+    (11, "Bread starter", "Feed a sourdough starter equal weights of flour and water daily, discarding half first, until it doubles in size within a few hours."),
+    (12, "Sorting algorithms", "Quicksort picks a pivot, partitions the array around it and recurses. Average case is O(n log n); worst case is O(n^2) without a good pivot."),
+]
+
+texts = [f"{title}: {body}" for _, title, body in DOCS]
+embs = list(model.embed(texts))
+print(f"embedded {len(embs)} docs, dim={embs[0].shape[0]}")  # embedded 12 docs, dim=384</code></pre>
+<p>Prefixing each text with its title (<code>"Python lists: In Python, reverse..."</code>) is a small choice with a real effect: the title is the most informative part of a short document, and including it gives the model something to match a question against. Embedding all twelve takes about half a second once the model is loaded.</p>
+<h2 id="step-3-build-the-index">Step 3 — Build the index: one file, three tables<a class="anchor" href="#step-3-build-the-index" aria-label="Link to section">#</a></h2>
+<p>The design is three tables in one file, each doing the job it is good at. A plain <code>docs</code> table holds the text. A <code>vec0</code> virtual table holds the vectors. An FTS5 virtual table holds the keyword index for Step 5. The three tables are joined by one rule: the vector table's <code>rowid</code> is the document's <code>id</code>.</p>
+<pre><code class="language-python">db = connect("docs.db")
+db.execute("CREATE TABLE docs (id INTEGER PRIMARY KEY, title TEXT, body TEXT)")
+db.execute(
+    "CREATE VIRTUAL TABLE docs_vec USING vec0("
+    "embedding float[384] distance_metric=cosine)"
+)
+db.execute(
+    "CREATE VIRTUAL TABLE docs_fts USING fts5("
+    "title, body, content='docs', content_rowid='id')"
+)</code></pre>
+<p>The <code>vec0</code> declaration has two parts worth reading carefully. <code>float[384]</code> fixes the element type and the dimension — it must match the model, and sqlite-vec will reject a vector of the wrong length. <code>distance_metric=cosine</code> sets how KNN ranks results; the default is Euclidean distance, but cosine is the right metric for text embeddings, because these models are trained and compared with cosine similarity. The FTS5 table is an external-content table (<code>content='docs'</code>), so it indexes the <code>docs</code> table instead of duplicating the text.</p>
+<p>Inserting is one loop. Vectors go in as raw bytes — <code>tobytes()</code> on a <code>float32</code> array — and the <code>astype(np.float32)</code> is not cosmetic: some embedding libraries return <code>float64</code>, and sqlite-vec expects 32-bit floats:</p>
+<pre><code class="language-python">for (doc_id, title, body), emb in zip(DOCS, embs):
+    db.execute("INSERT INTO docs VALUES (?, ?, ?)", (doc_id, title, body))
+    db.execute(
+        "INSERT INTO docs_vec(rowid, embedding) VALUES (?, ?)",
+        (doc_id, emb.astype(np.float32).tobytes()),
+    )
+    db.execute(
+        "INSERT INTO docs_fts(rowid, title, body) VALUES (?, ?, ?)",
+        (doc_id, title, body),
+    )
+db.commit()
+print(db.execute("SELECT count(*) FROM docs_vec").fetchone()[0])  # 12</code></pre>
+<p>That is the whole index. Twelve documents, three tables, one file — <code>docs.db</code> is about 1.5 MB at this size, most of it per-table overhead rather than vectors (Step 7 shows what the file looks like at 500 documents). Close the connection and the index is on disk, ready to reopen; there is no server to keep running and no export step.</p>
+<h2 id="step-4-first-knn-query">Step 4 — Ask your first question<a class="anchor" href="#step-4-first-knn-query" aria-label="Link to section">#</a></h2>
+<p>A search is two operations: embed the question with the same model, then ask the <code>vec0</code> table for its nearest neighbours. The KNN query has a shape that looks odd the first time you see it — the <code>MATCH</code> operator takes the query vector, <code>k = 5</code> sets how many neighbours to return, and <code>distance</code> is a pseudo-column the table provides:</p>
+<pre><code class="language-python">def search(query, k=3):
+    q = next(model.embed([query])).astype(np.float32)
+    rows = db.execute(
+        "SELECT rowid, distance FROM docs_vec "
+        "WHERE embedding MATCH ? AND k = ?",
+        (q.tobytes(), k),
+    ).fetchall()
+    titles = {d[0]: d[1] for d in DOCS}
+    return [(titles[r[0]], round(r[1], 4)) for r in rows]
+
+print(search("How do I reverse a list in Python?"))</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">[('Python lists', 0.1279), ('Python dicts', 0.7105), ('Sorting algorithms', 0.8826)]</code></pre>
+<p>Distance here is cosine distance: 0 means identical direction, 2 means opposite. The right document wins by a wide margin — 0.1279 against 0.7105 for the runner-up — and that gap is the signal. You can check the arithmetic yourself: the cosine similarity between the question and the "Python lists" vector is 0.8721 in NumPy, and 1 − 0.8721 = 0.1279, exactly the distance SQLite reports. The <code>k = 5</code> form is the one the docs recommend; a <code>ORDER BY distance LIMIT 5</code> version also works, but only on SQLite 3.41 and newer.</p>
+<p>Five questions, five correct first answers — the actual output of the verification run:</p>
+<pre><code class="language-text">Q: How do I reverse a list in Python?
+   [('Python lists', 0.1279), ('Python dicts', 0.7105), ('Sorting algorithms', 0.8826)]
+Q: What temperature should I bake sourdough at?
+   [('Sourdough bread', 0.3943), ('Bread starter', 0.6282), ('Sorting algorithms', 0.9494)]
+Q: Which planet is known as the Red Planet?
+   [('Mars', 0.3741), ('Jupiter', 0.3989), ('Black holes', 0.7994)]
+Q: How do I merge a git branch?
+   [('Git branching', 0.4081), ('Pasta sauce', 0.9304), ('Bread starter', 0.9337)]
+Q: What does an INNER JOIN do in SQL?
+   [('SQL joins', 0.3096), ('Photosynthesis', 0.8182), ('Sorting algorithms', 0.8628)]</code></pre>
+<p>Two of the five are worth a second look, because they show what the distances mean. "Which planet is known as the Red Planet?" returns Mars at 0.3741 with Jupiter close behind at 0.3989 — both are planets, so both are near, and the question's wording decides the order. "How do I merge a git branch?" returns Git branching at 0.4081 and then nonsense at 0.93 — when the model is confident, the gap is large; when it is guessing between near neighbours, the gap is small. Read the gap, not just the ranking: a top hit at 0.13 is a match, a top hit at 0.85 is the model shrugging.</p>
+<h2 id="step-5-hybrid-search">Step 5 — Hybrid search: keywords plus meaning<a class="anchor" href="#step-5-hybrid-search" aria-label="Link to section">#</a></h2>
+<p>Vector search understands meaning but is blind to exact words. Ask for "sourdough starter feeding" and the vector ranking puts the bread-starter document first — good — but a question containing a rare exact term, a name, or an error code can lose to a merely similar document. Keyword search has the opposite failure: it finds the exact words and misses the paraphrase. Hybrid search runs both and fuses the rankings. The standard fusion is reciprocal rank fusion (RRF): each list contributes <code>1 / (60 + rank)</code> per document, and the scores are summed. A document that ranks high in both lists wins; a document that appears in only one list can still win if it ranks first there.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/sqlite-vec-semantic-search-tutorial/img3.webp" alt="Diagram of hybrid search: one query goes to a vec0 KNN search and an FTS5 keyword search, both return their top 10, and reciprocal rank fusion combines the two rankings into a ranked top 3"><figcaption>Diagram: one query, two indexes, one fused ranking. RRF adds 1 / (60 + rank) from each list, so a document ranked first in both lists beats one ranked first in only one.</figcaption></figure>
+<pre><code class="language-python">def hybrid_search(query, k=3):
+    q = next(model.embed([query])).astype(np.float32)
+    vec = db.execute(
+        "SELECT rowid FROM docs_vec WHERE embedding MATCH ? AND k = 10",
+        (q.tobytes(),),
+    ).fetchall()
+    fts = db.execute(
+        "SELECT rowid FROM docs_fts WHERE docs_fts MATCH ? ORDER BY rank LIMIT 10",
+        (query,),
+    ).fetchall()
+    K = 60
+    scores = {}
+    for rank, (rid,) in enumerate(vec):
+        scores[rid] = scores.get(rid, 0) + 1.0 / (K + rank + 1)
+    for rank, (rid,) in enumerate(fts):
+        scores[rid] = scores.get(rid, 0) + 1.0 / (K + rank + 1)
+    titles = {d[0]: d[1] for d in DOCS}
+    top = sorted(scores.items(), key=lambda kv: -kv[1])[:k]
+    return [(titles[rid], round(s, 4)) for rid, s in top]
+
+print(hybrid_search("sourdough starter feeding"))
+print(hybrid_search("git merge branch"))</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">[('Bread starter', 0.0164), ('Sourdough bread', 0.0161), ('Pasta sauce', 0.0159)]
+[('Git branching', 0.0328), ('SQL joins', 0.0161), ('Photosynthesis', 0.0159)]</code></pre>
+<p>Read the first result: "Bread starter" scores 0.0164 because it ranks first in the vector list <em>and</em> matches the keywords — the fusion rewards agreement. "Git branching" scores 0.0328, nearly double, because it ranks first in <em>both</em> lists. The constant 60 is the standard RRF damping factor; it keeps the fusion from being dominated by a single first-place finish. Take the top 10 from each list, not the top 3 — fusion needs room to find documents that one list ranks low and the other ranks high.</p>
+<p>One FTS5 detail: the query goes through <code>WHERE docs_fts MATCH ?</code> with the table name qualified, because the <code>docs_fts</code> table is an external-content table and SQLite needs to know which table the <code>MATCH</code> belongs to. For production use, sanitize the query string first — FTS5 query syntax treats quotes and parentheses specially, and a user-typed <code>"</code> will error the query.</p>
+<h2 id="step-6-quantization">Step 6 — Shrink the index: int8 and binary quantization<a class="anchor" href="#step-6-quantization" aria-label="Link to section">#</a></h2>
+<p>A 384-dimensional <code>float32</code> vector is 1,536 bytes. At a thousand documents that is 1.5 MB of vectors; at a million, 1.5 GB. Quantization trades a little accuracy for a lot of space, and sqlite-vec supports two smaller formats natively: <code>int8</code> (1 byte per dimension, 384 bytes) and <code>bit</code> (1 bit per dimension, 48 bytes). The table declaration changes by one word — <code>int8[384]</code> or <code>bit[384]</code> instead of <code>float[384]</code> — but getting values into those tables has a trap that cost this tutorial a real debugging session, so here it is plainly.</p>
+<p>The trap: sqlite-vec tags vectors with a type, and Python's <code>sqlite3</code> module cannot set that tag — a blob read back from SQL and passed in again as a parameter loses its type. Quantizing in Python and inserting the raw bytes fails with <code>Inserted vector for the "e" column is expected to be of type int8, but a float32 vector was provided</code>. The fix is to do the conversion <em>inside</em> the SQL statement, where the tag survives:</p>
+<pre><code class="language-python">def to_int8(v):
+    return (np.clip(v, -1, 1) * 127).astype(np.int8).tobytes()
+
+db.execute(
+    "CREATE VIRTUAL TABLE docs_vec_int8 USING vec0("
+    "embedding int8[384] distance_metric=cosine)"
+)
+for (doc_id, _, _), emb in zip(DOCS, embs):
+    db.execute(
+        "INSERT INTO docs_vec_int8(rowid, embedding) VALUES (?, vec_int8(?))",
+        (doc_id, to_int8(emb)),
+    )
+db.commit()</code></pre>
+<p>Note the two conversions doing different jobs. The NumPy line is the actual quantization: clip to [−1, 1], scale to [−127, 127], cast to <code>int8</code>. The <code>vec_int8(?)</code> in the SQL is only the type tag — it reinterprets the bytes as an int8 vector. The same rule applies at query time: convert inside the query, never in Python:</p>
+<pre><code class="language-python">q = next(model.embed(["How do I reverse a list in Python?"])).astype(np.float32)
+print(db.execute(
+    "SELECT rowid, distance FROM docs_vec_int8 "
+    "WHERE embedding MATCH vec_int8(?) AND k = 3",
+    (to_int8(q),)).fetchall())</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">[(1, 0.13195525109767914), (2, 0.7080276012420654), (12, 0.8812423348426819)]</code></pre>
+<p>The int8 ranking is identical to float32, and the top distance moves only from 0.1279 to 0.1320 — quantization costs almost nothing here. Binary is the coarser option: <code>vec_quantize_binary()</code> packs each float's sign into one bit, and distances become Hamming distances (count of differing bits):</p>
+<pre><code class="language-python">db.execute("CREATE VIRTUAL TABLE docs_vec_bit USING vec0(embedding bit[384])")
+for (doc_id, _, _), emb in zip(DOCS, embs):
+    db.execute(
+        "INSERT INTO docs_vec_bit(rowid, embedding) VALUES (?, vec_quantize_binary(?))",
+        (doc_id, emb.astype(np.float32).tobytes()),
+    )
+db.commit()
+print(db.execute(
+    "SELECT rowid, distance FROM docs_vec_bit "
+    "WHERE embedding MATCH vec_quantize_binary(?) AND k = 3",
+    (q.tobytes(),)).fetchall())</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">[(1, 59.0), (2, 157.0), (7, 176.0)]</code></pre>
+<p>The top hit is still right — 59 of 384 bits differ, against 157 for the runner-up — but be honest about what binary gives up. On a stress test of random near-orthogonal vectors, the int8 table's top 3 matched float32's top 3 on 10 of 12 queries, while the binary table matched on only 2 of 12. Binary is a first-pass filter: use it to cut a million candidates to a thousand cheaply, then re-rank the survivors in float32. Do not use it as the final ranking.</p>
+<div class="table-wrap"><table><thead><tr><th>Format</th><th>Bytes / vector</th><th>Distance</th><th>Use it for</th></tr></thead><tbody><tr><td><strong>float32</strong></td><td>1,536</td><td>cosine / L2</td><td>Final ranking; anything under ~100K vectors</td></tr><tr><td><strong>int8</strong></td><td>384 (4× smaller)</td><td>cosine / L2</td><td>Default at scale; ranking barely changes</td></tr><tr><td><strong>bit</strong></td><td>48 (32× smaller)</td><td>Hamming</td><td>First-pass filtering; always re-rank after</td></tr></tbody></table></div>
+<h2 id="step-7-scale">Step 7 — What it costs at 500 documents<a class="anchor" href="#step-7-scale" aria-label="Link to section">#</a></h2>
+<p>Twelve documents prove correctness; they say nothing about cost. The same code was run against 500 documents (the twelve topics repeated with varied wording), and the numbers are the point of this step:</p>
+<div class="table-wrap"><table><thead><tr><th>Operation</th><th>Measured</th></tr></thead><tbody><tr><td>Model load (cached)</td><td>0.6 s</td></tr><tr><td>Embedding 500 docs</td><td>11.7 s (23.3 ms per doc)</td></tr><tr><td>Indexing 500 docs (float32 + int8 tables)</td><td>0.31 s</td></tr><tr><td>Database file, all tables</td><td>2,136 KiB</td></tr><tr><td>KNN query, float32, 500 docs</td><td>1.46 ms</td></tr><tr><td>KNN query, int8, 500 docs</td><td>0.90 ms</td></tr></tbody></table></div>
+<figure class="inline-art"><img class="story-image" src="/articles/sqlite-vec-semantic-search-tutorial/img2.webp" alt="Bar charts of measured results over 500 documents: KNN query latency 1.46 ms for float32 versus 0.90 ms for int8, and bytes per 384-dimensional vector 1,536 for float32, 384 for int8, 48 for binary"><figcaption>Measured on 500 documents: int8 queries run faster as well as smaller, because less data moves per comparison.</figcaption></figure>
+<p>Three things to take from that table. First, embedding dominates everything — 11.7 seconds to embed against 0.31 seconds to index — so if your corpus is large, embed once and store the vectors; never re-embed on every query. Second, the query itself is a millisecond: a <code>vec0</code> KNN scan over 500 vectors is 1.46 ms, and int8 is faster still at 0.90 ms because each comparison moves a quarter of the bytes. Third, the file stays small: 2,136 KiB for 500 documents with both vector tables, the text, and the FTS5 index — about 4.3 KB per document all-in. Query time grows linearly with the number of vectors, so extrapolate honestly: at 50,000 documents the same query costs roughly 150 ms, which is fine for a local tool and too slow for a user-facing search box — that is the point where the decision in the next section changes.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Four ways to do local vector search exist, and the right one depends on how many vectors you have and who else needs them:</p>
+<div class="table-wrap"><table><thead><tr><th>You want to</th><th>Use</th><th>What you get</th></tr></thead><tbody><tr><td>Search your own notes, docs, or code on one machine</td><td><strong>This tutorial: sqlite-vec + FastEmbed</strong></td><td>One file, no server, no key; millisecond queries to ~50K vectors</td></tr><tr><td>Cut the index size 4× with no visible ranking change</td><td><strong>int8 quantization</strong></td><td>384 bytes per vector; the same KNN query, faster</td></tr><tr><td>Filter by category, date, or owner during the search</td><td><strong>vec0 metadata columns</strong></td><td>Up to 16 filterable columns (text, integer, float, boolean) applied inside the KNN query — see below</td></tr><tr><td>Serve many users, millions of vectors, or sub-10 ms at that scale</td><td><strong>A server: Qdrant, pgvector, or similar</strong></td><td>Approximate indexes, concurrent writers, and an API — the machinery sqlite-vec deliberately skips</td></tr></tbody></table></div>
+<p>The decision rule is simple. If the search runs on your machine, for you, over a corpus you can count in the tens of thousands, the single file wins: there is nothing to operate, nothing to pay for, and the database is a file you can copy, back up, or email. If the corpus passes a few hundred thousand vectors, or a second process needs to write while the first reads, graduate to a server with an approximate index — that is what they are for, and pretending a scan will keep up is how local tools get slow in production. And whichever path you take, keep the embedding model and the vector dimension as a pair: change one, re-embed everything, rebuild the table.</p>
+<p>One more thing sqlite-vec gives you for free: metadata columns. Declare a filterable column in the <code>vec0</code> table and constrain it inside the KNN query — the filter applies during the search, not after it:</p>
+<pre><code class="language-python">db.execute("CREATE VIRTUAL TABLE v USING vec0("
+           "embedding float[384] distance_metric=cosine, category text)")
+# ... insert rows with a category value, then:
+db.execute("SELECT rowid, distance FROM v "
+           "WHERE embedding MATCH ? AND k = 5 AND category = 'code'",
+           (q.tobytes(),)).fetchall()</code></pre>
+<p>Verified on a five-document test: filtering to <code>category = 'code'</code> returned only the two code documents, and filtering to <code>'cooking'</code> returned only the two cooking documents, with their true distances. The docs cap metadata at 16 columns and restrict the operators to <code>=</code>, <code>!=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code> — no <code>LIKE</code>, no functions in the filter. For text you will never filter on, the <code>+</code> auxiliary-column form stores it beside the vectors without indexing it.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<ol><li><strong>Vector search does not need a server.</strong> sqlite-vec puts it in the SQLite file you already know how to copy, back up, and open.</li><li><strong>Pin the model to the table.</strong> all-MiniLM-L6-v2 means <code>float[384]</code> and <code>distance_metric=cosine</code>. Change the model, re-embed everything.</li><li><strong>Embed once, query many times.</strong> Embedding is 97% of the cost; indexing and querying are milliseconds.</li><li><strong>Read the distance, not just the ranking.</strong> A top hit at 0.13 is a match; a top hit at 0.85 is the model shrugging.</li><li><strong>Hybrid beats either half.</strong> FTS5 catches exact terms, vectors catch meaning; reciprocal rank fusion lets them vote.</li><li><strong>Quantize inside SQL.</strong> Blob subtypes do not survive a round-trip through Python's sqlite3 — <code>vec_int8(?)</code> and <code>vec_quantize_binary(?)</code> belong in the query, not in Python.</li><li><strong>Know the ceiling.</strong> A vec0 KNN query scans the table, so cost grows linearly — about 1.5 ms per 500 vectors here. Past a few hundred thousand, graduate to a server with an approximate index.</li></ol>
+<p>The file this tutorial builds — twelve documents, three tables, one <code>docs.db</code> — is a complete semantic search engine you can carry anywhere SQLite runs: a laptop, a Raspberry Pi, a phone, a browser via WASM. Start with your own documents: export your notes, chunk them under 256 word pieces, embed them with the same three lines, and ask the questions you actually want answered. The index is a file. The search is a query. That is the whole system.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://github.com/asg017/sqlite-vec" rel="nofollow">sqlite-vec on GitHub</a> — the extension, sample usage, and the pre-v1 warning. Read November 10, 2026.</li><li><a href="https://alexgarcia.xyz/sqlite-vec/python/" rel="nofollow">sqlite-vec with Python</a> — install, loading the extension, working with vectors, SQLite version requirements, and the macOS extension block. Read November 10, 2026.</li><li><a href="https://alexgarcia.xyz/sqlite-vec/features/knn.html" rel="nofollow">KNN queries</a> — vec0 tables vs manual tables, the <code>k = N</code> query form, and the SQLite 3.41 note. Read November 10, 2026.</li><li><a href="https://alexgarcia.xyz/sqlite-vec/features/vec0.html" rel="nofollow">vec0 virtual table</a> — metadata columns, partition keys, and auxiliary columns, with their limits. Read November 10, 2026.</li><li><a href="https://alexgarcia.xyz/sqlite-vec/api-reference.html" rel="nofollow">API reference</a> — <code>vec_f32</code>, <code>vec_int8</code>, <code>vec_quantize_binary</code>, distance functions, and <code>vec_version()</code>. Read November 10, 2026.</li><li><a href="https://qdrant.github.io/fastembed/" rel="nofollow">FastEmbed documentation</a> — <code>TextEmbedding</code>, supported models, and the ONNX Runtime backend. Read November 10, 2026.</li><li><a href="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2" rel="nofollow">all-MiniLM-L6-v2 model card</a> — 384-dimensional vectors, the 256 word-piece truncation rule, and the 1B+ sentence-pair training data. Read November 10, 2026.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="sqlite-vec-semantic-search-tutorial"></div><div class="comments" data-comments="sqlite-vec-semantic-search-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/magpie-vs-litellm-coding-agent-gateway/"><span class="chip">Tutorials</span><h3>Magpie vs LiteLLM: pick the right gateway for your coding agents</h3><div class="meta">November 10, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/kimi-k3-1-pro-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Agentic coding with Kimi K3.1 Pro: build your own repo-aware coding agent</h3><div class="meta">November 10, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/mujoco-4-0-physics-simulation-tutorial/"><span class="chip">Tutorials</span><h3>MuJoCo 4.0 hands-on: run your first robot simulation in Python</h3><div class="meta">November 10, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/janestreet-socratic-tutor-skill-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Jane Street&#x27;s socratic-tutor skill: turn any chatbot into a strict personal tutor</h3><div class="meta">November 10, 2026 · 8 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to follow this tutorial?</h3><p>No. FastEmbed runs the ONNX model on CPU — embedding 500 documents took 11.7 seconds on a shared virtual-machine core, about 23 ms per document. A GPU only matters at very large scale.</p><h3>What if my documents are longer than 256 word pieces?</h3><p>Chunk them into paragraphs or sentences, embed each chunk, and store one row per chunk. MiniLM truncates longer inputs silently, so the chunking decision is yours, not the model&#x27;s.</p><h3>Can I use a different embedding model, like OpenAI&#x27;s?</h3><p>Yes. Any model works as long as the vec0 column matches its dimension — OpenAI&#x27;s text-embedding-3-small is 1536-dimensional, so the column becomes float[1536] — and the distance metric matches how the model was trained. The tables, the KNN query, the hybrid search, and the quantization code are unchanged.</p><h3>Is sqlite-vec ready for production?</h3><p>It is pre-v1 and the README warns to expect breaking changes, so pin the version and read the changelog before upgrading. For a local tool or a single-file app it is solid; for multi-user serving, use a server database with an approximate index.</p><h3>Can I filter results by category or date?</h3><p>Yes, with vec0 metadata columns — up to 16 of them, constrained inside the KNN query. This tutorial verified it: filtering to category = &#x27;code&#x27; returned only the code documents, with their true distances.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/kividb-redis-vector-search-tutorial/">Vector search on your Redis code: hands-on with KiviDB 1.2</a></li><li><a href="/articles/rag-chunking-strategies-measured/">Stop guessing your chunk size: fixed, recursive, and semantic chunking, measured on real retrieval</a></li><li><a href="/articles/docling-pdf-markdown-rag-tutorial/">From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
