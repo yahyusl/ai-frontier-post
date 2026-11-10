@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Magpie vs LiteLLM: pick the right gateway for your coding agents — AI Frontier Post</title>
+<meta name="description" content="Magpie (33,828 stars) and LiteLLM (63,054 stars) both put one gateway between your coding agents and every model — but they solve different problems. We installed both, routed Claude Code through each, and compared setup, subscriptions, failover, and cost tracking.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/magpie-vs-litellm-coding-agent-gateway/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Magpie vs LiteLLM: pick the right gateway for your coding agents">
+<meta property="og:description" content="Magpie (33,828 stars) and LiteLLM (63,054 stars) both put one gateway between your coding agents and every model — but they solve different problems. We installed both, routed Claude Code through each, and compared setup, subscriptions, failover, and cost tracking.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/magpie-vs-litellm-coding-agent-gateway/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/magpie-vs-litellm-coding-agent-gateway/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-10">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Magpie vs LiteLLM: pick the right gateway for your coding agents", "description": "Magpie (33,828 stars) and LiteLLM (63,054 stars) both put one gateway between your coding agents and every model — but they solve different problems. We installed both, routed Claude Code through each, and compared setup, subscriptions, failover, and cost tracking.", "datePublished": "2026-11-10", "dateModified": "2026-11-10", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/magpie-vs-litellm-coding-agent-gateway/"}, "image": "https://aifrontierpost.com/articles/magpie-vs-litellm-coding-agent-gateway/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Magpie vs LiteLLM: pick the right gateway for your coding agents", "description": "Install Magpie and LiteLLM side by side, route Claude Code through each gateway, and pick the one that matches how you work.", "step": [{"@type": "HowToStep", "name": "Step 1 — Install Magpie and add a provider", "text": "Install Magpie from its install script and add your first provider with a key or a subscription sign-in."}, {"@type": "HowToStep", "name": "Step 2 — Route Claude Code through Magpie", "text": "Point Claude Code at a model it was never sold with, using one Magpie command, and check your remaining quota."}, {"@type": "HowToStep", "name": "Step 3 — Build a failover routing group", "text": "Group two models under one name so Magpie moves Claude Code to the next account when a quota runs dry."}, {"@type": "HowToStep", "name": "Step 4 — Install LiteLLM and write the proxy config", "text": "Install the LiteLLM proxy and write a config.yaml that maps two models behind one endpoint with fallbacks."}, {"@type": "HowToStep", "name": "Step 5 — Start the proxy and point Claude Code at it", "text": "Boot the proxy on port 4000, smoke-test it with curl, and aim Claude Code at it with two environment variables."}, {"@type": "HowToStep", "name": "Step 6 — Compare and pick", "text": "Run the same job through both gateways and keep the one that matches how you actually work."}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Can I run Magpie and LiteLLM at the same time?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Magpie listens on 127.0.0.1:3425 and LiteLLM on port 4000, so they never collide. Point each agent at one gateway and switch by changing the agent’s base URL — or let Magpie manage the agent while LiteLLM serves your apps."}}, {"@type": "Question", "name": "Do I need API keys for both gateways?", "acceptedAnswer": {"@type": "Answer", "text": "Magpie works with a subscription sign-in (Claude, ChatGPT, Copilot, Gemini, or Grok) or a provider API key. LiteLLM has no subscription support: every model in its config needs a provider API key, read from the environment with os.environ/."}}, {"@type": "Question", "name": "Which one should a solo developer pick?", "acceptedAnswer": {"@type": "Answer", "text": "Magpie, if your day is spent inside coding agents and you want your subscriptions to work everywhere. Pick LiteLLM if you need budgets, per-team keys, or spend tracking — or if the gateway serves an app, not just your terminal."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Magpie vs LiteLLM: pick the right gateway for your coding agents</h1>
+<p class="lede">Every coding agent keeps its model in its own file, in its own format, with its own keys. Your Claude Code subscription works in Claude Code and nowhere else; your cheap DeepSeek key works wherever you can paste a base URL. Two open-source gateways promise to end that — Magpie and LiteLLM — and they could hardly be more different. One is an app for your agents; the other is infrastructure for your team.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 10, 2026 · 9 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Magpie and LiteLLM both sit between your coding agents and every model, but Magpie is built for a developer switching models from a menu bar — subscriptions included, failover built in — while LiteLLM is built for apps and teams, with virtual keys, budgets, and spend tracking. Install both in about 20 minutes, route Claude Code through each, and keep the one that matches the job: Magpie for solo agent work, LiteLLM when more than one person or app shares the bill.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> a head-to-head of the two open-source gateways coding-agent users actually install: Magpie, the agent-first gateway, against LiteLLM, the app-first proxy.</li><li><b>Magpie:</b> yetone/magpie, MIT-licensed, created September 23, 2026. 33,828 stars and 3,003 forks as of November 10, 2026; latest release v0.1.3627, published November 10, 2026. Local gateway on 127.0.0.1:3425, 80+ agents supported.</li><li><b>LiteLLM:</b> BerriAI/litellm, open source since July 2023. 63,054 stars and 13,167 forks as of November 10, 2026; latest LTS v1.108.4, released November 9, 2026. Proxy on port 4000, 100+ providers, Python 3.10 or newer.</li><li><b>Verified here:</b> every command and flag was checked against the two projects’ own READMEs and docs, read November 10, 2026. Nothing was run live in our sandbox — both gateways need a provider API key or a subscription sign-in to answer a real request.</li><li><b>The verdict:</b> solo developer living in coding agents → Magpie. Team, app, or shared bill → LiteLLM. Running both at once is fine — they listen on different ports.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/magpie-vs-litellm-coding-agent-gateway/cover.webp" alt="A developer views lines of code on a laptop in a dark editor: the view from inside an agent session routed through a local gateway"></figure>
+<div class="article-body">
+<p>Two gateways, one promise: stop editing config files every time a model changes. Magpie has 33,828 stars after seven weeks. LiteLLM has 63,054 after three years. The star counts say both are wanted. The designs say they are wanted for different jobs.</p>
+<p>The question is not which gateway is better. It is which job you are hiring it for — and this tutorial answers it by installing both and routing the same agent, Claude Code, through each. If you only need the three-way agent comparison, see <a href="/articles/claude-code-vs-codex-vs-gemini-cli-compared/">Claude Code vs Codex vs Gemini CLI</a>.</p>
+<h2>The head-to-head</h2>
+<table>
+<thead><tr><th></th><th>Magpie</th><th>LiteLLM</th></tr></thead>
+<tbody>
+<tr><td><b>Built for</b></td><td>Coding agents on your machine</td><td>Apps and teams calling models</td></tr>
+<tr><td><b>Install</b></td><td><code>curl -fsSL https://usemagpie.ai/install.sh | sh</code></td><td><code>uv tool install 'litellm[proxy]'</code></td></tr>
+<tr><td><b>Gateway</b></td><td>127.0.0.1:3425; speaks OpenAI, Anthropic, Gemini</td><td>0.0.0.0:4000; OpenAI-compatible</td></tr>
+<tr><td><b>Subscriptions as providers</b></td><td>Yes — Claude, ChatGPT, Copilot, Gemini, Grok sign-ins</td><td>No — one API key per provider</td></tr>
+<tr><td><b>Failover</b></td><td>Routing groups: smart, order, rotate, usage, pace</td><td>Config fallbacks, retries, cooldowns</td></tr>
+<tr><td><b>Cost tracking</b></td><td><code>magpie quota</code> plus in-app usage view</td><td>Spend tracking, virtual keys, budgets, admin UI</td></tr>
+<tr><td><b>License and age</b></td><td>MIT; launched September 23, 2026</td><td>Open source; running since July 2023</td></tr>
+<tr><td><b>Stars, November 10, 2026</b></td><td>33,828</td><td>63,054</td></tr>
+</tbody>
+</table>
+<p>Read the table as a personality test. Magpie assumes you are one person with several agents and several accounts. LiteLLM assumes you are a system with several callers and one bill. Both assumptions are correct — for different readers.</p>
+<h2>What you&rsquo;ll need</h2>
+<ul>
+<li><b>Claude Code</b> (or any agent that takes a base URL) — the guinea pig for both gateways.</li>
+<li><b>A provider API key</b> (DeepSeek, OpenAI, Anthropic, or similar) <b>or</b> a Claude or ChatGPT subscription sign-in — Magpie accepts either; LiteLLM needs keys.</li>
+<li><b>Python 3.10 or newer</b> for LiteLLM; macOS, Windows, or Linux for Magpie. No GPU anywhere — both gateways only route requests.</li>
+<li><b>About 20 minutes.</b> Nothing here is deployed anywhere; both gateways run on localhost.</li>
+</ul>
+<h2>Step 1 &mdash; Install Magpie and add a provider</h2>
+<p>Magpie is a Go binary with a menu-bar app, a terminal UI, and a CLI; the installer picks the right one for your machine. On a desktop it installs the app; with no desktop it installs the terminal build and tells you which package to add.</p>
+<pre><code>curl -fsSL https://usemagpie.ai/install.sh | sh
+</code></pre>
+<p>Or, if you prefer to see exactly what you are getting: <code>go install github.com/yetone/magpie@latest</code>, or the Docker image linked from the project&rsquo;s README. The installer is the path the project documents first, and it self-updates afterwards.</p>
+<p>Open Magpie and go to <b>Providers &rarr; Add provider</b>. Pick a preset and paste a key — or sign in with a subscription. That second option is the whole pitch: a Claude, ChatGPT, Copilot, Gemini, or Grok plan you already pay for becomes a provider every other agent can use. Magpie finds the subscriptions your agents are signed in to by reading their sign-in files; turn that off in <b>Settings &rarr; Privacy &rarr; Subscription accounts</b> if you would rather it did not.</p>
+<h2>Step 2 &mdash; Route Claude Code through Magpie</h2>
+<p>One command moves Claude Code onto a model it was never sold with. The README&rsquo;s own example runs Claude Code on DeepSeek — the same trick our <a href="/articles/magpie-one-gateway-every-coding-agent-tutorial/">hands-on Magpie tutorial</a> uses to run Claude Code on Kimi:</p>
+<pre><code>magpie provider add deepseek sk-...              # a preset needs only the key
+magpie claude deepseek/deepseek-v4-pro          # Claude Code on DeepSeek
+magpie codex moonshot/kimi-k2.5                 # Codex on Kimi
+</code></pre>
+<p>Magpie rewrites the one key that matters in the agent&rsquo;s own config, atomically, keeping its comments and formatting. Start a new session and the agent is on the new model. Check what is left on every plan:</p>
+<pre><code>magpie quota                                    # what's left on every plan
+</code></pre>
+<p>Anything else that takes a base URL can use the gateway too — the README documents the exports for a generic agent:</p>
+<pre><code>export OPENAI_BASE_URL=http://127.0.0.1:3425/v1
+export ANTHROPIC_BASE_URL=http://127.0.0.1:3425
+</code></pre>
+<p>That is the test that matters: the gateway on 127.0.0.1:3425 speaks OpenAI Chat, OpenAI Responses, Anthropic Messages, and Gemini, translating between them with streaming, tool calls, and reasoning intact. If your agent talks one of those protocols, Magpie can sit in front of it.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/magpie-vs-litellm-coding-agent-gateway/img2.webp" alt="A laptop showing lines of code in a dark editor: the view from inside an agent session routed through a local gateway"><figcaption>One gateway, every agent: the view from inside a session routed through Magpie&rsquo;s local gateway. Photo: webflow.com</figcaption></figure>
+<h2>Step 3 &mdash; Build a failover routing group</h2>
+<p>A quota running dry at 3&nbsp;pm is the moment a gateway earns its keep. Magpie&rsquo;s answer is a routing group: several models an agent picks as one, with five modes — <code>smart</code>, <code>order</code>, <code>rotate</code>, <code>usage</code>, and <code>pace</code>. Smart mode uses the subscription with quota left that renews soonest, so less is wasted at the reset.</p>
+<pre><code>magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=smart
+magpie claude group/opus-anywhere               # fails over between subscriptions
+</code></pre>
+<p>With one account and no group there is nothing to move to, and the error reaches the agent — the README says so plainly. The group is the feature; a single provider is just a redirect. Profiles save every agent&rsquo;s setup under one name (<code>magpie save work &amp;&amp; magpie use work</code>), so a &ldquo;budget&rdquo; afternoon is one command away from a &ldquo;focus&rdquo; one.</p>
+<h2>Step 4 &mdash; Install LiteLLM and write the proxy config</h2>
+<p>LiteLLM is the older, heavier answer. It is a Python proxy with a Rust core, and its install is one <code>uv</code> command — the same proxy our <a href="/articles/litellm-gateway-tutorial/">LiteLLM gateway tutorial</a> stands up for apps:</p>
+<pre><code>uv tool install 'litellm[proxy]'
+</code></pre>
+<p>Where Magpie configures itself through an app, LiteLLM configures itself through a file. Write <code>config.yaml</code> with two models behind one endpoint, a fallback between them, and a master key read from the environment:</p>
+<pre><code>model_list:
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: claude-sonnet-4
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+router_settings:
+  fallbacks:
+    - gpt-4o: ["claude-sonnet-4"]
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+</code></pre>
+<p>Two entries with the same <code>model_name</code> become one load-balanced group; <code>fallbacks</code> moves a request to the next group once retries are exhausted. The model IDs above are the ones LiteLLM&rsquo;s own README uses in its examples. No key lives in the file — <code>os.environ/</code> reads each one from the environment, which is the difference between a config you can commit and one you cannot.</p>
+<h2>Step 5 &mdash; Start the proxy and point Claude Code at it</h2>
+<pre><code>export OPENAI_API_KEY="..."
+export ANTHROPIC_API_KEY="..."
+export LITELLM_MASTER_KEY="..."
+litellm --config config.yaml
+</code></pre>
+<p>The proxy listens on port 4000. Smoke-test it the way LiteLLM&rsquo;s README tests its own gateway — a plain <code>curl</code> at the OpenAI-compatible endpoint:</p>
+<pre><code>curl http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "What is 2+2?"}]}'
+</code></pre>
+<p>Now aim Claude Code at the proxy instead of at Anthropic. The pattern is the same base-URL trick Magpie documents, pointed at port 4000:</p>
+<pre><code>export ANTHROPIC_BASE_URL=http://localhost:4000
+export ANTHROPIC_API_KEY=$LITELLM_MASTER_KEY
+</code></pre>
+<p>One detail to get right: LiteLLM matches requests on <code>model_name</code>, so the config needs an entry whose name matches the model your agent asks for. If Claude Code asks for a name your config does not have, the proxy answers with an error instead of a model — add the entry and restart. The proxy also serves the Anthropic Messages endpoint (<code>/v1/messages</code>), so agents speaking Anthropic&rsquo;s protocol do not need translation tricks.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/magpie-vs-litellm-coding-agent-gateway/img3.webp" alt="Rows of server racks with dense cabling: the proxy as infrastructure, not an app"><figcaption>The proxy as infrastructure: LiteLLM is a server you run, with keys, budgets, and logs to match. Photo: computerfritz.ch</figcaption></figure>
+<h2>Step 6 &mdash; Compare and pick</h2>
+<p>Run the same job through both gateways — a small refactor, a test run, a quota check — and watch what you actually touch. With Magpie you touch a menu bar and a <code>magpie</code> command; the gateway is invisible until a quota dies, and then it quietly moves on. With LiteLLM you touch a YAML file and a dashboard; the gateway is visible all the time, and that visibility is the product.</p>
+<p><b>Pick Magpie</b> if your day is spent inside coding agents, you hold more than one subscription, and the pain is &ldquo;my plan works in one agent and nowhere else.&rdquo; It is the only contender here that treats a sign-in as a provider.</p>
+<p><b>Pick LiteLLM</b> if the gateway serves an app or a team, if anyone needs a budget or a per-team key, or if spend tracking is a requirement rather than a curiosity. Three years of production use and 63,054 stars buy a kind of boring reliability a seven-week-old project cannot claim yet.</p>
+<p><b>Run both</b> if the split is real: Magpie for your agents, LiteLLM for your apps. They listen on different ports, they never see each other, and each one is free to run locally. What you built is not a winner — it is a routing layer you control, with the model choice moved out of a dozen config files and into one place you can see.</p>
+<h2>The catch</h2>
+<p>Magpie is seven weeks old and it shows in the release cadence: v0.1.3625, v0.1.3626, and v0.1.3627 all shipped on November 10, 2026. That pace means bugs get fixed fast and behaviour can change under you; pin a version if you automate around it. Its subscription discovery reads your agents&rsquo; sign-in files, and its privacy masking — which swaps secrets for placeholders before a request leaves your machine — is off by default, so turn it on in <b>Settings &rarr; Privacy</b> before you route anything sensitive.</p>
+<p>LiteLLM&rsquo;s catch is the opposite: it never pretends a subscription is a key. Every model needs a provider API key, every behaviour lives in a YAML file, and the full feature set — Postgres, Redis, the admin UI — is a small piece of infrastructure to own, not an app to install. And neither gateway makes the models free: the bill still arrives from the provider, or from the subscription you already pay for. A gateway routes spend; it does not remove it.</p>
+<div class="afp-take" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>AFP take:</b> The interesting fight here is not Magpie versus LiteLLM — it is who owns the model subscription. Magpie turns a Claude or ChatGPT plan into a universal key, which is exactly what solo developers want and exactly what vendors may eventually police. LiteLLM stays safely on the API-key side of that line, which is why teams trust it. Both are free and local, so try the pair for an afternoon; the lock-in has moved from the agent to the gateway, and that is the dependency worth watching.</div>
+</div>
+</article>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Can I run Magpie and LiteLLM at the same time?</h3><p>Yes. Magpie listens on 127.0.0.1:3425 and LiteLLM on port 4000, so they never collide. Point each agent at one gateway and switch by changing the agent’s base URL — or let Magpie manage the agent while LiteLLM serves your apps.</p><h3>Do I need API keys for both gateways?</h3><p>Magpie works with a subscription sign-in (Claude, ChatGPT, Copilot, Gemini, or Grok) or a provider API key. LiteLLM has no subscription support: every model in its config needs a provider API key, read from the environment with os.environ/.</p><h3>Which one should a solo developer pick?</h3><p>Magpie, if your day is spent inside coding agents and you want your subscriptions to work everywhere. Pick LiteLLM if you need budgets, per-team keys, or spend tracking — or if the gateway serves an app, not just your terminal.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/magpie-route-every-agent-model-tutorial/">Route every AI coding agent to any model from one menu bar: hands-on with magpie</a></li><li><a href="/articles/magpie-one-gateway-every-coding-agent-tutorial/">Run Claude Code on DeepSeek: route every coding agent through one local gateway</a></li><li><a href="/articles/litellm-gateway-tutorial/">One API for every LLM: run LiteLLM as your AI gateway</a></li><li><a href="/articles/t3-code-phone-remote-coding-agents-tutorial/">T3 Code: drive Claude Code, Codex and Cursor from your phone</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
