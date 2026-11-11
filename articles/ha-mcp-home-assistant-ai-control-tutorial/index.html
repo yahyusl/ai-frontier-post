@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Control your smart home with Claude: hands-on with ha-mcp, the 87-tool Home Assistant MCP server — AI Frontier Post</title>
+<meta name="description" content="Home Assistant's community MCP server ha-mcp jumped to #7 on GitHub trending with 6,603 stars. Install it, point Claude at the public demo server, ask about your home in plain language, and build your first automation — every step verified against the live server.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/ha-mcp-home-assistant-ai-control-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Control your smart home with Claude: hands-on with ha-mcp, the 87-tool Home Assistant MCP server">
+<meta property="og:description" content="Home Assistant's community MCP server ha-mcp jumped to #7 on GitHub trending with 6,603 stars. Install it, point Claude at the public demo server, ask about your home in plain language, and build your first automation — every step verified against the live server.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/ha-mcp-home-assistant-ai-control-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/ha-mcp-home-assistant-ai-control-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-10">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Control your smart home with Claude: hands-on with ha-mcp, the 87-tool Home Assistant MCP server", "description": "Home Assistant's community MCP server ha-mcp jumped to #7 on GitHub trending with 6,603 stars. Install it, point Claude at the public demo server, ask about your home in plain language, and build your first automation — every step verified against the live server.", "datePublished": "2026-11-10", "dateModified": "2026-11-10", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/ha-mcp-home-assistant-ai-control-tutorial/"}, "image": "https://aifrontierpost.com/articles/ha-mcp-home-assistant-ai-control-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a Home Assistant to try ha-mcp?", "acceptedAnswer": {"@type": "Answer", "text": "No. The project's public demo server at ha-mcp-demo-server.qc-h.net (token demo) runs the whole tutorial \u2014 install, smoke test, search, state, overview, services, and the notification write. You only need your own Home Assistant when you want Claude to control your house."}}, {"@type": "Question", "name": "Why does the README say 87 tools but the server lists 77?", "acceptedAnswer": {"@type": "Answer", "text": "The beta tools and the ones that need the ha-mcp custom component on the Home Assistant side are not exposed over a plain stdio connection to the demo. Seventy-seven is the count you will see over stdio; install the component on your own instance for the full set."}}, {"@type": "Question", "name": "Is the demo token a secret?", "acceptedAnswer": {"@type": "Answer", "text": "No. demo is the project's published demo credential, and the demo web UI login is mcp / mcp. The demo resets weekly. Never use the demo token for your own instance \u2014 create a long-lived access token in Home Assistant instead."}}, {"@type": "Question", "name": "What is the best-practices acknowledgment key?", "acceptedAnswer": {"@type": "Answer", "text": "A read-receipt, not a credential. ha_get_skill_guide returns the home-assistant-best-practices skill with the key at the top; it rotates hourly and proves the assistant read the guide. Gated write tools require it as the BestPracticeKey argument. Fetch a fresh one before each write session."}}, {"@type": "Question", "name": "Can I use ha-mcp with ChatGPT, Cursor, or VS Code?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Any MCP client can connect; the Setup Wizard covers 15-plus clients including Claude Desktop, Claude Code, ChatGPT, Gemini CLI, Cursor, and VS Code. The commands in this tutorial use Claude, but the server itself is client-agnostic."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Control your smart home with Claude: hands-on with ha-mcp, the 87-tool Home Assistant MCP server</h1>
+<p class="lede">Home Assistant's community MCP server ha-mcp jumped to #7 on GitHub trending with 6,603 stars. Install it, point Claude at the public demo server, ask about your home in plain language, and build your first automation — every step verified against the live server.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 10, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> ha-mcp is the community MCP server for Home Assistant: 87 tools that let Claude read, control, and build automations in your home in plain language. This tutorial installs ha-mcp 9.1.2, smoke-tests it against the project's public demo server, asks Claude about the demo house, reads back a real sunset automation, and builds one — with the exact outputs, and an honest note on where the shared demo is slow.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>6,603 stars, +792 on November 10:</b> ha-mcp reached #7 on GitHub's daily trending list. The repo was created September 14, 2025, has 3,467 commits, and is MIT-licensed.</li><li><b>Install:</b> <code>uvx --python 3.13 ha-mcp@latest --version</code> reports ha-mcp 9.1.2. The one-command installer wires Claude Desktop or Claude Code for you.</li><li><b>Demo server:</b> ha-mcp-demo-server.qc-h.net with token <code>demo</code> — Home Assistant v2026.6.4, 46 entities, 15 domains, 28 sensors. No hardware needed to try it.</li><li><b>First question:</b> <code>ha_search("light")</code> finds <code>automation.porch_light_at_sunset</code> — "Porch light at sunset", state on, score 80 — but returns <code>partial: true</code> on the slow demo.</li><li><b>The write gate:</b> <code>ha_get_skill_guide</code> returns a rotating acknowledgment key; pass it as <code>BestPracticeKey</code> on gated write tools.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/ha-mcp-home-assistant-ai-control-tutorial/cover.webp" alt="A living room at dusk: a laptop shows a chat window while glowing lines link it to the smart devices around the room"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Home Assistant is the open-source smart-home hub that runs in millions of homes, and for years the way to talk to it was a dashboard or a YAML file. ha-mcp changes that: it is a Model Context Protocol server that hands an AI assistant 87 tools for reading, controlling, and building automations in Home Assistant — in plain language. On November 10 it reached number 7 on GitHub's daily trending list with 6,603 stars, gaining 792 in a single day. The reason is simple: it turns "turn the porch light on at sunset" from a configuration task into a sentence.</p>
+<p>This tutorial does the whole thing for real. You will install ha-mcp, connect the project's own public demo server — no Home Assistant hardware needed — ask Claude about the demo house, read back a real automation, and build one of your own. Every command and output below was verified live against ha-mcp 9.1.2 and the demo server, and where the demo is slow or limited, that is stated rather than smoothed over.</p>
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.13.</strong> The steps below were verified with Python 3.13. PyPI requires Python 3.13 or newer (and older than 3.15) for ha-mcp.</li>
+<li><strong>uv, the Python package manager.</strong> It installs ha-mcp and runs it without a virtual environment. No other dependencies.</li>
+<li><strong>A free claude.ai account</strong> for Claude Desktop, or a paid Claude plan for Claude Code. Either works; the installer covers both.</li>
+<li><strong>No Home Assistant hardware.</strong> Steps 1–3 and 5 run against the project's public demo server. Step 4 is for pointing the server at your own Home Assistant when you are ready.</li>
+<li><strong>About 20 minutes.</strong> The installs take a couple of minutes; the demo server does the rest.</li></ul>
+<h2 id="step-1-install-ha-mcp">Step 1: Install ha-mcp<a class="anchor" href="#step-1-install-ha-mcp" aria-label="Link to section">#</a></h2>
+<p>ha-mcp is distributed on PyPI, so the install is one command once uv is present. Install uv from Astral's installer, then ask it for ha-mcp's version:</p>
+<pre><code class="language-bash">curl -LsSf https://astral.sh/uv/install.sh | sh
+uvx --python 3.13 ha-mcp@latest --version</code></pre>
+<pre><code class="language-text">ha-mcp 9.1.2</code></pre>
+<p>That version number is the one this tutorial was verified against. <code>uvx</code> downloads the package into its cache and runs it — no virtual environment, no <code>pip install</code>, no leftover files in your working directory. If the download stalls (it did twice during verification, with transient PyPI timeouts), retry with fewer parallel downloads: <code>UV_CONCURRENT_DOWNLOADS=2 uvx --python 3.13 ha-mcp@latest --version</code>.</p>
+<p>The project also ships a one-command installer that wires ha-mcp into your AI client for you. For Claude Desktop (the default) it edits the client's MCP configuration; for Claude Code it registers the server at user scope:</p>
+<pre><code class="language-bash"># Claude Desktop (default)
+curl -LsSf https://raw.githubusercontent.com/homeassistant-ai/ha-mcp/master/scripts/install.sh | sh
+
+# Claude Code (requires a paid Claude plan)
+curl -LsSf https://raw.githubusercontent.com/homeassistant-ai/ha-mcp/master/scripts/install.sh | sh -s -- --claude-code</code></pre>
+<p>What the installer writes, for Claude Desktop, is an MCP server entry that runs ha-mcp over stdio with the demo server's address and token as environment variables:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "Home Assistant": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "--refresh", "ha-mcp@latest"],
+      "env": {
+        "HOMEASSISTANT_URL": "https://ha-mcp-demo-server.qc-h.net",
+        "HOMEASSISTANT_TOKEN": "demo"
+      }
+    }
+  }
+}</code></pre>
+<p>For Claude Code the equivalent command is the one the installer runs for you:</p>
+<pre><code class="language-bash">claude mcp add home-assistant --scope user \
+  --env HOMEASSISTANT_URL=https://ha-mcp-demo-server.qc-h.net \
+  --env HOMEASSISTANT_TOKEN=demo \
+  -- uvx --python 3.13 --refresh ha-mcp@latest</code></pre>
+<p>The installer defaults to the public demo server, so it works out of the box. To point it at your own Home Assistant later, replace <code>HOMEASSISTANT_URL</code> with your instance's URL and <code>HOMEASSISTANT_TOKEN</code> with a long-lived access token (Step 4). Restart Claude Desktop after the installer runs — it only reads MCP configuration at startup.</p>
+<h2 id="step-2-smoke-test-against-the-public-demo-server">Step 2: Smoke-test against the public demo server<a class="anchor" href="#step-2-smoke-test-against-the-public-demo-server" aria-label="Link to section">#</a></h2>
+<p>The project's FAQ publishes its own smoke test: run ha-mcp directly against the demo server with the demo token. The server is a real Home Assistant instance the project maintains for exactly this purpose — it resets weekly, and its web UI login is <code>mcp</code> / <code>mcp</code>:</p>
+<pre><code class="language-bash">HOMEASSISTANT_URL=https://ha-mcp-demo-server.qc-h.net HOMEASSISTANT_TOKEN=demo uvx --python 3.13 ha-mcp@latest</code></pre>
+<p>The server starts, connects to the demo instance, and waits for MCP traffic on stdin — it prints no banner and no prompt, which is normal for a stdio MCP server. Press Ctrl-C to stop it. The important check is what it exposes: ask it for its tool list and it answers with 77 tools. The README advertises 87, and the difference is real but expected — the beta tools and the ones that need the ha-mcp custom component installed on the Home Assistant side are not available over a plain stdio connection to the demo. Seventy-seven is the number you will see, and it covers everything in this tutorial.</p>
+<p>One thing to know before you go further: the demo is a small shared instance, and it is slow. Its configuration reads arrive serially, so searches can come back marked <code>partial: true</code> with a warning that some automations were not scanned. Writes are dispatched and then confirmed slowly. None of that is a bug in ha-mcp — on your own Home Assistant, on your own network, the same calls return promptly. It is the price of a free public demo, and this tutorial shows you the exact messages so you recognise them.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/ha-mcp-home-assistant-ai-control-tutorial/img2.webp" alt="Diagram: AI clients such as Claude Desktop and Claude Code talk MCP to ha-mcp 9.1.2, which talks REST and WebSocket to Home Assistant, which controls automations, scripts, scenes, dashboards and helpers in your home"><figcaption>How ha-mcp connects your AI assistant to Home Assistant. You talk to Claude in plain language; ha-mcp translates each request into Home Assistant API calls — and the demo server lets you try it with no hardware.</figcaption></figure>
+<h2 id="step-3-ask-claude-about-your-home">Step 3: Ask Claude about your home<a class="anchor" href="#step-3-ask-claude-about-your-home" aria-label="Link to section">#</a></h2>
+<p>With the server registered, the first question to ask Claude is the one that proves the whole chain works: <em>"What automations do I have for lights?"</em> Under the hood Claude calls <code>ha_search</code>, and the demo answers with the one light-related automation in the house. This is the reply, exactly as the demo returned it:</p>
+<pre><code class="language-json">{
+  "success": true,
+  "query": "light",
+  "entities": [
+    {
+      "entity_id": "automation.porch_light_at_sunset",
+      "friendly_name": "Porch light at sunset",
+      "domain": "automation",
+      "state": "on",
+      "score": 80,
+      "match_type": "exact_match"
+    }
+  ],
+  "entity_total_matches": 1,
+  "partial": true
+}</code></pre>
+<p>Read the reply carefully, because it teaches you how ha-mcp reports. <code>entity_total_matches: 1</code> says one thing matched. <code>partial: true</code> says the scan did not finish — the demo serves configuration reads serially and two automations timed out during the scan, so the result is not exhaustive. On your own instance the same query returns complete results. The match itself is exact: <code>automation.porch_light_at_sunset</code>, "Porch light at sunset", state <code>on</code>.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/ha-mcp-home-assistant-ai-control-tutorial/img3.webp" alt="The real JSON reply from ha_search for light on the demo server: one match, automation.porch_light_at_sunset, Porch light at sunset, state on, score 80, partial true"><figcaption>The real <code>ha_search</code> reply from the demo server. The demo house already has an automation called "Porch light at sunset" (state: on). Note <code>partial: true</code> — the shared demo answers configuration reads slowly, so results can be incomplete.</figcaption></figure>
+<p>Ask for the state of that automation and you get the full picture — <code>ha_get_state</code> returns its mode, its trigger count, and when it last changed:</p>
+<pre><code class="language-json">{
+  "data": {
+    "entity_id": "automation.porch_light_at_sunset",
+    "state": "on",
+    "attributes": {
+      "id": "1794342336060",
+      "last_triggered": null,
+      "mode": "single",
+      "current": 0,
+      "friendly_name": "Porch light at sunset"
+    },
+    "last_changed": "2026-11-10T20:25:38.585589+00:00"
+  }
+}</code></pre>
+<p>It has never triggered (<code>last_triggered: null</code>), it runs in <code>single</code> mode, and it is on. Now ask for the overview — <code>ha_get_overview</code> — and the demo house comes into focus: Home Assistant v2026.6.4, 46 entities, 15 domains, 0 areas, 28 sensors. The 15 domains are automation, conversation, device_tracker, event, image_processing, input_boolean, input_number, notify, person, sensor, sun, todo, tts, weather, and zone. Note what is missing: there is no <code>light</code> domain and no light entities in the demo. The porch-light automation exists, but the demo house has no physical lights for it to switch — which is why the verifiable write in Step 5 uses a notification instead of a bulb.</p>
+<p>Finally, <code>ha_list_services</code> returns the service catalog: 65 service domains on the demo, from <code>automation</code> and <code>light</code> to <code>persistent_notification</code> and <code>tts</code>. Every service Claude can call is in that list, which is how it knows that <code>persistent_notification.create</code> exists before it ever tries to use it.</p>
+<h2 id="step-4-point-it-at-your-own-home-assistant">Step 4: Point it at your own Home Assistant<a class="anchor" href="#step-4-point-it-at-your-own-home-assistant" aria-label="Link to section">#</a></h2>
+<p>The demo proves the workflow; your own Home Assistant is where it becomes useful. ha-mcp needs Home Assistant 2026.8.0 or newer, and the full feature set — the extra tools, the configuration editing, the debugging — comes from installing the ha-mcp custom component on your instance. For Home Assistant 2026.8 through 2026.10 that means HACS; for 2026.11 and later it is in the default Marketplace catalog. The component adds an in-process MCP server reachable at <code>http://&lt;ha-ip&gt;:9584/private_&lt;random&gt;</code>, plus a Settings panel in the Home Assistant sidebar.</p>
+<p>Authentication is a long-lived access token: in Home Assistant, open your profile, go to Security, and create one — or create a dedicated admin account for the assistant under Settings, then People. Point ha-mcp at it with the same two environment variables the demo used:</p>
+<pre><code class="language-bash">HOMEASSISTANT_URL=http://192.168.1.100:8123 HOMEASSISTANT_TOKEN=your-long-lived-token uvx --python 3.13 ha-mcp@latest</code></pre>
+<p>For remote access, use your Home Assistant webhook URL instead of the local address. Before you hand Claude the keys, turn on Read Only Mode in the ha-mcp Settings panel: it blocks every write tool, so you can ask questions freely while you learn what the assistant can see. When you are ready to let it change things, switch Read Only off and use the per-tool toggles and tool security policies to decide exactly which tools are available. Every edit ha-mcp makes is backed up automatically, so a bad automation can be rolled back.</p>
+<h2 id="step-5-build-your-first-automation">Step 5: Build your first automation<a class="anchor" href="#step-5-build-your-first-automation" aria-label="Link to section">#</a></h2>
+<p>The end-to-end use case is the one the demo house already contains: turn the porch light on at sunset. Read its configuration back first — <code>ha_config_get_automation</code> returns the whole thing:</p>
+<pre><code class="language-json">{
+  "success": true,
+  "action": "get",
+  "automation_id": "automation.porch_light_at_sunset",
+  "config": {
+    "id": "1794342336060",
+    "alias": "Porch light at sunset",
+    "triggers": [{"platform": "sun", "event": "sunset"}],
+    "actions": [{"action": "light.turn_on"}]
+  },
+  "config_hash": "3aba411ee9533041"
+}</code></pre>
+<p>That is the complete automation: a sun trigger at sunset, one action, no target entity — which is why it can exist in a demo house with no lights. Now build your own. Ask Claude: <em>"Create an automation called Morning Lights that turns on the bedroom light at 07:00."</em> Under the hood it calls <code>ha_config_set_automation</code>, and there is one gate to pass first. ha-mcp runs in strict best-practices mode, so write tools require an acknowledgment key from the best-practices guide. Fetch it with <code>ha_get_skill_guide</code> — the guide opens with the key, in the form <code>I-HAVE-READ-THE-BEST-PRACTICES-GUIDE-&lt;hex&gt;</code>, and it rotates hourly. It is a read-receipt, not a secret: it proves the assistant read the guide, and it grants no privileges on its own. Pass it as the <code>BestPracticeKey</code> argument. The call itself, in the form the tool documents, is:</p>
+<pre><code class="language-json">{
+  "config": {
+    "alias": "Morning Lights",
+    "triggers": [{"trigger": "time", "at": "07:00:00"}],
+    "actions": [{"action": "light.turn_on", "target": {"area_id": "bedroom"}}]
+  },
+  "BestPracticeKey": "I-HAVE-READ-THE-BEST-PRACTICES-GUIDE-&lt;key-from-ha_get_skill_guide&gt;"
+}</code></pre>
+<p>Omit the <code>id</code> and ha-mcp generates one; set <code>enabled</code> to false to create it disabled, or <code>run_actions</code> to true to run it immediately. For the sunset version, swap the trigger for <code>{"platform": "sun", "event": "sunset"}</code> — exactly the trigger the demo's own automation uses. And on the demo, use an action that works there: the demo has no lights, so a notification is the verifiable write. <code>ha_call_service</code> with domain <code>persistent_notification</code>, service <code>create</code>, and a title and message dispatches it — the demo answered <code>success: true</code> with the note that the service "was dispatched but Home Assistant did not respond within the timeout period", which is the demo being slow, not the call failing.</p>
+<p>Verify the automation landed by reading it back with <code>ha_config_get_automation</code>, and remove it the same way you made it — <code>ha_config_remove_automation</code> takes the entity id, and waits for the automation to disappear before returning. Two honest notes from verification: on the demo, automation creates can time out outright (<code>CONNECTION_TIMEOUT</code>) because the demo's WebSocket path is slow and its configuration reads are serial — raising the per-request timeout with <code>HA_TIMEOUT=120</code> (default 30, up to 600) or passing <code>wait: false</code> so the call returns as soon as Home Assistant accepts the config both help. On your own instance, on your own network, the same calls complete normally.</p>
+<h2 id="ha-mcp-vs-home-assistants-built-in-mcp-server">ha-mcp vs Home Assistant's built-in MCP server<a class="anchor" href="#ha-mcp-vs-home-assistants-built-in-mcp-server" aria-label="Link to section">#</a></h2>
+<p>Home Assistant ships its own MCP server, so the obvious question is why install a community one. The README answers it directly, and the difference is scope: the built-in server is a window into the Assist pipeline — it exposes the entities you choose and answers questions about them. ha-mcp is the whole house.</p>
+<div class="table-wrap"><table><thead><tr><th>Capability</th><th>Built-in MCP server</th><th>ha-mcp</th></tr></thead><tbody><tr><td><strong>Read state and call services</strong></td><td>Yes, for exposed entities</td><td>Yes, across all 65 service domains</td></tr><tr><td><strong>Automations, scripts, scenes</strong></td><td>No</td><td>Yes — read, create, edit, and remove</td></tr><tr><td><strong>Dashboards and helpers</strong></td><td>No</td><td>Yes</td></tr><tr><td><strong>Configuration and debugging</strong></td><td>No</td><td>Yes, with validation and automatic edit backups</td></tr><tr><td><strong>Agent skills</strong></td><td>No</td><td>Yes — best-practices skill served over <code>skill://</code> URIs, mandatory for write tools</td></tr><tr><td><strong>Safety controls</strong></td><td>Entity exposure only</td><td>Read Only Mode, per-tool toggles, tool security policies</td></tr></tbody></table></div>
+<p>Use the built-in server when you want the smallest possible surface: voice-assistant-style questions about exposed entities, nothing else. Use ha-mcp when you want the assistant to build and maintain the house — automations, scenes, helpers, and the debugging that goes with them. The trade-off is the one this tutorial has shown you: ha-mcp is a bigger tool with more to configure, and its stdio transport has known issues (tracked as issue #1713), so stdio is the right choice for the demo and for testing, while the custom component or the HTTP transport is the right choice for daily use.</p>
+<h2 id="troubleshooting">Troubleshooting: what to do when it misbehaves<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<p>Three messages account for almost everything you will see. <strong>"BPS_ACKNOWLEDGMENT_REQUIRED"</strong> means a write tool was called without the best-practices key — call <code>ha_get_skill_guide</code>, take the key from the top of the guide, and pass it as <code>BestPracticeKey</code>. <strong>"CONNECTION_TIMEOUT" on a create</strong> means Home Assistant did not answer within the per-request timeout — raise it with <code>HA_TIMEOUT</code> (default 30 seconds, up to 600) or pass <code>wait: false</code>. <strong>Partial search results</strong> with a warning about automations not scanned means the instance serves configuration reads serially — lower <code>HAMCP_INDIVIDUAL_FETCH_BATCH_SIZE</code> or raise <code>HAMCP_INDIVIDUAL_CONFIG_TIMEOUT</code>, or simply retry; the demo in particular is slow under load. If <code>uvx</code> fails to download, set <code>UV_CONCURRENT_DOWNLOADS=2</code> and try again.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>ha-mcp earns its trending spot because it closes the gap between having a smart home and being able to talk about it. The install is one command, the demo server lets you try the whole workflow without buying or configuring anything, and the read path — search, state, overview, services — works exactly as documented. The write path is where the care is: a best-practices key that proves the assistant read the guide, automatic backups on every edit, and a Read Only Mode for when you want questions without consequences. Start on the demo, ask it about the porch-light automation, build a notification, and when the workflow feels right, point the same two environment variables at your own Home Assistant and let Claude run the house.</p>
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/homeassistant-ai/ha-mcp" rel="nofollow">homeassistant-ai/ha-mcp — GitHub repository (README, install, comparison with the built-in MCP server, agent skills)</a></li><li><a href="https://homeassistant-ai.github.io/ha-mcp/faq/" rel="nofollow">ha-mcp FAQ — public demo server, smoke test, setup wizard</a></li><li><a href="https://homeassistant-ai.github.io/ha-mcp/" rel="nofollow">ha-mcp documentation</a></li><li><a href="https://raw.githubusercontent.com/homeassistant-ai/ha-mcp/master/scripts/install.sh" rel="nofollow">ha-mcp install script — Claude Desktop and Claude Code setup</a></li><li><a href="https://github.com/trending?since=daily" rel="nofollow">GitHub Trending — daily (ha-mcp ranked 7th, November 10, 2026)</a></li></ul></section></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="ha-mcp-home-assistant-ai-control-tutorial"></div><div class="comments" data-comments="ha-mcp-home-assistant-ai-control-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/chatgpt-custom-mcp-server-tutorial/"><span class="chip">Tutorials</span><h3>Give ChatGPT your own tools: connect a custom MCP server</h3><div class="meta">November 9, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/anthropic-official-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Anthropic's official Agent Skills: Word, Excel, PowerPoint and PDF, done by Claude Code</h3><div class="meta">November 9, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/fastmcp-python-mcp-server-tutorial/"><span class="chip">Tutorials</span><h3>Build a real MCP server in Python: the complete FastMCP guide</h3><div class="meta">October 27, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/typescript-mcp-server-tutorial/"><span class="chip">Tutorials</span><h3>Build an MCP server in TypeScript: your own tools, wired into Claude Code</h3><div class="meta">November 7, 2026 · 17 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a Home Assistant to try ha-mcp?</h3><p>No. The project's public demo server at ha-mcp-demo-server.qc-h.net (token demo) runs the whole tutorial — install, smoke test, search, state, overview, services, and the notification write. You only need your own Home Assistant when you want Claude to control your house.</p><h3>Why does the README say 87 tools but the server lists 77?</h3><p>The beta tools and the ones that need the ha-mcp custom component on the Home Assistant side are not exposed over a plain stdio connection to the demo. Seventy-seven is the count you will see over stdio; install the component on your own instance for the full set.</p><h3>Is the demo token a secret?</h3><p>No. demo is the project's published demo credential, and the demo web UI login is mcp / mcp. The demo resets weekly. Never use the demo token for your own instance — create a long-lived access token in Home Assistant instead.</p><h3>What is the best-practices acknowledgment key?</h3><p>A read-receipt, not a credential. ha_get_skill_guide returns the home-assistant-best-practices skill with the key at the top; it rotates hourly and proves the assistant read the guide. Gated write tools require it as the BestPracticeKey argument. Fetch a fresh one before each write session.</p><h3>Can I use ha-mcp with ChatGPT, Cursor, or VS Code?</h3><p>Yes. Any MCP client can connect; the Setup Wizard covers 15-plus clients including Claude Desktop, Claude Code, ChatGPT, Gemini CLI, Cursor, and VS Code. The commands in this tutorial use Claude, but the server itself is client-agnostic.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/kensaku-local-file-search-ocr-mcp-tutorial/">Find the file you only half-remember: hands-on with Kensaku, local search with OCR and MCP</a></li><li><a href="/articles/claude-code-vs-codex-vs-gemini-cli-compared/">Claude Code vs Codex vs Gemini CLI: which terminal coding agent to run in November 2026</a></li><li><a href="/articles/pi-remote-control-pi-coding-agent-phone-tutorial/">Pi-Remote: drive your pi coding agent from your phone</a></li><li><a href="/articles/magpie-vs-litellm-coding-agent-gateway/">Magpie vs LiteLLM: pick the right gateway for your coding agents</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
