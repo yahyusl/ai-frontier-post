@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode — AI Frontier Post</title>
+<meta name="description" content="Anthropic&#x27;s flagship is 20% cheaper and 30% faster than Fable 5.1 — but the API has four new ways to return a 400. This tutorial builds a working agent loop on the Messages API, verifies every call against SDK 2.8.0, and prices each run to the cent.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/claude-fable-5-2-api-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode">
+<meta property="og:description" content="Anthropic&#x27;s flagship is 20% cheaper and 30% faster than Fable 5.1 — but the API has four new ways to return a 400. This tutorial builds a working agent loop on the Messages API, verifies every call against SDK 2.8.0, and prices each run to the cent.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/claude-fable-5-2-api-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/claude-fable-5-2-api-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-12">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode", "description": "Anthropic's flagship is 20% cheaper and 30% faster than Fable 5.1 — but the API has four new ways to return a 400. This tutorial builds a working agent loop on the Messages API, verifies every call against SDK 2.8.0, and prices each run to the cent.", "datePublished": "2026-11-12", "dateModified": "2026-11-12", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/claude-fable-5-2-api-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/claude-fable-5-2-api-hands-on-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode", "description": "Call Claude Fable 5.2 from the Messages API: install the SDK, run a first request, build an append-only agent loop, cache the context, set effort, and use fast mode.", "step": [{"@type": "HowToStep", "name": "Step 1 — Install and verify", "text": "Create a virtual environment and install the anthropic package (version 2.8.0 at time of writing). Confirm the model ID with client.models.retrieve."}, {"@type": "HowToStep", "name": "Step 2 — Your first Fable 5.2 call", "text": "Send a Messages API request with model claude-fable-5-2, max_tokens, and output_config effort high. Read text blocks only — the first block is usually a thinking block."}, {"@type": "HowToStep", "name": "Step 3 — Build the agent loop Fable 5.2 accepts", "text": "Run an append-only loop: send each assistant turn back exactly as returned, keep tool_choice on auto, and append tool results as new turns."}, {"@type": "HowToStep", "name": "Step 4 — Prompt caching for the 1M-token context", "text": "Mark the stable prefix with cache_control ephemeral, optionally ttl 1h, and read cache hits off the usage object."}, {"@type": "HowToStep", "name": "Step 5 — Effort is the cost dial", "text": "Set output_config.effort explicitly. Start at high, step up to xhigh only where measured, reserve max for the ceiling."}, {"@type": "HowToStep", "name": "Step 6 — Fast mode", "text": "Set speed fast for up to 2.5x output tokens per second at $16/$80. Not with the Batch API; on Foundry use the claude-fable-5-2-fast deployment."}, {"@type": "HowToStep", "name": "Step 7 — The four 400s", "text": "Avoid forced tool use, temperature/top_p/top_k, disabled thinking, and the retired computer_20251124 tool; never edit an earlier turn."}, {"@type": "HowToStep", "name": "Step 8 — The shortcut: Fable 5.2 in Claude Code", "text": "Update Claude Code to 2.1.321 or later, then /model fable, /effort high, and /fast to toggle fast mode."}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, for the live calls: Fable 5.2 answers only with a key from the Claude Console. The agent loop itself was verified against anthropic SDK 2.8.0 with a mocked transport, so every request shape, parameter, and error path in this tutorial is exactly what the SDK sends — but the model only replies when your key is in the environment."}}, {"@type": "Question", "name": "Why does my existing code return a 400 on Fable 5.2?", "acceptedAnswer": {"@type": "Answer", "text": "Four usual causes: forced tool_choice (any or a named tool), temperature/top_p/top_k, a thinking setting other than adaptive, or the retired computer_20251124 tool. The fifth is the prefix check: any edit to the system prompt, tools, or an earlier message returns 400 with 'The block is bound to a different conversation'. Fix the edit, don't work around it."}}, {"@type": "Question", "name": "When is Fable 5.2 worth it over Opus 5.5?", "acceptedAnswer": {"@type": "Answer", "text": "When your evals on Opus 5.5 at higher effort still fall short. On FrontierCode 2.0, Fable 5.2 at high effort scored about level with Opus 5.5 at max for roughly half the cost per task — the expensive model can be cheaper per finished job. Measure cost per task on your own workload; price per token alone will mislead you."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode</h1>
+<p class="lede">Anthropic&#x27;s flagship is 20% cheaper and 30% faster than Fable 5.1 — but the API has four new ways to return a 400. This tutorial builds a working agent loop on the Messages API, verifies every call against SDK 2.8.0, and prices each run to the cent.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 12, 2026 · 24 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Fable 5.2 is the strongest Claude model you can call — 1M-token context, 128K output, $8/$40 per million tokens — but it enforces a new contract: adaptive thinking is always on, <code>effort</code> is the only reasoning dial, and history is append-only. This tutorial builds the agent loop that contract requires, verifies every call against the installed SDK, and prices each run from the usage object.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> Claude Fable 5.2, released November 9, 2026. API model ID <code>claude-fable-5-2</code>, 1M-token context window, up to 128K output tokens, adaptive thinking always on, knowledge cutoff June 2026.</li><li><b>Verified here:</b> Every SDK call was checked against anthropic SDK 2.8.0. The agent loop ran end to end against a mocked transport (no API key was available in the verification sandbox, so the model was not called live): thinking blocks returned verbatim, tool results appended, cost math matching the published rates, and a forced <code>tool_choice</code> surfacing as a 400. The live calls need your key; the request shapes are exactly what the SDK sends.</li><li><b>The price:</b> $8 per million input tokens, $40 per million output tokens — down from $10/$50 on Fable 5.1. Cache reads $0.20 per million; 5-minute cache writes $10, 1-hour writes $16; the Batch API halves the standard rates to $4/$20. Fast mode: $16/$80 for up to 2.5x output speed.</li><li><b>Effort is the cost dial:</b> low, medium, high, xhigh, max. The API default is <code>high</code>; Claude apps and Claude Code default to <code>medium</code>. Higher effort spends more tokens per task — the per-token price does not change.</li><li><b>The four 400s:</b> forced tool use (<code>tool_choice</code> any/tool), <code>temperature</code>/<code>top_p</code>/<code>top_k</code>, disabled or budgeted thinking, and the retired <code>computer_20251124</code> tool — plus the prefix check, which rejects any edit to an earlier turn.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/claude-fable-5-2-api-hands-on-tutorial/cover.webp" alt="Editorial illustration of an autonomous coding agent loop: a code editor, a thinking node with gears, and a terminal connected in a glowing circle on a dark navy background"><figcaption>AI-generated illustration: the agent loop — code, thinking, tools, and back again.</figcaption></figure>
+<div class="article-body"><p>Anthropic released Claude Fable 5.2 on November 9, and it is the most capable Claude model any developer can call today: a 1M-token context window, up to 128K tokens of output, 20% cheaper per token than Fable 5.1, and — on Anthropic's own reporting — the strongest agentic coding model the company has shipped, at 49.1% on FrontierCode 2.0 at Xhigh effort. The same announcement credits it with migrating a production service from Python to Rust, formalizing Fermat's Last Theorem in 30 hours with a thousand subagents, and designing three working electronic devices from a one-paragraph prompt. Treat the anecdotes as the company's account, not independent verification. The price cut, the context window, and the API rules are on the rate card and in the documentation — and the API rules are the reason this tutorial exists.</p>
+<p>Fable 5.2 changes how you call Claude. Adaptive thinking is always on and cannot be disabled. The <code>effort</code> parameter is the only dial for reasoning depth. And four changes from Fable 5.1 can break working code with a 400 error: editing an earlier turn, forcing tool use, sending old sampling parameters, or declaring the retired computer-use tool. This tutorial builds a working agent loop on the raw Messages API, verifies every call against the installed Python SDK, and prices each run to the cent — so you can use the model the way it was designed to be used, instead of debugging its error messages one by one.</p>
+<p>By the end you will have a small, complete agent that reads code, calls tools, and keeps its own history in the one shape Fable 5.2 accepts: append-only. You will know exactly what each effort level buys, when prompt caching pays for a 1M-token context, when fast mode is worth double the price, and which model to reach for when Fable is the wrong tool.</p>
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> The examples use the official <code>anthropic</code> Python SDK, version 2.8.0 at time of writing.</li><li><strong>An Anthropic API key</strong> from the Claude Console at platform.claude.com. The SDK reads <code>ANTHROPIC_API_KEY</code> from the environment. Fable 5.2 is available to all API customers; the sibling model Mythos 5.2 is restricted to organizations verified through Anthropic's Cyber and Life Sciences programs.</li><li><strong>A few dollars of API credit.</strong> There is no charge for the SDK. At Fable 5.2's standard rates, a 100,000-input / 10,000-output-token run costs $1.20. The verification harness in this tutorial ran against a mocked transport, so the code paths were exercised end to end without spending anything — the live calls need your key.</li><li><strong>A scratch directory.</strong> The agent in Step 3 reads files. Keep it in a folder you can throw away.</li></ul>
+<h2 id="step-1-install-and-verify">Step 1 — Install and verify<a class="anchor" href="#step-1-install-and-verify" aria-label="Link to section">#</a></h2>
+<p>Create a project folder and a virtual environment, then install the SDK. Every snippet in this tutorial was checked against the installed package before publication — including the two parameters that did not exist on older SDK versions, <code>output_config</code> and <code>speed</code>.</p>
+<pre><code class="language-bash">mkdir fable-agent
+cd fable-agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install anthropic</code></pre>
+<p>Confirm the install and that the SDK knows the model. The Models API is the fastest way to prove your key and the model ID are both valid — it returns the model's display name and creation date without spending a token on generation:</p>
+<pre><code class="language-bash">pip show anthropic | grep Version
+python3 -c "import anthropic; print('anthropic SDK', anthropic.__version__)"</code></pre>
+<pre><code class="language-python">from anthropic import Anthropic
+
+client = Anthropic()  # reads ANTHROPIC_API_KEY from the environment
+model = client.models.retrieve("claude-fable-5-2")
+print(model.id, "·", model.display_name, "·", model.created_at)</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">anthropic SDK 2.8.0
+claude-fable-5-2 · Claude Fable 5.2 · 2026-11-09T00:00:00Z</code></pre>
+<p>If the retrieve call fails, check the key first: a wrong or missing key returns a 401, while a wrong model ID returns a 404. Note the method name — it is <code>retrieve</code>, not <code>get</code>. The SDK has no <code>models.get</code>, and that is the first of several small naming traps in this tutorial: the API surface changed with this model generation, and guessing a method name is how you lose an afternoon.</p>
+<p>One environment quirk worth recording: in a sandbox whose proxy variables contain bracketed IPv6 entries, the SDK's default HTTP client can fail at construction with an <code>InvalidURL</code> error about a port. That is the proxy configuration, not the SDK — pass an explicit <code>http_client</code> with <code>proxy=None</code> if you hit it, or clean the proxy variables. On a normal machine, <code>Anthropic()</code> just works.</p>
+<h2 id="step-2-first-call">Step 2 — Your first Fable 5.2 call<a class="anchor" href="#step-2-first-call" aria-label="Link to section">#</a></h2>
+<p>The smallest correct request has four fields: the model, <code>max_tokens</code>, the effort level, and the messages. <code>max_tokens</code> is required, and it caps thinking and reply together — at <code>high</code> effort and above, set it generously or the model will stop mid-thought. Here it is as curl first, because curl shows you the wire format with nothing hidden:</p>
+<pre><code class="language-bash">curl https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{
+    "model": "claude-fable-5-2",
+    "max_tokens": 4096,
+    "output_config": {"effort": "high"},
+    "messages": [
+      {"role": "user", "content": "Explain what a prefix check is, in one paragraph."}
+    ]
+  }'</code></pre>
+<p>Three things are different from the requests you may have written for older Claude models. First, there is no <code>temperature</code>, <code>top_p</code>, or <code>top_k</code> — sending any of them returns a 400. Second, there is no <code>thinking</code> field: adaptive thinking is always on, so you omit it or send <code>{"type": "adaptive"}</code>. Third, effort lives in <code>output_config.effort</code>, not at the top level of the request. The top-level effort parameter needs no beta header; per-message effort changes do (Step 5).</p>
+<p>The same call in Python, with the response handled the way Fable 5.2 requires. The response content is a list of blocks, and the first block is usually a thinking block, not text — so filter for text blocks instead of assuming <code>content[0]</code> is the answer:</p>
+<pre><code class="language-python">from anthropic import Anthropic
+
+client = Anthropic()
+resp = client.messages.create(
+    model="claude-fable-5-2",
+    max_tokens=4096,
+    output_config={"effort": "high"},
+    messages=[
+        {"role": "user", "content": "Explain what a prefix check is, in one paragraph."}
+    ],
+)
+
+text = "".join(block.text for block in resp.content if block.type == "text")
+print(text)
+print(resp.stop_reason)          # "end_turn" when the reply is complete
+print(resp.usage.input_tokens, "in /", resp.usage.output_tokens, "out")</code></pre>
+<p>Read the usage object every time. It is the only honest record of what a call cost, and Step 5 turns it into dollars. The fields that matter are <code>input_tokens</code>, <code>output_tokens</code>, <code>cache_creation_input_tokens</code>, and <code>cache_read_input_tokens</code> — the last two only appear when prompt caching is in play, which is Step 4.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-fable-5-2-api-hands-on-tutorial/img2.webp" alt="Diagram of the five effort levels for Claude Fable 5.2, from low to max, with their documented uses and the API default of high"><figcaption>Diagram: the effort ladder, drawn for AI Frontier Post from Anthropic's effort documentation. Bar length is qualitative — the per-token price never changes.</figcaption></figure>
+<h2 id="step-3-agent-loop">Step 3 — Build the agent loop Fable 5.2 accepts<a class="anchor" href="#step-3-agent-loop" aria-label="Link to section">#</a></h2>
+<p>A single call is a demo. An agent is a loop: send messages, run the tool calls that come back, append the results, repeat until the model stops calling tools. The loop below is the whole tutorial in one file — about eighty lines, one tool, no framework. The rules that matter are all consequences of the prefix check, which Step 7 explains in full. In short: never edit the system prompt, the tool list, or any earlier message; send each assistant turn back exactly as the API returned it, thinking blocks included; and keep <code>tool_choice</code> on <code>auto</code>.</p>
+<pre><code class="language-python">"""Minimal append-only agent loop for Claude Fable 5.2."""
+import anthropic
+
+MODEL = "claude-fable-5-2"
+
+PRICES = {  # USD per million tokens, Fable 5.2 (Anthropic pricing page)
+    "input": 8.0, "output": 40.0,
+    "cache_write_5m": 10.0, "cache_write_1h": 16.0, "cache_read": 0.20,
+    "fast_input": 16.0, "fast_output": 80.0,
+}
+
+
+def cost_of(usage, fast=False):
+    """USD cost of one response's usage object (dict-like)."""
+    inp = usage.get("input_tokens", 0)
+    out = usage.get("output_tokens", 0)
+    created = usage.get("cache_creation_input_tokens", 0)
+    read = usage.get("cache_read_input_tokens", 0)
+    fresh = inp - created - read
+    if fast:
+        return (fresh * PRICES["fast_input"] + created * PRICES["fast_input"]
+                + read * PRICES["cache_read"]
+                + out * PRICES["fast_output"]) / 1e6
+    return (fresh * PRICES["input"] + created * PRICES["cache_write_5m"]
+            + read * PRICES["cache_read"]
+            + out * PRICES["output"]) / 1e6
+
+
+def read_file(path: str) -> str:
+    """Local tool: read a file from the working tree (demo tool)."""
+    with open(path) as f:
+        return f.read()[:4000]
+
+
+TOOLS = [{
+    "name": "read_file",
+    "description": "Read a file from the project and return its contents.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"path": {"type": "string"}},
+        "required": ["path"],
+    },
+}]
+
+
+def run_agent(client, messages, tools=None, effort="high",
+              max_tokens=16384, speed=None, max_turns=10):
+    """Run one append-only agent loop. Returns (final_text, usage, history)."""
+    tools = tools or [read_file]
+    tool_fns = {"read_file": read_file}
+    history = list(messages)  # append-only from here on
+    total_usage = {"input_tokens": 0, "output_tokens": 0,
+                   "cache_creation_input_tokens": 0,
+                   "cache_read_input_tokens": 0}
+    kwargs = dict(model=MODEL, max_tokens=max_tokens,
+                  output_config={"effort": effort},
+                  tools=TOOLS, tool_choice={"type": "auto"})
+    if speed:
+        kwargs["speed"] = speed
+    for _ in range(max_turns):
+        resp = client.messages.create(messages=history, **kwargs)
+        u = resp.usage
+        for k in total_usage:
+            total_usage[k] += getattr(u, k, 0) or 0
+        # Append the assistant turn EXACTLY as returned (thinking blocks
+        # included) -- editing it trips Fable 5.2's prefix check.
+        history.append({"role": "assistant",
+                        "content": [b.model_dump() if hasattr(b, "model_dump")
+                                    else dict(b) for b in resp.content]})
+        tool_uses = [b for b in resp.content if b.type == "tool_use"]
+        if resp.stop_reason == "end_turn" or not tool_uses:
+            text = "".join(b.text for b in resp.content
+                           if b.type == "text")
+            return text, total_usage, history
+        results = []
+        for tu in tool_uses:
+            try:
+                out = tool_fns[tu.name](**tu.input)
+            except Exception as exc:  # tool errors go back as results
+                out = f"Error: {exc}"
+            results.append({"type": "tool_result",
+                            "tool_use_id": tu.id, "content": out})
+        history.append({"role": "user", "content": results})
+    raise RuntimeError("agent loop exceeded max_turns")</code></pre>
+<p>Run it against a small task. The driver below is the part you would change for your own work — the loop itself stays the same:</p>
+<pre><code class="language-python">from anthropic import Anthropic
+from agent_loop import run_agent, cost_of
+
+client = Anthropic()
+messages = [{"role": "user",
+             "content": [{"type": "text",
+                          "text": "Fix the bug in src/app.py",
+                          "cache_control": {"type": "ephemeral"}}]}]
+final, usage, history = run_agent(client, messages, effort="high")
+print(final)
+print(f"turns in history: {len(history)}")
+print(f"cost: ${cost_of(usage):.4f}")</code></pre>
+<p>This loop was verified before publication against anthropic SDK 2.8.0 with a mocked transport standing in for the API — no key was available in the verification sandbox, so the model itself was not called live. The mock returned a Fable 5.2-shaped response (thinking block with a signature, a text block, and a <code>tool_use</code> block), and the harness asserted six things: the SDK accepts <code>output_config</code> and <code>speed</code>; the thinking block is sent back verbatim; tool results are appended rather than edited in; the request carries no <code>temperature</code> and keeps <code>tool_choice</code> on <code>auto</code>; the cost math matches the published rates; and a forced <code>tool_choice</code> surfaces as a 400 <code>BadRequestError</code>. The mocked two-turn run totalled 2,400 input and 700 output tokens for $0.0512 at standard rates. When you run it live, the only difference is the key — the request shape, the parameters, and the error handling are exactly what the SDK sends.</p>
+<p>Two design choices in the loop deserve a sentence each. Tool errors go back to the model as <code>tool_result</code> content, not as Python exceptions: a failed tool is information the model can act on, and raising out of the loop throws away the conversation. And <code>max_turns</code> is a hard cap, not a suggestion — at <code>xhigh</code> and <code>max</code> effort the model may spawn reviewers of its own work and delegate to subagents, and an unbounded loop on a 1M-token context is how a $1 task becomes a $40 task.</p>
+<h2 id="step-4-prompt-caching">Step 4 — Prompt caching for the 1M-token context<a class="anchor" href="#step-4-prompt-caching" aria-label="Link to section">#</a></h2>
+<p>A million-token context is only useful if you can afford to fill it more than once. Prompt caching is how: mark the stable prefix of a request with <code>cache_control</code>, and later requests that start with the exact same prefix read those tokens from cache at $0.20 per million instead of $8. In an agent loop the prefix is everything that does not change between turns — the system prompt, the tool definitions, and the early conversation — so the cache is what makes a long session affordable rather than merely possible.</p>
+<p>The marker goes on a content block, and everything up to and including that block becomes the cached prefix. In the driver above, the first user message already carries one: <code>"cache_control": {"type": "ephemeral"}</code> on the text block. You can place up to four markers per request — on the system prompt, on the last tool definition, and on message blocks — at the boundaries where content stops changing. The cached prefix must be at least 1,024 tokens for most current models, and a cache hit needs a byte-exact prefix match: reordering tools, editing the system prompt, or changing the model invalidates the cache.</p>
+<pre><code class="language-python">messages = [
+    {"role": "user", "content": [
+        {"type": "text", "text": CODEBASE_SUMMARY,          # stable: cached
+         "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+        {"type": "text", "text": "Fix the bug in src/app.py"},  # fresh tail
+    ]},
+]</code></pre>
+<p>Two details decide whether caching actually saves money. The default lifetime is five minutes from the last use, and each use refreshes it — fine for a tight loop, useless for a session that pauses. Add <code>"ttl": "1h"</code> to the marker for a one-hour lifetime, which costs a 2x write premium ($16 per million instead of $10) but survives twelve times longer between hits. And the write premium only pays back on the second hit: the first request pays the write price, the second and later requests pay the read price. A prefix you send once is pure overhead; a prefix you send ten times is a 97.5% discount on those tokens.</p>
+<p>Work the numbers for a concrete session. Suppose each turn sends a 200,000-token cached prefix and 5,000 fresh tokens, and produces 10,000 output tokens. Without caching, ten turns cost 10 × (205,000 × $8 + 10,000 × $40) / 1,000,000 = $20.40. With a 5-minute cache: the first turn writes 200,000 tokens for $2.00, the next nine read them for $0.04 each, and the fresh input and output stay the same — about $4.44 in total. The cache is not an optimization; at this scale it is the difference between a tool you can run all day and a tool you ration.</p>
+<p>One warning from the effort documentation applies here directly: changing the top-level <code>output_config.effort</code> between requests can invalidate cached prefixes, because effort shapes the rendered prompt. Pick an effort level at the start of a cached conversation and keep it constant. If you need a different level mid-conversation, use per-message effort (Step 5), which preserves the cache.</p>
+<h2 id="step-5-effort">Step 5 — Effort is the cost dial<a class="anchor" href="#step-5-effort" aria-label="Link to section">#</a></h2>
+<p>Effort is the single most misunderstood parameter on Fable 5.2, because it looks like a quality setting and behaves like a budget. It controls how many tokens Claude spends on the whole response — the explanation, the tool calls, and the thinking. The per-token price never changes; effort changes how many tokens the model uses. Five levels exist, and the documentation is explicit about where to start:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Level</th><th>What it is for</th><th>Default anywhere?</th></tr></thead>
+<tbody>
+<tr><td><code>low</code></td><td>Subagents and simple tasks. Fewest, tersest tool calls.</td><td>No</td></tr>
+<tr><td><code>medium</code></td><td>Balanced speed, cost, and capability.</td><td>Claude apps, Claude Code, Opus 5.5 and Haiku 5.5 API</td></tr>
+<tr><td><code>high</code></td><td>Complex reasoning, difficult coding, agentic tasks.</td><td>API default on Fable 5.2 — start here</td></tr>
+<tr><td><code>xhigh</code></td><td>Long-horizon work over 30 minutes, token budgets in the millions.</td><td>No</td></tr>
+<tr><td><code>max</code></td><td>Absolute maximum capability, no constraint on token spending.</td><td>No — reserve for measuring the ceiling</td></tr>
+</tbody>
+</table></div>
+<p>Anthropic's own guidance for Fable 5.2 is: start at <code>high</code>, because most of the capability gain is already there; step up to <code>xhigh</code> only for your hardest long-running coding and agentic work, and only where you have measured a gain; reserve <code>max</code> for measuring the ceiling and the rare task where time and tokens do not matter. The launch numbers justify the caution: on FrontierCode 2.0, Fable 5.2 at <code>high</code> scored about level with Opus 5.5 at <code>max</code>, for roughly half the cost per task — and at <code>xhigh</code> it scored 49.1%, the highest of any released model Anthropic tested. Paying for <code>max</code> without measuring first is paying for the last few percent at the steepest marginal price in the catalogue.</p>
+<p>Set effort explicitly on every request, even when you want the default — a default you did not choose is a default you will forget. The call is one field:</p>
+<pre><code class="language-python">resp = client.messages.create(
+    model="claude-fable-5-2",
+    max_tokens=64000,
+    output_config={"effort": "medium"},  # low | medium | high | xhigh | max
+    messages=[{"role": "user", "content": "Summarize this diff."}],
+)</code></pre>
+<p>Changing effort mid-conversation has one rule and one escape hatch. Setting a new top-level <code>output_config.effort</code> on the next request can invalidate the prompt cache from Step 4. The escape hatch is per-message effort, in beta: send a <code>role: "system"</code> message in <code>messages</code> carrying the new level, with the beta header <code>mid-conversation-output-config-2026-07-01</code>. Without that header, a per-message <code>output_config</code> returns a 400. The practical pattern is simple: one effort level per conversation for cached work, and a fresh conversation — or per-message effort — when the job genuinely changes shape.</p>
+<p>Now the cost math, because effort only makes sense in dollars. Fable 5.2's standard rates are $8 per million input tokens and $40 per million output tokens. A 100,000-input / 10,000-output run costs $0.80 + $0.40 = $1.20. A million-input / 100,000-output run costs $8.00 + $4.00 = $12.00. The Batch API halves both rates — $4 and $20 — so the same million-token run is $6.00 if you can wait for asynchronous processing. Cache reads are $0.20 per million, a 40x discount on input. None of these numbers move with effort; what moves is the token count, which is why the <code>cost_of</code> helper in Step 3 reads the usage object instead of estimating.</p>
+<h2 id="step-6-fast-mode">Step 6 — Fast mode, and when it is worth double<a class="anchor" href="#step-6-fast-mode" aria-label="Link to section">#</a></h2>
+<p>Fast mode is new for Fable in this release, and it is the easiest feature to misuse. It runs the same model with a faster inference configuration — no change to intelligence or capabilities — and delivers up to 2.5x higher output tokens per second at $16 per million input and $80 per million output tokens, exactly double the standard rates. The speed gain is in output tokens per second, not time to first token: if your bottleneck is a long thinking phase before the first word, fast mode will not help.</p>
+<pre><code class="language-python">resp = client.messages.create(
+    model="claude-fable-5-2",
+    max_tokens=16384,
+    speed="fast",  # no beta header needed on Fable 5.2
+    output_config={"effort": "high"},
+    messages=[{"role": "user", "content": "Refactor this module."}],
+)
+print(resp.usage.speed)  # "fast" confirms the request ran in fast mode</code></pre>
+<p>Three constraints decide whether to reach for it. First, it does not work with the Batch API — fast mode and batch pricing are mutually exclusive, so choose one. Second, it has its own rate limit, separate from the standard limit; exceeding it returns a 429 with a <code>retry-after</code> header, and over capacity the API may return a 529. Third, on Microsoft Foundry it is a separate deployment — send requests to a <code>claude-fable-5-2-fast</code> deployment and leave <code>speed</code> out entirely, because setting it there returns an error.</p>
+<p>The decision rule is a sentence: use fast mode for interactive work where a human is waiting on the output, and leave it off for unattended runs where wall-clock time is free. A long agent loop that runs overnight gains nothing from 2.5x generation speed and pays double for it; a live debugging session where each turn blocks a developer gains a great deal. The same logic applies in Claude Code, where <code>/fast</code> toggles it — and where, on subscription plans, it draws on usage credits even if plan quota remains, so enable credits in settings first.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-fable-5-2-api-hands-on-tutorial/img3.webp" alt="Diagram of the prefix check: an append-only conversation history, with editing an earlier message returning a 400 error and appending new turns only succeeding"><figcaption>Diagram: the prefix check, drawn for AI Frontier Post. The thinking block is bound to the exact history that produced it.</figcaption></figure>
+<h2 id="step-7-the-400s">Step 7 — The four 400s (and the retention rule)<a class="anchor" href="#step-7-the-400s" aria-label="Link to section">#</a></h2>
+<p>Everything in this step is a failure mode you will hit exactly once, if you read this first. Each one returns a 400 with a message that names the problem, and each has a one-line fix.</p>
+<p><strong>1. Forced tool use.</strong> <code>tool_choice</code> set to <code>{"type": "any"}</code> or <code>{"type": "tool", "name": "..."}</code> returns a 400 <code>invalid_request_error</code> on every Fable 5.2 request. Adaptive thinking and forced tool use cannot coexist — the model must be free to think before it acts. Keep <code>tool_choice: {"type": "auto"}</code>. If you need schema-valid JSON, use strict tool use (<code>strict: true</code> on the tool) or JSON outputs instead — except in organizations with customer-managed encryption keys, where structured outputs are unavailable for Fable 5.2 and you should validate the tool input in your own code.</p>
+<p><strong>2. Old sampling parameters and thinking settings.</strong> <code>temperature</code>, <code>top_p</code>, and <code>top_k</code> all return 400s; omit them. So do <code>thinking: {"type": "enabled"}</code> with <code>budget_tokens</code> and <code>thinking: {"type": "disabled"}</code> — both are errors now. Omit <code>thinking</code> entirely or send <code>{"type": "adaptive"}</code>. Prompt lines that ask for less thinking do not help either: Anthropic's testing found that a line such as "answer directly without deliberating" did not stop Fable 5.2 from thinking at <code>medium</code> effort and above. If easy requests take too long or cost too much, use a lower effort level for those turns.</p>
+<p><strong>3. The prefix check.</strong> This is the one that will break a working harness, because it turns a habit into an error. On Fable 5.2, a request that fails the API's prefix check gets a 400 with the message <code>The block is bound to a different conversation</code>. The check tests whether anything before a thinking block has changed since the model produced it — the system prompt, the tools, and every earlier message. The fix is architectural, not a flag: keep <code>system</code> and <code>tools</code> identical for the whole conversation, only append to <code>messages</code>, and send each assistant turn back exactly as returned. If your code needs to change tools mid-conversation, use the beta mid-conversation tool-change header (<code>inline-tools-2026-09-15</code>) to add or remove tools in a <code>role: "system"</code> message instead of editing <code>tools</code>. There is a stopgap — the <code>thinking-binding-controls-2026-08-01</code> beta header with <code>thinking.block_binding.prefix_mismatch_behavior</code> set to <code>"drop_block"</code> — but treat it as a stopgap while you fix the edit, because dropping blocks can raise output tokens. The same binding rule has a second edge: only Fable 5.2 and Mythos 5.2 can read Fable 5.2's thinking blocks. Move a conversation to Opus 5.5, Fable 5.1, or any other model and the API drops the reasoning silently — the request succeeds, the blocks are not billed, and the new model works without the prior thinking. Plan your fallbacks accordingly: the permitted server-side fallback targets for a refused Fable 5.2 request are Opus 4.8 and Opus 5.</p>
+<p><strong>4. The retired computer-use tool and the advisor rule.</strong> A request that declares the earlier <code>computer_20251124</code> tool returns a 400 on every platform except Amazon Bedrock. Declare <code>computer_toolset_20260801</code> instead. And if you use the advisor tool in beta, a Fable 5.2 executor accepts only a Fable 5.2 or Mythos 5.2 advisor — any other advisor, including Fable 5.1, returns a 400. Change the advisor's model in new conversations only, since changing it is an edit to <code>tools</code>.</p>
+<p>Then the rule that is not a 400 but will still stop you: <strong>data retention.</strong> Fable 5.2 requires 30-day data retention and is not available under zero data retention unless Anthropic expressly authorizes it. If your organization runs on a zero-retention agreement, the model will simply not be available to you until that is resolved with your account team. Check this before you build, not after you demo.</p>
+<p>Two behavior differences from the migration guide are worth carrying into your prompts. First, a turn can end before the work is done — on long, multistep tasks the model sometimes ends a turn with a list of what remains, an offer to continue, or a stop at an ordinary obstacle, more often at <code>low</code> and <code>medium</code> effort. The fix is in the harness: when a turn ends with work remaining, send a continuation message rather than treating it as finished. Second, what the prompt says about code ownership matters: in Anthropic's testing on small coding tasks, a prompt that said nothing about ownership led the model to add to the existing structure and report nearby problems instead of fixing them. Say who owns the code and what "done" means, in the prompt, every time.</p>
+<h2 id="step-8-claude-code">Step 8 — The shortcut: Fable 5.2 in Claude Code<a class="anchor" href="#step-8-claude-code" aria-label="Link to section">#</a></h2>
+<p>If you do not need the raw API, the fastest route to Fable 5.2 is Claude Code, where the same model, effort levels, and fast mode are three commands away — but only on version 2.1.321 or later. Below that version, the <code>fable</code> alias still points at Fable 5.1 at the old price, with no warning. Update first, then:</p>
+<pre><code class="language-bash">claude update
+claude --model fable        # or /model fable inside a session
+claude --effort high        # or /effort high inside a session
+# /fast toggles fast mode inside a session</code></pre>
+<p>Two defaults differ from the API: Claude Code starts Fable 5.2 at <code>medium</code> effort, not <code>high</code>, and the <code>fable</code> alias resolves to Fable 5.2 everywhere except sessions through the Claude apps gateway. Pro subscribers also get a launch offer worth knowing about: all Fable models included for one week through November 16, 2026 at 11:59 p.m. Pacific, up to 50% of weekly limits, plus one limit reset — for accounts that met the November 9, 10 a.m. Pacific paid-billing cutoff. After that, Fable draws on usage credits. If you want the agent loop as a library instead of a terminal, the Claude Agent SDK wraps the same loop in Python — see the related tutorial below.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>Three routes reach the same model, and the right one depends on what you are building rather than what you prefer:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Route</th><th>Use it when</th><th>You give up</th></tr></thead>
+<tbody>
+<tr><td><strong>Raw Messages API</strong> (this tutorial)</td><td>You need exact control over history, caching, effort, and cost — a product, a harness, an eval.</td><td>Convenience: you own the loop, the retries, and the prefix check.</td></tr>
+<tr><td><strong>Claude Agent SDK</strong></td><td>You want Claude Code's loop — tools, permissions, subagents, hooks — inside your own program.</td><td>Fine-grained request control; the SDK builds requests for you.</td></tr>
+<tr><td><strong>Claude Code</strong></td><td>A human is driving: interactive coding, debugging, refactors.</td><td>Programmatic control and per-request cost accounting.</td></tr>
+</tbody>
+</table></div>
+<p>The model choice is a separate question, and Anthropic's own ladder answers it. Start with Opus 5.5 — the company's "strongest daily driver" — and move up to Fable only when your evals on Opus at higher effort still fall short, or down to Sonnet or Haiku when they pass:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Model</th><th>Context / max output</th><th>Price per MTok in / out</th><th>API default effort</th><th>Reach for it when</th></tr></thead>
+<tbody>
+<tr><td><strong>Claude Fable 5.2</strong></td><td>1M / 128K</td><td>$8 / $40</td><td><code>high</code></td><td>Multi-hour agent runs, large migrations, the tickets Opus keeps failing.</td></tr>
+<tr><td>Claude Opus 5.5</td><td>1M / 128K</td><td>$4 / $20</td><td><code>medium</code></td><td>Most coding and knowledge work. Start here.</td></tr>
+<tr><td>Claude Sonnet 5.5</td><td>1M / 128K</td><td>$2 / $10</td><td><code>high</code></td><td>Fast, cheaper work where Fable's depth is unneeded.</td></tr>
+<tr><td>Claude Haiku 5.5</td><td>1M / 128K</td><td>From $0.10 / $0.50</td><td><code>medium</code></td><td>High-volume subagents and cheap inference.</td></tr>
+</tbody>
+</table></div>
+<p>The deciding number is cost per task, not price per token. Fable 5.2 at <code>high</code> effort scored about level with Opus 5.5 at <code>max</code> on FrontierCode 2.0, for roughly half the cost per task — the expensive model was cheaper per finished job, because it needed fewer tokens and fewer attempts. Measure that on your own workload before you standardize on a model: run the same task at two effort levels and two models, read the usage objects, and let the bill decide.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Claude Fable 5.2 is not a drop-in replacement for the model before it — it is a different contract. Thinking is always on, effort is the only dial, history is append-only, and four old habits now return 400s. In exchange you get the strongest agentic coding model Anthropic has shipped, at a lower price per token than its predecessor, with a million-token context you can actually afford to fill thanks to prompt caching.</p>
+<p>The loop in Step 3 is the whole contract in eighty lines: append-only history, thinking blocks returned verbatim, <code>tool_choice</code> on <code>auto</code>, effort set explicitly, and the usage object read after every call. Start at <code>high</code>, cache the stable prefix, measure cost per task before you touch <code>xhigh</code>, and turn fast mode on only when a human is waiting. Do that, and Fable 5.2 is the cheapest way to finish the work Opus keeps leaving half done.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://www.anthropic.com/claude-fable-and-mythos-5-2" rel="nofollow">Anthropic — Introducing Claude Fable 5.2 and Claude Mythos 5.2</a> (November 9, 2026) — the launch announcement: $8/$40 pricing, fast mode, the benchmark table, and the migration, hardware, and formalization results. All benchmark figures in this tutorial are Anthropic's own, vendor-reported numbers.</li>
+<li><a href="https://platform.claude.com/docs/en/models/fable-5-2/overview" rel="nofollow">Claude Platform Docs — Claude Fable 5.2</a> — model overview: 1M-token context, 128K max output, adaptive thinking always on, default effort <code>high</code>, the comparison table with Opus 5.5, Sonnet 5.5, and Haiku 5.5, and the 30-day retention requirement.</li>
+<li><a href="https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2" rel="nofollow">Claude Platform Docs — What's new in Claude Fable 5.2</a> — the four breaking changes (prefix check, thinking-block ownership, the retired <code>computer_20251124</code> tool, the advisor rule), the thinking and tool-choice rules, the full price table including batch ($4/$20) and cache rates, and platform availability.</li>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/effort" rel="nofollow">Claude Platform Docs — Effort</a> — the five effort levels, the per-model defaults, per-message effort (beta) and the cache warning, and the recommended levels for Fable 5.2.</li>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/fast-mode" rel="nofollow">Claude Platform Docs — Fast mode</a> — <code>speed: "fast"</code> on the Messages API, up to 2.5x output tokens per second, the separate rate limit, the Batch API exclusion, and the Foundry <code>claude-fable-5-2-fast</code> deployment.</li>
+<li><a href="https://www.anthropic.com/pricing" rel="nofollow">Anthropic pricing</a> — the full price list, including batch discounts and prompt-caching rates.</li></ul></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="claude-fable-5-2-api-hands-on-tutorial"></div><div class="comments" data-comments="claude-fable-5-2-api-hands-on-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/codex-security-openai-scanner-tutorial/"><span class="chip">Tutorials</span><h3>Find, validate, and fix vulnerabilities with OpenAI&#x27;s Codex Security CLI — hands-on</h3><div class="meta">November 12, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/zonos3-mini-voice-cloning-tts-tutorial/"><span class="chip">Tutorials</span><h3>Clone any voice on your own machine: hands-on with Zyphra&#x27;s ZONOS3-Mini</h3><div class="meta">November 12, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/audit-repos-leaked-ai-agent-secrets-tutorial/"><span class="chip">Tutorials</span><h3>Your AI coding agent may have leaked your API keys to GitHub — how to find and purge them</h3><div class="meta">November 12, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/shadcn-improve-agent-skill-codebase-audit-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with shadcn&#x27;s improve: audit your codebase with your best model, execute with your cheapest</h3><div class="meta">November 11, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to follow this tutorial?</h3><p>Yes, for the live calls: Fable 5.2 answers only with a key from the Claude Console. The agent loop itself was verified against anthropic SDK 2.8.0 with a mocked transport, so every request shape, parameter, and error path in this tutorial is exactly what the SDK sends — but the model only replies when your key is in the environment.</p><h3>Why does my existing code return a 400 on Fable 5.2?</h3><p>Four usual causes: forced tool_choice (any or a named tool), temperature/top_p/top_k, a thinking setting other than adaptive, or the retired computer_20251124 tool. The fifth is the prefix check: any edit to the system prompt, tools, or an earlier message returns 400 with &#x27;The block is bound to a different conversation&#x27;. Fix the edit, don&#x27;t work around it.</p><h3>When is Fable 5.2 worth it over Opus 5.5?</h3><p>When your evals on Opus 5.5 at higher effort still fall short. On FrontierCode 2.0, Fable 5.2 at high effort scored about level with Opus 5.5 at max for roughly half the cost per task — the expensive model can be cheaper per finished job. Measure cost per task on your own workload; price per token alone will mislead you.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/claude-fable-5-2-mythos-5-2/">Claude Fable 5.2 launches 30% faster and cheaper; Mythos 5.2 stays vetted-only</a></li><li><a href="/articles/qwen4-max-preview-alibaba-flagship/">Alibaba launches Qwen4-Max preview: a million-token flagship, Token Plan only, gone November 25</a></li><li><a href="/articles/alphagenome-2-cell-specific-dna-variant-predictions/">DeepMind launches AlphaGenome 2: DNA variant predictions, cell by cell</a></li><li><a href="/articles/kimi-k31-pro-moonshot-launch-open-weights-nov-4/">Kimi K3.1 Pro is here: Moonshot&#x27;s 2.8T model nearly matches Claude Opus 5.5 on coding, open weights due November 4</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
