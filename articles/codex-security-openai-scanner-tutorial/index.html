@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Find, validate, and fix vulnerabilities with OpenAI&#x27;s Codex Security CLI — hands-on — AI Frontier Post</title>
+<meta name="description" content="OpenAI&#x27;s Codex Security CLI puts an agentic security reviewer in your terminal: install it, run a full scan–validate–patch loop with no sign-in using mock mode, then wire the same commands into CI with a $5 cost cap.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/codex-security-openai-scanner-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Find, validate, and fix vulnerabilities with OpenAI&#x27;s Codex Security CLI — hands-on">
+<meta property="og:description" content="OpenAI&#x27;s Codex Security CLI puts an agentic security reviewer in your terminal: install it, run a full scan–validate–patch loop with no sign-in using mock mode, then wire the same commands into CI with a $5 cost cap.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/codex-security-openai-scanner-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/codex-security-openai-scanner-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-12">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Find, validate, and fix vulnerabilities with OpenAI's Codex Security CLI — hands-on", "description": "OpenAI's Codex Security CLI puts an agentic security reviewer in your terminal: install it, run a full scan–validate–patch loop with no sign-in using mock mode, then wire the same commands into CI with a $5 cost cap.", "datePublished": "2026-11-12", "dateModified": "2026-11-12", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/codex-security-openai-scanner-tutorial/"}, "image": "https://aifrontierpost.com/articles/codex-security-openai-scanner-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an OpenAI account to try Codex Security?", "acceptedAnswer": {"@type": "Answer", "text": "No. Install, dry-run, mock scan, findings import, policy dry-run, and the SDK mock all work with no sign-in — the mock scan in this tutorial ran with no credentials at all. A real scan needs a ChatGPT login or an API key: an OpenAI key, or another provider such as OpenRouter, Fireworks, or Amazon Bedrock."}}, {"@type": "Question", "name": "What does a real scan cost?", "acceptedAnswer": {"@type": "Answer", "text": "The official GitHub Action example caps each scan at an estimated $5 with max-cost. The tool prices its default model, gpt-5.6-sol, at $4 per million input tokens and $20 per million output tokens in short context (as of September 14, 2026). Set --max-cost to cap a scan — and remember that requests already in progress can exceed the limit."}}, {"@type": "Question", "name": "Are the mock scan’s findings real vulnerabilities?", "acceptedAnswer": {"@type": "Answer", "text": "No. Mock mode writes 12 synthetic findings with fictional file paths to exercise the reporting pipeline. They do not correspond to the code you scanned, and the scan manifest says so. Use mock mode to learn the tool; use a real scan to judge code."}}, {"@type": "Question", "name": "Why did my install report a missing Codex executable?", "acceptedAnswer": {"@type": "Answer", "text": "The global install pulls a ~438 MB platform binary as an optional dependency. If that download fails, npm warns and continues, and the CLI later reports that the bundled Codex executable could not be resolved. Reinstall with optional dependencies enabled, or set CODEX_CLI_PATH to an installed Codex executable."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Find, validate, and fix vulnerabilities with OpenAI&#x27;s Codex Security CLI — hands-on</h1>
+<p class="lede">OpenAI&#x27;s Codex Security CLI is sitting at number two on GitHub Trending today for a simple reason: it does not stop at finding vulnerabilities. It validates each one against your source, drafts the patch, verifies the fix, and exports the evidence — and you can run the entire loop in under a minute without signing in to anything.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 12, 2026 · 17 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> OpenAI&#x27;s Codex Security CLI scans a repo, validates each finding against the source, patches it, and verifies the fix — one tool, one saved history. Install 0.10.0 from npm, run the full loop free with <code>--mock</code> (12 synthetic findings, a real report and SARIF file), then sign in with ChatGPT or an API key for a real scan capped at $5.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> <code>openai/codex-security</code> — 12,106 stars, 957 forks, 2,044 commits, 55 releases; number two on GitHub Trending on November 12, 2026; Apache 2.0.</li><li><b>The install:</b> <code>npm install --global @openai/codex-security@0.10.0</code>; needs Node 22.13+ and Python 3.10+; pulls a ~438 MB platform binary as an optional dependency.</li><li><b>The free path:</b> dry-run, mock scan, findings import, and policy dry-run need no sign-in. The mock scan ran in 0.7 seconds, cost $0, and produced a real <code>report.md</code>, <code>findings.json</code>, and SARIF file.</li><li><b>The real scan:</b> default model <code>gpt-5.6-sol</code> at maximum reasoning effort; sign in with ChatGPT or set <code>OPENAI_API_KEY</code>; cap the cost with <code>--max-cost 5</code>.</li><li><b>The limit:</b> a completed scan is not a clean bill of health — exclusions and deferred work are recorded in the report, and mock findings are synthetic fixtures. Never file them.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/codex-security-openai-scanner-tutorial/cover.webp" alt="A glowing shield above red, amber, and green severity bars framed by code brackets on a dark circuit-board background"><figcaption>AI-generated illustration: a shield over the severity bars of a findings report, framed by code brackets.</figcaption></figure>
+<div class="article-body"><p>Most security scanners give you a list and walk away. OpenAI&#x27;s Codex Security does the whole job in one place: it scans a repository, validates each finding against the source, drafts the patch, verifies the fix, and exports the results as SARIF, JSON, or CSV. It is a CLI first, with a TypeScript SDK and a GitHub Action alongside it, and it is the reason the project is sitting at number two on GitHub Trending today — 12,106 stars, 957 forks, and 2,044 commits since July, all under an Apache 2.0 licence.</p>
+<p>The idea is not new — agentic code review has been tried before — but the packaging is what is driving the attention. One command scans. The same tool checks its own findings, so you get fewer of the confident false positives that make teams ignore scanner output. And everything it produces lands in a saved scan history you can re-open, re-run, or export, instead of vanishing when the terminal closes.</p>
+<p>This tutorial runs the whole loop end to end. You will install the CLI, prove the setup with a dry run, run a complete scan without signing in to anything, read the report it writes, import findings from another tool, and wire the same commands into CI. Every command in Steps 1–6 and 8–9 was executed while writing this article, and the outputs shown are the real ones. Step 7 — the live model scan — needs a ChatGPT login or an API key, which this sandbox does not have; those commands are quoted from the official CLI reference and marked as such.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Node.js 22.13 or newer in the 22.x line, or Node 24.x / 26.x</strong> — check with <code>node --version</code>. This tutorial used Node v24.22.1.</li><li><strong>Python 3.10 or newer</strong> — the CLI uses it for some export and plugin work. This tutorial used Python 3.12.3.</li><li><strong>A terminal</strong> on macOS or Linux. Windows users can follow along in WSL.</li><li><strong>About 30 minutes.</strong> The install takes under a minute; the mock scan takes under a second.</li><li><strong>No account and no API key for Steps 1–6.</strong> The mock scan, the dry run, and the import flow need no sign-in at all. A real scan (Step 7) needs a ChatGPT login or an OpenAI API key.</li></ul>
+<h2 id="1-install-the-cli">Step 1: Install the CLI<a class="anchor" href="#1-install-the-cli" aria-label="Link to section">#</a></h2>
+<p>Install version 0.10.0 globally from npm. Pin the version: the project is moving fast — 55 releases since July — and the commands in this tutorial were verified against 0.10.0.</p>
+<pre><code class="language-bash">npm install --global @openai/codex-security@0.10.0</code></pre>
+<p>Verify the install:</p>
+<pre><code class="language-bash">cs --version
+cs info --json</code></pre>
+<p>The first command prints <code>0.10.0</code>. The second prints the resolved configuration: SDK version 0.10.0, bundled plugin 0.1.95, bundled Codex 0.167.1, default model <code>gpt-5.6-sol</code>, and default reasoning effort <code>xhigh</code>. If you prefer not to install globally, <code>npx @openai/codex-security</code> runs the same CLI; <code>cs</code> and <code>codex-security</code> are the same command, so use whichever is shorter on your keyboard.</p>
+<p>One gotcha, worth knowing before you blame your machine: the install pulls a platform-specific Codex binary as an optional dependency — about 438 MB unpacked for <code>@openai/codex-linux-x64</code>. If that download fails, npm treats it as a warning and finishes anyway, and the CLI will install cleanly but refuse to do anything that needs Codex, with this error:</p>
+<pre><code class="language-bash">The bundled Codex executable could not be resolved from @openai/codex-linux-x64.
+Reinstall @openai/codex with optional dependencies enabled, or set CODEX_CLI_PATH
+to an installed Codex executable.</code></pre>
+<p>That is exactly what happened in the sandbox used for this article — a disk-quota error interrupted the optional download and npm sailed on. The fix on a normal machine is to reinstall with optional dependencies enabled; on a machine where that is not possible, <code>CODEX_CLI_PATH</code> lets you point the CLI at a Codex executable you installed another way.</p>
+<h2 id="2-check-your-sign-in">Step 2: Check your sign-in — or skip it<a class="anchor" href="#2-check-your-sign-in" aria-label="Link to section">#</a></h2>
+<p>Before scanning anything, check what the CLI thinks your credentials are:</p>
+<pre><code class="language-bash">cs login status --json</code></pre>
+<p>With no sign-in saved, this prints <code>{"authenticated": false, "method": "stored_credentials"}</code> and exits with code 1, alongside a plain <code>Not logged in</code>. That is the expected state for Steps 3–6: the dry run, the mock scan, and the import flow all work without credentials, and the status check itself is an offline operation.</p>
+<p>When you are ready for a real scan, there are two ways in. Interactive use signs in with ChatGPT:</p>
+<pre><code class="language-bash">cs login
+cs scan .</code></pre>
+<p>CI and headless machines use an API key instead — either saved once, or passed in the environment for a single command:</p>
+<pre><code class="language-bash">printenv OPENAI_API_KEY | cs login --with-api-key
+OPENAI_API_KEY="sk-..." cs scan .</code></pre>
+<p><code>CODEX_API_KEY</code> works the same way. Non-interactive commands prefer <code>OPENAI_API_KEY</code>, then <code>CODEX_API_KEY</code>, then stored credentials; <code>--auth chatgpt</code> or <code>--auth api-key</code> forces the choice. The CLI also supports other providers — OpenRouter, Fireworks, Cheaper Inference, and Amazon Bedrock — each with its own API key and a <code>--provider</code> flag, so an OpenAI account is not the only route to a real scan.</p>
+<h2 id="3-dry-run-the-preflight">Step 3: Dry-run the preflight<a class="anchor" href="#3-dry-run-the-preflight" aria-label="Link to section">#</a></h2>
+<p>Build a small target first. The demo app below is a deliberately vulnerable Express service: SQL string interpolation, a reflected cross-site scripting hole, and a hard-coded admin token. Create it in a scratch directory — it exists only to be scanned, never to be run.</p>
+<pre><code class="language-javascript">// server.js — deliberately vulnerable. Do not use as a template for real code.
+const express = require("express");
+const sqlite3 = require("sqlite3");
+const app = express();
+app.use(express.json());
+
+const db = new sqlite3.Database(":memory:");
+db.serialize(() =&gt; {
+  db.run("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
+  db.run("INSERT INTO users (name, email) VALUES ('ada', 'ada@example.com')");
+});
+
+// FLAW 1: SQL string interpolation — user input lands directly in the query.
+app.get("/users", (req, res) =&gt; {
+  const q = `SELECT * FROM users WHERE name = '${req.query.name || ""}'`;
+  db.all(q, (err, rows) =&gt; (err ? res.status(500).send(err.message) : res.json(rows)));
+});
+
+// FLAW 2: reflected XSS — unsanitised input written straight into HTML.
+app.get("/hello", (req, res) =&gt; {
+  res.send(`&lt;h1&gt;Hello ${req.query.name || "guest"}&lt;/h1&gt;`);
+});
+
+// FLAW 3: hard-coded secret.
+const ADMIN_TOKEN = "sk-demo-hardcoded-9f2c41";
+app.get("/admin", (req, res) =&gt; {
+  if (req.headers["x-admin-token"] !== ADMIN_TOKEN) return res.status(403).send("nope");
+  res.json({ users: "all rows" });
+});
+
+app.listen(3000, () =&gt; console.log("demo listening on :3000"));</code></pre>
+<p>Now validate the scan setup without starting a scan:</p>
+<pre><code class="language-bash">cs scan demo-app --dry-run --json</code></pre>
+<p>The output is the resolved scan plan, and it is worth reading in full the first time:</p>
+<pre><code class="language-json">{
+  "dryRun": true,
+  "repository": "/home/hatch/.../demo-app",
+  "target": { "kind": "repository", "paths": [] },
+  "mode": "standard",
+  "stateDirectory": "/tmp/cs-verify/state",
+  "authentication": { "method": "stored_credentials", "verified": false },
+  "model": "gpt-5.6-sol",
+  "reasoningEffort": "xhigh"
+}</code></pre>
+<p>Exit code 0, and <code>Preflight complete</code> on stderr. The dry run confirms the target resolves, the model and effort are what you expect, and authentication is unverified — which is fine, because the next step needs none. One operational note: if you override the state directory with <code>CODEX_SECURITY_STATE_DIR</code>, its parent must not be group- or world-writable without the sticky bit, or the CLI refuses with <code>Scan output parent must not be group- or world-writable</code>. The default state directory avoids this entirely.</p>
+<h2 id="4-run-a-mock-scan">Step 4: Run a mock scan end to end<a class="anchor" href="#4-run-a-mock-scan" aria-label="Link to section">#</a></h2>
+<p>The CLI ships a <code>--mock</code> mode that runs the full scan pipeline — report, findings file, SARIF export, saved history — with synthetic results and no model calls or authentication. It exists for testing, but it is also the fastest way to learn the tool: every artifact a real scan produces, in under a second, for free.</p>
+<pre><code class="language-bash">cs scan demo-app --mock --headless --output-dir /tmp/cs-verify/out-mock --json</code></pre>
+<p>The output directory must be empty and outside the scanned directory and its enclosing git worktree. The scan finished in under a second, exited 0, and cost exactly $0 with 0 tokens. Its summary line reads:</p>
+<pre><code class="language-bash">Scan ea91ee32-5c59-4d97-a40f-1b5529476c45 · complete · started 2026-11-12T13:22:46Z
+Inspect: codex-security scans show ea91ee32-5c59-4d97-a40f-1b5529476c45</code></pre>
+<p>The output directory holds four artifacts:</p>
+<ul><li><strong><code>report.md</code></strong> — the readable summary: scope, severity mix, and one section per finding.</li><li><strong><code>findings.json</code></strong> — the canonical findings document (<code>codex-security.findings</code>), 12 findings.</li><li><strong><code>scan-manifest.json</code></strong> — the sealed record of the scan: target snapshot digest, scope, status, timestamps.</li><li><strong><code>exports/results.sarif</code></strong> — a SARIF 2.1.0 export with all 12 results, tool name “Codex Security”, ready to upload to GitHub code scanning or any SARIF consumer.</li></ul>
+<p>Read the severity mix first — it is the shape of a real report:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/codex-security-openai-scanner-tutorial/img2.webp" alt="Horizontal bar chart of the mock scan findings by severity: 2 critical, 4 high, 3 medium, 2 low, 1 informational"><figcaption>Chart: the mock scan&#x27;s 12 findings by severity — 2 critical, 4 high, 3 medium, 2 low, 1 informational. Counts from the scan run in this tutorial.</figcaption></figure>
+<p>Two critical, four high, three medium, two low, one informational. The report itself counts 11 reportable findings: it omits the informational one from the findings table and says so. The twelve titles show what the fixture set is designed to exercise:</p>
+<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Severity</th></tr></thead><tbody><tr><td>[Mock] Shell metacharacters in the export name execute commands</td><td>critical</td></tr><tr><td>[Mock] Export filename reaches a shell command</td><td>critical</td></tr><tr><td>[Mock] Search term is concatenated into a SQL query</td><td>high</td></tr><tr><td>[Mock] Archive entry escapes the extraction directory</td><td>high</td></tr><tr><td>[Mock] Parent-directory archive names overwrite files outside extraction</td><td>high</td></tr><tr><td>[Mock] Document download omits the ownership check</td><td>high</td></tr><tr><td>[Mock] Image proxy fetches arbitrary destinations</td><td>medium</td></tr><tr><td>[Mock] Sign-in callback accepts an external redirect</td><td>medium</td></tr><tr><td>[Mock] Comment preview renders stored HTML</td><td>medium</td></tr><tr><td>[Mock] Session cookie omits HttpOnly</td><td>low</td></tr><tr><td>[Mock] Error response exposes an internal stack trace</td><td>low</td></tr><tr><td>[Mock] Response header advertises the framework version</td><td>informational</td></tr></tbody></table></div>
+<p>Read the labels carefully: every title starts with <code>[Mock]</code>, the file paths are fictional <code>mock/*.ts</code> files, and the scan manifest states the limitation in plain language — “Synthetic mock scan for testing. No LLM calls or security analysis were performed.” These are fixtures for testing the pipeline, not vulnerabilities in the demo app. Do not file them, do not paste them into a security report, and do not be surprised that none of them matches the three flaws in <code>server.js</code>. The mock scan proves the machinery works; only a real scan judges your code.</p>
+<h2 id="5-read-the-report-and-export-it">Step 5: Read the report and export it<a class="anchor" href="#5-read-the-report-and-export-it" aria-label="Link to section">#</a></h2>
+<p>Everything the scan saved is reviewable from the CLI, and everything is scoped to a repository — run these from inside the target repo, or they will report nothing. Re-open the scan you just ran:</p>
+<pre><code class="language-bash">cs scans show ea91ee32-5c59-4d97-a40f-1b5529476c45 --json</code></pre>
+<p>That returns the scan&#x27;s artifact paths, cost (0 tokens, $0 estimated), model, and status. List what is in history and what it found:</p>
+<pre><code class="language-bash">cs scans list --json
+cs findings list --json</code></pre>
+<p>Export the findings in the format your workflow consumes. CSV is the most portable:</p>
+<pre><code class="language-bash">cs export /tmp/cs-verify/out-mock --export-format csv --output findings.csv</code></pre>
+<p>The CSV has one row per finding plus a header — 13 lines for this scan — with columns <code>occurrence_id, finding_id, title, summary, severity, confidence, status, close_reason, note, remediation, path, start_line, end_line</code>. The <code>remediation</code> column is genuinely useful: for the shell-metacharacter finding it reads “Pass the filename as a separate argument to a process API that does not invoke a shell.” JSON and SARIF exports use the same command with <code>--export-format json</code> or <code>sarif</code>; a threat model exports with <code>--artifact threat-model</code>.</p>
+<p>Finally, confirm the exit-code contract, because CI depends on it. A completed scan exits 0 by default. Add a severity gate and it exits 1 when findings meet the threshold:</p>
+<pre><code class="language-bash">cs scan demo-app --mock --headless --fail-on-severity high \
+  --output-dir /tmp/cs-verify/out-mock2 --json
+echo $?</code></pre>
+<p>Output: <code>1</code>. The scan still completes and saves everything — the exit code is a policy verdict, not a crash. Execution failures (bad target, broken output directory) exit 2 instead, so a pipeline can tell “found something” apart from “something broke”.</p>
+<h2 id="6-import-findings-from-another-scanner">Step 6: Import findings from another scanner<a class="anchor" href="#6-import-findings-from-another-scanner" aria-label="Link to section">#</a></h2>
+<p>Codex Security does not insist on finding everything itself. It can save findings from other tools as a completed scan in its own history — no model calls, no authentication. This is how you fold a Semgrep or Snyk report into the same review flow, and it is also the quickest way to test the import path: feed it the CSV you just exported.</p>
+<pre><code class="language-bash">cs scan import findings.csv --dry-run --json</code></pre>
+<p>The dry run validates without saving: <code>{"dryRun": true, "format": "csv", "findingCount": 12}</code>. Run it for real:</p>
+<pre><code class="language-bash">cs scan import findings.csv --output-dir /tmp/cs-verify/out-import --json</code></pre>
+<p>The output confirms it: <code>Imported 12 findings as scan 8d596a6b-d2c4-4a5a-85c3-0039346e932b</code>, and the new scan directory holds its own <code>findings.json</code> plus the retained input under <code>artifacts/import/source.csv</code>. The manifest records the import explicitly — <code>extensions.import</code> with format and finding count — so nobody mistakes an import for an analysis. JSON input works the same way, either as a complete <code>codex-security.findings</code> document or as <code>{"findings": [...]}</code>. The CLI also has dedicated import commands for GitHub, Semgrep, Snyk, and Sonar findings; the CSV/JSON path above is the generic one.</p>
+<h2 id="7-run-a-real-scan">Step 7: Run a real scan<a class="anchor" href="#7-run-a-real-scan" aria-label="Link to section">#</a></h2>
+<p>Everything so far ran with no credentials. A real scan is the same command minus <code>--mock</code> — but it calls the model, so sign in first (Step 2) and set a cost limit before you start. The commands in this section are quoted from the official CLI reference; they were not executed in the sandbox, which has no ChatGPT login or API key.</p>
+<pre><code class="language-bash">cs login
+cs scan . --max-cost 5 --show-cost</code></pre>
+<p>The <code>--max-cost 5</code> flag caps the scan at an estimated $5 — the same figure the official GitHub Action example uses per scan — and <code>--show-cost</code> prints the running estimate. Requests already in progress can exceed the limit, so treat it as a tripwire, not a hard wall. For pricing context, the tool&#x27;s own cost table (as of September 14, 2026) prices its default model, <code>gpt-5.6-sol</code>, at $4 per million input tokens, $0.40 cache read, $5 cache write, and $20 output in short context, roughly doubling for long context.</p>
+<p>Scope the scan to what changed, or to the part you care about:</p>
+<pre><code class="language-bash">cs scan . --path src --path tests
+cs scan . --diff origin/main
+cs scan . --working-tree</code></pre>
+<p>Whole repositories, selected paths, committed diffs, and working-tree changes are all supported; diff and working-tree scans need git. For a deeper pass, Deep Scan repeats Standard scans in batches of workers until several consecutive runs find nothing new:</p>
+<pre><code class="language-bash">cs scan . --mode deep --workers 2 --max-time 90</code></pre>
+<p>Defaults are 4 workers, 3 subagents each, stop after 4 runs with no new findings, and at most 40 discovery runs. <code>--max-time</code> is advisory in Standard mode and an enforced discovery limit in Deep mode (maximum 96 hours). Then close the loop on what it finds. Validation re-checks each finding against source evidence only, with read-only filesystem access and no network:</p>
+<pre><code class="language-bash">cs scan . --validate
+cs validate findings.json</code></pre>
+<p>Patching applies fixes for the findings you select and verifies them, and <code>--create-pr</code> opens a draft pull request with the result:</p>
+<pre><code class="language-bash">cs patch --scan latest --severity high
+cs verify-fix --scan latest</code></pre>
+<p><code>verify-fix</code> checks fixes you already made, without changing the repository. Two honest limits from the docs: validation cannot be combined with <code>--max-cost</code>, <code>--dry-run</code>, or <code>--mock</code>, because its extra model calls are not cost-tracked; and a completed scan is not a clean bill of health — the report records exclusions, deferred work, and open questions, and absence of findings in a stopped run is inconclusive. Some cybersecurity requests also need a Daybreak access program; if a refusal or safety block aborts a scan, the run fails even with <code>--fail-on-severity none</code>, and a failed scan does not mean the repository has no vulnerabilities.</p>
+<h2 id="8-put-it-in-ci">Step 8: Put it in CI<a class="anchor" href="#8-put-it-in-ci" aria-label="Link to section">#</a></h2>
+<p>The same scan runs weekly in GitHub Actions. The official example workflow — verified against the repository&#x27;s Action README — is short enough to read in full:</p>
+<pre><code class="language-yaml">name: Codex Security repository
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 7 * * 1" # Mondays at 07:23 UTC
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan the repository
+        id: security
+        uses: openai/codex-security@REPLACE_WITH_REVIEWED_COMMIT
+        with:
+          scope: repository
+          model: gpt-5.6-sol
+          effort: high
+          max-cost: "5"
+          fail-on-severity: none
+        env:
+          OPENAI_API_KEY: ${{ secrets.CODEX_SECURITY_API_KEY }}</code></pre>
+<p>Three details matter. First, add your API key as a repository secret named <code>CODEX_SECURITY_API_KEY</code>. Second, replace <code>REPLACE_WITH_REVIEWED_COMMIT</code> with the full distribution commit SHA from an <code>action-vX.Y.Z</code> release you have reviewed — the distribution commit contains the Action bundles and the CLI dependency lock, and the pin-by-SHA is deliberate. Third, <code>fail-on-severity: none</code> makes the run report-only: findings never fail the job, but scanner errors still do. The workflow runs Mondays at 07:23 UTC, or on demand from the Actions tab.</p>
+<p>For project-level defaults, generate a starter configuration file in the repo:</p>
+<pre><code class="language-bash">cs init
+codex-security scan . -c codex-security.yaml --dry-run</code></pre>
+<p><code>cs init</code> writes <code>codex-security.yaml</code> with the defaults commented out — model, effort, scope paths, knowledge-base files, a per-scan cost limit, and a severity gate — and the dry run confirms the file parses before any scan uses it. Treat the file as trusted operator configuration: it can start processes and choose model destinations, so keep it out of untrusted checkouts. The CLI also ships <code>cs install-hook</code>, which installs a pre-commit hook that scans staged and unstaged changes and blocks on errors or findings at your chosen severity.</p>
+<h2 id="9-drive-it-from-typescript">Step 9: Drive it from TypeScript<a class="anchor" href="#9-drive-it-from-typescript" aria-label="Link to section">#</a></h2>
+<p>The same tool is a library. Install it as a dependency and run a scan from code — the snippet below is the README&#x27;s own example:</p>
+<pre><code class="language-bash">npm install @openai/codex-security</code></pre>
+<pre><code class="language-typescript">import { CodexSecurity } from "@openai/codex-security";
+const security = new CodexSecurity();
+try {
+  const result = await security.run("/path/to/repository");
+  console.log(result.reportPath);
+} finally {
+  await security.close();
+}</code></pre>
+<p>The SDK was executed in the sandbox with the mock flag — <code>security.run("./demo-app", { mock: true })</code> — and it returned a result object carrying <code>reportPath</code>, <code>scanDir</code>, <code>sarifPath</code>, <code>findings</code>, and <code>cost</code>, with the report written under the scan state directory. The SDK guide covers deep-scan configuration, validation, severity classification, and owner suggestions from there, and the CLI&#x27;s <code>scan --schema --format json</code> documents the full input and output shapes. Policy generation follows the same pattern: <code>cs policy .</code> drafts a <code>SECURITY.md</code> for review, and <code>cs policy . --dry-run --json</code> — executed here, exit 0 — checks the inputs without calling the model.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/codex-security-openai-scanner-tutorial/img3.webp" alt="Five-box workflow diagram: scan, validate, patch, verify fix, export, each with its cs command"><figcaption>Diagram: the remediation loop — scan once, then validate, patch, verify, and export without leaving the CLI. Every step writes to the same saved scan history.</figcaption></figure>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p>Codex Security is an agentic reviewer, not a rules engine. That decides where it fits.</p>
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>Use it for</th><th>Strengths</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Codex Security</strong></td><td>Whole-repo security review with evidence, validation, patching, and verification in one loop</td><td>Findings carry source evidence and a root cause; validation and patching are built in; SARIF/CSV/JSON export; GitHub Action and SDK</td><td>Needs a model and credentials for real scans; per-scan cost; a completed scan is not a guarantee — exclusions and deferred work are recorded, not resolved</td></tr><tr><td><strong>Semgrep / CodeQL</strong></td><td>Deterministic, repeatable rules in CI on every push</td><td>Free; fast; no model calls; same input always gives the same output</td><td>Pattern-bound — it finds what its rules describe and nothing else; no patching loop</td></tr><tr><td><strong>Gitleaks / TruffleHog</strong></td><td>Secrets in code and history</td><td>Fast, specialised detectors; TruffleHog verifies credentials against live APIs</td><td>Secrets only — they say nothing about injection, authz, or logic flaws</td></tr><tr><td><strong>Cloudflare security-audit-skill</strong></td><td>Audits driven inside Claude Code as a skill</td><td>Lives where you already code; multi-phase audit with verified findings</td><td>Tied to the Claude Code workflow; findings stay in the session unless you export them</td></tr></tbody></table></div>
+<p>The practical setup is layered, not either-or: keep the deterministic scanner in CI for every push, run Codex Security on a weekly schedule or before releases for the review a rules engine cannot do, and keep a secrets scanner on history. The import command exists precisely so those layers can share one findings history instead of three inboxes.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The reason Codex Security is trending is not that it finds vulnerabilities — plenty of tools do that — but that it finishes the job: scan, validate, patch, verify, export, all from one CLI, with every step recorded in a history you can re-open. The mock mode makes that loop free to learn: install the CLI, run <code>cs scan . --mock</code>, and you will hold a real report, a real SARIF file, and a real findings database within a minute, no account required.</p>
+<p>From there the honest path is short. Point it at a repository you own, set a $5 cost cap, and read the first real report with the same scepticism you would give any reviewer — check the evidence, run validation, and patch the findings that survive it. The tool&#x27;s own docs say a completed scan does not mean every file was examined; treat the report as a prioritised starting point, not a verdict. Used that way, it is the fastest route from “we should really audit this” to a reviewed, patched, and exported result.</p>
+
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/openai/codex-security" rel="nofollow">Codex Security — GitHub repository and README</a></li><li><a href="https://github.com/openai/codex-security/blob/main/sdk/typescript/docs/cli.md" rel="nofollow">Codex Security — CLI and workflows reference</a></li><li><a href="https://github.com/openai/codex-security/blob/main/github-action/README.md" rel="nofollow">Codex Security — GitHub Action README</a></li><li><a href="https://github.com/openai/codex-security/blob/main/github-action/examples/repository.yml" rel="nofollow">Codex Security — weekly workflow example</a></li><li><a href="https://www.npmjs.com/package/@openai/codex-security" rel="nofollow">@openai/codex-security — npm package (0.10.0)</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="codex-security-openai-scanner-tutorial"></div><div class="comments" data-comments="codex-security-openai-scanner-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/audit-repos-leaked-ai-agent-secrets-tutorial/"><span class="chip">Tutorials</span><h3>Your AI coding agent may have leaked your API keys to GitHub — how to find and purge them</h3><div class="meta">November 12, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/shadcn-improve-agent-skill-codebase-audit-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with shadcn&#x27;s improve: audit your codebase with your best model, execute with your cheapest</h3><div class="meta">November 11, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/nvidia-skillspector-skill-security-scanner-tutorial/"><span class="chip">Tutorials</span><h3>Scan every skill before you install it: hands-on with NVIDIA&#x27;s SkillSpector</h3><div class="meta">October 27, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/cloudflare-security-audit-skill-tutorial/"><span class="chip">Tutorials</span><h3>Turn your coding agent into a security auditor with Cloudflare&#x27;s security-audit-skill</h3><div class="meta">September 27, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an OpenAI account to try Codex Security?</h3><p>No. Install, dry-run, mock scan, findings import, policy dry-run, and the SDK mock all work with no sign-in — the mock scan in this tutorial ran with no credentials at all. A real scan needs a ChatGPT login or an API key: an OpenAI key, or another provider such as OpenRouter, Fireworks, or Amazon Bedrock.</p><h3>What does a real scan cost?</h3><p>The official GitHub Action example caps each scan at an estimated $5 with max-cost. The tool prices its default model, gpt-5.6-sol, at $4 per million input tokens and $20 per million output tokens in short context (as of September 14, 2026). Set --max-cost to cap a scan — and remember that requests already in progress can exceed the limit.</p><h3>Are the mock scan’s findings real vulnerabilities?</h3><p>No. Mock mode writes 12 synthetic findings with fictional file paths to exercise the reporting pipeline. They do not correspond to the code you scanned, and the scan manifest says so. Use mock mode to learn the tool; use a real scan to judge code.</p><h3>Why did my install report a missing Codex executable?</h3><p>The global install pulls a ~438 MB platform binary as an optional dependency. If that download fails, npm warns and continues, and the CLI later reports that the bundled Codex executable could not be resolved. Reinstall with optional dependencies enabled, or set CODEX_CLI_PATH to an installed Codex executable.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/open-code-review-alibaba-tutorial/">Alibaba&#x27;s OpenCodeReview hit #1 on GitHub Trending: a hands-on tutorial</a></li><li><a href="/articles/bumblebee-supply-chain-scanner-tutorial/">Perplexity&#x27;s Bumblebee hit 5,000 stars in days: scan your machine for supply-chain compromises, hands-on</a></li><li><a href="/articles/indirect-prompt-injection-agent-defense/">Your agent reads the internet: stop prompt injections from hijacking its tools</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
