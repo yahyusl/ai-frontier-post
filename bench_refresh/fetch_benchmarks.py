@@ -174,6 +174,7 @@ def fetch_hle():
 # ------------------------------------------------------- FrontierCode (JSON-LD)
 FC_ORGS = {
     "Claude Opus 5.5": "Anthropic",
+    "Claude Fable 5.2": "Anthropic",
     "Claude Fable 5": "Anthropic",
     "Claude Opus 5": "Anthropic",
     "Claude Fable 5.1": "Anthropic",
@@ -196,6 +197,7 @@ FC_ORGS = {
     "Kimi K3": "Moonshot AI",
     "GLM-5.3": "Z AI",
     "DeepSeek V4.1 Flash": "DeepSeek",
+    "Gemini 4 Carbon": "Google",
     "Gemini 3.8 Flash": "Google",
     "Muse Spark 1.3": "Meta",
 }
@@ -228,6 +230,7 @@ AB_ORGS = {
     "Gemini 4 Carbon": "Google",
     "Claude Sonnet 5.5": "Anthropic",
     "Claude Opus 5.5": "Anthropic",
+    "Claude Fable 5.2": "Anthropic",
     "Claude Haiku 5.5": "Anthropic",
     "GPT-6 Astra": "OpenAI",
 }
