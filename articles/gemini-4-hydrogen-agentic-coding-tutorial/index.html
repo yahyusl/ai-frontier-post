@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a fast agentic coding loop with Gemini 4 Hydrogen — AI Frontier Post</title>
+<meta name="description" content="Google&#x27;s fast execution model costs $1.50/$7.50 per million tokens, thinks at four levels, and has a free tier. This tutorial builds a complete coding agent on its function-calling API — verified call by call against the Python SDK — and prices every run to the cent.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gemini-4-hydrogen-agentic-coding-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a fast agentic coding loop with Gemini 4 Hydrogen">
+<meta property="og:description" content="Google&#x27;s fast execution model costs $1.50/$7.50 per million tokens, thinks at four levels, and has a free tier. This tutorial builds a complete coding agent on its function-calling API — verified call by call against the Python SDK — and prices every run to the cent.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gemini-4-hydrogen-agentic-coding-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gemini-4-hydrogen-agentic-coding-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-13">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Build a fast agentic coding loop with Gemini 4 Hydrogen","description":"Google's fast execution model costs $1.50/$7.50 per million tokens, thinks at four levels, and has a free tier. This tutorial builds a complete coding agent on its function-calling API \u2014 verified call by call against the Python SDK \u2014 and prices every run to the cent.","datePublished":"2026-11-13","dateModified":"2026-11-13","author":{"@type":"Person","name":"Priya Nair","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/gemini-4-hydrogen-agentic-coding-tutorial/"},"image":"https://aifrontierpost.com/articles/gemini-4-hydrogen-agentic-coding-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"Build a fast agentic coding loop with Gemini 4 Hydrogen","description":"Call Gemini 4 Hydrogen from the Python SDK: install the SDK, run a first request, set thinking levels, build an agent loop with an approval gate, price each run, and use the Interactions API.","step":[{"@type":"HowToStep","name":"Step 1 \u2014 Install and verify","text":"Create a virtual environment and install google-genai 3.3.0 and pytest 9.2.0. Confirm the model ID with client.models.get."},{"@type":"HowToStep","name":"Step 2 \u2014 Your first Hydrogen call","text":"Send a generate_content request with model gemini-4-hydrogen and thinking_config at high. Read the usage object, including thoughts_token_count."},{"@type":"HowToStep","name":"Step 3 \u2014 Thinking levels","text":"Set thinking_level explicitly: low, medium, high (default), or xhigh. Never send temperature, top_p, top_k, thinking_budget, or the minimal level."},{"@type":"HowToStep","name":"Step 4 \u2014 Build the agent loop","text":"Run an append-only loop with read_file, run_tests, and write_file tools, with writes behind a human approval gate and every path confined to the project."},{"@type":"HowToStep","name":"Step 5 \u2014 Run it on a real bug","text":"Point the agent at a demo project with a failing test and watch it read, test, fix (approved), and re-test to green."},{"@type":"HowToStep","name":"Step 6 \u2014 What a run actually costs","text":"Price each run from the usage object: fresh input $1.50, cached input $0.075, visible output and thinking $7.50 per million tokens."},{"@type":"HowToStep","name":"Step 7 \u2014 The Interactions API","text":"Use client.interactions.create when the platform should run the loop; keep the hand-rolled loop when you need the approval gate."}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need an API key to follow this tutorial?","acceptedAnswer":{"@type":"Answer","text":"Yes, for the live calls: Hydrogen answers only with a key from Google AI Studio. The agent loop itself was verified against google-genai 3.3.0 with a mocked transport, so every request shape, parameter, and error path in this tutorial is exactly what the SDK sends \u2014 but the model only replies when your key is in the environment. The free tier means the first calls cost nothing."}},{"@type":"Question","name":"Why does my existing code return a 400 on Hydrogen?","acceptedAnswer":{"@type":"Answer","text":"Three usual causes: temperature, top_p, or top_k (removed on Gemini 4), thinking_budget (Gemini 2.5-era), or the minimal thinking level (rejected on all Gemini 4 models). Set thinking_level explicitly and drop the sampling knobs."}},{"@type":"Question","name":"When is Hydrogen the wrong model?","acceptedAnswer":{"@type":"Answer","text":"When the work needs the deepest reasoning (Gemini 4 Carbon or Argon), or a capability Hydrogen lacks: image generation, audio generation, and the Live API are not supported. For everyday coding and agent work, start with Hydrogen and measure cost per task before reaching up."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a fast agentic coding loop with Gemini 4 Hydrogen</h1>
+<p class="lede">Google&#x27;s fast execution model costs $1.50/$7.50 per million tokens, thinks at four levels, and has a free tier. This tutorial builds a complete coding agent on its function-calling API — verified call by call against the Python SDK — and prices every run to the cent.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 13, 2026 · 20 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Gemini 4 Hydrogen is Google&#x27;s fast execution model — $1.50/$7.50 per million tokens, a 1M-token context, four thinking levels, and a free tier. This tutorial builds a complete coding agent on its function-calling API, verifies every call against google-genai 3.3.0, and prices each run from the usage object.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> Gemini 4 Hydrogen, released November 12, 2026. API model ID <code>gemini-4-hydrogen</code>, 1M-token context window, up to 65,536 output tokens per synchronous request, knowledge cutoff March 2026.</li><li><b>Verified here:</b> Every SDK call was checked against google-genai 3.3.0. The agent loop ran end to end against a mocked transport (no API key was available in the verification sandbox, so the model was not called live): the thinking_level wire shape, the model record, the four-turn agent run (read, test, approved write, green tests), the approval gate, the cost math, and the Interactions API. The live calls need your key; the request shapes are exactly what the SDK sends.</li><li><b>The price:</b> $1.50 per million input tokens, $7.50 per million output tokens — thinking tokens bill as output. Cache reads $0.075 per million (implicit only, from 4,096 tokens); Batch and Flex halve the rates to $0.75/$3.75. Free tier on AI Studio.</li><li><b>Thinking is the cost dial:</b> low, medium, high (default), xhigh. Higher levels spend more tokens per task — the per-token price does not change.</li><li><b>The three 400s:</b> <code>temperature</code>/<code>top_p</code>/<code>top_k</code>, <code>thinking_budget</code>, and the <code>minimal</code> level — plus the 65,536-token output cap that covers thinking and reply together.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/gemini-4-hydrogen-agentic-coding-tutorial/cover.webp" alt="Editorial illustration of a fast AI agent loop: a glowing blue orb sending light pulses to a code editor, a terminal, and a checklist arranged in a circle on a dark navy background"><figcaption>AI-generated illustration: the agent loop — model, code, tests, and back again.</figcaption></figure>
+<div class="article-body"><p>Google released Gemini 4 Hydrogen on November 12, and it is the most useful Gemini model most developers will ever call: a fast execution model for everyday coding and agentic work, priced at $1.50 per million input tokens and $7.50 per million output tokens, with a free tier on the API and a 1-million-token context window. It is the model Google calls the recommended upgrade from Gemini 3.8 Flash — 2.5 times faster on Google's reporting, with Terminal-Bench 4.1 scores of 57% against 18.2% for the model it replaces, and an Artificial Analysis Intelligence Index score of 51 at its default setting, one point above the frontier Gemini 4 Argon. Treat those as the company's numbers, not independent verification. The price, the free tier, and the API rules are on the rate card and in the documentation — and the API rules are the reason this tutorial exists.</p>
+<p>Hydrogen changes how you call Gemini in three ways that will break code written for older models. Thinking is controlled by a single <code>thinking_level</code> dial with four settings — <code>low</code>, <code>medium</code>, <code>high</code>, and a new <code>xhigh</code> — and the old <code>thinking_budget</code> control is gone. The sampling knobs <code>temperature</code>, <code>top_p</code>, and <code>top_k</code> are removed: in-range values are ignored and out-of-range values return a 400. And thinking tokens bill as output tokens, so the level you pick is a cost decision, not just a quality one. This tutorial builds a complete coding agent on the function-calling API, verifies every call against the installed Python SDK, and prices each run to the cent — so you can use the model the way it was designed to be used instead of debugging its error messages one by one.</p>
+<p>By the end you will have a small, complete agent that reads code, runs tests, and edits files only after a human approves — about 130 lines, three tools, no framework. You will know exactly what each thinking level buys, how to read the usage object that prices every run, when implicit caching pays for a million-token context, and which Gemini 4 model to reach for when Hydrogen is the wrong tool.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or newer.</strong> The examples use the official <code>google-genai</code> Python SDK, version 3.3.0 at time of writing (it requires Python 3.11+).</li><li><strong>A Gemini API key</strong> from Google AI Studio at aistudio.google.com. The SDK reads <code>GEMINI_API_KEY</code> from the environment. Hydrogen is available on the free tier as well as the paid tier — the only Gemini 4 model with one.</li><li><strong>A few dollars of API credit, or the free tier.</strong> There is no charge for the SDK. At Hydrogen&#x27;s standard rates, a 100,000-input / 10,000-output-token run costs about $0.23. The verification harness in this tutorial ran against a mocked transport, so the code paths were exercised end to end without spending anything — the live calls need your key.</li><li><strong>A scratch directory.</strong> The agent in Step 4 reads and writes files. Keep it in a folder you can throw away.</li></ul>
+<h2 id="step-1-install-and-verify">Step 1 — Install and verify<a class="anchor" href="#step-1-install-and-verify" aria-label="Link to section">#</a></h2>
+<p>Create a project folder and a virtual environment, then install the SDK and the test runner. Every snippet in this tutorial was checked against the installed packages before publication — including the two parameters that did not exist on older SDK versions, <code>thinking_level</code> and <code>thoughts_token_count</code>.</p>
+<pre><code class="language-bash">mkdir hydrogen-agent
+cd hydrogen-agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install google-genai==3.3.0 pytest==9.2.0</code></pre>
+<p>Confirm the install and that the SDK knows the model. The Models API is the fastest way to prove your key and the model ID are both valid — it returns the model&#x27;s display name and token limits without spending a token on generation:</p>
+<pre><code class="language-bash">pip show google-genai | grep Version
+python3 -c "import google.genai; print('google-genai 3.3.0')"</code></pre>
+<pre><code class="language-python">from google import genai
+
+client = genai.Client()  # reads GEMINI_API_KEY from the environment
+model = client.models.get(model="gemini-4-hydrogen")
+print(model.name, "·", model.display_name, "·",
+      model.input_token_limit, "in ·", model.output_token_limit, "out")</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">models/gemini-4-hydrogen · Gemini 4 Hydrogen · 1048576 in · 65536 out</code></pre>
+<p>The two limits are the ones that shape everything else in this tutorial: one shared window of 1,048,576 tokens for input, thinking, and output together, and a 65,536-token cap on a single synchronous response. If the get call fails, check the key first: a wrong or missing key returns a 401, while a wrong model ID returns a 404. Note the method name — it is <code>models.get</code>, and the model ID is the bare <code>gemini-4-hydrogen</code>, with no <code>models/</code> prefix and no version suffix.</p>
+<h2 id="step-2-first-call">Step 2 — Your first Hydrogen call<a class="anchor" href="#step-2-first-call" aria-label="Link to section">#</a></h2>
+<p>The smallest correct request has three fields: the model, the contents, and a config carrying the thinking level. Here it is as curl first, because curl shows you the wire format with nothing hidden:</p>
+<pre><code class="language-bash">curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-4-hydrogen:generateContent" \
+  -H "x-goog-api-key: $GEMINI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"role": "user", "parts": [{"text": "Explain what a thinking level is, in one paragraph."}]}
+    ],
+    "generationConfig": {
+      "thinkingConfig": {"thinkingLevel": "HIGH"},
+      "maxOutputTokens": 4096
+    }
+  }'</code></pre>
+<p>The same call in Python, with the response handled the way Hydrogen requires. The usage object is the part most tutorials skip, and it is the part this tutorial is built on: <code>thoughts_token_count</code> is the thinking the model did, billed at the output rate, and it is separate from the visible reply in <code>candidates_token_count</code>.</p>
+<pre><code class="language-python">from google import genai
+from google.genai import types
+
+client = genai.Client()
+resp = client.models.generate_content(
+    model="gemini-4-hydrogen",
+    contents="Explain what a thinking level is, in one paragraph.",
+    config=types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_level="high"),
+        max_output_tokens=4096,
+    ),
+)
+
+print(resp.text)
+usage = resp.usage_metadata
+print(usage.prompt_token_count, "in /",
+      usage.candidates_token_count, "visible out /",
+      usage.thoughts_token_count, "thinking")</code></pre>
+<p>Two things are different from the requests you may have written for Gemini 2.5 or 3.8 Flash. First, there is no <code>temperature</code>, <code>top_p</code>, or <code>top_k</code> anywhere in the config — sending them is either silently ignored or a 400, depending on the value. Second, thinking is set with <code>thinking_level</code>, not <code>thinking_budget</code>: the budget control belongs to Gemini 2.5 and earlier, and Hydrogen rejects it. One dial at a time, and on Hydrogen that dial is the level.</p>
+<p>One SDK quirk worth recording, found while verifying this tutorial: google-genai 3.3.0 serialises the nested thinking field as <code>"thinking_level": "HIGH"</code> on the wire — snake_case inside <code>thinkingConfig</code>, while every other field goes out camelCase. The value is correct and the API accepts it (its JSON parser accepts both the proto field name and the JSON name). You will never see it unless you log requests, and you should not &quot;fix&quot; it by hand-building JSON — the typed <code>ThinkingConfig</code> is the supported form.</p>
+<h2 id="step-3-thinking-levels">Step 3 — Thinking levels: the one dial that matters<a class="anchor" href="#step-3-thinking-levels" aria-label="Link to section">#</a></h2>
+<p>Thinking level is the single most misunderstood parameter on Hydrogen, because it looks like a quality setting and behaves like a budget. It controls how many tokens the model spends reasoning before it answers — and every one of those tokens bills at the $7.50 output rate. The per-token price never changes; the level changes how many tokens the model uses. Four levels exist, and Google&#x27;s guidance is specific about where to start:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Level</th><th>What it is for</th><th>Default anywhere?</th></tr></thead>
+<tbody>
+<tr><td><code>low</code></td><td>Fewest thinking tokens, lowest latency. Routing, classification, short summaries, extraction.</td><td>No</td></tr>
+<tr><td><code>medium</code></td><td>Balances reasoning quality and latency. Interactive coding, live UI prototyping, responsive chat.</td><td>No — but the default on Argon and Carbon</td></tr>
+<tr><td><code>high</code></td><td>Deep reasoning, multi-step problem solving, multi-turn tool use. Agent runs, hard debugging, complex analysis.</td><td>API default on Hydrogen — start here</td></tr>
+<tr><td><code>xhigh</code></td><td>Maximum thinking capacity, for the hardest math, science, formal checks, and long-horizon software work.</td><td>No — new on Hydrogen; Argon and Carbon stop at <code>high</code></td></tr>
+</tbody>
+</table></div>
+<figure class="inline-art"><img class="story-image" src="/articles/gemini-4-hydrogen-agentic-coding-tutorial/img2.webp" alt="Diagram of the four thinking levels for Gemini 4 Hydrogen, from low to xhigh, with their documented uses and the API default of high"><figcaption>Diagram: the thinking-level ladder, drawn for AI Frontier Post from Google&#x27;s thinking-level guidance. Bar length is qualitative — the per-token price never changes.</figcaption></figure>
+<p>Google&#x27;s advice is: start with <code>high</code> for most complex tasks, and reserve <code>xhigh</code> for problems where <code>high</code> is not enough. The caution is warranted: at <code>xhigh</code>, Hydrogen produced roughly four times the output tokens of comparable models across the Artificial Analysis index, and the docs warn that <code>xhigh</code> on simple text or JSON extraction can overthink the task or exhaust <code>max_output_tokens</code> — the 65,536-token output cap covers thinking and reply together, so a deep level with a low cap can spend the whole budget on thought and return no answer at all. Set the level explicitly on every request, even when you want the default — a default you did not choose is a default you will forget.</p>
+<p>Three rejections to memorise before you write any other code. The level <code>minimal</code> is not supported on any Gemini 4 model, Hydrogen included — a request that asks for it fails. The old <code>thinking_budget</code> control belongs to Gemini 2.5; sending it alongside <code>thinking_level</code> returns an error. And <code>temperature</code>, <code>top_p</code>, and <code>top_k</code> are gone on Gemini 4: in-range values are ignored, out-of-range values return a 400. If a prompt feels too random or too flat, change the thinking level or the wording — there is no sampling knob left to turn.</p>
+<h2 id="step-4-agent-loop">Step 4 — Build the agent loop<a class="anchor" href="#step-4-agent-loop" aria-label="Link to section">#</a></h2>
+<p>A single call is a demo. An agent is a loop: send the task, run the tool calls that come back, append the results, repeat until the model stops calling tools. The loop below is the whole tutorial in one file — about 130 lines, three tools, no framework. It has one rule that makes it safe to run on a real project: the agent cannot change a single file until a human approves the change.</p>
+<pre><code class="language-python">"""Minimal agentic coding loop on Gemini 4 Hydrogen.
+
+One file, three tools, one rule: the agent cannot change a file until a
+human approves the change. Requires google-genai 3.3.0 and a key in
+GEMINI_API_KEY (free tier: aistudio.google.com).
+"""
+import argparse
+import os
+import subprocess
+import sys
+
+from google import genai
+from google.genai import types
+
+MODEL = "gemini-4-hydrogen"
+
+# USD per million tokens, Gemini 4 Hydrogen standard tier (Google pricing page).
+PRICES = {"input": 1.50, "output": 7.50, "cache_read": 0.075}
+
+LEVELS = ("low", "medium", "high", "xhigh")
+
+SYSTEM = (
+    "You are a coding agent working in a small Python project. "
+    "Fix the task using the tools provided. Read files before editing them, "
+    "run the tests after every edit, and never edit test files. "
+    "Say who owns the code and what 'done' means before you start."
+)
+
+
+def cost_of(usage):
+    """USD cost of accumulated usage (dict of token counts)."""
+    prompt = usage.get("prompt_token_count", 0)
+    cached = usage.get("cached_content_token_count", 0)
+    visible = usage.get("candidates_token_count", 0)
+    thinking = usage.get("thoughts_token_count", 0)
+    fresh = prompt - cached
+    return (
+        fresh * PRICES["input"]
+        + cached * PRICES["cache_read"]
+        + (visible + thinking) * PRICES["output"]
+    ) / 1_000_000
+
+
+def make_tools(project_dir):
+    """Tool implementations, confined to project_dir. Returns (decls, fns)."""
+
+    def read_file(path):
+        target = (project_dir / path).resolve()
+        if not str(target).startswith(str(project_dir.resolve())):
+            return "Error: path escapes the project directory."
+        return target.read_text()[:8000]
+
+    def run_tests():
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q"],
+            cwd=project_dir, capture_output=True, text=True, timeout=120,
+        )
+        return (proc.stdout + proc.stderr)[-4000:]
+
+    def write_file(path, content):
+        target = (project_dir / path).resolve()
+        if not str(target).startswith(str(project_dir.resolve())):
+            return "Error: path escapes the project directory."
+        target.write_text(content)
+        return f"Wrote {len(content)} characters to {path}."
+
+    declarations = [
+        types.FunctionDeclaration(
+            name="read_file",
+            description="Read a file inside the project and return its contents.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={"path": types.Schema(type=types.Type.STRING)},
+                required=["path"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="run_tests",
+            description="Run pytest in the project and return the output.",
+            parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+        ),
+        types.FunctionDeclaration(
+            name="write_file",
+            description="Overwrite a file inside the project with new content.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "path": types.Schema(type=types.Type.STRING),
+                    "content": types.Schema(type=types.Type.STRING),
+                },
+                required=["path", "content"],
+            ),
+        ),
+    ]
+    return declarations, {
+        "read_file": read_file,
+        "run_tests": run_tests,
+        "write_file": write_file,
+    }
+
+
+def run_agent(client, task, level="high", project_dir=".",
+              approve=None, max_turns=8):
+    """Run one agent loop. Returns (final_text, usage_totals, history)."""
+    from pathlib import Path
+    project_dir = Path(project_dir)
+    declarations, tool_fns = make_tools(project_dir)
+    if approve is None:
+        approve = lambda name, args: input(
+            f"Approve {name}({args})? [y/N] ").strip().lower() == "y"
+
+    history = [{"role": "user", "parts": [{"text": task}]}]
+    totals = {"prompt_token_count": 0, "candidates_token_count": 0,
+              "thoughts_token_count": 0, "cached_content_token_count": 0}
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM,
+        thinking_config=types.ThinkingConfig(thinking_level=level),
+        max_output_tokens=16384,
+        tools=[types.Tool(function_declarations=declarations)],
+    )
+    for _ in range(max_turns):
+        resp = client.models.generate_content(
+            model=MODEL, contents=history, config=config)
+        usage = resp.usage_metadata
+        if usage is not None:
+            for key in totals:
+                totals[key] += getattr(usage, key, 0) or 0
+        content = resp.candidates[0].content
+        history.append(content)  # send the turn back exactly as returned
+        calls = [p.function_call for p in content.parts if p.function_call]
+        if not calls:
+            text = "".join(p.text for p in content.parts if p.text)
+            return text, totals, history
+        results = []
+        for call in calls:
+            args = dict(call.args or {})
+            if call.name == "write_file" and not approve(call.name, args):
+                result = "Declined: the human did not approve this write."
+            else:
+                try:
+                    result = tool_fns[call.name](**args)
+                except Exception as exc:  # tool errors go back as results
+                    result = f"Error: {exc}"
+            results.append(types.Part(function_response=types.FunctionResponse(
+                name=call.name, response={"result": result})))
+        history.append({"role": "user", "parts": results})
+    raise RuntimeError("agent loop exceeded max_turns")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("task")
+    parser.add_argument("--project", default=".")
+    parser.add_argument("--level", default="high", choices=LEVELS)
+    args = parser.parse_args()
+    if not os.environ.get("GEMINI_API_KEY"):
+        sys.exit("Set GEMINI_API_KEY first (free key: aistudio.google.com).")
+    client = genai.Client()
+    final, usage, history = run_agent(
+        client, args.task, level=args.level, project_dir=args.project)
+    print(final)
+    print(f"turns: {len(history)}  cost: ${cost_of(usage):.4f}  "
+          f"({usage['prompt_token_count']} in, "
+          f"{usage['candidates_token_count']} visible out, "
+          f"{usage['thoughts_token_count']} thinking)")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<p>Three design choices in the loop deserve a sentence each. Tool errors go back to the model as <code>function_response</code> content, not as Python exceptions: a failed tool is information the model can act on, and raising out of the loop throws away the conversation. The approval gate sits on <code>write_file</code> only — reads and test runs are safe to automate, writes are not, and a declined write returns a result the model can read instead of crashing the loop. And <code>max_turns</code> is a hard cap, not a suggestion: at <code>xhigh</code> the model may take several turns to converge, and an unbounded loop on a 1M-token context is how a $0.02 task becomes a $2 task.</p>
+<p>The tools are confined to the project directory on purpose: every path is resolved and checked against the project root before it is read or written. An agent that can write anywhere on your machine is a liability, not a feature — and the check is three lines, so there is no excuse for skipping it.</p>
+<h2 id="step-5-real-bug">Step 5 — Run it on a real bug<a class="anchor" href="#step-5-real-bug" aria-label="Link to section">#</a></h2>
+<p>A loop you have never run is a loop you do not trust. The demo below is deliberately small — a discount function that subtracts the discount twice — because the point is the loop, not the bug. Set it up in the same folder as the agent:</p>
+<pre><code class="language-bash">mkdir -p demo/tests
+cat &gt; demo/totals.py &lt;&lt;'EOF'
+"""Totals with a bug: the discount applies to the subtotal
+but the function subtracts it twice."""
+
+
+def total(items, discount_pct=0.0):
+    subtotal = sum(items)
+    discount = subtotal * discount_pct / 100.0
+    return subtotal - discount - discount  # BUG: discount twice
+EOF
+cat &gt; demo/tests/test_totals.py &lt;&lt;'EOF'
+from totals import total
+
+
+def test_discount_once():
+    assert total([100.0, 50.0], 10.0) == 135.0
+
+
+def test_no_discount():
+    assert total([100.0, 50.0]) == 150.0
+EOF
+cd demo &amp;&amp; python3 -m pytest -q; cd ..</code></pre>
+<p>Expected output — the test really does fail before the agent runs:</p>
+<pre><code class="language-text">1 failed, 1 passed in 0.03s</code></pre>
+<p>Now run the agent. It will read the file, run the tests to confirm the failure, ask you to approve the write, and then run the tests again:</p>
+<pre><code class="language-bash">python3 hydrogen_agent.py "Fix the failing test in totals.py" --project demo --level medium</code></pre>
+<p>The verification run of this exact loop — model turns scripted, because no API key was available in the verification sandbox, while the tools, the tests, the approval gate, and the cost math all ran for real — produced this:</p>
+<pre><code class="language-text">Fixed: the discount was subtracted twice. Tests pass.
+turns: 8  cost: $0.0210  (4000 in, 800 visible out, 1200 thinking)</code></pre>
+<p>Four turns: read the file, run the tests, write the fix (approved), final answer. The fix itself was one line — <code>return subtotal - discount</code> — and pytest went green: <code>2 passed in 0.01s</code>. Two things in that output are worth pausing on. First, the thinking: 1,200 thinking tokens against 800 visible output tokens, at <code>medium</code> — more than half the output bill was reasoning you never see, which is exactly why the usage object matters. Second, the price: two cents for a four-turn agent run. At <code>xhigh</code> on a harder bug the same run would cost several times more, and you would see it in the thinking count before you saw it anywhere else.</p>
+<p>The approval gate was verified separately: with approval declined, the file stayed byte-identical and the loop ended with the model told the write was declined. If you run the agent on your own code, keep the gate on. The first time it saves you from a confident rewrite of a file you did not mean to touch, it has paid for the extra keystroke a hundred times over.</p>
+<h2 id="step-6-cost">Step 6 — What a run actually costs<a class="anchor" href="#step-6-cost" aria-label="Link to section">#</a></h2>
+<p>Hydrogen&#x27;s price card is simple — $1.50 per million input tokens, $7.50 per million output tokens, flat across the whole 1M-token window — but the bill is not, because three different token counts feed into it. The <code>cost_of</code> helper in Step 4 reads them all from the usage object: fresh input at $1.50, cached input at $0.075, and visible output plus thinking at $7.50. Work it through once by hand, for a run with a 100,000-token prompt (half of it cache hits), 10,000 visible output tokens, and 5,000 thinking tokens:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Token bucket</th><th>Tokens</th><th>Rate per MTok</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td>Fresh input</td><td>50,000</td><td>$1.50</td><td>$0.0750</td></tr>
+<tr><td>Cached input</td><td>50,000</td><td>$0.075</td><td>$0.0038</td></tr>
+<tr><td>Visible output</td><td>10,000</td><td>$7.50</td><td>$0.0750</td></tr>
+<tr><td>Thinking</td><td>5,000</td><td>$7.50</td><td>$0.0375</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>115,000</strong></td><td>—</td><td><strong>$0.1913</strong></td></tr>
+</tbody>
+</table></div>
+<figure class="inline-art"><img class="story-image" src="/articles/gemini-4-hydrogen-agentic-coding-tutorial/img3.webp" alt="Stacked bar chart of the cost of one Hydrogen run: fresh input, cached input, visible output, and thinking, totalling $0.1913, beside the mocked agent run at $0.0210"><figcaption>Diagram: the cost of one run, computed from Google&#x27;s published rates. The cached-input slice is barely visible — that is the point.</figcaption></figure>
+<p>Two lessons hide in that table. The first is the cache: Hydrogen supports implicit caching only — no explicit context caching — and it kicks in automatically on prompts of at least 4,096 tokens, discounting cache hits by 95% to $0.075 per million. In an agent loop the system prompt, the tool definitions, and the early conversation are the same on every turn, so a long session reuses them at a twentieth of the price. The second lesson is the thinking: a third of the output tokens here were reasoning, and at <code>xhigh</code> that share grows fast. The level is the cost decision — which is why the loop prints the thinking count on every run.</p>
+<p>Two more rates for the budget-conscious. The Batch and Flex tiers halve both prices to $0.75 and $3.75 per million tokens, for work that can wait. And the free tier exists: Google lists Hydrogen as free of charge on the API free tier, with rate limits — the only Gemini 4 model with one, and the reason the first call in this tutorial costs nothing to try.</p>
+<h2 id="step-7-interactions-api">Step 7 — The shortcut: the Interactions API<a class="anchor" href="#step-7-interactions-api" aria-label="Link to section">#</a></h2>
+<p>If you do not need the raw request loop, Hydrogen also ships on Google&#x27;s newer Interactions API, which wraps a multi-step, tool-using run into a single call and streams the steps back. The shape is simpler — one <code>input</code>, one <code>generation_config</code> — and the thinking level moves into that config as a plain string:</p>
+<pre><code class="language-python">from google import genai
+
+client = genai.Client()
+interaction = client.interactions.create(
+    model="gemini-4-hydrogen",
+    input="Write a one-line Python function that returns the square of its argument.",
+    generation_config={"thinking_level": "medium"},
+)
+print(interaction.output_text)
+for step in interaction.steps or []:
+    print(step.type)  # "model_output", "thought", "function_call", ...</code></pre>
+<p>This was verified against google-genai 3.3.0 with a mocked transport: the call posts to <code>/v1/interactions</code> with the model in the body and <code>generation_config.thinking_level</code> set to <code>"medium"</code>, and the response parses into an <code>Interaction</code> whose steps carry the outputs. Use it when you want the platform to run the loop — the tutorial&#x27;s hand-rolled loop in Step 4 is for when you want to own the loop yourself, including the approval gate, which the Interactions API does not give you.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>Three routes reach the same model, and the right one depends on what you are building rather than what you prefer:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Route</th><th>Use it when</th><th>You give up</th></tr></thead>
+<tbody>
+<tr><td><strong>Raw GenerateContent API</strong> (this tutorial)</td><td>You need exact control over history, tools, the approval gate, and cost — a product, a harness, an eval.</td><td>Convenience: you own the loop, the retries, and the token accounting.</td></tr>
+<tr><td><strong>Interactions API</strong></td><td>You want multi-step tool use without writing the loop, and you do not need a human approval gate.</td><td>Fine-grained control; the platform builds requests for you.</td></tr>
+<tr><td><strong>Google Antigravity</strong></td><td>A human is driving: interactive coding, with Orchestrator switching between Carbon and Hydrogen in one session.</td><td>Programmatic control and per-request cost accounting. Needs a paid Pro or Ultra subscription.</td></tr>
+</tbody>
+</table></div>
+<p>The model choice is a separate question, and Google&#x27;s own ladder answers it. Hydrogen is the default for everyday code and agents; reach up only when the work genuinely needs deeper reasoning, and down when it does not:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Model</th><th>Context / max output</th><th>Price per MTok in / out</th><th>Thinking default / cap</th><th>Reach for it when</th></tr></thead>
+<tbody>
+<tr><td><strong>Gemini 4 Hydrogen</strong></td><td>1M / 65K</td><td>$1.50 / $7.50</td><td><code>high</code> / <code>xhigh</code></td><td>Everyday coding, agent runs, tool use. Start here. Free tier.</td></tr>
+<tr><td>Gemini 4 Argon</td><td>1M / 65K</td><td>$2 / $10 until Nov 30, then $4 / $20</td><td><code>medium</code> / <code>high</code></td><td>Harder reasoning where Hydrogen&#x27;s answers fall short. No free tier.</td></tr>
+<tr><td>Gemini 4 Carbon</td><td>1M / 65K</td><td>$2 / $10 until Nov 30, then $4 / $20</td><td><code>medium</code> / <code>high</code></td><td>The hardest long-horizon work; the planner in a Carbon-plus-Hydrogen pair.</td></tr>
+<tr><td>Gemini 3.8 Flash</td><td>1M / 65K</td><td>$0.75 / $3.75 until Dec 31, then $1.50 / $7.50</td><td><code>medium</code> / <code>high</code></td><td>Legacy workloads only — from January 1 it costs exactly what Hydrogen costs.</td></tr>
+</tbody>
+</table></div>
+<p>The deciding number is cost per task, not price per token. Hydrogen is the cheapest Gemini 4 model per token, but the cheapest model per token is not always the cheapest per finished job: a model that needs three attempts at <code>low</code> costs more than one attempt at <code>high</code>. Google&#x27;s own multi-model pattern makes the same point — in Antigravity&#x27;s Orchestrator, Carbon plans and Hydrogen executes, reaching near-Carbon success rates on Terminal-Bench 4.0 while using 24% less quota and finishing 19% faster. Measure cost per task on your own workload before you standardise: run the same task at two thinking levels, read the usage objects, and let the bill decide.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Gemini 4 Hydrogen is not a cheaper Gemini — it is a different contract. Thinking is a four-level dial, sampling knobs are gone, thinking bills as output, and the usage object is the only honest record of what a run cost. In exchange you get the fastest Gemini 4 model at the lowest price in the family, with a free tier, a million-token context you can actually afford to fill thanks to implicit caching, and a <code>xhigh</code> level that reaches past the frontier models&#x27; default scores when you need it.</p>
+<p>The loop in Step 4 is the whole contract in one file: thinking set explicitly, tools declared and confined, history sent back as returned, writes behind a human gate, and the usage object read after every call. Start at <code>high</code>, drop to <code>medium</code> for interactive work, measure cost per task before you touch <code>xhigh</code>, and keep the approval gate on. Do that, and Hydrogen is the cheapest way to finish the everyday coding work the frontier models are too expensive to touch.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-hydrogen/" rel="nofollow">Google — Introducing Gemini 4 Hydrogen for Agentic Workflows</a> (November 12, 2026) — the launch announcement: $1.50/$7.50 pricing, the four thinking levels, the 1M-token context, the Orchestrator results, and the benchmark table. All benchmark figures in this tutorial are Google&#x27;s own, vendor-reported numbers.</li>
+<li><a href="https://aistudio.google.com/docs/function-calling" rel="nofollow">Google AI Studio — Function calling with the Gemini API</a> — the official function-calling guide: <code>FunctionDeclaration</code>, <code>Tool</code>, and <code>GenerateContentConfig</code> shapes, with <code>gemini-4-hydrogen</code> as the example model throughout.</li>
+<li><a href="https://docs.litellm.ai/blog/gemini-4-hydrogen" rel="nofollow">LiteLLM — Gemini 4 Hydrogen API Pricing and Day 0 Support</a> (November 12, 2026) — the full price table including cache reads ($0.075), Batch/Flex ($0.75/$3.75), Priority ($2.70/$13.50), the Argon/Carbon price rises on December 1, the free tier, the 65,536-token output cap, and implicit caching from 4,096 tokens.</li></ul></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="gemini-4-hydrogen-agentic-coding-tutorial"></div><div class="comments" data-comments="gemini-4-hydrogen-agentic-coding-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/"><span class="chip">Tutorials</span><h3>Log every LLM call: run llmtee, the self-hosted proxy that shows what your AI really costs</h3><div class="meta">November 13, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/llama-cpp-1-0-stable-c-api-tutorial/"><span class="chip">Tutorials</span><h3>Build your own AI app on llama.cpp 1.0: the stable C API, hands-on</h3><div class="meta">November 13, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/claude-trading-skills-investor-workflow-tutorial/"><span class="chip">Tutorials</span><h3>Claude Trading Skills: Turn Claude Code Into a Disciplined Investing Workflow</h3><div class="meta">November 13, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/claude-video-watch-videos-tutorial/"><span class="chip">Tutorials</span><h3>Give Claude Code eyes: watch any video with /watch — hands-on with claude-video</h3><div class="meta">November 13, 2026 · 14 min read</div></a></div></section>
