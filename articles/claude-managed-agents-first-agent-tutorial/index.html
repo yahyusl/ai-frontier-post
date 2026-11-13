@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build your first Claude Managed Agent: a hosted agent that codes in its own sandbox — AI Frontier Post</title>
+<meta name="description" content="Anthropic&#x27;s Managed Agents API runs the whole agent loop — harness, sandbox, and session state — on its own servers. This tutorial builds a working coding agent with the Python SDK, verifies every call against SDK 2.8.0, and prices the run to the cent.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/claude-managed-agents-first-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build your first Claude Managed Agent: a hosted agent that codes in its own sandbox">
+<meta property="og:description" content="Anthropic&#x27;s Managed Agents API runs the whole agent loop — harness, sandbox, and session state — on its own servers. This tutorial builds a working coding agent with the Python SDK, verifies every call against SDK 2.8.0, and prices the run to the cent.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/claude-managed-agents-first-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/claude-managed-agents-first-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="900">
+<meta property="article:published_time" content="2026-11-13">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build your first Claude Managed Agent: a hosted agent that codes in its own sandbox", "description": "Anthropic's Managed Agents API runs the whole agent loop — harness, sandbox, and session state — on its own servers. This tutorial builds a working coding agent with the Python SDK, verifies every call against SDK 2.8.0, and prices the run to the cent.", "datePublished": "2026-11-13", "dateModified": "2026-11-13", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/claude-managed-agents-first-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/claude-managed-agents-first-agent-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How is this different from the Claude Agent SDK?", "acceptedAnswer": {"@type": "Answer", "text": "The Agent SDK is a library you run in your own process: you host the runtime and own the agent loop. Managed Agents is a hosted service: Anthropic runs the loop, the sandbox, and the session state, and you configure it through the API. Use the SDK when you need the loop inside your own infrastructure; use Managed Agents when you want long-running agents without operating any of it."}}, {"@type": "Question", "name": "Can I use Managed Agents without giving Anthropic my code or credentials?", "acceptedAnswer": {"@type": "Answer", "text": "Not on the hosted service: the agent's sandbox and session history live on Anthropic's infrastructure, and credentials you hand it are stored in its vaults. That is exactly what the self-hosted edition announced on November 12 is for — it moves the server, database, workers, credentials, and history into your own cloud — but it is a private beta open only to eligible organizations through their Anthropic account team."}}, {"@type": "Question", "name": "What does a session cost if the agent just sits idle?", "acceptedAnswer": {"@type": "Answer", "text": "Nothing beyond the tokens already spent. Session runtime is metered to the millisecond and accrues only while the session's status is running. Time spent idle — waiting for your next message or a tool confirmation — does not count toward the $0.08 per session-hour charge."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build your first Claude Managed Agent: a hosted agent that codes in its own sandbox</h1>
+<p class="lede">On November 12, Anthropic opened a private beta for running its whole Managed Agents service inside a customer&#x27;s own cloud. The hosted version — the one anyone with an API key can use today — has been in public beta since April, and it changes the shape of agent work: instead of writing your own loop, your own tool execution, and your own sandbox, you configure three things and let Anthropic run the rest. This tutorial builds a working coding agent on that API, end to end, with every call verified against the Python SDK.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · November 13, 2026 · 17 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Claude Managed Agents is Anthropic&#x27;s hosted agent runtime. You define an <em>agent</em> (model, prompt, tools), an <em>environment</em> (sandbox plus networking rules), and a <em>session</em> (one run of that agent in that environment), then stream <em>events</em> as it works. This tutorial creates all three with the Python SDK, runs a small coding task in the sandbox, follows up once, and cleans up — under a $5 budget cap, so a runaway agent can&#x27;t surprise you.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The four objects:</b> agent (the configuration), environment (the sandbox), session (one run), events (the stream between you and the agent). Three API calls create them; everything after that is streaming.</li><li><b>The price:</b> standard token rates for Claude Sonnet 5.5 — $2 per million input tokens, $10 per million output — plus $0.08 per session-hour, metered to the millisecond and charged only while the session is running.</li><li><b>The beta header:</b> every Managed Agents request must carry <code>anthropic-beta: managed-agents-2026-04-01</code>. The Python SDK sets it for you — verified in SDK 2.8.0 source — so you never pass it by hand.</li><li><b>Verification:</b> the code in this tutorial was run end to end against a mocked API transport (no key was available in the verification sandbox), so every request shape, parameter, and cleanup call is exactly what the SDK sends — but the model only replies when your key is in the environment.</li><li><b>Self-hosted is separate:</b> the self-hosted edition announced November 12 is a private-beta product for enterprises. This tutorial uses the hosted API, which is enabled by default for all API accounts.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/claude-managed-agents-first-agent-tutorial/cover.webp" alt="A laptop on a desk connected by streams of light to a glowing cloud container where a small robot agent works at a terminal"><figcaption>Your code sends a task; Anthropic's cloud runs the agent in its own sandbox and streams the work back. Illustration: AI Frontier Post.</figcaption></figure>
+<div class="article-body">
+<p>Building an agent the old way means writing four things yourself: the loop that calls the model, the code that executes its tools, the sandbox those tools run in, and the storage that keeps the conversation alive between turns. Each one is a project. Managed Agents is Anthropic's answer to that: the loop, the sandbox, and the state live on its servers, and your code shrinks to configuration plus a stream reader.</p>
+<p>That is a genuine trade. You give up control over the runtime in exchange for not operating it — and for sessions that keep running, and keep their history, even if your process disconnects. Whether the trade is right depends on the workload, and there is a section at the end that lays out the alternatives honestly. First, the build: by the end of this tutorial you will have created an agent, an environment, and a session, watched the agent write and run a Python script inside its own sandbox, sent it a follow-up, and torn everything down.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or later.</strong> The Anthropic SDK requires it; check with <code>python3 --version</code>.</li>
+<li><strong>The Anthropic Python SDK, version 2.3.0 or later</strong> (<code>pip install anthropic</code>). Version 2.8.0 is current at time of writing, and every call below was verified against it.</li>
+<li><strong>An Anthropic API key</strong> from the Claude Console at platform.claude.com, set as the <code>ANTHROPIC_API_KEY</code> environment variable. Managed Agents is enabled by default for all API accounts — there is no waitlist or separate signup for the hosted service.</li>
+<li><strong>A few dollars of API credit.</strong> The worked example in this tutorial costs about $0.15 at standard rates. The session carries a $5 hard budget cap, set in Step 4, so the worst case is bounded before you start.</li></ul>
+<p>One note on how this tutorial was verified, because it affects what you will see: no API key was available in the verification sandbox, so the script was executed end to end against a mocked transport standing in for the API. The mock asserted the exact request paths, the beta header on every call, and the request bodies — model, toolset, networking, budget, event shapes — and fed back canned events in the real SSE format. The request shapes, parameters, and cleanup calls are therefore exactly what the SDK sends. The transcript shown in Step 5 is the shape of a real run; the model's actual words and tool calls in your live run will differ, because a real model is doing the work.</p>
+<h2 id="the-four-concepts">The four concepts<a class="anchor" href="#the-four-concepts" aria-label="Link to section">#</a></h2>
+<p>Everything in Managed Agents hangs off four resources. Learn them once and the API reads plainly:</p>
+<div class="table-wrap"><table><thead><tr><th>Resource</th><th>What it is</th><th>Created</th></tr></thead><tbody><tr><td><strong>Agent</strong></td><td>The configuration: model, system prompt, tools, MCP servers, skills. Versioned — updating one creates a new version.</td><td>Once, then reused across sessions</td></tr><tr><td><strong>Environment</strong></td><td>Where sessions run: an Anthropic-managed cloud sandbox, or a self-hosted sandbox on your own infrastructure. Holds the networking rules and pre-installed packages.</td><td>Once, then reused across sessions</td></tr><tr><td><strong>Session</strong></td><td>One running instance of an agent in an environment, doing one task. Owns its sandbox, its event history, and its budget.</td><td>Per task</td></tr><tr><td><strong>Events</strong></td><td>The messages between you and the agent: your turns, its replies, its tool calls and results, status changes. An append-only log that lives server-side.</td><td>Continuously, while a session runs</td></tr></tbody></table></div>
+<p>The mental model that makes it click: the agent is the job description, the environment is the office, the session is one shift, and events are the paper trail. You write the first two once and start as many sessions against them as your workload needs.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-managed-agents-first-agent-tutorial/img2.webp" alt="Four glowing panels connected in a pipeline: a robot head, a sandbox cube, a clock, and wavy event stream lines"><figcaption>Agent, environment, session, events — the four resources, in the order you create them. Illustration: AI Frontier Post.</figcaption></figure>
+<h2 id="step-1-install-the-sdk-and-set-your-key">Step 1 — Install the SDK and set your key<a class="anchor" href="#step-1-install-the-sdk-and-set-your-key" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">pip install "anthropic&gt;=2.3.0"
+export ANTHROPIC_API_KEY="sk-ant-..."</code></pre>
+<p>The SDK reads <code>ANTHROPIC_API_KEY</code> from the environment, so the key never appears in your code. Keep it that way — the tutorial script below constructs its client with a bare <code>Anthropic()</code> and nothing else. If the key is missing, the constructor raises immediately rather than failing on the first API call, which makes a bad environment easy to spot.</p>
+<p>Managed Agents lives under <code>client.beta</code> in the SDK — <code>client.beta.agents</code>, <code>client.beta.environments</code>, <code>client.beta.sessions</code> — because the service is in public beta. The <code>beta</code> in the path is about the product's status, not about your code being experimental: the endpoints, the pricing, and the header are all documented and stable for the beta.</p>
+<h2 id="step-2-create-the-agent">Step 2 — Create the agent<a class="anchor" href="#step-2-create-the-agent" aria-label="Link to section">#</a></h2>
+<p>The agent is a reusable configuration. This one is a careful coding assistant: Sonnet 5.5 for the model, a short system prompt, and the built-in toolset with the web tools switched off, because the task in this tutorial never needs the web.</p>
+<pre><code class="language-python">from anthropic import Anthropic
+
+MODEL = "claude-sonnet-5-5"  # $2 / MTok in, $10 / MTok out
+
+client = Anthropic()  # reads ANTHROPIC_API_KEY from the environment
+
+# --- Step 2: create the agent -------------------------------------------
+# The agent is a reusable configuration: model, system prompt, tools.
+agent = client.beta.agents.create(
+    model=MODEL,
+    name="scratch-coder",
+    description="Writes and runs small Python scripts in a sandbox.",
+    system=(
+        "You are a careful coding assistant. Work in the sandbox only. "
+        "Write the file, run it, and report the exact output. "
+        "If a step fails, read the error and fix it before moving on."
+    ),
+    tools=[
+        {
+            "type": "agent_toolset_20260401",
+            "configs": [
+                {"type": "web_search", "name": "web_search", "enabled": False},
+                {"type": "web_fetch", "name": "web_fetch", "enabled": False},
+            ],
+        }
+    ],
+)
+print(f"agent: {agent.id} (version {agent.version})")</code></pre>
+<p>Three choices here deserve a sentence each. <strong>The model</strong> is <code>claude-sonnet-5-5</code> — the middle of Anthropic's current lineup at $2 per million input tokens and $10 per million output, and the right default for a task this small. Fable 5.2 ($8/$40) and Opus 5.5 ($4/$20) exist for harder work; Haiku 5.5 ($0.10/$0.50) for high-volume routine work. The <code>model</code> field also accepts a <code>model_config</code> object if you later want fast mode or a pinned inference geography, but a plain model string is all this tutorial needs. <strong>The toolset</strong> is the single built-in bundle, <code>agent_toolset_20260401</code>, which enables bash, file read/write/edit, glob, grep, web search, and web fetch. The <code>configs</code> list overrides individual tools — here it disables the two web tools. Give an agent only the tools its task needs; an agent that cannot reach the web cannot leak anything to it, and cannot burn your $10-per-1,000-searches budget on curiosity. <strong>The system prompt</strong> is short and behavioral rather than encyclopedic: work in the sandbox, report exact output, fix errors before moving on. That last clause matters — an agent that stops at the first error is a demo; one that reads the traceback and retries is a worker.</p>
+<p>The call returns the agent with an <code>id</code> like <code>agnt_...</code> and a <code>version</code> starting at 1. Keep the id: sessions reference it, and every later change to the agent creates a new version while old sessions keep running against theirs.</p>
+<h2 id="step-3-create-the-environment">Step 3 — Create the environment<a class="anchor" href="#step-3-create-the-environment" aria-label="Link to section">#</a></h2>
+<p>The environment is the sandbox the agent's tools run in. This one is deliberately strict: limited networking, package managers allowed, and the <code>requests</code> library pre-installed so the task can prove the package setup works.</p>
+<pre><code class="language-python">env = client.beta.environments.create(
+    name="scratch-coder-env",
+    description="Limited network, pip packages allowed.",
+    config={
+        "type": "cloud",
+        "networking": {"type": "limited", "allow_package_managers": True},
+        "packages": {"type": "packages", "pip": ["requests"]},
+    },
+)
+print(f"environment: {env.id}")</code></pre>
+<p>The <code>config</code> has three layers. <code>type: "cloud"</code> means Anthropic hosts the sandbox; the alternative is a self-hosted sandbox on your own infrastructure, which keeps tool execution inside your perimeter while Anthropic still runs the agent loop. <code>networking</code> set to <code>limited</code> with <code>allow_package_managers: True</code> lets code inside the sandbox reach public package registries — PyPI, npm, and the like — and nothing else. With no <code>allowed_hosts</code> listed, there is no outbound web access at all, which is consistent with disabling the web tools in Step 2: even if the agent tried to fetch a URL, the sandbox would refuse. If your agent genuinely needs the web, add the hosts it needs to <code>allowed_hosts</code> and re-enable the tools — the allowlist then applies to web search and web fetch too, even though those run outside the sandbox. <code>packages</code> pre-installs dependencies at environment build time, so the agent never has to run <code>pip install</code> itself; versions use the package manager's own syntax, so <code>requests==2.32.3</code> would pin one.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-managed-agents-first-agent-tutorial/img3.webp" alt="A transparent glass sandbox cube on a workbench holding floating code files and a terminal window, inside a shield outline"><figcaption>The sandbox is a real boundary: code runs inside it, the network rules decide what it can reach, and nothing else on your machine is visible. Illustration: AI Frontier Post.</figcaption></figure>
+<h2 id="step-4-start-a-session-with-a-budget-cap">Step 4 — Start a session with a budget cap<a class="anchor" href="#step-4-start-a-session-with-a-budget-cap" aria-label="Link to section">#</a></h2>
+<p>A session pairs the agent with the environment and gives it a task. Two details in this call do most of the safety work: the budget, and the fact that the task arrives as an event, not as a parameter.</p>
+<pre><code class="language-python">TASK = (
+    "Write a Python script called primes.py that computes the first 20 prime "
+    "numbers, saves them to primes.json, and prints the installed requests "
+    "library version. Then run the script with python3 and confirm primes.json "
+    "exists and holds 20 numbers."
+)
+
+session = client.beta.sessions.create(
+    agent=agent.id,
+    environment_id=env.id,
+    title="first-managed-agent-run",
+    budget={
+        "type": "limit",
+        "max_list_cost": {"amount": "500", "currency": "USD"},
+    },
+    initial_events=[
+        {"type": "user.message", "content": [{"type": "text", "text": TASK}]}
+    ],
+)
+print(f"session: {session.id} (status: {session.status})")</code></pre>
+<p>The <code>agent</code> field takes the agent id string, which pins the latest version for the session; passing an object with both id and version pins a specific one instead. The <code>budget</code> is a hard ceiling: <code>max_list_cost</code> is a monetary amount in minor units, so <code>"500"</code> cents is $5.00, and the session stops issuing new model requests once the tracked list cost reaches it. List price is used regardless of any negotiated discount, so the cap fires at or before the actual charge. Omit the budget and the session is uncapped — don't. The task itself goes in <code>initial_events</code> as a <code>user.message</code> event with a text block. That shape is worth memorizing, because every later message you send uses the same one: events are the only way to talk to a running session.</p>
+<p>The task is deliberately small and checkable: write a file, run it, confirm the output. It exercises the full loop — the agent must use the write tool, the bash tool, and its own judgment about verification — without needing the network, which the sandbox doesn't have. It also proves the package setup: if <code>requests</code> wasn't pre-installed, the version print fails and you'll know immediately.</p>
+<h2 id="step-5-stream-the-run-until-the-agent-goes-idle">Step 5 — Stream the run until the agent goes idle<a class="anchor" href="#step-5-stream-the-run-until-the-agent-goes-idle" aria-label="Link to section">#</a></h2>
+<p>Sessions are asynchronous: creating one starts the work, and you watch it through the event stream. Open a stream, print the agent's messages, log its tool calls, and stop when it goes idle.</p>
+<pre><code class="language-python">with client.beta.sessions.events.stream(session.id) as stream:
+    for event in stream:
+        if event.type == "agent.message":
+            for block in event.content:
+                if block.type == "text":
+                    print(block.text, end="", flush=True)
+        elif event.type == "agent.tool_use":
+            print(f"\n[tool] {event.name}: {event.input}")
+        elif event.type == "session.status_idle":
+            print("\n[session idle — task done]")
+            break</code></pre>
+<p>Three event types carry almost everything you need in a first project. <code>agent.message</code> holds the agent's replies as text blocks. <code>agent.tool_use</code> names the tool and shows its input — this is your audit trail, and in production you would log every one. <code>session.status_idle</code> means the agent has nothing more to do; the stream ends there. The event carries a <code>stop_details</code> field when there is something to report — a budget reached, a refusal, retries exhausted — so check it when a session stops earlier than you expected. The stream is a context manager: breaking out of the loop closes it cleanly, and the session itself keeps living server-side. You can open a new stream on the same session later and pick up exactly where you left off.</p>
+<p>What the output looks like — the shape of it, from the verification run:</p>
+<pre><code class="language-text">agent: agnt_... (version 1)
+environment: env_...
+session: sess_... (status: running)
+I wrote primes.py and ran it.
+[tool] bash: {'command': 'python3 primes.py'}
+
+[session idle — task done]</code></pre>
+<p>In your live run the agent's words will be longer and the tool calls will include the file write and the verification read, in whatever order the model chooses. What won't change is the structure: messages, tool calls, idle. If the run stalls, the transcript is your debugger — open the session in the Claude Console, where every tool call and decision is laid out on a visual timeline.</p>
+<h2 id="step-6-follow-up-then-clean-up">Step 6 — Follow up, then clean up<a class="anchor" href="#step-6-follow-up-then-clean-up" aria-label="Link to section">#</a></h2>
+<p>A session is a conversation, not a single shot. Send a follow-up as another <code>user.message</code> event — same shape as the first one — and stream again. The agent still has its sandbox, its files, and its history, so it can answer from the work it already did.</p>
+<pre><code class="language-python">client.beta.sessions.events.send(
+    session.id,
+    events=[
+        {
+            "type": "user.message",
+            "content": [
+                {"type": "text", "text": "Show me the first five lines of primes.json."}
+            ],
+        }
+    ],
+)
+with client.beta.sessions.events.stream(session.id) as stream:
+    for event in stream:
+        if event.type == "agent.message":
+            for block in event.content:
+                if block.type == "text":
+                    print(block.text, end="", flush=True)
+        elif event.type == "session.status_idle":
+            print("\n[session idle]")
+            break</code></pre>
+<p>Expect the reply to list the first five primes — 2, 3, 5, 7, 11 — read back from the file the agent wrote in the previous turn. That round trip is the whole point of a stateful session: the second message is cheap because the first one already did the work.</p>
+<p>Then tear everything down. Sessions and environments delete; agents archive, because they are versioned records rather than disposable objects:</p>
+<pre><code class="language-python">client.beta.sessions.delete(session.id)
+client.beta.environments.delete(env.id)
+client.beta.agents.archive(agent.id)
+print("cleaned up: session deleted, environment deleted, agent archived")</code></pre>
+<p>Deleting the session also deletes the server-side transcript and sandbox state, which is the part to remember for the privacy section below: if you want the record, fetch the event log with <code>client.beta.sessions.events.list(session.id)</code> before you delete. Agents and environments are cheap to keep — reuse them across sessions instead of recreating them per task — but delete the session when the work is done, or it keeps its history on Anthropic's servers indefinitely.</p>
+<h2 id="what-it-costs">What it costs<a class="anchor" href="#what-it-costs" aria-label="Link to section">#</a></h2>
+<p>Managed Agents bills on two dimensions: tokens at the standard model rates, and session runtime. The runtime charge is small enough to forget and large enough to respect at scale.</p>
+<div class="table-wrap"><table><thead><tr><th>Line item</th><th>Rate</th><th>Notes</th></tr></thead><tbody><tr><td>Sonnet 5.5 input tokens</td><td>$2 / million</td><td>Cache reads $0.10 / million</td></tr><tr><td>Sonnet 5.5 output tokens</td><td>$10 / million</td><td>—</td></tr><tr><td>Session runtime</td><td>$0.08 / session-hour</td><td>Metered to the millisecond; only while status is <code>running</code></td></tr><tr><td>Web search inside a session</td><td>$10 / 1,000 searches</td><td>Standard rate; this tutorial disables it</td></tr></tbody></table></div>
+<p>A worked example at standard rates. A ten-minute session that consumes 30,000 input tokens and 8,000 output tokens costs: input 30,000 × $2 / 1,000,000 = $0.06; output 8,000 × $10 / 1,000,000 = $0.08; runtime 10 / 60 × $0.08 = $0.013 — about $0.15 all in. Anthropic's own docs give a larger example for comparison: a one-hour Opus 5.5 coding session with 50,000 input and 15,000 output tokens totals $0.58. Two things keep real bills small: the runtime meter stops the moment the session goes idle, and prompt caching applies identically inside sessions, so repeated system prompts and conversation history read back at the cache rate. The budget cap from Step 4 is the backstop for everything else.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Anthropic now offers four ways to run a Claude agent, and they overlap enough to confuse. The deciding question is who you want running the loop:</p>
+<div class="table-wrap"><table><thead><tr><th></th><th>Managed Agents (hosted)</th><th>Messages API</th><th>Agent SDK</th><th>Self-hosted Managed Agents</th></tr></thead><tbody><tr><td><strong>Who runs the loop</strong></td><td>Anthropic</td><td>You</td><td>You (library)</td><td>You</td></tr><tr><td><strong>Sandbox</strong></td><td>Anthropic cloud</td><td>You build it</td><td>You build it</td><td>Your infrastructure</td></tr><tr><td><strong>Session state</strong></td><td>Server-side, persistent</td><td>You store it</td><td>You store it</td><td>Your database</td></tr><tr><td><strong>Best for</strong></td><td>Long-running, asynchronous work</td><td>Custom loops, fine-grained control</td><td>Claude Code-style agents inside your app</td><td>Regulated environments, data residency</td></tr><tr><td><strong>Access</strong></td><td>Public beta, all API accounts</td><td>Generally available</td><td>Generally available</td><td>Private beta, account team only</td></tr></tbody></table></div>
+<p>Pick Managed Agents when the task runs for minutes or hours, when it should survive your process disconnecting, and when you don't want to operate a sandbox fleet. Pick the Messages API when the loop itself is the product — custom orchestration, unusual tooling, tight control over every turn. Pick the Agent SDK when you want Claude Code's machinery inside your own application, on your own machines. Pick self-hosted when the hosted service's data handling is the blocker: the private beta moves the server, the database, the workers, the credentials, and the history into your cloud, and the model calls route to Anthropic, Bedrock, Google's Agent Platform, Microsoft Foundry, or your own gateway. Note what self-hosting does not do: Claude itself still runs outside your network, scheduled deployments and webhooks are missing from the beta, and nothing migrates from the hosted service — you rebuild agents, skills, vaults, and history from scratch.</p>
+<h2 id="gotchas-worth-knowing-before-you-ship">Gotchas worth knowing before you ship<a class="anchor" href="#gotchas-worth-knowing-before-you-ship" aria-label="Link to section">#</a></h2>
+<ul><li><strong>The beta header is automatic in the SDK, manual everywhere else.</strong> If you call the API with raw HTTP, every request needs <code>anthropic-beta: managed-agents-2026-04-01</code>. Without it you get a 403, which is the most common first error — and the least informative one.</li>
+<li><strong>Sessions are stateful by design, and that has a privacy cost.</strong> Transcripts, sandbox state, and outputs persist server-side until you delete them, and the hosted service is not currently eligible for Zero Data Retention or HIPAA BAA coverage. If that rules it out, the self-hosted edition is the answer, not a workaround.</li>
+<li><strong>The built-in toolset is files, bash, web, and MCP.</strong> There is no computer-use tool in Managed Agents — keyboard-and-mouse automation still runs in an environment you control. MCP servers connect through the <code>mcp_servers</code> field on the agent, and every server must be referenced by an <code>mcp_toolset</code> in <code>tools</code> or the request is rejected.</li>
+<li><strong>No Batch discount, no partner clouds.</strong> The Batch API's 50% discount does not apply to sessions — they are stateful and interactive, so there is no batch mode — and Managed Agents is not available on partner-operated cloud platforms.</li>
+<li><strong>Rate limits are organization-level.</strong> The reference documents separate limits for reads and writes; if you run many sessions in parallel, check them before you scale, and prefer reusing one agent and environment across sessions rather than creating fresh ones per task.</li>
+<li><strong>Prefer the Console quickstart for the no-code path.</strong> If you want to see an agent run before writing anything, the Claude Console builds one from a template or a plain-language description. Claude Code can do the same from your terminal with <code>/claude-api managed-agents-onboard</code>. Either way you end up with the same three resources this tutorial creates by hand — and now you know what they are.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Managed Agents removes the three most tedious parts of building an agent — the loop, the sandbox, and the state — and leaves you with configuration and a stream reader. The whole first project is four calls: create an agent, create an environment, create a session, stream the events. The discipline that makes it production-ready is all in the details around those calls: least-privilege tools, a strict network policy, a budget cap set before the first token is spent, and cleanup when the work is done. Start with the hosted API and the script in this tutorial; reach for the Agent SDK when the loop belongs in your process, and for self-hosted when the data rules demand it.</p>
+<p><b>Sources:</b> <a href="https://platform.claude.com/docs/en/managed-agents/quickstart" rel="nofollow">Anthropic docs — Get started with Claude Managed Agents</a>; <a href="https://platform.claude.com/docs/en/managed-agents/overview" rel="nofollow">Anthropic docs — Claude Managed Agents overview</a>; <a href="https://platform.claude.com/docs/en/about-claude/pricing" rel="nofollow">Anthropic docs — Pricing (Claude Managed Agents section)</a>; <a href="https://claude.com/resources/articles/claude-managed-agents" rel="nofollow">Anthropic — Claude Managed Agents: get to production 10x faster</a> (April 8, 2026); <a href="https://aifrontierpost.com/articles/anthropic-self-hosted-claude-managed-agents-private-beta/">AI Frontier Post — Anthropic lets enterprises self-host the full Claude Managed Agents stack</a> (November 12, 2026). Model and session pricing verified against Anthropic's pricing docs on November 13, 2026; SDK calls verified against anthropic Python SDK 2.8.0.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="claude-managed-agents-first-agent-tutorial"></div><div class="comments" data-comments="claude-managed-agents-first-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/claude-fable-5-2-api-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode</h3><div class="meta">November 12, 2026 · 24 min read</div></a><a class="rel-card" href="/articles/codex-security-openai-scanner-tutorial/"><span class="chip">Tutorials</span><h3>Find, validate, and fix vulnerabilities with OpenAI&#x27;s Codex Security CLI — hands-on</h3><div class="meta">November 12, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/zonos3-mini-voice-cloning-tts-tutorial/"><span class="chip">Tutorials</span><h3>Clone any voice on your own machine: hands-on with Zyphra&#x27;s ZONOS3-Mini</h3><div class="meta">November 12, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/audit-repos-leaked-ai-agent-secrets-tutorial/"><span class="chip">Tutorials</span><h3>Your AI coding agent may have leaked your API keys to GitHub — how to find and purge them</h3><div class="meta">November 12, 2026 · 20 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>How is this different from the Claude Agent SDK?</h3><p>The Agent SDK is a library you run in your own process: you host the runtime and own the agent loop. Managed Agents is a hosted service: Anthropic runs the loop, the sandbox, and the session state, and you configure it through the API. Use the SDK when you need the loop inside your own infrastructure; use Managed Agents when you want long-running agents without operating any of it.</p><h3>Can I use Managed Agents without giving Anthropic my code or credentials?</h3><p>Not on the hosted service: the agent&#x27;s sandbox and session history live on Anthropic&#x27;s infrastructure, and credentials you hand it are stored in its vaults. That is exactly what the self-hosted edition announced on November 12 is for — it moves the server, database, workers, credentials, and history into your own cloud — but it is a private beta open only to eligible organizations through their Anthropic account team.</p><h3>What does a session cost if the agent just sits idle?</h3><p>Nothing beyond the tokens already spent. Session runtime is metered to the millisecond and accrues only while the session&#x27;s status is running. Time spent idle — waiting for your next message or a tool confirmation — does not count toward the $0.08 per session-hour charge.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/claude-fable-5-2-api-hands-on-tutorial/">Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode</a></li><li><a href="/articles/anthropic-self-hosted-claude-managed-agents-private-beta/">Anthropic lets enterprises self-host the full Claude Managed Agents stack — private beta now open</a></li><li><a href="/articles/openai-agents-api-hands-on-tutorial/">Stop writing your own agent loop: a hands-on tutorial for OpenAI&#x27;s Agents API</a></li><li><a href="/articles/anthropic-managed-claude-google-cloud-ga/">Anthropic now runs Claude itself on Google Cloud — managed option goes GA with day-zero agents, skills and code execution</a></li><li><a href="/articles/audit-repos-leaked-ai-agent-secrets-tutorial/">Your AI coding agent may have leaked your API keys to GitHub — how to find and purge them</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
