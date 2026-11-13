@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build your own AI app on llama.cpp 1.0: the stable C API, hands-on — AI Frontier Post</title>
+<meta name="description" content="llama.cpp 1.0 freezes the C API after three and a half years of nightly builds. Build it from source and write a real chat program against libllama — load, tokenize, template, decode, sample — with every number measured on a CPU-only machine.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/llama-cpp-1-0-stable-c-api-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build your own AI app on llama.cpp 1.0: the stable C API, hands-on">
+<meta property="og:description" content="llama.cpp 1.0 freezes the C API after three and a half years of nightly builds. Build it from source and write a real chat program against libllama — load, tokenize, template, decode, sample — with every number measured on a CPU-only machine.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/llama-cpp-1-0-stable-c-api-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/llama-cpp-1-0-stable-c-api-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-13">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build your own AI app on llama.cpp 1.0: the stable C API, hands-on", "description": "llama.cpp 1.0 freezes the C API after three and a half years of nightly builds. Build it from source and write a real chat program against libllama — load, tokenize, template, decode, sample — with every number measured on a CPU-only machine.", "datePublished": "2026-11-13", "dateModified": "2026-11-13", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/llama-cpp-1-0-stable-c-api-tutorial/"}, "image": "https://aifrontierpost.com/articles/llama-cpp-1-0-stable-c-api-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build your own AI app on llama.cpp 1.0: the stable C API, hands-on", "description": "llama.cpp 1.0 freezes the C API after three and a half years of nightly builds. Build it from source and write a real chat program against libllama — load, tokenize, template, decode, sample — with every number measured on a CPU-only machine.", "step": [{"@type": "HowToStep", "name": "Step 1: What 1.0 actually changes", "text": "Semantic versioning from here on: a breaking change to the public C API is a major-version bump; 35 deprecated functions were removed and the NextN speculative-decoding API was promoted into llama.h."}, {"@type": "HowToStep", "name": "Step 2: Build llama.cpp 1.0 from source", "text": "Check out the v1.0.0-b12359-b1b770d tag and build with CMake; add -DLLAMA_BUILD_IS_DEV=OFF for the clean 1.0.0 version string."}, {"@type": "HowToStep", "name": "Step 3: Get a model", "text": "Download Qwen2.5-0.5B-Instruct in Q4_K_M GGUF (469 MB) and verify the size and SHA-256."}, {"@type": "HowToStep", "name": "Step 4: See what the model sees", "text": "Tokenize a string with llama_tokenize and print each token id and piece; Qwen2.5 has a 151,936-token vocabulary."}, {"@type": "HowToStep", "name": "Step 5: Write the chat program", "text": "Load the model, apply its chat template, tokenize, and decode with the new llama_batch_ext API; compile with cc and the llama.cpp headers."}, {"@type": "HowToStep", "name": "Step 6: How the generate loop works", "text": "Feed the whole prompt once, then one token per step; request logits only on the last position and stop on the end-of-generation token."}, {"@type": "HowToStep", "name": "Step 7: Make it deterministic — and make it yours", "text": "Chain min_p, temperature, and dist samplers; temperature 0.0 gives byte-identical answers across runs."}, {"@type": "HowToStep", "name": "Step 8: The same model over HTTP", "text": "Run llama-server, wait for /health to return 200, and call /v1/chat/completions with an OpenAI-compatible request."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Why does my source build report 1.0.0-dev instead of 1.0.0?", "acceptedAnswer": {"@type": "Answer", "text": "Because LLAMA_BUILD_IS_DEV defaults to ON in the project's CMakeLists.txt — a checkout of the release tag is still a development build by that definition. Reconfigure with -DLLAMA_BUILD_IS_DEV=OFF and rebuild; the version string becomes the clean 1.0.0. The official release binaries are built with the flag off."}}, {"@type": "Question", "name": "Do I need a GPU to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No. Every measurement in this article was made on four CPU threads with no GPU. A GPU helps — set mparams.n_gpu_layers above zero with a GPU-enabled build to offload layers — but a 0.5B model runs fine on a CPU, and the code is identical either way."}}, {"@type": "Question", "name": "Can I use a bigger model with the same program?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Point -m at any GGUF file and the program works unchanged — the code does not care what size the model is. Two things change: RAM (a 7–8B model in Q4_K_M is roughly 5 GB on disk and in memory) and load time. Also check n_ctx against the model's trained context: the 2,048 tokens used here fit comfortably inside this model's 32,768, but a model trained on a shorter context will not accept more than it was trained for."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build your own AI app on llama.cpp 1.0: the stable C API, hands-on</h1>
+<p class="lede">llama.cpp 1.0, released today, freezes the C API after three and a half years of nightly builds. This tutorial builds it from source and writes a real chat program against libllama — load, tokenize, template, decode, sample — with every number measured on a CPU-only machine.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 13, 2026 · 20 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> llama.cpp 1.0 (November 13, 2026) makes the C API a stable, semver&rsquo;d contract: a breaking change to the public C API is a major-version bump, and nothing less. This tutorial clones the v1.0.0 tag, builds libllama from source, downloads Qwen2.5-0.5B-Instruct in Q4_K_M (469 MB), and writes two small C programs — a token inspector and a complete chat client — using only calls from the 1.0 header. Every command and output below was run for this article on a CPU-only machine, and the exact numbers are printed in the text.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>llama.cpp and ggml are both at 1.0.0 as of November 13, 2026. From here, a breaking change to the public C API in <code>./include</code> is a major-version bump.</li><li>The 1.0 release removes 35 deprecated functions and promotes the NextN speculative-decoding API into <code>llama.h</code>.</li><li>The new extended batch API — <code>llama_batch_ext</code> plus <code>llama_process</code> — is what the 1.0 examples use. The classic <code>llama_batch</code> and <code>llama_decode</code> still work.</li><li>A source checkout reports version &ldquo;1.0.0-dev (build 1, commit b1b770d)&rdquo;. Build with <code>-DLLAMA_BUILD_IS_DEV=OFF</code> for the clean <code>1.0.0</code> string.</li><li>Everything here runs on CPU with no GPU, no account, and no API key. Total cost: zero.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/llama-cpp-1-0-stable-c-api-tutorial/cover.webp" alt="Editorial illustration of a llama made of glowing circuit traces standing on a laptop keyboard, in cyan and amber on a dark navy background"><figcaption>AI-generated illustration: the llama.cpp engine, as circuitry — the C library this tutorial builds against.</figcaption></figure>
+<div class="article-body"><p>For three and a half years, building on llama.cpp meant building on a moving target. The library was versioned by commit number, the C API changed whenever the maintainers needed it to change, and code you wrote in January could fail to compile in June. That was fine for an engine that was still finding its shape — and it was the reason half the local-AI ecosystem, from desktop apps to phone runtimes, depends on it anyway. But a library that everything depends on cannot keep breaking its public interface.</p>
+<p>Version 1.0, released today, is the answer: a stable C API under semantic versioning, so the code you write against <code>llama.h</code> now is a contract, not a snapshot. This tutorial takes that promise literally. We will build the 1.0.0 release from source, download a small instruction-tuned model, and write a working chat program in C — about 200 lines, no dependencies beyond libllama — that loads the model, applies its chat template, tokenizes your question, decodes the answer one token at a time, and stops at the end-of-generation token. Along the way you will see exactly what the model sees (token ids, not words), how the new batch API works, and how sampling turns logits into text.</p>
+<p>Why C and not Python? Because the C API is the layer everything else is built on: llama-server, the Python bindings, the desktop apps. If you can drive libllama directly, you can embed a model in anything — a game, a command-line tool, a service that has no business running a Python interpreter. The Python route is covered in our earlier tutorial; this one is for the layer underneath.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>A Linux or macOS machine</strong> with git, a C compiler (gcc or clang), and CMake. The commands below were run on Linux; the C code itself is portable, but the manual <code>cc</code> compile line in Step 5 is Unix-specific — on Windows, build with the CMake-generated Visual Studio project instead.</li><li><strong>About 350 MB free</strong> for the source and build outputs (measured: 352 MB for the checkout plus build directory), plus <strong>469 MB</strong> for the model.</li><li><strong>Four CPU threads</strong> is plenty. No GPU, no account, no API key, and no cost — everything is free and local.</li><li><strong>Patience for one long build:</strong> the first compile takes about 15 minutes on four cores. After that, everything is seconds.</li></ul>
+<h2 id="step-1-what-1-0-actually-changes">Step 1: What 1.0 actually changes<a class="anchor" href="#step-1-what-1-0-actually-changes" aria-label="Link to section">#</a></h2>
+<p>The headline change is not a feature — it is a promise. The release announcement puts it plainly: &ldquo;Moving forward, both llama.cpp and ggml will reflect API and ABI incompatibilities with major-version bumps.&rdquo; The versioning rules, published with the release, are:</p>
+<table><thead><tr><th>Change type</th><th>What it means</th></tr></thead><tbody><tr><td><strong>MAJOR</strong></td><td>Breaking change to the public C API in <code>./include</code></td></tr><tr><td><strong>MINOR</strong></td><td>Backward-compatible feature, backend updates, model support, or API addition</td></tr><tr><td><strong>PATCH</strong></td><td>Bug fix with no API change</td></tr></tbody></table>
+<p>That is the whole point of the release: code written against 1.0 will compile against 1.1, 1.2, and 1.9. Only a 2.0 can break it. The release also does the housekeeping a 1.0 demands:</p>
+<ul><li><strong>35 deprecated functions removed</strong> from the public headers, along with the warmup setter and the defrag threshold option.</li><li><strong>The NextN speculative-decoding API promoted into <code>llama.h</code></strong> — the engine behind speculative decoding, which we measured end to end in an earlier tutorial, is now part of the stable surface.</li><li><strong>FP8 KV caches</strong> for lower-memory inference.</li><li><strong>llama-server security fixes</strong> (SSRF via the CORS proxy, DNS rebinding, child-instance access), plus a new <code>/v1/audio/speech</code> endpoint, MCP cancellation, and a redesigned web UI.</li><li><strong>ggml 1.0.0 as well</strong>, and support for more than 150 model architecture variants.</li></ul>
+<p>Distribution is wider than before, too: pre-built binaries on GitHub Releases, Homebrew, Winget, conda-forge, MacPorts, Debian, and Docker, plus the Llama desktop apps for macOS and Windows. This tutorial builds from source anyway — you learn the most that way, and you need the headers and the shared library for the C programs in Steps 4 and 5.</p>
+<h2 id="step-2-build-llama-cpp-1-0-from-source">Step 2: Build llama.cpp 1.0 from source<a class="anchor" href="#step-2-build-llama-cpp-1-0-from-source" aria-label="Link to section">#</a></h2>
+<p>Clone the repo and check out the release tag:</p>
+<pre><code class="language-bash">git clone https://github.com/ggml-org/llama.cpp
+cd llama.cpp
+git checkout v1.0.0-b12359-b1b770d
+</code></pre>
+<p>Then configure and build. The two <code>-DLLAMA_BUILD_*</code> flags skip the test suite and the example programs, which you do not need for this tutorial:</p>
+<pre><code class="language-bash">cmake -B build -DCMAKE_BUILD_TYPE=Release -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF
+cmake --build build -j4
+</code></pre>
+<p>The <code>-j4</code> is the number of parallel jobs — set it to your core count. On the four-core machine used for this tutorial the full build took about 15 minutes. When it finishes, <code>build/bin/</code> holds <code>llama-cli</code>, <code>llama-server</code>, and <code>llama-quantize</code>, and the shared libraries <code>libllama.so.1.0.0</code> and <code>libggml*.so.1.0.0</code> sit alongside them.</p>
+<p>Check the version:</p>
+<pre><code class="language-bash">./build/bin/llama-cli --version
+</code></pre>
+<pre>version: 1.0.0-dev (build 1, commit b1b770d)
+</pre>
+<p>That <code>-dev</code> suffix surprises people, so here is the explanation. The top of the project&rsquo;s <code>CMakeLists.txt</code> says it plainly: <code>LLAMA_BUILD_IS_DEV</code> is &ldquo;whether this is a development/nightly build — set this to OFF when making a release from a release tag&rdquo;, and it defaults to ON. A checkout of the release tag is still a development build by that definition. To get the clean release string, reconfigure with the flag off and rebuild:</p>
+<pre><code class="language-bash">cmake -B build -DLLAMA_BUILD_IS_DEV=OFF
+cmake --build build -j4 --target llama-cli llama-server
+./build/bin/llama-cli --version
+</code></pre>
+<pre>version: 1.0.0 (build 1, commit b1b770d)
+</pre>
+<p>The reconfigure plus rebuild of the two targets took about 14 seconds — only the version-stamped files are recompiled. From here on, this tutorial uses the clean 1.0.0 build.</p>
+<h2 id="step-3-get-a-model">Step 3: Get a model<a class="anchor" href="#step-3-get-a-model" aria-label="Link to section">#</a></h2>
+<p>The model for this tutorial is Qwen2.5-0.5B-Instruct in Q4_K_M quantization — a 0.5-billion-parameter instruction-tuned model, 469 MB on disk. It is the smallest sensible choice for learning the API: it downloads in minutes, loads in seconds, and answers simple questions correctly. Download it from the official Qwen repo on Hugging Face:</p>
+<pre><code class="language-bash">curl -L -o qwen2.5-0.5b-instruct-q4_k_m.gguf \
+  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf
+</code></pre>
+<p>Verify the download before you trust it:</p>
+<pre><code class="language-bash">ls -l qwen2.5-0.5b-instruct-q4_k_m.gguf
+sha256sum qwen2.5-0.5b-instruct-q4_k_m.gguf
+</code></pre>
+<pre>-rw-r--r-- 1 root root 491400032 Nov 13 17:17 qwen2.5-0.5b-instruct-q4_k_m.gguf
+74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db  qwen2.5-0.5b-instruct-q4_k_m.gguf
+</pre>
+<p>The file should be exactly 491,400,032 bytes with the SHA-256 above. If the download breaks partway — slow connections to the Hugging Face CDN do that — add <code>-C -</code> to the curl command to resume it. Here is what the loader reports about this model when it opens it: a Qwen2 architecture with 24 layers, 896 hidden units, a 4,864-unit feed-forward network, 14 attention heads with 2 key-value heads, RoPE base 1,000,000, a trained context of 32,768 tokens, and a vocabulary of 151,936 tokens. The &ldquo;Q4_K_M&rdquo; in the filename is the quantization: 4-bit weights with a medium-sized scale block, the standard trade-off between size and quality for local runs.</p>
+<p>One honest note before you go further: 0.5 billion parameters is a teaching model, not a model you would ship. It handles simple questions and short explanations; it will not write your essay. The same two programs work unchanged with any GGUF model — point them at a 7B or 8B file and only the load time and the RAM change.</p>
+<h2 id="step-4-see-what-the-model-sees">Step 4: See what the model sees<a class="anchor" href="#step-4-see-what-the-model-sees" aria-label="Link to section">#</a></h2>
+<p>The model never sees characters. It sees token ids — integers from a fixed vocabulary — and the first API to understand is the tokenizer. This small program prints exactly how a string becomes tokens:</p>
+<pre><code class="language-c">// tokens.c - show exactly how a model sees your text: token ids and pieces.
+// Usage: ./tokens -m model.gguf "some text here"
+#include "llama.h"
+
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+
+int main(int argc, char ** argv) {
+    const char * model_path = NULL;
+    const char * text = NULL;
+
+    for (int i = 1; i &lt; argc; i++) {
+        if (strcmp(argv[i], "-m") == 0 &amp;&amp; i + 1 &lt; argc) {
+            model_path = argv[++i];
+        } else {
+            text = argv[i];
+        }
+    }
+    if (!model_path || !text) {
+        fprintf(stderr, "usage: %s -m model.gguf \"text\"
+", argv[0]);
+        return 1;
+    }
+
+    llama_backend_init();
+
+    struct llama_model_params mparams = llama_model_default_params();
+    mparams.n_gpu_layers = 0;
+
+    struct llama_model * model = llama_model_load_from_file(model_path, mparams);
+    if (!model) {
+        fprintf(stderr, "error: unable to load model '%s'
+", model_path);
+        return 1;
+    }
+    const struct llama_vocab * vocab = llama_model_get_vocab(model);
+
+    printf("vocab size: %d tokens
+", llama_vocab_n_tokens(vocab));
+    printf("BOS id: %d, EOS id: %d
+", llama_vocab_bos(vocab), llama_vocab_eos(vocab));
+    printf("trained context: %d tokens
+", llama_model_n_ctx_train(model));
+
+    const int n = -llama_tokenize(vocab, text, (int) strlen(text), NULL, 0, true, true);
+    llama_token * tokens = malloc(sizeof(llama_token) * n);
+    if (llama_tokenize(vocab, text, (int) strlen(text), tokens, n, true, true) &lt; 0) {
+        fprintf(stderr, "error: failed to tokenize
+");
+        return 1;
+    }
+
+    printf("\"%s\" -&gt; %d tokens:
+", text, n);
+    for (int i = 0; i &lt; n; i++) {
+        char buf[256];
+        const int len = llama_token_to_piece(vocab, tokens[i], buf, sizeof(buf), 0, true);
+        printf("  %6d  '%.*s'
+", tokens[i], len, buf);
+    }
+
+    free(tokens);
+    llama_model_free(model);
+    llama_backend_free();
+    return 0;
+}
+</code></pre>
+<p>Compile it with the same command you will use for the chat program in the next step. Set <code>LLAMA</code> to the directory you cloned llama.cpp into:</p>
+<pre><code class="language-bash">LLAMA=$PWD/llama.cpp
+cc -O2 -std=c11 -I$LLAMA/include -I$LLAMA/ggml/include tokens.c -o tokens \
+  -L$LLAMA/build/bin -lllama -lggml -lggml-base -lggml-cpu -lm \
+  -Wl,-rpath,$LLAMA/build/bin
+</code></pre>
+<p>The flags: <code>-I</code> points at the two header directories (<code>llama.h</code> lives in <code>include/</code>, <code>ggml.h</code> in <code>ggml/include/</code>); <code>-L</code> and <code>-l</code> link the four libraries; <code>-Wl,-rpath</code> bakes the library path into the binary so it can find the <code>.so</code> files at run time. The alternative is <code>export LD_LIBRARY_PATH=$LLAMA/build/bin</code> before every run. Now try it:</p>
+<pre><code class="language-bash">./tokens -m qwen2.5-0.5b-instruct-q4_k_m.gguf "Hello, world!"
+./tokens -m qwen2.5-0.5b-instruct-q4_k_m.gguf "The capital of France is"
+</code></pre>
+<pre>vocab size: 151936 tokens
+BOS id: 151643, EOS id: 151645
+trained context: 32768 tokens
+"Hello, world!" -&gt; 4 tokens:
+    9707  'Hello'
+      11  ','
+    1879  ' world'
+       0  '!'
+
+vocab size: 151936 tokens
+BOS id: 151643, EOS id: 151645
+trained context: 32768 tokens
+"The capital of France is" -&gt; 5 tokens:
+     785  'The'
+    6722  ' capital'
+     315  ' of'
+    9625  ' France'
+     374  ' is'
+</pre>
+<p>Three things to notice. First, the tokenizer keeps the space attached to the following word — <code>' world'</code> and <code>' France'</code> are single tokens, which is why token counts never match word counts. Second, token ids are arbitrary: <code>'!'</code> happens to be id 0, and nothing about the number 9707 says &ldquo;Hello&rdquo; — the id is just an index into the vocabulary. Third, <code>add_special=true</code> added no BOS token for Qwen2.5. That is correct for this model: its chat template supplies the turn markers (<code>&lt;|im_start|&gt;</code> and friends) at the template stage, not the tokenizer stage. You will see those markers in the next step.</p>
+<p>One idiom in the code is worth remembering: calling <code>llama_tokenize</code> with a NULL buffer and length 0 returns the negative of the token count. That is the documented way to size your buffer before the real call — you will see the same pattern in the official examples.</p>
+<h2 id="step-5-write-the-chat-program">Step 5: Write the chat program<a class="anchor" href="#step-5-write-the-chat-program" aria-label="Link to section">#</a></h2>
+<p>Here is the whole program — one file, about 200 lines, no dependencies beyond libllama. It takes a question on the command line, renders it through the model&rsquo;s chat template, tokenizes it, decodes it, and prints the answer as it is generated:</p>
+<pre><code class="language-c">// chat.c - ask a question, get an answer. Minimal chat on llama.cpp 1.0.
+// Usage: ./chat -m model.gguf [-n 128] [-t 0.7] "your question here"
+#define _POSIX_C_SOURCE 200809L
+#include "llama.h"
+
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;time.h&gt;
+
+// Put tokens into the batch at consecutive positions, logits on the last one.
+static void batch_set_tokens(struct llama_batch_ext * batch, const llama_token * tokens,
+                             int32_t n_tokens, llama_pos pos_0) {
+    llama_batch_ext_clear(batch);
+    for (int32_t i = 0; i &lt; n_tokens; ++i) {
+        const int32_t idx = llama_batch_ext_add_token(batch, 0, tokens[i]);
+        const llama_pos pos = pos_0 + i;
+        llama_batch_ext_set_pos(batch, idx, &amp;pos);
+    }
+    llama_batch_ext_set_output_logits(batch, n_tokens - 1, true);
+}
+
+static double now_s(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &amp;ts);
+    return ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+static void log_quiet(enum ggml_log_level level, const char * text, void * user_data) {
+    (void) user_data;
+    if (level &gt;= GGML_LOG_LEVEL_ERROR) {
+        fprintf(stderr, "%s", text);
+    }
+}
+
+int main(int argc, char ** argv) {
+    const char * model_path = NULL;
+    const char * question = NULL;
+    int   n_predict = 128;
+    float temp = 0.7f;
+
+    for (int i = 1; i &lt; argc; i++) {
+        if (strcmp(argv[i], "-m") == 0 &amp;&amp; i + 1 &lt; argc) {
+            model_path = argv[++i];
+        } else if (strcmp(argv[i], "-n") == 0 &amp;&amp; i + 1 &lt; argc) {
+            n_predict = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-t") == 0 &amp;&amp; i + 1 &lt; argc) {
+            temp = (float) atof(argv[++i]);
+        } else {
+            question = argv[i];
+        }
+    }
+    if (!model_path || !question) {
+        fprintf(stderr, "usage: %s -m model.gguf [-n 128] [-t 0.7] \"question\"
+", argv[0]);
+        return 1;
+    }
+
+    // Only errors from the library, so stdout stays clean for the answer.
+    llama_log_set(log_quiet, NULL);
+
+    fprintf(stderr, "llama.cpp version: %s
+", llama_version());
+    llama_backend_init();
+
+    struct llama_model_params mparams = llama_model_default_params();
+    mparams.n_gpu_layers = 0; // CPU-only build: keep every layer on the CPU
+
+    struct llama_model * model = llama_model_load_from_file(model_path, mparams);
+    if (!model) {
+        fprintf(stderr, "error: unable to load model '%s'
+", model_path);
+        return 1;
+    }
+    const struct llama_vocab * vocab = llama_model_get_vocab(model);
+
+    // The model ships its own chat template (ChatML for Qwen2.5).
+    const char * tmpl = llama_model_chat_template(model, NULL);
+    if (!tmpl) {
+        fprintf(stderr, "error: model has no chat template
+");
+        return 1;
+    }
+
+    llama_chat_message msgs[2] = {
+        { "system", "You are a helpful assistant. Answer concisely." },
+        { "user",   question },
+    };
+
+    char formatted[8192];
+    int prompt_len = llama_chat_apply_template(tmpl, msgs, 2, true, formatted, sizeof(formatted));
+    if (prompt_len &lt; 0) {
+        fprintf(stderr, "error: failed to apply the chat template
+");
+        return 1;
+    }
+    fprintf(stderr, "--- prompt sent to the model ---
+%.*s
+--- end prompt ---
+", prompt_len, formatted);
+
+    // Tokenize. add_special=true only for the first prompt in the session.
+    const int n_prompt = -llama_tokenize(vocab, formatted, prompt_len, NULL, 0, true, true);
+    llama_token * prompt_tokens = malloc(sizeof(llama_token) * n_prompt);
+    if (llama_tokenize(vocab, formatted, prompt_len, prompt_tokens, n_prompt, true, true) &lt; 0) {
+        fprintf(stderr, "error: failed to tokenize the prompt
+");
+        return 1;
+    }
+    fprintf(stderr, "prompt: %d tokens
+", n_prompt);
+
+    struct llama_context_params cparams = llama_context_default_params();
+    cparams.n_ctx = 2048;
+    cparams.n_batch = 512;
+    cparams.n_threads = 4;
+    cparams.n_threads_batch = 4;
+
+    struct llama_context * ctx = llama_init_from_model(model, cparams);
+    if (!ctx) {
+        fprintf(stderr, "error: failed to create the context
+");
+        return 1;
+    }
+
+    struct llama_sampler * smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05f, 1));
+    llama_sampler_chain_add(smpl, llama_sampler_init_temp(temp));
+    llama_sampler_chain_add(smpl, llama_sampler_init_dist(1234));
+
+    struct llama_batch_ext * batch = llama_batch_ext_init(ctx);
+
+    const llama_token * tokens = prompt_tokens;
+    int n_tokens = n_prompt;
+    int n_pos = 0;
+    int n_generated = 0;
+    const double t_start = now_s();
+
+    while (n_generated &lt; n_predict) {
+        batch_set_tokens(batch, tokens, n_tokens, n_pos);
+        if (llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) {
+            fprintf(stderr, "error: decode failed
+");
+            return 1;
+        }
+        n_pos += n_tokens;
+
+        const llama_token id = llama_sampler_sample(smpl, ctx, -1);
+        if (llama_vocab_is_eog(vocab, id)) {
+            break;
+        }
+
+        char buf[256];
+        const int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, true);
+        if (n &lt; 0) {
+            fprintf(stderr, "error: failed to convert token to piece
+");
+            return 1;
+        }
+        fwrite(buf, 1, n, stdout);
+        fflush(stdout);
+
+        tokens = &amp;id;
+        n_tokens = 1;
+        n_generated++;
+    }
+    printf("
+");
+
+    const double dt = now_s() - t_start;
+    fprintf(stderr, "generated %d tokens in %.2f s (%.1f tok/s)
+",
+            n_generated, dt, n_generated / dt);
+
+    free(prompt_tokens);
+    llama_batch_ext_free(batch);
+    llama_sampler_free(smpl);
+    llama_free(ctx);
+    llama_model_free(model);
+    llama_backend_free();
+    return 0;
+}
+</code></pre>
+<p>Two things in this listing will trip up C programmers who are used to the C++ examples. First, the type names: in C, <code>llama_model</code>, <code>llama_context</code>, <code>llama_vocab</code>, <code>llama_sampler</code>, <code>llama_batch_ext</code>, <code>llama_model_params</code>, and <code>llama_context_params</code> are forward-declared structs with no typedef — you must write <code>struct llama_model *</code>, as above. The C++ examples drop the <code>struct</code> keyword; the C compiler will not. (<code>llama_chat_message</code>, <code>llama_batch</code>, <code>llama_token</code>, and <code>llama_pos</code> are typedefs, so those need no prefix.) Second, the <code>formatted</code> buffer is a fixed 8,192 bytes — fine for one question, but a real app should size it dynamically: <code>llama_chat_apply_template</code> returns the number of bytes the rendered prompt needs, so you can reallocate and retry when the buffer is too small.</p>
+<p>Compile it with the same command as <code>tokens.c</code>:</p>
+<pre><code class="language-bash">cc -O2 -std=c11 -I$LLAMA/include -I$LLAMA/ggml/include chat.c -o chat \
+  -L$LLAMA/build/bin -lllama -lggml -lggml-base -lggml-cpu -lm \
+  -Wl,-rpath,$LLAMA/build/bin
+</code></pre>
+<p>Then ask it something:</p>
+<pre><code class="language-bash">./chat -m qwen2.5-0.5b-instruct-q4_k_m.gguf "What is the capital of France? Answer in one sentence."
+</code></pre>
+<p>The answer comes on stdout; everything else goes to stderr, so the answer stays clean for piping. This is the exact output from the run made for this article:</p>
+<pre>The capital of France is Paris.
+</pre>
+<pre>llama.cpp version: 1.0.0
+.....................................................
+--- prompt sent to the model ---
+&lt;|im_start|&gt;system
+You are a helpful assistant. Answer concisely.&lt;|im_end|&gt;
+&lt;|im_start|&gt;user
+What is the capital of France? Answer in one sentence.&lt;|im_end|&gt;
+&lt;|im_start|&gt;assistant
+
+--- end prompt ---
+prompt: 36 tokens
+generated 7 tokens in 1.17 s (6.0 tok/s)
+</pre>
+<p>Read the stderr block top to bottom and you can see the whole pipeline working. The version line confirms the 1.0.0 build. The row of dots is the loader&rsquo;s progress as it maps the model file. Then the rendered prompt: the model&rsquo;s own ChatML template wrapped the system message and your question in <code>&lt;|im_start|&gt;</code> and <code>&lt;|im_end|&gt;</code> markers and left an open <code>&lt;|im_start|&gt;assistant</code> turn for the model to complete — that is what &ldquo;applying the chat template&rdquo; means in practice. The prompt is 36 tokens, the answer is 7 tokens, and the model stopped by itself at the end-of-generation token (EOS 151645), which is why the answer is one sentence and not a runaway paragraph.</p>
+<h2 id="step-6-how-the-generate-loop-works">Step 6: How the generate loop works<a class="anchor" href="#step-6-how-the-generate-loop-works" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/llama-cpp-1-0-stable-c-api-tutorial/img2.webp" alt="Diagram of the five-stage generation loop: text, tokens, model, sampler, answer"><figcaption>AI-generated diagram: the five stages of a turn — text, tokens, model, sampler, answer — the loop the chat program runs.</figcaption></figure>
+<p>The program in Step 5 looks long, but the generate loop itself is ten calls. Walk it in order:</p>
+<ol><li><strong><code>llama_backend_init()</code></strong> — once, at startup. It initializes the backends (CPU here; a GPU build would register its backends too).</li><li><strong><code>llama_model_load_from_file()</code></strong> — memory-maps the GGUF file and loads its tensors into a <code>struct llama_model</code>.</li><li><strong><code>llama_model_get_vocab()</code></strong> — the tokenizer lives on the vocabulary, so every tokenize/detokenize call takes the vocab.</li><li><strong><code>llama_model_chat_template()</code> and <code>llama_chat_apply_template()</code></strong> — the model ships its own template, and the apply call renders your messages into the prompt string. One caveat from the header: this function does not run a Jinja engine — it supports a predefined list of templates, and Qwen2.5&rsquo;s ChatML is one of them.</li><li><strong><code>llama_tokenize()</code></strong> — the prompt string becomes token ids.</li><li><strong><code>llama_init_from_model()</code></strong> — creates the context, which holds the KV cache and the compute state. Here <code>n_ctx</code> is 2,048 tokens and <code>n_batch</code> is 512.</li><li><strong>The sampler chain</strong> — the next step.</li><li><strong>The loop:</strong> <code>llama_batch_ext_add_token</code> and <code>llama_batch_ext_set_pos</code> put tokens at consecutive positions; <code>llama_batch_ext_set_output_logits(batch, n_tokens - 1, true)</code> asks for logits only on the last token; <code>llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch)</code> runs the model; <code>llama_sampler_sample(smpl, ctx, -1)</code> picks the next token from the last position; <code>llama_vocab_is_eog()</code> stops on the end-of-generation token; <code>llama_token_to_piece()</code> turns the id back into text and prints it.</li><li><strong>Free everything in reverse:</strong> batch, sampler, context, model, backend.</li></ol>
+<p>Two details in the loop deserve attention. The first pass feeds the whole prompt — all 36 tokens at once, processed in parallel. Every later pass feeds exactly one token: the one just sampled. That is why the loop tracks <code>n_pos</code> separately from the token count, and it is also why prompt processing is fast and generation is one token at a time. The second detail is the logits request: the model only needs to predict the next token after the last prompt token, so asking for logits on every position would waste compute. Requesting them on the last position only is the standard optimization, and the new batch API makes it explicit.</p>
+<p>A note on the new API versus the old one. The 1.0 examples use <code>llama_batch_ext</code> plus <code>llama_process</code>, and this tutorial follows them. The classic <code>llama_batch</code> plus <code>llama_decode</code> still exist and still work — the 1.0 release did not remove them. What changed is guidance: <code>llama_batch_get_one</code> is marked in the header as a helper &ldquo;to facilitate transition to the new batch API — avoid using it&rdquo;. If you are starting fresh, learn the extended API. If you are maintaining old code, it still compiles.</p>
+<h2 id="step-7-make-it-deterministic-and-make-it-yours">Step 7: Make it deterministic — and make it yours<a class="anchor" href="#step-7-make-it-deterministic-and-make-it-yours" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/llama-cpp-1-0-stable-c-api-tutorial/img3.webp" alt="Illustration of a sampler chain: a stream of tokens narrowing through three stacked filters into a single choice"><figcaption>AI-generated illustration: the sampler chain — min_p, temperature, and dist narrow 151,936 possible tokens down to one.</figcaption></figure>
+<p>The model does not choose words. It produces a probability distribution over all 151,936 tokens, and the sampler chain turns that distribution into one token. The chain in <code>chat.c</code> has three links, applied in order:</p>
+<ul><li><strong><code>llama_sampler_init_min_p(0.05f, 1)</code></strong> — drops every token whose probability is below 5% of the top token&rsquo;s probability. Unlike a fixed top-k, min_p adapts: when the model is confident, the cutoff is strict; when it is uncertain, more tokens survive.</li><li><strong><code>llama_sampler_init_temp(0.7f)</code></strong> — scales the distribution. Temperature 1.0 is the model&rsquo;s raw probabilities; lower is more conservative; 0.0 always picks the top token.</li><li><strong><code>llama_sampler_init_dist(1234)</code></strong> — draws the token, using seed 1234, so a run is reproducible.</li></ul>
+<p>Set the temperature to zero and the same question gives the same answer every time. Run twice:</p>
+<pre><code class="language-bash">./chat -m qwen2.5-0.5b-instruct-q4_k_m.gguf -t 0.0 "Name three primary colors."
+./chat -m qwen2.5-0.5b-instruct-q4_k_m.gguf -t 0.0 "Name three primary colors."
+</code></pre>
+<pre>Three primary colors are red, blue, and yellow.
+Three primary colors are red, blue, and yellow.
+</pre>
+<p>Byte-identical, both runs. That is what temperature 0 buys you: determinism for tests, evals, and anything you need to reproduce. Now a longer answer at the default temperature 0.7:</p>
+<pre><code class="language-bash">./chat -m qwen2.5-0.5b-instruct-q4_k_m.gguf "Explain in three sentences why the sky is blue."
+</code></pre>
+<pre>The sky is blue because of the scattering of sunlight. When sunlight enters the Earth's atmosphere, it is scattered by tiny particles in the atmosphere, such as nitrogen, oxygen, and water vapor. The scattering of sunlight creates colors, and the blue light is scattered the most, leading to the blue appearance of the sky.
+</pre>
+<p>Three sentences, correct physics, 64 tokens in 8.35 seconds (7.7 tok/s). It is also a little repetitive in the middle — a 0.5B model&rsquo;s answer is what it is, and the repetition is a good reminder that a small model&rsquo;s ceiling is low even when the prompt is right.</p>
+<p>About speed: repeated runs of the questions in this tutorial landed between 3.8 and 8.6 tokens per second. That number is a property of the small shared-CPU sandbox used for this tutorial (1.5 shared CPUs, 4 threads) — not of llama.cpp, and not a claim about your machine. On a real machine with more cores the same code runs faster, and on a GPU you set <code>mparams.n_gpu_layers</code> to a value above zero with a GPU-enabled build to offload layers. The point of the numbers here is that they were measured, not claimed.</p>
+<p>Three experiments to try on your own: re-run a question with <code>-t 1.0</code> and compare the variety; ask a longer question with <code>-n 300</code> and watch the model stop by itself at the end-of-generation token; and swap in a bigger GGUF — the program does not care what size the model is, only that it fits in RAM.</p>
+<h2 id="step-8-the-same-model-over-http">Step 8: The same model over HTTP<a class="anchor" href="#step-8-the-same-model-over-http" aria-label="Link to section">#</a></h2>
+<p>Sometimes you do not want a C program — you want an endpoint. The build already produced <code>llama-server</code>, an OpenAI-compatible HTTP server wrapping the same engine. Start it:</p>
+<pre><code class="language-bash">./build/bin/llama-server -m qwen2.5-0.5b-instruct-q4_k_m.gguf --port 8899 --host 127.0.0.1
+</code></pre>
+<p>Wait for the model to finish loading before you call it. The <code>/health</code> endpoint answers 503 while the model is still loading — in this run it took about 3 seconds; a bigger model takes longer:</p>
+<pre><code class="language-bash">for i in $(seq 1 60); do
+  code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/health)
+  [ "$code" = "200" ] &amp;&amp; break
+  sleep 1
+done
+curl -s http://127.0.0.1:8899/v1/models
+</code></pre>
+<pre>{"object":"list","data":[{"id":"qwen2.5-0.5b-instruct-q4_k_m.gguf","object":"model",
+  "owned_by":"llamacpp","meta":{"n_vocab":151936,"n_ctx":32768,"n_params":630167424,
+  "ftype":"Q4_K - Medium"}}]}
+</pre>
+<p>The reply is trimmed here — the full response also lists the model under a <code>models</code> key with its format, family, and capabilities. The part that matters is the <code>id</code>: it is the file path you passed with <code>-m</code>, and the <code>meta</code> block confirms the vocabulary, context, parameter count, and quantization from the file itself.</p>
+<p>Then a chat completion, using the OpenAI request shape:</p>
+<pre><code class="language-bash">curl -s -X POST http://127.0.0.1:8899/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"What is 2+2? Answer with just the number."}],"max_tokens":20,"temperature":0}'
+</code></pre>
+<pre>{"choices":[{"finish_reason":"stop","index":0,
+  "message":{"role":"assistant","content":"4"}}],
+ "model":"qwen2.5-0.5b-instruct-q4_k_m.gguf","object":"chat.completion",
+ "usage":{"completion_tokens":2,"prompt_tokens":42,"total_tokens":44}}
+</pre>
+<p>The answer is <code>4</code>, with 42 prompt tokens and 2 completion tokens — the same engine, the same model, behind a standard HTTP API. The full reply also carries a per-call id, a system fingerprint, and a <code>timings</code> block: on this run it reported 49 prompt tokens per second and 10 generated tokens per second on the same small CPU sandbox. Stop the server with Ctrl-C when you are done. The 1.0 server also serves <code>/v1/completions</code>, embeddings, and the new <code>/v1/audio/speech</code> endpoint.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Five ways to run a local model, five different trade-offs:</p>
+<table><thead><tr><th>Approach</th><th>Use it when</th><th>What you give up</th></tr></thead><tbody><tr><td><strong>The C API (this tutorial)</strong></td><td>You are embedding a model in an app or a library and want full control — memory, threads, sampling — with no process boundary</td><td>You write the loop, the template handling, and the error handling yourself</td></tr><tr><td><strong>llama-server</strong></td><td>You want an OpenAI-compatible HTTP endpoint for any language, in one command</td><td>A process boundary, HTTP overhead, and the server&rsquo;s opinions about defaults</td></tr><tr><td><strong>llama-cli</strong></td><td>You want to chat with a model or benchmark it right now, with no code</td><td>There is no API of your own — it is a tool, not a library</td></tr><tr><td><strong>llama-cpp-python</strong></td><td>Your app is Python and you want the same engine behind a Python API</td><td>The C API&rsquo;s control, and the binding&rsquo;s own release cadence</td></tr><tr><td><strong>Ollama</strong></td><td>You want zero-code local serving with model management</td><td>Control over the engine and the API surface</td></tr></tbody></table>
+<p>The honest rule: pick the highest layer that still gives you what you need. Most apps should start with llama-server or a binding and drop to the C API only when they hit a limit the higher layer cannot express. But when you do drop down, the layer underneath is now a stable contract — that is what 1.0 bought you.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>llama.cpp 1.0 does not change what the engine does. It changes what you can rely on: the C API in <code>llama.h</code> is now a versioned contract, 35 deprecated functions are gone, the extended batch API is the recommended path, and the code you write today will compile against 1.1, 1.2, and 1.9. The whole loop is about ten calls — backend, load, vocab, template, tokenize, context, sampler, batch, process, sample — and everything else is your app. Start from <code>chat.c</code>, point it at a bigger model, and you have the skeleton of every local AI product: a prompt in, tokens out, under your control, on your machine, with no API key and no bill.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://huggingface.co/blog/ggml-org/llama-cpp-v1" rel="nofollow">llama.cpp v1.0.0: A stronger foundation for the local AI ecosystem</a> — the release announcement from the llama.cpp team at Hugging Face, including the semantic versioning rules and distribution channels.</li><li><a href="https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0-b12359-b1b770d" rel="nofollow">llama.cpp v1.0.0 release notes (GitHub)</a> — the full list of breaking changes, removals, and new features, including the 35 removed functions and the NextN promotion.</li><li><a href="https://github.com/ggml-org/llama.cpp" rel="nofollow">ggml-org/llama.cpp</a> — the source repository; the <code>v1.0.0-b12359-b1b770d</code> tag and <code>include/llama.h</code> are what this tutorial builds and reads.</li><li><a href="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF" rel="nofollow">Qwen/Qwen2.5-0.5B-Instruct-GGUF (Hugging Face)</a> — the model used in every measurement here.</li><li><a href="/articles/llama-cpp-v1-0-release/">llama.cpp hits 1.0: the local AI engine finally gets a stable API</a> — AI Frontier Post&rsquo;s news coverage of the release.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="llama-cpp-1-0-stable-c-api-tutorial"></div><div class="comments" data-comments="llama-cpp-1-0-stable-c-api-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/llama-cpp-python-local-api-tutorial/"><span class="chip">Tutorials</span><h3>Your laptop is the API: run a local LLM server with llama-cpp-python and a 398 MB GGUF model</h3><div class="meta">October 30, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/speculative-decoding-llamacpp-tutorial/"><span class="chip">Tutorials</span><h3>Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</h3><div class="meta">September 29, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/ollama-local-llm-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Run open models on your own machine: the complete Ollama hands-on guide</h3><div class="meta">October 27, 2026 · 21 min read</div></a><a class="rel-card" href="/articles/qwen3-8-27b-local-setup/"><span class="chip">Tutorials</span><h3>Qwen3.8-27B on your own hardware: the complete local setup guide</h3><div class="meta">September 25, 2026 · 12 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Why does my source build report 1.0.0-dev instead of 1.0.0?</h3><p>Because <code>LLAMA_BUILD_IS_DEV</code> defaults to ON in the project&rsquo;s CMakeLists.txt — a checkout of the release tag is still a development build by that definition. Reconfigure with <code>-DLLAMA_BUILD_IS_DEV=OFF</code> and rebuild; the version string becomes the clean <code>1.0.0</code>. The official release binaries are built with the flag off.</p><h3>Do I need a GPU to follow this tutorial?</h3><p>No. Every measurement in this article was made on four CPU threads with no GPU. A GPU helps — set <code>mparams.n_gpu_layers</code> above zero with a GPU-enabled build to offload layers — but a 0.5B model runs fine on a CPU, and the code is identical either way.</p><h3>Can I use a bigger model with the same program?</h3><p>Yes. Point <code>-m</code> at any GGUF file and the program works unchanged — the code does not care what size the model is. Two things change: RAM (a 7–8B model in Q4_K_M is roughly 5 GB on disk and in memory) and load time. Also check <code>n_ctx</code> against the model&rsquo;s trained context: the 2,048 tokens used here fit comfortably inside this model&rsquo;s 32,768, but a model trained on a shorter context will not accept more than it was trained for.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/llama-cpp-v1-0-release/">llama.cpp hits 1.0: the local AI engine finally gets a stable API</a></li></ul></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
