@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Log every LLM call: run llmtee, the self-hosted proxy that shows what your AI really costs — AI Frontier Post</title>
+<meta name="description" content="llmtee is a single Go binary that sits between your apps and your LLM provider, logging every request with tokens, cost, latency and time to first token — plus hard per-key budgets. Here&#x27;s how to run it in ten minutes.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Log every LLM call: run llmtee, the self-hosted proxy that shows what your AI really costs">
+<meta property="og:description" content="llmtee is a single Go binary that sits between your apps and your LLM provider, logging every request with tokens, cost, latency and time to first token — plus hard per-key budgets. Here&#x27;s how to run it in ten minutes.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-13">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Log every LLM call: run llmtee, the self-hosted proxy that shows what your AI really costs", "description": "llmtee is a single Go binary that sits between your apps and your LLM provider, logging every request with tokens, cost, latency and time to first token — plus hard per-key budgets. Here's how to run it in ten minutes.", "datePublished": "2026-11-13", "dateModified": "2026-11-13", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/"}, "image": "https://aifrontierpost.com/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a provider API key to try llmtee?", "acceptedAnswer": {"@type": "Answer", "text": "No. Install the binary, register a local stand-in upstream as in Step 3, and the whole loop — proxy, logging, pricing, dashboard, budgets — works with no key and no spend. A real provider key is only needed for real model traffic, and a local Ollama server works with no key at all."}}, {"@type": "Question", "name": "How much does llmtee itself cost to run?", "acceptedAnswer": {"@type": "Answer", "text": "Nothing beyond the machine it runs on. It is a single 22 MB Go binary with an embedded price table of 3,690 models and a SQLite database it creates itself. There is no hosted component and no telemetry."}}, {"@type": "Question", "name": "Will llmtee change my model's responses?", "acceptedAnswer": {"@type": "Answer", "text": "No. It passes each response through to your client unchanged and keeps a copy — like the Unix tee it is named after. The verification in this tutorial compared the proxied reply against the upstream reply and they matched, including the usage block."}}, {"@type": "Question", "name": "What happens when a key hits its budget mid-day?", "acceptedAnswer": {"@type": "Answer", "text": "The request that crosses the limit completes, because llmtee only knows the cost after the response arrives. The next request is refused with a 429 in the provider's error format, and the refusal is logged. Budgets reset at the start of the next UTC day or month."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Log every LLM call: run llmtee, the self-hosted proxy that shows what your AI really costs</h1>
+<p class="lede">Your LLM bill arrives as a single number at the end of the month, and by then it is too late to do anything about it. llmtee is a single Go binary that sits between your code and the model, logging every request with tokens, cost, latency, and time to first token — and it can refuse a request the moment a key&#x27;s budget is spent. This tutorial runs it end to end, free, in about twenty minutes.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 13, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> llmtee is a self-hosted LLM proxy: one 22 MB Go binary and a SQLite file. Point your client at it instead of the provider and it forwards every request unchanged while logging tokens, cost, latency, and time to first token — and it answers 429 once a key&#x27;s budget is spent. Install v0.1.1, prove the logging free with a local stand-in upstream, then swap in your real provider key or an Ollama server.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> <code>garritfra/llmtee</code> — 3 stars, 21 commits, 1 release (v0.1.1); created November 8, 2026; front page of Hacker News November 13; Apache 2.0.</li><li><b>The install:</b> 8.4 MB download, 22 MB binary; Linux, macOS, and Windows on amd64 and arm64; no Docker, no database server, no GPU.</li><li><b>The free path:</b> a local stand-in upstream proves the whole loop with no key and no spend. One gpt-4o-mini call logged $0.000045 — exact to the cent.</li><li><b>The real setup:</b> change one base URL — <code>OPENAI_BASE_URL</code> or <code>ANTHROPIC_BASE_URL</code> — or add Ollama at <code>localhost:11434</code>. No code changes.</li><li><b>The limit:</b> five days old, 0.x, keys load at startup (restart after adding one), and it logs and caps only — no evals, routing, or fallbacks.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/cover.webp" alt="Clients send requests through a small glowing gateway to a language model, with a ledger panel below tracking cost"><figcaption>AI-generated illustration: client requests flow through a single gateway to the model, with a ledger tracking the cost.</figcaption></figure>
+<div class="article-body"><p>Your LLM bill arrives as a single number at the end of the month, and by then it is too late to do anything about it. The calls that produced it are scattered across SDKs, agents, and scripts, and none of them kept a receipt. llmtee fixes that by sitting in the one place every request already passes through: between your code and the model. Point your client at it instead of the provider, and it forwards each request unchanged while logging the tokens, the cost, the latency, and the time to first token — and it can refuse a request the moment a key's budget is spent.</p>
+<p>The project is five days old. Garrit Franke published it on November 8, 2026, and it reached the Hacker News front page on November 13 with a Show HN post titled "Log every LLM call with tokens, cost, latency, and time to first token." At the time of writing it has 3 stars, 21 commits, and one release, v0.1.1, under an Apache 2.0 licence. That is small, and you should know it before you trust it with production traffic. But the reason it is getting attention is the packaging: where Helicone's self-hosted setup is in maintenance mode since March 2026, Langfuse needs a web service, a worker, Postgres, ClickHouse, Redis, and S3, and LiteLLM Proxy needs Postgres for spend tracking, llmtee is one 22 MB Go binary and a SQLite file. There is nothing else to run.</p>
+<p>This tutorial runs the whole thing end to end. You will install the v0.1.1 binary, start it, prove the setup with a local stand-in upstream that costs nothing, point a real client at it, read the dashboard, and set a budget that actually blocks a request. Every command in Steps 1–3 and 5–7 was executed while writing this article, and the outputs shown are the real ones. Step 4 shows the real-provider configuration from the official README; the live model calls in that step need a provider key, which this sandbox does not have, and those commands are marked as such.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Linux, macOS, or Windows</strong> — prebuilt binaries ship for amd64 and arm64. This tutorial used Linux amd64.</li><li><strong>A terminal and about 20 minutes.</strong> The download is 8.4 MB; the binary is 22 MB.</li><li><strong>No Docker, no database server, no GPU.</strong> The proxy stores everything in a SQLite file it creates itself.</li><li><strong>No account and no API key for Steps 1–3.</strong> A small fake upstream stands in for a provider so you can see the logging work without spending anything. A real provider key is only needed for Step 4, and the same setup works with a local Ollama server if you prefer no key at all.</li></ul>
+<h2 id="1-install-the-binary">Step 1: Install the binary<a class="anchor" href="#1-install-the-binary" aria-label="Link to section">#</a></h2>
+<p>Download v0.1.1 from the releases page and extract it. Pin the version: the project is five days old and moving fast, and every command in this tutorial was verified against 0.1.1.</p>
+<pre><code class="language-bash">curl -sL -o llmtee.tar.gz https://github.com/garritfra/llmtee/releases/download/v0.1.1/llmtee_0.1.1_linux_amd64.tar.gz
+tar xzf llmtee.tar.gz
+./llmtee version</code></pre>
+<p>The last command prints <code>llmtee 0.1.1 (9503b0e)</code>. The tarball also contains the README, the licence, and an <code>examples/</code> folder with a sample YAML config and a sample prices file. If you are on macOS or Windows, or on arm64, take the matching asset from the same release page — the README lists Linux, macOS, and Windows builds on both architectures. There is a Docker image too, but you do not need it: the binary is the whole product.</p>
+<h2 id="2-start-it-and-check-health">Step 2: Start it and check health<a class="anchor" href="#2-start-it-and-check-health" aria-label="Link to section">#</a></h2>
+<p>llmtee reads its settings from environment variables. Three matter for a first run: an admin password for the dashboard, a database location, and — for the free trial in Step 3 — a stand-in upstream. Start it like this:</p>
+<pre><code class="language-bash">LLMTEE_ADMIN_PASSWORD='choose-a-strong-password' \
+  DATABASE_URL='sqlite://llmtee.db' \
+  ./llmtee</code></pre>
+<p>The startup log tells you exactly what it loaded:</p>
+<pre><code class="language-bash">llmtee ready listen=:8080 database=sqlite prices=3690 log_bodies=true body_retention_days=30 keys=0</code></pre>
+<p>Two details in that line are worth noting. <code>prices=3690</code> is the embedded price table — 3,690 model prices from LiteLLM's table, baked into the binary and refreshed weekly at build time. <code>log_bodies=true</code> is the default: request and response bodies are stored for 30 days so you can inspect the exact prompt behind a cost. The server warns about this at startup, and it should: bodies can contain sensitive data. Turn it off with <code>LLMTEE_LOG_BODIES=false</code> if you do not want prompts on disk.</p>
+<p>Check the health endpoint in a second terminal:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8080/healthz</code></pre>
+<p>It answers <code>{"status":"ok"}</code>. Keep this endpoint in mind: llmtee sits in your request path, so if it goes down, your LLM calls fail. Monitor <code>/healthz</code> and keep the provider's direct base URL at hand as a fallback.</p>
+<h2 id="3-try-it-free-with-a-fake-upstream">Step 3: Try it free with a fake upstream<a class="anchor" href="#3-try-it-free-with-a-fake-upstream" aria-label="Link to section">#</a></h2>
+<p>Before you hand llmtee a real API key, prove the logging works against a stand-in. Save the following as <code>fake_upstream.py</code>. It answers like OpenAI's chat completions endpoint, always returning the same reply with fixed usage: 100 prompt tokens and 50 completion tokens for <code>gpt-4o-mini</code>.</p>
+<pre><code class="language-python">import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+USAGE = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        body = json.loads(self.rfile.read(n) or b"{}")
+        payload = {
+            "id": "chatcmpl-fake123", "object": "chat.completion",
+            "created": 1793000000, "model": body.get("model", "gpt-4o-mini"),
+            "choices": [{"index": 0, "message": {"role": "assistant",
+                "content": "The sky is blue because air molecules scatter short blue wavelengths."},
+                "finish_reason": "stop"}],
+            "usage": USAGE,
+        }
+        data = json.dumps(payload).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+ThreadingHTTPServer(("127.0.0.1", 18001), H).serve_forever()</code></pre>
+<p>Start it, then restart llmtee with the fake registered as an upstream. Custom upstreams are served at <code>/u/&lt;name&gt;/v1/...</code>:</p>
+<pre><code class="language-bash">python3 fake_upstream.py &amp;
+LLMTEE_ADMIN_PASSWORD='choose-a-strong-password' \
+  DATABASE_URL='sqlite://llmtee.db' \
+  LLMTEE_UPSTREAM_FAKE='http://127.0.0.1:18001' \
+  LLMTEE_UPSTREAM_FAKE_API_KEY='fake-key-for-verify' \
+  ./llmtee</code></pre>
+<p>Now send a request through the proxy with curl, exactly as a client would:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8080/u/fake/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer fake-provider-key-1' \
+  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Why is the sky blue?"}]}'</code></pre>
+<p>The reply comes back byte-identical to what the upstream sent, including the usage block. The interesting part is what llmtee recorded. Query the SQLite file it created:</p>
+<pre><code class="language-bash">sqlite3 llmtee.db "SELECT model, status, streamed, tokens_in, tokens_out, cost_usd, latency_ms, ttft_ms FROM requests;"</code></pre>
+<p>This tutorial's run produced:</p>
+<pre><code class="language-bash">gpt-4o-mini|200|0|100|50|4.5e-05|8|</code></pre>
+<p>That row is the whole product in miniature: model, HTTP status, token counts, cost, and latency. The cost is exact — 100 input tokens at $0.15 per million plus 50 output tokens at $0.60 per million is $0.000015 + $0.00003 = $0.000045, and llmtee logged <code>4.5e-05</code>. A streamed request through the same proxy logged the same tokens and cost, plus <code>ttft_ms=2</code> — time to first token, which only exists for streamed responses. Non-streamed rows leave it empty.</p>
+<p>The same flow works with the real OpenAI SDK. Point it at the proxy instead of the provider — one line changes, nothing else:</p>
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8080/u/fake/v1", api_key="fake-provider-key-1")
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Why is the sky blue?"}],
+)
+print(response.choices[0].message.content)
+print(response.usage.prompt_tokens, response.usage.completion_tokens)</code></pre>
+<p>Against the fake upstream this printed the canned sky-blue reply and <code>100 50 150</code>, and the request appeared in the database with the same $0.000045 cost. The Anthropic side works the same way: a request to <code>/anthropic/v1/messages</code> with model <code>claude-haiku-4-5-20251001</code> and usage of 80 input / 40 output tokens logged a cost of $0.00028 — $1 per million in, $5 per million out.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/img2.webp" alt="Diagram: your apps point their base URL at the llmtee proxy, which forwards requests to OpenAI, Anthropic, OpenRouter, or Ollama and logs every request's tokens, cost, latency, and time to first token"><figcaption>Diagram: llmtee sits between your code and the model, and keeps the receipt for every request.</figcaption></figure>
+<h2 id="4-point-a-real-client-at-it">Step 4: Point a real client at it<a class="anchor" href="#4-point-a-real-client-at-it" aria-label="Link to section">#</a></h2>
+<p>Once the logging is proven, swap the fake for a real provider. llmtee has built-in upstreams for OpenAI, Anthropic, and OpenRouter, and you can add any OpenAI-compatible endpoint as a custom upstream. The client side is a base-URL change — no code changes, no SDK swaps. The following is from the official README; the live model calls need a provider key, which this sandbox does not have, so run these with your own key.</p>
+<pre><code class="language-bash">export OPENAI_BASE_URL=http://localhost:8080/openai/v1
+export ANTHROPIC_BASE_URL=http://localhost:8080/anthropic</code></pre>
+<p>With those set, the OpenAI and Anthropic SDKs, Claude Code, Codex, and automation tools send their traffic through llmtee, which forwards your provider key unchanged. The proxy's own Setup page in the web UI shows the same instructions for Claude Code, Codex, opencode, and Pi, with your instance's base URL filled in. For a local model with no key at all, add an Ollama upstream instead:</p>
+<pre><code class="language-bash">LLMTEE_UPSTREAM_OLLAMA=http://localhost:11434 ./llmtee</code></pre>
+<p>That serves Ollama at <code>http://localhost:8080/u/ollama/v1</code>, so local models show up in the same dashboard as hosted ones. A vLLM server or Groq works the same way — the sample config in the tarball shows both.</p>
+<h2 id="5-read-the-dashboard">Step 5: Read the dashboard<a class="anchor" href="#5-read-the-dashboard" aria-label="Link to section">#</a></h2>
+<p>Open <code>http://localhost:8080</code> and sign in with the admin password you set. The dashboard shows an Overview with spend today (UTC), a cost-per-day chart, and breakdowns by model, by key, by user, and by upstream, above a filterable request list where each row opens to the full request and response bodies.</p>
+<p>If you have no real traffic yet, seed the dashboard with demo data — 50 requests over 7 days is enough to see the charts fill in:</p>
+<pre><code class="language-bash">LLMTEE_ADMIN_PASSWORD='choose-a-strong-password' \
+  DATABASE_URL='sqlite://llmtee.db' \
+  ./llmtee seed --days 7 --requests 50</code></pre>
+<p>This tutorial's seed run reported <code>seeded 50 requests over 7 days</code> and wrote 50 rows totalling $0.78515027, using realistic models. Delete the seeded rows by removing the database file before you start logging real traffic, or just point the server at a fresh file.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/img3.webp" alt="Bar chart: one gpt-4o-mini call costs $0.000015 for 100 input tokens plus $0.000030 for 50 output tokens, totalling $0.000045"><figcaption>Chart: the exact cost llmtee logged for one gpt-4o-mini call — 100 input tokens plus 50 output tokens.</figcaption></figure>
+<h2 id="6-budgets-and-keys">Step 6: Budgets and keys<a class="anchor" href="#6-budgets-and-keys" aria-label="Link to section">#</a></h2>
+<p>Logging tells you what you spent. Budgets stop the spending. llmtee has two kinds of key. A <em>provider key</em> is your OpenAI or Anthropic key, forwarded as usual; llmtee stores only its SHA-256 hash. A <em>llmtee key</em> replaces the provider key on the client side, and llmtee swaps in the real key from its environment — so teammates and agents never see it. Create one with a daily budget:</p>
+<pre><code class="language-bash">LLMTEE_ADMIN_PASSWORD='choose-a-strong-password' \
+  DATABASE_URL='sqlite://llmtee.db' \
+  ./llmtee keys create agent-team --budget-day 5 --budget-month 60</code></pre>
+<p>It prints a secret like <code>llmtee-SbP5Li4EVk2z9FX3MOClIOPt7U5rWaBD</code> and warns you to store it now — it is not shown again. Hand that key to the client instead of the provider key.</p>
+<p>One gotcha, found the hard way while writing this tutorial: <strong>create keys before starting the server, or restart after adding one.</strong> llmtee loads keys into memory at startup — the startup log reports how many it found — and a key created while the server is running is rejected with <code>401 {"code":"authentication_error","message":"llmtee: invalid proxy key"}</code> until the next restart. That is a rough edge in a five-day-old tool, and it is the kind of thing that wastes an evening if you do not know it.</p>
+<p>When a key's budget is spent, the next request is refused with a 429 in the provider's own error format, and the refusal itself is logged. This tutorial verified it with a $0.00001 daily budget: the first request completed and cost $0.000045, and the second came back:</p>
+<pre><code class="language-json">{"error": {"code": "budget_exceeded", "message": "llmtee: daily budget of $0.00 exceeded for this key (spent $0.0000); resets at the start of the next day (UTC)", "type": "budget_exceeded"}}</code></pre>
+<p>Two honest details in that message. First, the request that crosses the limit completes — llmtee only knows the cost after the response arrives — so a key can overshoot by one request. Second, limits reset at the start of the next UTC day or month. To give an existing provider key a name and a budget without rotating it, use <code>llmtee keys label NAME PROVIDER_KEY --budget-day 5</code> instead, and to attribute requests to a key alongside a provider key, send it in an <code>Llmtee-Key</code> header. Set <code>LLMTEE_REQUIRE_PROXY_KEY=true</code> to reject any request without a valid llmtee key.</p>
+<h2 id="7-export-metrics-and-mcp">Step 7: Export, metrics, and MCP<a class="anchor" href="#7-export-metrics-and-mcp" aria-label="Link to section">#</a></h2>
+<p>The dashboard is not the only way out of the data. Export the request log as CSV:</p>
+<pre><code class="language-bash">LLMTEE_ADMIN_PASSWORD='choose-a-strong-password' \
+  DATABASE_URL='sqlite://llmtee.db' \
+  ./llmtee export --range 30d &gt; requests.csv</code></pre>
+<p>This tutorial's export produced a header of <code>id,time,upstream,path,model,key_id,key_name,user_id,session_id,status,streamed,tokens_in,tokens_out,...</code> with one row per request — enough to build any report the dashboard does not. Prometheus metrics live at <code>/metrics</code> behind the admin password as a bearer token: an unauthenticated request gets a 401, and <code>Authorization: Bearer &lt;admin password&gt;</code> returns request, token, and cost counters, plus duration, time to first token, budget rejections, and dropped events. An MCP server at <code>/mcp</code> exposes <code>get_spend</code>, <code>list_requests</code>, and <code>get_request</code> — add it to Claude Code with the command from the README:</p>
+<pre><code class="language-bash">claude mcp add --transport http llmtee http://localhost:8080/mcp --header "Authorization: Bearer $LLMTEE_ADMIN_PASSWORD"</code></pre>
+<p>That command is quoted from the README and was not executed here; the metrics endpoint it guards was verified directly. For a persistent setup, move the settings into a YAML config file — the tarball's <code>examples/config.yaml</code> shows the full shape, including alert webhooks at 80% and 100% of budget and a global daily and monthly cap — and run it as a service. A systemd unit and a Caddy-with-TLS example ship in the repo's docs.</p>
+<h2 id="when-to-use-llmtee-vs-alternatives">When to use llmtee vs alternatives<a class="anchor" href="#when-to-use-llmtee-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p>llmtee is the right tool when the question is "what did we spend, on what, and who spent it" and you want the answer with one binary and no extra services. The comparison in its own README is unusually candid about where it stops:</p>
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>What you run</th><th>Hard budgets</th><th>Best for</th></tr></thead><tbody><tr><td><strong>llmtee</strong></td><td>1 binary + SQLite</td><td>Yes, per key</td><td>Cost logging and caps for individuals and small teams</td></tr><tr><td>LiteLLM Proxy</td><td>Proxy + Postgres for spend tracking</td><td>Yes</td><td>Routing, fallbacks, and 100+ providers as a gateway</td></tr><tr><td>Helicone (self-hosted)</td><td>Several containers</td><td>Cost-based rate limits</td><td>Logging and analytics — in maintenance mode since March 2026</td></tr><tr><td>Langfuse</td><td>Web, worker, Postgres, ClickHouse, Redis, S3</td><td>No</td><td>Evals, prompt management, and tracing</td></tr></tbody></table></div>
+<p>Use LiteLLM when you need routing, fallbacks, or load balancing across providers — llmtee deliberately has none of those, and its README says so. Use Langfuse when you need evals and prompt management. Use Agent Console, covered on this blog in October, when you want a local-first dashboard over your coding agents' token usage without putting a proxy in the request path at all. Use llmtee when you want the smallest possible thing that answers "what did that cost" and stops the bleeding when a key runs away — an agent in a loop, a shared team key, a script you forgot was running.</p>
+<h2 id="limits-and-gotchas">Limits and gotchas<a class="anchor" href="#limits-and-gotchas" aria-label="Link to section">#</a></h2>
+<ul><li><strong>It is five days old.</strong> One release, 21 commits, 3 stars. The core loop is verified and works, but expect rough edges — the keys-at-startup behaviour above is one — and configuration may still change between minor versions. The project says so itself: the current release is 0.x.</li><li><strong>It only logs and caps.</strong> No evals, no prompt management, no playground, no response caching, no load balancing, no fallbacks, no SSO, no multi-tenancy. If a feature would need a second service, llmtee skips it or offers an export instead.</li><li><strong>Native Gemini, Azure OpenAI, and AWS Bedrock APIs are not supported yet.</strong> Their OpenAI-compatible endpoints work; the native ones do not.</li><li><strong>Costs are as accurate as the price table.</strong> Prices come from LiteLLM's table embedded at build time. It does not model batch, flex, or priority pricing, and it never estimates tokens — a response with no usage is marked "usage unknown."</li><li><strong>Body logging is on by default.</strong> Request and response bodies are stored with 30-day retention. Turn it off with <code>LLMTEE_LOG_BODIES=false</code>, or per request with the <code>Llmtee-Omit-*</code> headers, if prompts must not sit on disk. <code>LLMTEE_REDACT_FIELDS</code> replaces named JSON fields before storage.</li><li><strong>It is a single point of failure.</strong> llmtee sits in the request path, and if it is down your LLM calls fail. Monitor <code>/healthz</code>, and keep the provider's direct base URL as a fallback.</li><li><strong>An upstream outage becomes a 502.</strong> When the upstream was down during verification, the proxy answered 502 and logged the failed request with no tokens. That is the correct behaviour, but do not be surprised by it.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>llmtee does one job and does it with the smallest possible footprint: a single binary that forwards your LLM traffic unchanged, logs every request with tokens, cost, latency, and time to first token, and refuses requests once a key's budget is spent. The verification in this tutorial was done without spending a cent — a local stand-in upstream, an SDK pointed at the proxy, and a SQLite query — and the numbers came out exact: $0.000045 for a 100-in, 50-out gpt-4o-mini call, $0.00028 for an 80-in, 40-out Claude Haiku call, and a 429 the moment a $0.00001 budget was crossed.</p>
+<p>If your LLM spend is a monthly surprise, install it, point one client at it, and look at the dashboard after a day. The surprise is usually not the total. It is which key, which model, and which agent produced it — and that is exactly what llmtee shows you.</p>
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/garritfra/llmtee" rel="nofollow">llmtee — GitHub repository and README</a></li><li><a href="https://github.com/garritfra/llmtee/releases" rel="nofollow">llmtee — releases (v0.1.1)</a></li><li><a href="https://github.com/garritfra/llmtee/releases/tag/v0.1.1" rel="nofollow">llmtee v0.1.1 — release notes</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="llmtee-self-hosted-llm-cost-proxy-tutorial"></div><div class="comments" data-comments="llmtee-self-hosted-llm-cost-proxy-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/litellm-gateway-tutorial/"><span class="chip">Tutorials</span><h3>One API for every LLM: run LiteLLM as your AI gateway</h3><div class="meta">September 28, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/agent-console-token-observability-tutorial/"><span class="chip">Tutorials</span><h3>See exactly what your coding agents cost: hands-on with Agent Console, the 765-star local-first token dashboard</h3><div class="meta">October 1, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/headroom-agent-context-compression-tutorial/"><span class="chip">Tutorials</span><h3>Cut your AI agent&#x27;s token bill by 20–60%: hands-on with Headroom, the local compression layer</h3><div class="meta">October 7, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/openwebui-013-local-ai-workspace-tutorial/"><span class="chip">Tutorials</span><h3>Your own ChatGPT, with a computer attached: hands-on with Open WebUI 0.13</h3><div class="meta">November 7, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a provider API key to try llmtee?</h3><p>No. Install the binary, register a local stand-in upstream as in Step 3, and the whole loop — proxy, logging, pricing, dashboard, budgets — works with no key and no spend. A real provider key is only needed for real model traffic, and a local Ollama server works with no key at all.</p><h3>How much does llmtee itself cost to run?</h3><p>Nothing beyond the machine it runs on. It is a single 22 MB Go binary with an embedded price table of 3,690 models and a SQLite database it creates itself. There is no hosted component and no telemetry.</p><h3>Will llmtee change my model's responses?</h3><p>No. It passes each response through to your client unchanged and keeps a copy — like the Unix <code>tee</code> it is named after. The verification in this tutorial compared the proxied reply against the upstream reply and they matched, including the usage block.</p><h3>What happens when a key hits its budget mid-day?</h3><p>The request that crosses the limit completes, because llmtee only knows the cost after the response arrives. The next request is refused with a 429 in the provider's error format, and the refusal is logged. Budgets reset at the start of the next UTC day or month.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/codex-security-openai-scanner-tutorial/">Find, validate, and fix vulnerabilities with OpenAI&#x27;s Codex Security CLI — hands-on</a></li><li><a href="/articles/claude-managed-agents-first-agent-tutorial/">Build your first Claude Managed Agent: a hosted agent that codes in its own sandbox</a></li><li><a href="/articles/audit-repos-leaked-ai-agent-secrets-tutorial/">Your AI coding agent may have leaked your API keys to GitHub — how to find and purge them</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
