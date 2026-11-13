@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Cut 90 ms off every voice-assistant turn: hands-on with RealtimeVAD — AI Frontier Post</title>
+<meta name="description" content="RealtimeVAD spots the end of your sentence about 90 ms before Silero VAD does — by watching the audio go quiet instead of waiting for a probability to fall. It installs with one pip command, needs no GPU and no API key, and I measured its lead on real speech before writing a word of this tutorial.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/realtimevad-faster-speech-off-signal-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Cut 90 ms off every voice-assistant turn: hands-on with RealtimeVAD">
+<meta property="og:description" content="RealtimeVAD spots the end of your sentence about 90 ms before Silero VAD does — by watching the audio go quiet instead of waiting for a probability to fall. It installs with one pip command, needs no GPU and no API key, and I measured its lead on real speech before writing a word of this tutorial.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/realtimevad-faster-speech-off-signal-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/realtimevad-faster-speech-off-signal-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-13">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Cut 90 ms off every voice-assistant turn: hands-on with RealtimeVAD", "description": "RealtimeVAD spots the end of your sentence about 90 ms before Silero VAD does — by watching the audio go quiet instead of waiting for a probability to fall. It installs with one pip command, needs no GPU and no API key, and I measured its lead on real speech before writing a word of this tutorial.", "datePublished": "2026-11-13", "dateModified": "2026-11-13", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/realtimevad-faster-speech-off-signal-tutorial/"}, "image": "https://aifrontierpost.com/articles/realtimevad-faster-speech-off-signal-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a microphone or an API key to try RealtimeVAD?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything in this tutorial runs offline on WAV files, with no account and no key. A microphone is only needed for the live demo in the repository."}}, {"@type": "Question", "name": "How much earlier is the pause signal, really?", "acceptedAnswer": {"@type": "Answer", "text": "On three LibriSpeech utterances this tutorial measured a lead of 64 to 190 ms against the moment Silero's VADIterator reports the end of a turn. Against the raw moment Silero's probability drops below 0.5 the lead was smaller and mixed: -96, +62, and +16 ms. The project's headline 92 ms was measured on close-microphone audio from one speaker."}}, {"@type": "Question", "name": "Can I use it if my pipeline cannot cancel speculative work?", "acceptedAnswer": {"@type": "Answer", "text": "No — and the library's own documentation says so. If your pipeline waits for the end of the turn before doing anything, or starts work it cannot cancel cheaply, RealtimeVAD gives you nothing and you should use Silero alone."}}, {"@type": "Question", "name": "Does it work with frameworks like LiveKit or Pipecat?", "acceptedAnswer": {"@type": "Answer", "text": "The repository ships a LiveKit Agents plugin; the author's numbers are 120 ms sooner on Whisper and 56 ms on a streaming recognizer. Pipecat is not supported, because its recognizers finalize only when the VAD reports the stop."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Cut 90 ms off every voice-assistant turn: hands-on with RealtimeVAD</h1>
+<p class="lede">RealtimeVAD spots the end of your sentence about 90 ms before Silero VAD does — by watching the audio go quiet instead of waiting for a probability to fall. It installs with one pip command, needs no GPU and no API key, and I measured its lead on real speech before writing a word of this tutorial.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 13, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> RealtimeVAD is a tiny Python library that watches the audio level while Silero VAD decides what counts as speech. When the audio goes quiet it fires a <code>pause</code> event — a median 92 ms before Silero on the author&#x27;s close-microphone recordings, and 64–190 ms before Silero&#x27;s <code>VADIterator</code> end on the three LibriSpeech utterances measured in this tutorial. Install 0.1.0 with pip, feed it a 16 kHz mono WAV, and start speculative work at <code>pause</code> — if your pipeline can cancel it.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> <code>KoljaB/RealtimeVAD</code> — 86 stars, 3 forks, 92 commits; created November 7, 2026; front page of Hacker News November 12; MIT.</li><li><b>The install:</b> <code>pip install realtimevad==0.1.0</code> — NumPy and ONNX Runtime only; the Silero model ships inside the package; no PyTorch, no GPU, no key.</li><li><b>The measured lead:</b> 64, 190, and 144 ms against the <code>VADIterator</code> end on three LibriSpeech utterances; 11–38 false pauses per file — the price of the early signal.</li><li><b>The cost:</b> 0.15 s model load, then 11.7 ms of processing per second of audio on a two-core machine. One CPU thread, 16 kHz mono only.</li><li><b>The limit:</b> alpha, 0.1.0 — only pays off if your pipeline can start work at <code>pause</code> and cancel it fast. No lead on a distant microphone or in loud noise.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/realtimevad-faster-speech-off-signal-tutorial/cover.webp" alt="A glowing audio waveform in amber and teal on a dark background, fading to silence at a bright vertical marker line"><figcaption>AI-generated illustration: the waveform fades to silence at the marker — the moment RealtimeVAD fires its early pause signal.</figcaption></figure>
+<div class="article-body"><p>A voice assistant cannot answer until it knows you have stopped talking. Speech recognition, the language-model call, and the voice output all wait for that one decision, and the standard tool for making it — Silero VAD — takes a few hundred milliseconds to be sure. RealtimeVAD is a small Python library that gives you a second, earlier signal: it keeps Silero to decide what counts as speech, and every 10 ms it checks whether the audio has gone quiet. The moment it has, you get a <code>pause</code> event, and you can start the answer before Silero has finished deciding. If the speaker goes on, you cancel the work and try again at the next pause.</p>
+<p>The project is six days old. Kolja Beigel published it on November 7, 2026, and it reached the Hacker News front page on November 12 with a Show HN post titled "RealtimeVAD – trading false positives for 110ms earlier end-of-speech." At the time of writing it has 86 stars, 3 forks, and 92 commits under an MIT licence. Beigel is not a newcomer to this problem: his RealtimeSTT and RealtimeTTS libraries have 10,238 and 4,052 stars respectively. The headline claim is a median 92 ms lead over Silero on close-microphone audio, and 238 ms over Silero's <code>VADIterator</code> end. This tutorial tests that claim instead of repeating it. You will install the library, feed it real recorded speech, print the actual event stream, measure the lead against Silero yourself with the project's own benchmark script, and build the speculative-generation loop the library is designed for. Every command and output below was executed while writing this article.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.9 or later.</strong> This tutorial used Python 3.12.3 on Linux.</li><li><strong>pip and about five minutes.</strong> The install is two small packages — NumPy and ONNX Runtime — plus the library itself. No PyTorch, no GPU, no model download: the Silero model ships inside the package.</li><li><strong>A 16 kHz mono WAV file of real speech.</strong> Step 3 shows how to fetch three short public-domain LibriSpeech utterances for testing, or convert your own recording with ffmpeg. The library accepts 16 kHz mono only.</li><li><strong>No account, no API key, no microphone.</strong> Everything in this tutorial runs offline on files. A microphone is only needed if you want to try the live demo in the repository.</li></ul>
+<h2 id="1-install-realtimevad">Step 1: Install RealtimeVAD<a class="anchor" href="#1-install-realtimevad" aria-label="Link to section">#</a></h2>
+<p>Install version 0.1.0 from PyPI and pin it. The project is six days old and labels itself alpha, so pinning matters: the API may still change, and every command in this tutorial was verified against 0.1.0.</p>
+<pre><code class="language-bash">python3 -m venv .venv
+.venv/bin/pip install realtimevad==0.1.0</code></pre>
+<p>The install pulls in NumPy 2.5.4 and ONNX Runtime 1.32.0. That is the whole dependency list — the project's <code>pyproject.toml</code> declares exactly those two. Check the install and confirm the bundled model is present:</p>
+<pre><code class="language-bash">.venv/bin/python -c "from RealtimeVAD import VAD, VADIterator; import RealtimeVAD; print(RealtimeVAD.__version__)"
+.venv/bin/python -c "from RealtimeVAD import VAD; import time; t=time.perf_counter(); VAD(); print(f'model load: {time.perf_counter()-t:.2f}s')"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-bash">0.1.0
+model load: 0.15s</code></pre>
+<p>The first <code>VAD()</code> loads the bundled Silero model (<code>silero_vad_v6.2.1.onnx</code>, shipped inside the installed package) in 0.15 seconds. After that, feeding audio costs about 11.7 ms of processing per second of audio on this two-core machine — the README says about 8 ms, and the difference is the slower hardware. Either way, it runs on one CPU thread and is roughly a hundred times faster than real time, so the detector itself is never the bottleneck.</p>
+<p>As a sanity check, run the project's own test suite. Clone the repository and run pytest against the installed package:</p>
+<pre><code class="language-bash">git clone --depth 1 https://github.com/KoljaB/RealtimeVAD.git
+.venv/bin/python -m pytest RealtimeVAD/tests/test_vad.py RealtimeVAD/tests/test_silero.py RealtimeVAD/tests/test_iterator.py RealtimeVAD/tests/test_package.py -q</code></pre>
+<p>Expected output: <code>85 passed in 1.34s</code>. The edge-case tests in <code>tests/audio/</code> skip without about 100 MB of freely licensed audio that is not in git — they need a separate 1.3 GB download, which this tutorial does not use.</p>
+<h2 id="2-your-first-event-stream">Step 2: Your first event stream<a class="anchor" href="#2-your-first-event-stream" aria-label="Link to section">#</a></h2>
+<p>The README's quick start feeds 16 kHz mono audio in chunks and reacts to four events. Save this as <code>first_run.py</code> and run it against the LibriSpeech sentence you will fetch in Step 3 — or any 16 kHz mono WAV you already have. The code is the README's example, with the microphone replaced by a file and a timestamp printed for each event:</p>
+<pre><code class="language-python">import wave
+import numpy as np
+from RealtimeVAD import VAD
+
+with wave.open("6930-75918-0000.wav") as w:
+    assert w.getframerate() == 16000 and w.getnchannels() == 1 and w.getsampwidth() == 2
+    audio = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
+
+vad = VAD(resume_events=True)
+for i in range(0, len(audio) - 512 + 1, 512):  # 32 ms chunks
+    for event in vad.feed(audio[i:i + 512]):
+        print(f"{event.kind:7s} at {event.time:.3f}s")</code></pre>
+<p>The four events mean:</p>
+<ul><li><strong><code>start</code></strong> — speech has begun, after about 64 ms of confident speech, so clicks do not trigger it.</li><li><strong><code>pause</code></strong> — the speaker may have stopped. It fires within about 10 ms of the audio going quiet, and it fires often: on every breath, every short gap between words, and every stop consonant.</li><li><strong><code>resume</code></strong> — the speech went on after a <code>pause</code>, about 20 ms after sound is back. Off by default; this script turns it on with <code>resume_events=True</code>.</li><li><strong><code>end</code></strong> — the segment is over, decided where Silero alone ends it. Only <code>end</code> closes a segment; never treat <code>pause</code> as the end of the turn.</li></ul>
+<p>Run against the 4.5-second LibriSpeech sentence "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS", this tutorial's run produced 1 <code>start</code> at 0.672 s, 14 <code>pause</code> events, 13 <code>resume</code> events, and 1 <code>end</code> at 3.680 s. The first few lines:</p>
+<pre><code class="language-bash">start   at 0.672s
+pause   at 0.870s
+resume  at 0.890s
+pause   at 1.150s
+resume  at 1.170s
+pause   at 1.180s
+resume  at 1.200s
+...
+pause   at 3.520s
+end     at 3.680s</code></pre>
+<p>Two details are worth noting. First, the last <code>pause</code> came at 3.520 s, 160 ms before the <code>end</code> at 3.680 s — that gap is the head start this library sells. Second, almost every <code>pause</code> was followed by a <code>resume</code> about 20–100 ms later. That is the design, not a bug: <code>pause</code> is early and often wrong on purpose, and the library's own README says so. The <code>end</code> event carries the finished segment with its audio — 3.30 seconds of audio here, from 0.672 s to 3.680 s — and <code>vad.audio()</code> returns the running segment at any time, starting about 0.3 s before the speech began (5,120 samples, or 0.32 s, at the <code>start</code> in this run), so audio sent only from <code>start</code> on has not lost the first sound.</p>
+<h2 id="3-measure-the-lead-yourself">Step 3: Measure the lead yourself<a class="anchor" href="#3-measure-the-lead-yourself" aria-label="Link to section">#</a></h2>
+<p>Do not take the 92 ms headline on trust. The repository ships a benchmark script, <code>benchmarks/speech_off_lead.py</code>, that feeds each WAV through RealtimeVAD and compares its last <code>pause</code> against Silero on the same probabilities. First fetch three short public-domain LibriSpeech utterances (test-clean split) with this script, saved as <code>fetch_samples.py</code>. It calls the Hugging Face datasets-server API, which returns a fresh download link for each row:</p>
+<pre><code class="language-python">import json, os, subprocess, urllib.request, wave
+
+os.makedirs("audio", exist_ok=True)
+req = urllib.request.Request(
+    "https://datasets-server.huggingface.co/rows?dataset=openslr/librispeech_asr"
+    "&amp;config=clean&amp;split=test&amp;offset=0&amp;length=3",
+    headers={"User-Agent": "curl"})
+data = json.load(urllib.request.urlopen(req, timeout=60))
+for r in data["rows"]:
+    row, fid = r["row"], r["id"]
+    urllib.request.urlretrieve(row["audio"][0]["src"], f"audio/{fid}.flac")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", f"audio/{fid}.flac",
+                    "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", f"audio/{fid}.wav"],
+                   check=True)
+    with wave.open(f"audio/{fid}.wav", "rb") as w:
+        n, frames = w.getnframes(), w.readframes(w.getnframes())
+    with wave.open(f"audio/{fid}.wav", "wb") as w:  # 1 s of trailing silence
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+        w.writeframes(frames + b"\x00\x00" * 16000)
+    print(fid, row["text"][:50])</code></pre>
+<p>This downloads three utterances totalling about 460 KB: "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS" (4.5 s), "THE ENGLISH FORWARDED TO THE FRENCH BASKETS OF FLOWERS OF WHICH ..." (15.2 s), and "CONGRATULATIONS WERE POURED IN UPON THE PRINCESS EVERYWHERE" (6.0 s). The trailing second of silence matters: the benchmark needs one turn with trailing silence to find the final speech end. Now run the project's benchmark:</p>
+<pre><code class="language-bash">.venv/bin/python RealtimeVAD/benchmarks/speech_off_lead.py audio bench_out.json 2</code></pre>
+<p>This tutorial's run measured:</p>
+<div class="table-wrap"><table><thead><tr><th>File</th><th>Speech</th><th>False pauses</th><th>Lead vs Silero prob. &lt; 0.5</th><th>Lead vs VADIterator end</th></tr></thead><tbody><tr><td>File 1 — 4.5 s</td><td>3.01 s</td><td>13</td><td>−96 ms</td><td>64 ms</td></tr><tr><td>File 2 — 15.2 s</td><td>14.02 s</td><td>38</td><td>62 ms</td><td>190 ms</td></tr><tr><td>File 3 — 6.0 s</td><td>4.90 s</td><td>11</td><td>16 ms</td><td>144 ms</td></tr></tbody></table></div>
+<p>Read the two lead columns as answers to two different questions. Against the moment Silero's speech probability first drops below 0.5, the lead on read speech is small and noisy: −96 ms on file 1, meaning the last <code>pause</code> came 96 ms <em>after</em> Silero's probability fell, and +62 and +16 ms on the other two. Against the <code>VADIterator</code> end — the timestamp a voice pipeline actually waits for before acting — the lead is consistent: 64, 190, and 144 ms. That is the number that matters in practice, because no pipeline acts on a raw probability; it acts on the iterator's end. The README's headline 92 ms was measured on 3,153 turns from one speaker on a close microphone with noise suppression; LibriSpeech is read speech from a different capture chain, and the lead shrinks accordingly. The README is candid about this — its own table gives 82–84 ms for LibriSpeech-style read speech — and the honest summary of my run is: the lead is real, it is smaller than the headline on read speech, and it shows up most clearly against the iterator's end. The false-pause column is the price: 11 to 38 pauses per file were followed by more speech. A pipeline that cannot cancel speculative work gets nothing from this library, and the README says exactly that.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/realtimevad-faster-speech-off-signal-tutorial/img2.webp" alt="Timeline of RealtimeVAD events on one 4.5 second LibriSpeech sentence: one start, fourteen pauses, thirteen resumes, and one end, with the last pause 160 milliseconds before the end"><figcaption>Chart: every event RealtimeVAD fired on one 4.5 s sentence — 1 start, 14 pauses, 13 resumes, 1 end. Data from this tutorial's run.</figcaption></figure>
+<h2 id="4-tune-how-early-pause-fires">Step 4: Tune how early <code>pause</code> fires<a class="anchor" href="#4-tune-how-early-pause-fires" aria-label="Link to section">#</a></h2>
+<p>One setting, <code>pause_mode</code>, trades how early <code>pause</code> comes against how often it comes too early, inside the last word. The default is <code>"accurate"</code>; <code>"balanced"</code> and <code>"fast"</code> count audio as quiet 3 dB or 6 dB sooner. Run the same three files under both modes and compare the pause counts and the time of the last pause:</p>
+<pre><code class="language-python">import glob, wave
+import numpy as np
+from RealtimeVAD import VAD
+
+def load(path):
+    with wave.open(path) as w:
+        return np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
+
+for path in sorted(glob.glob("audio/*.wav")):
+    x = load(path)
+    for mode in ("accurate", "fast"):
+        vad = VAD(pause_mode=mode, resume_events=True)
+        pauses = []
+        for i in range(0, len(x) - 512 + 1, 512):
+            pauses += [e for e in vad.feed(x[i:i + 512]) if e.kind == "pause"]
+        print(f"{path} {mode:9s} {len(pauses)} pauses, last at {pauses[-1].time:.3f}s")</code></pre>
+<p>This tutorial's run:</p>
+<pre><code class="language-bash">audio/6930-75918-0000.wav accurate  14 pauses, last at 3.520s
+audio/6930-75918-0000.wav fast       10 pauses, last at 3.340s
+audio/6930-75918-0001.wav accurate  39 pauses, last at 14.050s
+audio/6930-75918-0001.wav fast       52 pauses, last at 13.960s
+audio/6930-75918-0002.wav accurate  12 pauses, last at 5.040s
+audio/6930-75918-0002.wav fast       15 pauses, last at 5.040s</code></pre>
+<p>Fast mode moved the last pause earlier by 180 ms on file 1 and 90 ms on file 2, and not at all on file 3 — but it does not reliably mean fewer pauses. It fires more pauses on files 2 and 3 (52 vs 39, 15 vs 12) and fewer on file 1 (10 vs 14), because the faster modes report one pause per stretch of speech instead of repeating them. The cost is in the README's own table: in fast mode, the last <code>pause</code> lands more than 100 ms before the last word is over in 18–24% of turns, against 1–9% in accurate mode. Use fast only when what you start at <code>pause</code> copes with a missing word ending, or is redone at <code>end</code>. Other settings worth knowing: <code>VAD(early_end=True)</code> ends segments a median 16–70 ms sooner at the cost of more ends inside an utterance; <code>VAD(repause_s=None)</code> restores the one-pause-per-stretch behaviour of version 0.0.5; <code>VAD(normalize_to_dbfs=-30)</code> helps quiet or phone-line input. The full list, with what each setting costs, is in the repository's <code>SPEC.md</code>.</p>
+<h2 id="5-drop-in-where-silero-already-lives">Step 5: Drop in where Silero already lives<a class="anchor" href="#5-drop-in-where-silero-already-lives" aria-label="Link to section">#</a></h2>
+<p>If your pipeline already uses Silero's <code>VADIterator</code>, the migration is one import. RealtimeVAD ships a compatible iterator with the same constructor and the same <code>{'start': ...}</code> / <code>{'end': ...}</code> results — and without a model argument it uses the bundled model, so it does not need PyTorch:</p>
+<pre><code class="language-python">from RealtimeVAD import VADIterator
+
+vad_iterator = VADIterator(sampling_rate=16000)
+for i in range(0, len(audio) - 512 + 1, 512):
+    speech_dict = vad_iterator(audio[i:i + 512], return_seconds=True)
+    if speech_dict:
+        print(speech_dict)</code></pre>
+<p>On the same three files this printed <code>{'start': 0.5} {'end': 3.5}</code>, <code>{'start': 0.3} {'end': 14.1}</code>, and <code>{'start': 0.1} {'end': 5.1}</code>. The iterator on its own gives you no speed — its <code>end</code> is decided where Silero's own count decides it. It is a migration path, not the feature: use <code>VAD</code> for the early signal, and keep the iterator only where you need Silero's exact interface. One note: the README's example imports <code>load_silero_vad</code> from the separate <code>silero_vad</code> package to pass an explicit model. You do not need that package; the no-argument form above worked as documented.</p>
+<h2 id="6-the-speculative-generation-loop">Step 6: The speculative-generation loop<a class="anchor" href="#6-the-speculative-generation-loop" aria-label="Link to section">#</a></h2>
+<p>This is the end-to-end use case the library exists for. At <code>pause</code>, start the work — finalize the transcript, call the language model, prepare the voice output. At <code>resume</code>, cancel it. At <code>end</code>, finalize with the full segment. The script below is the skeleton; the "work" is a printed line where a real pipeline would make its calls. Save it as <code>speculative_demo.py</code>:</p>
+<pre><code class="language-python">import wave
+import numpy as np
+from RealtimeVAD import VAD
+
+with wave.open("6930-75918-0000.wav") as w:
+    audio = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
+
+vad = VAD(resume_events=True)
+started = cancelled = 0
+for i in range(0, len(audio) - 512 + 1, 512):
+    for e in vad.feed(audio[i:i + 512]):
+        if e.kind == "start":
+            print(f"[{e.time:6.3f}s] start   -- stream audio to ASR")
+        elif e.kind == "pause":
+            started += 1
+            print(f"[{e.time:6.3f}s] pause   -- SPECULATE: finalize transcript + start LLM call")
+        elif e.kind == "resume":
+            cancelled += 1
+            print(f"[{e.time:6.3f}s] resume  -- speaker continued, CANCEL speculative work")
+        elif e.kind == "end":
+            print(f"[{e.time:6.3f}s] end     -- FINALIZE with {len(e.segment.audio) / 16000:.2f}s of audio")
+print(f"\n{started} speculative starts, {cancelled} cancelled, 1 finalized")</code></pre>
+<p>Output on the 4.5-second sentence:</p>
+<pre><code class="language-bash">[ 0.672s] start   -- stream audio to ASR
+[ 0.870s] pause   -- SPECULATE: finalize transcript + start LLM call
+[ 0.890s] resume  -- speaker continued, CANCEL speculative work
+...
+[ 3.520s] pause   -- SPECULATE: finalize transcript + start LLM call
+[ 3.680s] end     -- FINALIZE with 3.30s of audio
+
+14 speculative starts, 13 cancelled, 1 finalized</code></pre>
+<p>Fourteen speculative starts, thirteen cancelled, one finalized — and the answer for the final turn was ready 160 ms before the segment ended. The whole 4.5 seconds of audio processed in 0.04 seconds of wall clock after the 0.15-second model load. That ratio is the point: thirteen wasted starts cost almost nothing when each start is a few milliseconds of local work, and the one that survives saves a real, human-perceptible slice of latency on every turn. The arithmetic flips if each start is expensive — a full language-model call per pause, with no cheap cancellation, costs up to 1.7 times as many speculative requests in the author's own LiveKit runs. Start cheap work at <code>pause</code> (transcript finalization, a small-model draft, TTS prebuffering) and keep the expensive call for the point where you are confident, or make sure your cancellation is measured in tens of milliseconds. And always redo at the next <code>pause</code>: the latest one is the best estimate of where the speech stopped, and a <code>pause</code> can land inside the last word when the level dips before a final consonant.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/realtimevad-faster-speech-off-signal-tutorial/img3.webp" alt="Bar chart of measured speech-off lead on three LibriSpeech utterances: 64, 190, and 144 milliseconds earlier than Silero VADIterator end, and minus 96, 62, and 16 milliseconds against Silero probability below 0.5"><figcaption>Chart: the lead this tutorial measured — consistent against the iterator's end, mixed against the raw probability threshold.</figcaption></figure>
+<h2 id="when-to-use-realtimevad-vs-silero-alone">When to use RealtimeVAD vs Silero alone<a class="anchor" href="#when-to-use-realtimevad-vs-silero-alone" aria-label="Link to section">#</a></h2>
+<p>The README answers this question with unusual honesty, and it is worth repeating verbatim in spirit, because it is the difference between a library that helps and one that adds noise:</p>
+<div class="table-wrap"><table><thead><tr><th>Your pipeline</th><th>What you get</th></tr></thead><tbody><tr><td>Starts work at <code>pause</code> and cancels it within a few tens of milliseconds</td><td>The lead measured above, on every turn where the audio goes quiet</td></tr><tr><td>Waits for the end of the turn before doing anything</td><td>Nothing. <code>end</code> is Silero's end. Use Silero</td></tr><tr><td>Starts early but cannot cancel, or each start is expensive</td><td>More cost than gain: up to 1.7× as many speculative requests. Use Silero</td></tr><tr><td>Already answers faster than the end of the turn arrives</td><td>Little or nothing: 0 ms in the author's LiveKit run with a 0.1 s LLM</td></tr></tbody></table></div>
+<p>The same logic applies to frameworks. The repository ships a LiveKit Agents plugin plus a wrapper that starts LiveKit's preemptive generation at <code>pause</code>; the author's numbers are 120 ms sooner on Whisper, 56 ms on a streaming recognizer, and 0 ms with a 0.1-second LLM, at the wrapper's default <code>pause</code> of 0.15 s. Those are the author's measurements, not this tutorial's — the plugin was not run here, and the LiveKit timings in the README are a single repetition on 10 to 16 sentences. Pipecat is not supported: its speech recognizers finalize only when the VAD reports the stop, so nothing can start at <code>pause</code>. If your stack is Pipecat, or any pipeline that treats the VAD as a gate rather than a signal, RealtimeVAD has nothing to offer you yet.</p>
+<h2 id="limits-and-gotchas">Limits and gotchas<a class="anchor" href="#limits-and-gotchas" aria-label="Link to section">#</a></h2>
+<ul><li><strong>It is alpha, and it says so.</strong> Six days old, version 0.1.0, 86 stars. The API may still change, and the headline number has already moved across releases — 110 ms at 0.0.4, 100 ms at 0.0.5, 92 ms now — because each release moved the default toward fewer mistakes, not because the detector got slower.</li><li><strong>16 kHz mono only.</strong> For 8 kHz audio without resampling, use Silero. Resample with ffmpeg (<code>-ar 16000 -ac 1</code>) before feeding anything else in.</li><li><strong>No lead on a distant microphone or in loud noise.</strong> The README's own table gives 0 ms on a distant table microphone and none when steady noise is within about 11 dB of the speaker, or with babble, music, or street noise close under the speaker. Where there is no lead, RealtimeVAD behaves like Silero alone: correct, and no faster.</li><li><strong>Thin evidence in places.</strong> The headline numbers come from one speaker and one capture chain, mostly quiet rooms with browser noise suppression. The room-noise and phone-line rows are simulated. Treat the numbers as a starting point and measure on your own audio — Step 3 shows how.</li><li><strong>Whisper is mostly not detected; laughter, coughs, and sneezes often are.</strong> Those are Silero's limits, and RealtimeVAD inherits them. Very quiet and narrowband speech makes Silero unsure, and RealtimeVAD with it.</li><li><strong><code>pause</code> is not the end of the turn.</strong> In 1 to 4% of clips the last <code>pause</code> is taken back by a <code>resume</code> and no new one comes before the <code>end</code>. Keep <code>end</code> as the fallback, always.</li><li><strong>The first <code>pause</code> is not the best one.</strong> Several pauses can precede one <code>end</code>, and the latest is the best estimate of where the speech stopped. Redo speculative work at each new <code>pause</code> and drop the older result.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>RealtimeVAD does one small thing well: it notices the silence at the end of your sentence about a tenth of a second before the standard tool does, and it hands you that tenth of a second as an event you can act on. The cost is a pip install, two dependencies, and a design constraint — your pipeline has to be able to start work early and cancel it fast. On three real LibriSpeech utterances, this tutorial measured a lead of 64 to 190 ms against the moment a pipeline would otherwise act, with 11 to 38 false pauses per file that a cancelling pipeline throws away for free. That is smaller than the 92 ms headline on the author's own close-microphone recordings, and larger than nothing, which is what most voice assistants get today.</p>
+<p>If you are building a voice assistant and its latency budget is measured in hundreds of milliseconds, install it, run the benchmark in Step 3 on your own recordings, and look at the lead column before you commit. If the lead is there and your pipeline can cancel, the 90 ms is yours on every turn. If either condition fails, Silero alone is the right call — and the library's own documentation will tell you so.</p>
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/KoljaB/RealtimeVAD" rel="nofollow">RealtimeVAD — GitHub repository and README</a></li><li><a href="https://github.com/KoljaB/RealtimeVAD/blob/main/SPEC.md" rel="nofollow">RealtimeVAD — SPEC.md (event guarantees and settings)</a></li><li><a href="https://github.com/KoljaB/RealtimeVAD/blob/main/docs/results.md" rel="nofollow">RealtimeVAD — docs/results.md (full measurement tables)</a></li><li><a href="https://pypi.org/project/realtimevad/" rel="nofollow">realtimevad 0.1.0 — PyPI</a></li><li><a href="https://news.ycombinator.com/item?id=50474586" rel="nofollow">Show HN: RealtimeVAD — Hacker News thread</a></li><li><a href="https://huggingface.co/datasets/openslr/librispeech_asr" rel="nofollow">LibriSpeech ASR corpus — Hugging Face (public domain, LibriVox recordings)</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="realtimevad-faster-speech-off-signal-tutorial"></div><div class="comments" data-comments="realtimevad-faster-speech-off-signal-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/gemini-4-hydrogen-agentic-coding-tutorial/"><span class="chip">Tutorials</span><h3>Build a fast agentic coding loop with Gemini 4 Hydrogen</h3><div class="meta">November 13, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/"><span class="chip">Tutorials</span><h3>Log every LLM call: run llmtee, the self-hosted proxy that shows what your AI really costs</h3><div class="meta">November 13, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/llama-cpp-1-0-stable-c-api-tutorial/"><span class="chip">Tutorials</span><h3>Build your own AI app on llama.cpp 1.0: the stable C API, hands-on</h3><div class="meta">November 13, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/claude-trading-skills-investor-workflow-tutorial/"><span class="chip">Tutorials</span><h3>Claude Trading Skills: Turn Claude Code Into a Disciplined Investing Workflow</h3><div class="meta">November 13, 2026 · 12 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a microphone or an API key to try RealtimeVAD?</h3><p>No. Everything in this tutorial runs offline on WAV files, with no account and no key. A microphone is only needed for the live demo in the repository.</p><h3>How much earlier is the pause signal, really?</h3><p>On three LibriSpeech utterances this tutorial measured a lead of 64 to 190 ms against the moment Silero's VADIterator reports the end of a turn. Against the raw moment Silero's probability drops below 0.5 the lead was smaller and mixed: -96, +62, and +16 ms. The project's headline 92 ms was measured on close-microphone audio from one speaker.</p><h3>Can I use it if my pipeline cannot cancel speculative work?</h3><p>No — and the library's own documentation says so. If your pipeline waits for the end of the turn before doing anything, or starts work it cannot cancel cheaply, RealtimeVAD gives you nothing and you should use Silero alone.</p><h3>Does it work with frameworks like LiveKit or Pipecat?</h3><p>The repository ships a LiveKit Agents plugin; the author's numbers are 120 ms sooner on Whisper and 56 ms on a streaming recognizer. Pipecat is not supported, because its recognizers finalize only when the VAD reports the stop.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/faster-whisper-local-transcription-tutorial/">Transcribe audio locally with faster-whisper — hands-on</a></li><li><a href="/articles/build-voice-agent-weekend/">Build a voice agent in a weekend</a></li><li><a href="/articles/elevenlabs-voice-agent-tutorial/">Build a voice agent with ElevenLabs: from first call to a working website widget</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
