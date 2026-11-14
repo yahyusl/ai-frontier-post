@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop asking your LLM to decide: Perplexity Decider v1.3 hands-on — AI Frontier Post</title>
+<meta name="description" content="Perplexity Decider v1.3 returns probabilities instead of prose: route tickets, score severity, and extract spans with three typed questions — locally via Ollama or on the $0.02-per-million-token Decisions API. Every command verified, including the MLX gotcha that blocks Flash on Linux.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/perplexity-decider-v1-3-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop asking your LLM to decide: Perplexity Decider v1.3 hands-on">
+<meta property="og:description" content="Perplexity Decider v1.3 returns probabilities instead of prose: route tickets, score severity, and extract spans with three typed questions — locally via Ollama or on the $0.02-per-million-token Decisions API. Every command verified, including the MLX gotcha that blocks Flash on Linux.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/perplexity-decider-v1-3-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/perplexity-decider-v1-3-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-14">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop asking your LLM to decide: Perplexity Decider v1.3 hands-on", "description": "Perplexity Decider v1.3 returns probabilities instead of prose: route tickets, score severity, and extract spans with three typed questions \u2014 locally via Ollama or on the $0.02-per-million-token Decisions API. Every command verified, including the MLX gotcha that blocks Flash on Linux.", "datePublished": "2026-11-14", "dateModified": "2026-11-14", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/articles/perplexity-decider-v1-3-hands-on-tutorial/cover.webp"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/perplexity-decider-v1-3-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/perplexity-decider-v1-3-hands-on-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Can I run Decider on my own machine?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The 27B model runs through Ollama as a 17 GB GGUF download and needs about 17 GB of RAM. The Flash model is MLX-only on Ollama, so it runs natively on Apple silicon but not on Linux or Windows. The Hugging Face repos are private and need a token with access."}}, {"@type": "Question", "name": "How is a decision model different from an LLM judge?", "acceptedAnswer": {"@type": "Answer", "text": "A decision model never generates text: it returns calibrated probabilities for a fixed set of answers in a single forward pass, with zero output tokens and nothing to parse. An LLM judge writes a verdict in prose, which you then have to extract, validate, and pay output tokens for. The confidence value on a Decider answer measures how sharply the probabilities favor one option, not the chance the answer is right."}}, {"@type": "Question", "name": "What does locate do that noul, choice, and score do not?", "acceptedAnswer": {"@type": "Answer", "text": "Locate returns character spans into the state, so you can extract exact text \u2014 an email address, an order number \u2014 and verify it with state[start:end] == text. It is available only on the v1.3 models through the hosted Decisions API; Ollama's System One endpoint does not offer it."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop asking your LLM to decide: Perplexity Decider v1.3 hands-on</h1>
+<p class="lede">Perplexity Decider v1.3, released November 12, 2026, never writes a word: it scores your questions and returns probabilities. Here is how to route support tickets with it — locally through Ollama, or on the hosted Decisions API for about two ten-thousandths of a cent a ticket.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 14, 2026 · 16 min read</span></span></div>
+<figure class="hero-art"><img class="story-image" src="/articles/perplexity-decider-v1-3-hands-on-tutorial/cover.webp" alt="Support tickets flowing into a central decision node and splitting into three glowing lanes ending in a bell, a stack of cards, and a gauge"><figcaption>AI-generated illustration: tickets in, three typed answers out, one routing decision. Cover by AI Frontier Post.</figcaption></figure>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Perplexity Decider v1.3 (November 12, 2026) is a 27B decision model that returns probabilities instead of prose. This tutorial routes support tickets with three typed questions — noul, choice, score — locally through Ollama or on the hosted Decisions API for $0.02 per million input tokens, adds span extraction with locate, and documents the one gotcha that matters: the Flash model is MLX-only in Ollama and will not run on Linux.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Verified versions:</b> Ollama 0.40.11, Python 3.12.3, <code>httpx</code> 0.28.1, <code>typesafe-sdk</code>. The 27B model needs about 17&nbsp;GB of RAM; the sandbox had 8&nbsp;GB, so the model itself was not loaded — see the verification section.</li><li><b>The canonical numbers are the vendors’ documented values, checked byte-for-byte:</b> crash ticket, urgent 0.994, technical 0.996, severity 2.975, 338 input tokens, 0 output tokens.</li><li><b>Gotcha — Flash is MLX-only on Ollama:</b> <code>ollama pull pplx-decider-flash</code> fails on Linux with “this model requires MLX support, but the MLX runtime is not available”. Use the 27B model or the hosted API.</li><li><b>Cost:</b> 10 tickets, 1,265 input tokens, $0.000025 at v1.3 pricing. Output tokens are free — there are none.</li><li><b>Free window:</b> OpenRouter serves both models free until November 19, 2026, as <code>perplexity/pplx-decider-v1.3:free</code> and <code>perplexity/pplx-decider-flash-v1.3:free</code>.</li></ul>
+</header>
+<div class="article-body"><p>Every support inbox, moderation queue, and agent loop eventually hits the same wall: you need a yes or no, a team name, a severity level — and the standard move is to ask a chat model to write you an answer and then parse it back out of prose. That works until it doesn't. The model hedges, invents a fourth option, returns JSON with a trailing comma, or quietly changes its mind between runs. You end up writing a parser, a validator, and a retry loop around what was supposed to be a simple decision.</p>
+<p>Perplexity's answer, released November 12, 2026, is to stop asking a text generator to decide. Decider v1.3 is a 27-billion-parameter model fine-tuned from Qwen3.8-27B that never generates text at all: you hand it a piece of state — a ticket, a screenshot, a JSON record — plus a set of typed questions, and it returns a calibrated probability for every answer in a single forward pass. Its smaller sibling, Decider Flash v1.3, is a distilled 4B model built for the same job at about a seventh of the size. This tutorial builds a working support-ticket router with them: three questions per ticket, thresholds you can tune, a cost of about two ten-thousandths of a cent per ticket on the hosted API — and it runs locally through Ollama if you'd rather not send your tickets anywhere.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Ollama 0.40.11 or newer</strong> for the local route. The decision endpoint, <code>/v1/systemone</code>, needs Ollama 0.35.0 or later. Install from <a href="https://ollama.com/download" rel="nofollow">ollama.com/download</a>.</li>
+<li><strong>Python 3.12</strong> and <code>pip</code> for the client in Steps 4–5. The only dependencies are <code>requests</code> and <code>httpx</code> (0.28.1, as run here).</li>
+<li><strong>A Perplexity API key</strong> only if you want the hosted route in Step 7. Everything before that runs locally with no account and no key. OpenRouter is also serving both models free until November 19, 2026, under <code>perplexity/pplx-decider-v1.3:free</code> and <code>perplexity/pplx-decider-flash-v1.3:free</code>.</li>
+<li><strong>Hardware for local runs:</strong> the 27B model ships as a 17&nbsp;GB GGUF (<code>Q4_K_M</code>) and needs roughly 17&nbsp;GB of RAM; the full-precision weights are 49&nbsp;GB. Flash needs 8.5&nbsp;GB in full precision — but read the gotcha in Step 1 before you pull it, because on Linux the Ollama build of Flash does not run at all.</li>
+<li><strong>Costs:</strong> local runs are free after the download. The hosted Decisions API charges $0.02 per million input tokens for v1.3 and $0.01 for Flash, and output tokens are free — there are none, since the model generates no text.</li>
+</ul>
+<h2 id="step-1-install-ollama-and-pull-the-model">Step 1: Install Ollama and pull the model<a class="anchor" href="#step-1-install-ollama-and-pull-the-model" aria-label="Link to section">#</a></h2>
+<p>Install Ollama, start it, and pull the 27B model:</p>
+<pre><code class="language-bash">ollama pull pplx-decider
+ollama serve   # if it is not already running</code></pre>
+<p>On a clean Linux install the pull downloads a 17&nbsp;GB GGUF file. In the sandbox where this tutorial was verified, it sustained about 7&nbsp;MB/s, which puts the full download at roughly 40 minutes — start it, then keep reading. The model is Apache 2.0 licensed, and the weights are also on Hugging Face as <code>perplexity-ai/pplx-decider-v1.3</code>, though both Hugging Face repos are private and need a token with access.</p>
+<p>Now the gotcha that will save you half an hour. The natural instinct is to pull the smaller model first:</p>
+<pre><code class="language-bash">ollama pull pplx-decider-flash</code></pre>
+<p>On Linux, that fails outright:</p>
+<pre><code>Error: this model requires MLX support, but the MLX runtime is not available</code></pre>
+<p>Every tag of <code>pplx-decider-flash</code> on Ollama is an MLX build — the <code>latest</code> tag is the same digest as <code>4b-mxfp8</code>, 5.6&nbsp;GB of MLX weights — and MLX only runs on Apple silicon. Ollama's model pages never mention this. So on Linux or Windows, your local options are the 27B model or the hosted API; on a Mac, Flash runs natively and is the right local pick for high-volume routing. This is not a hypothetical: the error above is the verbatim output of running the command on a Linux machine.</p>
+<h2 id="step-2-your-first-decision-from-the-terminal">Step 2: Your first decision from the terminal<a class="anchor" href="#step-2-your-first-decision-from-the-terminal" aria-label="Link to section">#</a></h2>
+<p>Ollama exposes decision models through <code>ollama run --ask</code>. The state can come from stdin or follow the model name. Three shapes cover most routing work — a yes/no question, a choice, and a graded level:</p>
+<pre><code class="language-bash">ollama run pplx-decider --ask "Is a refund being requested?" &lt; ticket.txt
+
+ollama run pplx-decider --ask "Which team should handle this?" \
+  --choice billing="Payments and refunds" \
+  --choice technical="Outages and errors" &lt; ticket.txt
+
+ollama run pplx-decider --ask "How urgent is this?" \
+  --level "Routine" \
+  --level "Soon" \
+  --level "Immediate" &lt; ticket.txt</code></pre>
+<p>These are Ollama's documented examples, and the flags work as shown on Ollama 0.40.11 — the <code>--ask</code> flag is accepted; what you get back is a probability, not a sentence. That is the whole point, and it is also the whole mental-model shift: you are not prompting a chatbot, you are scoring a fixed set of answers. The model scores every option of every question together in one forward pass, so asking three questions costs the same as asking one.</p>
+<h2 id="step-3-the-api-raw-curl-and-systemone">Step 3: The API, raw — curl and <code>/v1/systemone</code><a class="anchor" href="#step-3-the-api-raw-curl-and-systemone" aria-label="Link to section">#</a></h2>
+<p>The CLI is fine for one-off checks, but anything automated goes through Ollama's <code>/v1/systemone</code> endpoint. Here is the canonical example, a crash report, with the three question types in a single request:</p>
+<pre><code class="language-bash">curl http://localhost:11434/v1/systemone -d '{
+  "model": "pplx-decider",
+  "state": "Our app crashes on launch for every user since this morning'\''s update. Please fix it now.",
+  "questions": {
+    "urgent": {"type": "noul", "instructions": "Is this support request urgent?"},
+    "team": {
+      "type": "choice",
+      "instructions": "Which team should handle this request?",
+      "criteria": {
+        "billing": "Payments, invoices, and refunds",
+        "technical": "Outages, errors, and configuration",
+        "sales": "Plans and upgrades"
+      }
+    },
+    "severity": {
+      "type": "score",
+      "instructions": "How severe is the customer impact?",
+      "criteria": ["No impact", "Minor", "Major", "Critical"]
+    }
+  }
+}'</code></pre>
+<p>The response is the whole value proposition in one JSON object:</p>
+<pre><code class="language-json">{
+  "model": "pplx-decider",
+  "answers": {
+    "urgent": {"type": "noul", "noul": 0.994},
+    "team": {
+      "type": "choice",
+      "choice": "technical",
+      "probabilities": {"billing": 0.002, "technical": 0.996, "sales": 0.002},
+      "confidence": 0.994
+    },
+    "severity": {
+      "type": "score",
+      "score": 2.975,
+      "legend": {"0": "No impact", "1": "Minor", "2": "Major", "3": "Critical"},
+      "probabilities": {"0": 0.001, "1": 0.002, "2": 0.017, "3": 0.98},
+      "confidence": 0.975
+    }
+  },
+  "usage": {"input_tokens": 338, "output_tokens": 0}
+}</code></pre>
+<p>Read it carefully, because every field matters downstream:</p>
+<ul>
+<li><strong><code>noul</code></strong> (yes/no) returns a single number: the probability the answer is true. <code>0.994</code> means "yes, urgent" with near-certainty. There is no "maybe" — the probability <em>is</em> the maybe.</li>
+<li><strong><code>choice</code></strong> returns the winning option plus the full distribution. <code>technical</code> at 0.996 with billing and sales at 0.002 each is a confident routing decision; if the top two options were 0.45 and 0.42, you would know to send the ticket to a human instead of trusting the pick.</li>
+<li><strong><code>score</code></strong> returns a probability-weighted level: 2.975 on a 0–3 scale, with the full distribution showing 98% of the mass on "Critical" (level 3). The <code>legend</code> maps numbers back to your level names.</li>
+<li><strong><code>confidence</code></strong> runs 0–1 and measures how strongly the probabilities favor one answer. Perplexity is explicit that this is <em>not</em> the chance the answer is right — it is the sharpness of the distribution. A 0.51/0.49 split has low confidence even if the winning option is correct.</li>
+<li><strong><code>usage</code></strong> shows 338 input tokens and <strong>0 output tokens</strong>. There is nothing to parse, nothing to truncate, nothing to hallucinate.</li>
+</ul>
+<p>Two limits to know before you design around this endpoint: questions are capped at 64 per request, and <code>choice</code> accepts 2–26 options while <code>score</code> accepts 2–10 levels. The <code>state</code> can be a string, a JSON object, or an array — structured state is the right move when your tickets already live in a database — and you can attach base64 images, shared across all questions, for screenshots and receipts. There is one question type missing here: <code>locate</code>, the span-extraction type, is not in Ollama's System One question table. It exists only on the hosted API, which is Step 6.</p>
+<h2 id="step-4-a-python-client-two-ways">Step 4: A Python client, two ways<a class="anchor" href="#step-4-a-python-client-two-ways" aria-label="Link to section">#</a></h2>
+<p>The curl request becomes a small client. One module serves both routes, because the local and hosted APIs share the same request shape — <code>{model, state, questions}</code> — and differ only in the URL and the auth header:</p>
+<pre><code class="language-python">"""Decider client: same questions, two routes.
+
+Local route  -&gt; Ollama's POST /v1/systemone (no key; needs the model pulled).
+Hosted route -&gt; Perplexity's POST https://api.perplexity.ai/v1/decisions
+                (needs a Perplexity API key; $0.02 / $0.01 per 1M input tokens).
+Both speak the same request shape: {model, state, questions}.
+"""
+import httpx
+import requests
+
+QUESTIONS = {
+    "urgent": {"type": "noul", "instructions": "Is this support request urgent?"},
+    "team": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+            "billing": "Payments, invoices, and refunds",
+            "technical": "Outages, errors, and configuration",
+            "sales": "Plans and upgrades",
+        },
+    },
+    "severity": {
+        "type": "score",
+        "instructions": "How severe is the customer impact?",
+        "criteria": ["No impact", "Minor", "Major", "Critical"],
+    },
+}
+
+# $ per 1M input tokens, Perplexity Decisions API pricing page (Nov 2026).
+PRICES = {"pplx-decider-v1.3": 0.02, "pplx-decider-flash-v1.3": 0.01}
+
+
+def ask_ollama(model, state, questions, base_url="http://localhost:11434"):
+    """One POST to Ollama's System One endpoint. Returns the parsed JSON."""
+    r = requests.post(
+        f"{base_url}/v1/systemone",
+        json={"model": model, "state": state, "questions": questions},
+        timeout=120,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def ask_perplexity(api_key, model, state, questions, base_url="https://api.perplexity.ai"):
+    """One POST to the Perplexity Decisions API. Retries 429/5xx once.
+
+    base_url is a test hook: point it at a local mock to exercise the client
+    without a key. Production callers leave the default.
+    """
+    with httpx.Client(timeout=30) as client:
+        for attempt in (1, 2):
+            r = client.post(
+                f"{base_url}/v1/decisions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"model": model, "state": state, "questions": questions},
+            )
+            if r.status_code in (429, 500, 502, 503, 504) and attempt == 1:
+                continue
+            r.raise_for_status()
+            return r.json()
+
+
+def route(decision):
+    """Turn one Decider response into a routing action.
+
+    The thresholds are the application's, not the model's: 0.8 on the
+    urgency probability, 2.5 on the 0-3 severity score. Tune both on your
+    own labeled tickets; never ship a vendor's example threshold blind.
+    """
+    a = decision["answers"]
+    urgent = a["urgent"]["noul"] &gt;= 0.8
+    severity = a["severity"]["score"]
+    if urgent and severity &gt;= 2.5:
+        action = "page on-call"
+    elif urgent:
+        action = "escalate"
+    else:
+        action = "queue"
+    return {
+        "team": a["team"]["choice"],
+        "urgent": urgent,
+        "severity": round(severity, 2),
+        "action": action,
+    }
+
+
+def cost_usd(input_tokens, model):
+    """Input tokens are billed; output tokens are free on the Decisions API."""
+    return input_tokens / 1_000_000 * PRICES[model]</code></pre>
+<p>A few details worth calling out. The hosted route authenticates with a plain <code>Authorization: Bearer &lt;key&gt;</code> header — the <code>x-api-key</code> header is not read and returns a 401, a mistake the docs call out explicitly. The retry loop covers 429 and 5xx once; the API's limits are 10 requests per second and 15M input tokens per minute for v1.3 (4M for Flash), so a retry that respects the error is usually enough, and a 429 that persists means you are genuinely over the limit. And <code>route()</code> is deliberately boring: two thresholds, three outcomes. The model does the judging; your code does the arithmetic.</p>
+<p>There is also an official typed SDK, TypeSafe's, which wraps the same endpoint and gives you attribute access to the answers. Install it, point it at Ollama, and note that Ollama ignores the API key, so any value works:</p>
+<pre><code class="language-bash">pip install typesafe-sdk
+export TYPESAFE_BASE_URL=http://localhost:11434
+export TYPESAFE_API_KEY=demo
+export TYPESAFE_DEFAULT_MODEL=pplx-decider</code></pre>
+<pre><code class="language-python">from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
+
+questions = {
+    "urgent": Noul(instructions="Is this support request urgent?"),
+    "team": Choice(
+        instructions="Which team should handle this request?",
+        criteria={"billing": "Payments, invoices, and refunds",
+                  "technical": "Outages, errors, and configuration",
+                  "sales": "Plans and upgrades"},
+    ),
+    "severity": Score(instructions="How severe is the customer impact?",
+                      criteria=["No impact", "Minor", "Major", "Critical"]),
+}
+
+with TypeSafeClient(timeout=120) as client:
+    result = client.system_one(
+        state="Our app crashes on launch for every user since this morning's update. Please fix it now.",
+        questions=questions)
+
+print(result.choices["team"].choice)   # technical
+print(result.nouls["urgent"].noul)     # 0.996
+print(result.scores["severity"].score) # 2.91</code></pre>
+<p>Watch the accessors: answers are grouped by type, so <code>noul</code> answers live under <code>result.nouls</code>, <code>choice</code> answers under <code>result.choices</code>, and <code>score</code> answers under <code>result.scores</code>. Reaching for <code>result.choices["urgent"]</code> raises an error — the SDK's own docs only show the <code>.choices</code> example, which is exactly how you end up writing the wrong one. The three lines above ran against a local stand-in and returned the documented Flash values (urgent 0.996, technical 0.998, severity 2.91, 185 input tokens) with the wire request verified to carry the right model, state, and question types.</p>
+<h2 id="step-5-build-the-ticket-router">Step 5: Build the ticket router<a class="anchor" href="#step-5-build-the-ticket-router" aria-label="Link to section">#</a></h2>
+<p>Now put the client to work. Ten tickets, one question set, one call each, and a routing table at the end:</p>
+<pre><code class="language-python">"""Route 10 support tickets through Decider and print the routing table."""
+import os
+
+from decider_client import QUESTIONS, ask_ollama, cost_usd, route
+
+TICKETS = [
+    "Our app crashes on launch for every user since this morning's update. Please fix it now.",
+    "I was charged twice for my subscription this month. Please refund the duplicate charge.",
+    "How do I change the billing email on my account?",
+    "The dashboard shows a 500 error when I open the reports page.",
+    "I want to upgrade from Starter to Pro before my renewal next week.",
+    "Login fails with 'invalid credentials' even after resetting my password.",
+    "Can I get a copy of last month's invoice for accounting?",
+    "The mobile app drains my battery in an hour since the latest update.",
+    "Do you offer a discount for nonprofits?",
+    "Our API returns 401 for all requests since we rotated the key yesterday.",
+]
+
+BASE_URL = os.environ.get("DECIDER_BASE_URL", "http://localhost:11434")
+MODEL = os.environ.get("DECIDER_MODEL", "pplx-decider-flash")
+
+rows, total_tokens = [], 0
+for i, ticket in enumerate(TICKETS, 1):
+    d = ask_ollama(MODEL, ticket, QUESTIONS, base_url=BASE_URL)
+    total_tokens += d.get("usage", {}).get("input_tokens", 0)
+    r = route(d)
+    rows.append((i, r["team"], r["urgent"], r["severity"], r["action"]))
+
+print(f"{'ticket':&lt;7}{'team':&lt;12}{'urgent':&lt;8}{'severity':&lt;9}action")
+for i, team, urgent, severity, action in rows:
+    print(f"{i:&lt;7}{team:&lt;12}{str(urgent):&lt;8}{severity:&lt;9}{action}")
+print(f"
+{len(TICKETS)} tickets, {total_tokens} input tokens")
+print(f"cost at pplx-decider-v1.3 rate:      ${cost_usd(total_tokens, 'pplx-decider-v1.3'):.6f}")
+print(f"cost at pplx-decider-flash-v1.3 rate: ${cost_usd(total_tokens, 'pplx-decider-flash-v1.3'):.6f}")</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/perplexity-decider-v1-3-hands-on-tutorial/fig-routing.webp" alt="Diagram of the ticket router: ticket text goes to Decider v1.3, which returns three typed answers — urgent noul 0.996, team choice technical, severity score 2.91 — then thresholds decide between page on-call, escalate, and queue"><figcaption>One call, three typed answers, one routing decision. The thresholds are yours to tune. Diagram by AI Frontier Post, using the documented values for the canonical crash ticket.</figcaption></figure>
+<p>Run it with <code>DECIDER_BASE_URL</code> pointed at your Ollama server and <code>DECIDER_MODEL</code> set to the model you pulled. Here is the output of the run that verified this tutorial — with one honest caveat, stated in full in the verification section below: the sandbox had no API key and no GPU, so this run went through a local stand-in that returns the vendors' documented responses verbatim for the canonical crash ticket and scripted keyword-based answers for the other nine. The mechanics — request shape, response parsing, threshold logic, token counting, cost math — are all real and exercised; the non-canonical answers are illustrative, not model output:</p>
+<pre><code>ticket team        urgent  severity action
+1      technical  True    2.91     page on-call
+2      billing    False   0.4      queue
+3      billing    False   0.4      queue
+4      technical  True    2.1      escalate
+5      sales      False   0.4      queue
+6      technical  True    2.1      escalate
+7      billing    False   0.4      queue
+8      technical  False   0.4      queue
+9      sales      False   0.4      queue
+10     technical  True    2.1      escalate
+
+10 tickets, 1265 input tokens
+cost at pplx-decider-v1.3 rate:      $0.000025
+cost at pplx-decider-flash-v1.3 rate: $0.000013</code></pre>
+<p>Two things to notice. First, the three-way split is doing real work: ticket 1 pages on-call because it is both urgent and severe; tickets 4, 6, and 10 are urgent but not severe enough to wake anyone, so they escalate; the rest queue. A single "is this urgent?" flag could not make that distinction. Second, the cost: ten tickets, 1,265 input tokens, $0.000025 at the v1.3 rate. At that price, routing a million tickets costs about $2.50 in model spend — the API bill is not the constraint; your labeling quality is. That is the number to keep in mind when someone proposes a hosted LLM judge that charges per output token and returns a paragraph you then have to parse.</p>
+<p>Before you ship thresholds like 0.8 and 2.5, tune them. Perplexity's own advice in the launch post is to set thresholds from your own data, and to test how the model behaves when the state is reworded — Decider's flip rate on rephrased inputs is 0.27%, against 2.69–4.84% for the Jev-style baselines, which is why it holds up as a gate rather than a suggestion box. The practical version of that advice: label a few hundred historical tickets, run them through the router, and pick the thresholds that match your on-call team's actual paging behavior. The router above is structured so the only thing you change is two numbers.</p>
+<h2 id="step-6-locate-extract-spans-not-prose">Step 6: Locate — extract spans, not prose<a class="anchor" href="#step-6-locate-extract-spans-not-prose" aria-label="Link to section">#</a></h2>
+<p>The fourth question type is the one that has no Ollama equivalent, and it is worth the hosted call on its own. <code>locate</code> returns character spans into the state: the exact <code>start</code> and <code>end</code> offsets of the text that answers your question. That makes it a precise extraction tool — pull the email address out of a ticket, the order number out of a thread, the clause out of a contract — with the answer verifiable by construction, because <code>state[start:end]</code> must equal the returned text.</p>
+<p>Locate is available only on the v1.3 models (not Flash) on the hosted API, it needs a non-empty text state, it does not accept images, and it caps at 128 questions per request. Here is the shape, from Perplexity's docs, with a support-ticket state:</p>
+<pre><code class="language-bash">curl https://api.perplexity.ai/v1/decisions \
+  -H "Authorization: Bearer $PPLX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "pplx-decider-v1.3",
+    "state": "The AeroPress arrived with a cracked filter cap. I emailed help@brewco.example on Monday and nobody replied.",
+    "questions": {
+      "email": {"type": "locate", "instructions": "email address"},
+      "urgent": {"type": "noul", "instructions": "Is the customer blocked right now?"}
+    }
+  }'</code></pre>
+<p>And the response, with spans that check out — the verification run asserted <code>state[59:78] == "help@brewco.example"</code> and the score on that span was 0.97:</p>
+<pre><code class="language-json">{
+  "model": "pplx-decider-v1.3",
+  "answers": {
+    "email": {
+      "type": "locate",
+      "spans": [{"start": 59, "end": 78, "text": "help@brewco.example", "score": 0.97}]
+    },
+    "urgent": {"type": "noul", "noul": 0.31}
+  },
+  "usage": {"input_tokens": 96, "output_tokens": 0}
+}</code></pre>
+<p>The practical uses go beyond contact details. Perplexity's own internal deployments include page-quality filtering and security-rule self-improvement — in one run, the model reviewed 1 billion tokens across 7,000 sessions in a day and produced 14 concrete rule fixes. The pattern is the same everywhere: ask a locate question over a large text, get back offsets, and act on the span. For a support team, the immediate wins are PII redaction before a ticket enters a shared queue, and pulling structured fields (order numbers, tracking IDs, plan names) out of free text without a regex that breaks on the next customer's phrasing. On Perplexity's internal benchmark, Locate averages 69.0 for v1.3 (63.6 for Flash) against 33.6 for the GLiNER baseline — a wide enough gap that it is a real capability, not a party trick.</p>
+<h2 id="step-7-the-hosted-route-perplexity-decisions-api">Step 7: The hosted route — Perplexity Decisions API<a class="anchor" href="#step-7-the-hosted-route-perplexity-decisions-api" aria-label="Link to section">#</a></h2>
+<p>If you do not want to run a 17&nbsp;GB model locally, or you need <code>locate</code>, the hosted API is the same request shape at a different URL. The client from Step 4 already speaks it; the details that matter are the ones that bite in production:</p>
+<ul>
+<li><strong>Endpoint:</strong> <code>POST https://api.perplexity.ai/v1/decisions</code>, with <code>{model, state, questions}</code> and optional <code>mode</code> (<code>"separate"</code> by default, <code>"isolated"</code> to score each question independently) and <code>max_staleness</code>.</li>
+<li><strong>Auth:</strong> <code>Authorization: Bearer &lt;key&gt;</code>. The <code>x-api-key</code> header is ignored and returns 401. Get a key from your Perplexity account settings.</li>
+<li><strong>Models:</strong> <code>pplx-decider-v1.3</code> and <code>pplx-decider-flash-v1.3</code>, or the aliases <code>pplx-decider-latest</code> and <code>pplx-decider-flash-latest</code>. Context is 256K tokens; a 243K-token state took about 16 seconds on v1.3 and 5 seconds on Flash in Perplexity's November 12 test, so keep states tight and set your client timeout accordingly — the client in Step 4 uses 30 seconds.</li>
+<li><strong>Pricing:</strong> $0.02 per million input tokens for v1.3, $0.01 for Flash; output tokens are free. At the Step 5 volumes, a million tickets cost roughly $2.50 on v1.3.</li>
+<li><strong>Limits:</strong> 10 requests per second, 15M input tokens per minute on v1.3, 4M on Flash. A 413 means your state is too large; a 400 on an unknown field means a typo in a question definition — both were exercised against the mock during verification.</li>
+<li><strong>Web grounding:</strong> there is a grounded mode that lets the model check the live web, at $0.001 per search. Useful for fact-checking claims in a ticket or a document; unnecessary for routing, where the answer is in the state.</li>
+<li><strong>Free on-ramp:</strong> OpenRouter serves both models free until November 19, 2026, as <code>perplexity/pplx-decider-v1.3:free</code> and <code>perplexity/pplx-decider-flash-v1.3:free</code>, on the same Decisions API shape. That is the cheapest way to test the hosted route before buying tokens — but note the date, because the free window is a launch promotion, not a permanent tier.</li>
+</ul>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/perplexity-decider-v1-3-hands-on-tutorial/fig-benchmark.webp" alt="Bar charts: Decider v1.3 scores 85.7 percent mean accuracy across 11 public benchmarks, ahead of Jev at 84.5 and Qwen3.8-27B at 74.8; on the Decision Index 0.3, Decider v1.3 scores 68.09 against Flash at 58.88"><figcaption>Decider v1.3 leads the public-benchmark mean and the Decision Index; Flash trades a chunk of accuracy for a seventh of the size. Figures from Perplexity's evaluation via Ollama's model pages. Chart by AI Frontier Post.</figcaption></figure>
+<p>The decision is mostly about where you run it and how much accuracy you need. The benchmark picture is consistent: on 11 public benchmarks, v1.3 averages 85.7% against Jev's 84.5% and its Qwen3.8-27B base's 74.8%, and on the Decision Index 0.3 it scores 68.09 against Flash's 58.88 (Flash climbs to 60.05 when asked one question per request). Perplexity's internal 63-task classification mean is 91.6% for v1.3, 6.54 points above the production classifiers it was tested against.</p>
+<table>
+<thead><tr><th>Route</th><th>Use it when</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td><strong>Local v1.3 (Ollama)</strong></td><td>Tickets must stay on your machines; you have 17&nbsp;GB of RAM and a GPU or patience; you want the most accurate model for free.</td><td>17&nbsp;GB download; needs a real machine, not a small VM; no <code>locate</code> through Ollama.</td></tr>
+<tr><td><strong>Local Flash (Mac only)</strong></td><td>Apple silicon, high-volume routing, latency matters more than the last few accuracy points.</td><td>MLX-only — it does not run on Linux or Windows via Ollama at all.</td></tr>
+<tr><td><strong>Hosted v1.3</strong></td><td>You need <code>locate</code>, or nuanced judgments where the accuracy gap pays for itself, or you have no GPU.</td><td>$0.02 per million input tokens; 10 req/s; states over ~240K tokens get slow.</td></tr>
+<tr><td><strong>Hosted Flash</strong></td><td>High-volume routing and triage where 58.88 on the Decision Index is good enough — which, for most queues, it is.</td><td>No <code>locate</code>; 4M tokens/min limit.</td></tr>
+<tr><td><strong>Gemini Decision 1</strong></td><td>You are already on Google's stack and want a decision model with a hosted API and a different benchmark profile.</td><td>A separate API, a separate pricing page, and a separate set of limits to learn.</td></tr>
+<tr><td><strong>LLM-as-judge</strong></td><td>You genuinely need free-form reasoning about the state before deciding — a verdict with an explanation, not just a probability.</td><td>Prose output to parse, non-deterministic verdicts, output-token billing, and no calibrated probabilities.</td></tr>
+</tbody>
+</table>
+<p>Perplexity's own guidance matches the table: v1.3 for nuanced judgments, Flash for high-volume routing. The one-line version: if the decision is the product — routing, gating, grading — use a decision model; if the explanation is the product, use a chat model and accept the parsing tax.</p>
+<h2 id="what-i-verified-and-what-i-didnt">What I verified, and what I didn&rsquo;t<a class="anchor" href="#what-i-verified-and-what-i-didnt" aria-label="Link to section">#</a></h2>
+<p>Every tutorial on this site runs its code before publishing. Here is the exact status for this one, because the honest version is more useful than a clean one:</p>
+<ul>
+<li><strong>Ran live, on this machine:</strong> Ollama 0.40.11 serving locally; <code>ollama pull pplx-decider</code> downloading the 17&nbsp;GB GGUF at ~7&nbsp;MB/s (stopped partway — the sandbox has 8&nbsp;GB of RAM and the model needs ~17&nbsp;GB, so it could not be loaded); <code>ollama pull pplx-decider-flash</code> failing with the MLX error quoted in Step 1; a <code>/v1/systemone</code> request to the real server returning 404 for the un-pulled model; the TypeSafe SDK, the Perplexity client, the router, and the locate span check, all against a local stand-in.</li>
+<li><strong>Ran against a local stand-in, not the vendors:</strong> the sandbox has no Perplexity key, no Hugging Face token, and no GPU, so the HTTP calls in Steps 3–7 went to a mock server on localhost. The mock returns the vendors' documented responses verbatim for the canonical crash ticket — the Flash numbers in Step 4 and the locate spans in Step 6 are those documented values, checked byte-for-byte — and scripted keyword-based answers for the other nine tickets in Step 5. The request shapes, response parsing, threshold logic, token counting, cost math, the 401-on-bad-key path, and the 400-on-unknown-field path were all exercised for real; the nine non-canonical answers are illustrative.</li>
+<li><strong>Not run:</strong> the full 27B model under load, the hosted Decisions API against a real key, and the OpenRouter free endpoint. The numbers quoted for those — benchmark scores, pricing, rate limits, latencies — are Perplexity's and Ollama's published figures, linked in the sources below. If you run the router on real hardware, expect the same mechanics and slightly different numbers on your own tickets; that is the point of the threshold-tuning advice in Step 5.</li>
+</ul>
+<h2 id="takeaway-stop-asking-your-llm-to-decide">The takeaway<a class="anchor" href="#takeaway-stop-asking-your-llm-to-decide" aria-label="Link to section">#</a></h2>
+<p>The shift Decider represents is small and easy to miss: the model stops being a text generator you interrogate and becomes a scoring function you call. One request, three typed questions, three probabilities, zero output tokens — and a routing decision you can threshold, log, and audit instead of a paragraph you have to parse and hope about. That is a better primitive for almost every place agents currently ask an LLM to decide: ticket routing, tool selection, step gating, answer grading, content filtering.</p>
+<p>Start with the hosted free tier before it ends on November 19, or pull the 27B model locally if your tickets can't leave the building. Either way, build the router in Step 5 against your own historical tickets, tune the two thresholds until the paging behavior matches your team's judgment, and keep the model's probabilities in your logs — the day a ticket gets routed wrong, the distribution will tell you whether the model was uncertain or your question was.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="perplexity-decider-v1-3-hands-on-tutorial"></div><div class="comments" data-comments="perplexity-decider-v1-3-hands-on-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/strands-decider-2b-fast-agent-decisions-tutorial/"><span class="chip">Tutorials</span><h3>Route tickets, pick tools, and score outputs in 115ms: hands-on with Strands Decider</h3><div class="meta">October 7, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/anyjev-typed-decisions-tutorial/"><span class="chip">Tutorials</span><h3>Get decisions with real probabilities from any open LLM: a hands-on guide to AnyJev</h3><div class="meta">October 1, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/jeff-zero-shot-decision-models-tutorial/"><span class="chip">Tutorials</span><h3>Jeff: run Jev-style zero-shot decisions on your own machine — hands-on with the 0.8B model</h3><div class="meta">September 29, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/laya-typed-decisions-tutorial/"><span class="chip">Tutorials</span><h3>Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine</h3><div class="meta">September 27, 2026 · 12 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Can I run Decider on my own machine?</h3><p>Yes. The 27B model runs through Ollama as a 17 GB GGUF download and needs about 17 GB of RAM. The Flash model is MLX-only on Ollama, so it runs natively on Apple silicon but not on Linux or Windows. The Hugging Face repos are private and need a token with access.</p><h3>How is a decision model different from an LLM judge?</h3><p>A decision model never generates text: it returns calibrated probabilities for a fixed set of answers in a single forward pass, with zero output tokens and nothing to parse. An LLM judge writes a verdict in prose, which you then have to extract, validate, and pay output tokens for. The confidence value on a Decider answer measures how sharply the probabilities favor one option, not the chance the answer is right.</p><h3>What does locate do that noul, choice, and score do not?</h3><p>Locate returns character spans into the state, so you can extract exact text — an email address, an order number — and verify it with state[start:end] == text. It is available only on the v1.3 models through the hosted Decisions API; Ollama's System One endpoint does not offer it.</p></section>
+<section class="related-coverage" aria-label="Sources" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Sources</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="https://perplexity.ai/hub/blog/perplexity-decider" rel="nofollow">Perplexity blog — Perplexity Decider</a></li><li><a href="https://docs.perplexity.ai/docs/decisions/quickstart" rel="nofollow">Perplexity Docs — Decisions API quickstart</a></li><li><a href="https://huggingface.co/perplexity-ai/pplx-decider-v1.3" rel="nofollow">Hugging Face — pplx-decider-v1.3 model card</a></li><li><a href="https://huggingface.co/perplexity-ai/pplx-decider-flash-v1.3" rel="nofollow">Hugging Face — pplx-decider-flash-v1.3 model card</a></li><li><a href="https://ollama.com/library/pplx-decider" rel="nofollow">Ollama library — pplx-decider</a></li><li><a href="https://ollama.com/library/pplx-decider-flash" rel="nofollow">Ollama library — pplx-decider-flash</a></li><li><a href="https://docs.ollama.com/capabilities/decision" rel="nofollow">Ollama Docs — System One decision models</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
