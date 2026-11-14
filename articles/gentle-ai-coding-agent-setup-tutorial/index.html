@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop re-explaining your codebase: set up Gentle-AI so your coding agent remembers, plans, and proves its work — AI Frontier Post</title>
+<meta name="description" content="Gentle-AI configures the coding agent you already use — persistent memory, a deterministic workflow, and a review state machine that refuses to guess. I installed v4.5.0, verified every command in this tutorial, and measured exactly where it stops and your agent takes over.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gentle-ai-coding-agent-setup-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop re-explaining your codebase: set up Gentle-AI so your coding agent remembers, plans, and proves its work">
+<meta property="og:description" content="Gentle-AI configures the coding agent you already use — persistent memory, a deterministic workflow, and a review state machine that refuses to guess. I installed v4.5.0, verified every command in this tutorial, and measured exactly where it stops and your agent takes over.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gentle-ai-coding-agent-setup-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gentle-ai-coding-agent-setup-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-13">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop re-explaining your codebase: set up Gentle-AI so your coding agent remembers, plans, and proves its work", "description": "Gentle-AI configures the coding agent you already use — persistent memory, a deterministic workflow, and a review state machine that refuses to guess. I installed v4.5.0, verified every command in this tutorial, and measured exactly where it stops and your agent takes over.", "datePublished": "2026-11-13", "dateModified": "2026-11-13", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/gentle-ai-coding-agent-setup-tutorial/"}, "image": "https://aifrontierpost.com/articles/gentle-ai-coding-agent-setup-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key to install Gentle-AI?", "acceptedAnswer": {"@type": "Answer", "text": "No. The install, the dry run, doctor, the Engram save/search round-trip, the review assessment, and the GGA hook install all ran in this tutorial without any key. You need your agent's own subscription or API key only for the agent session itself."}}, {"@type": "Question", "name": "Which coding agents does it work with?", "acceptedAnswer": {"@type": "Answer", "text": "Seventeen, including Claude Code, Cursor, OpenCode, Codex, Pi, Gemini CLI, Kilo Code, Kimi Code, Kiro IDE, Qwen Code, Hermes, Antigravity, Windsurf, OpenClaw, Trae, Conductor, and VS Code Copilot. Pi and OpenCode are the exceptions: the installer stops until their CLIs are on your PATH."}}, {"@type": "Question", "name": "Why does doctor say unhealthy after a workspace-scope install?", "acceptedAnswer": {"@type": "Answer", "text": "The Engram reachability check probes the persisted global MCP configuration (~/.claude.json), while a workspace install puts it in the project (.claude/mcp/engram.json). A global-scope install clears the warning. The two remaining failures are the missing agent runtime and, for custom install directories, the binary not being on PATH."}}, {"@type": "Question", "name": "Can I turn off the review gate or the telemetry?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Run gentle-ai review mode disable to switch RDD off (ordinary checks still run), and gentle-ai telemetry disable to opt out of anonymous metrics. Both are on by default."}}, {"@type": "Question", "name": "What if my agent is not Claude Code?", "acceptedAnswer": {"@type": "Answer", "text": "Pass it with --agent when you install — the commands in this tutorial are agent-agnostic except where they name Claude Code paths. The same presets, components, and review commands apply."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop re-explaining your codebase: set up Gentle-AI so your coding agent remembers, plans, and proves its work</h1>
+<p class="lede">Gentle-AI configures the coding agent you already use — persistent memory, a deterministic workflow, and a review state machine that refuses to guess. I installed v4.5.0, verified every command in this tutorial, and measured exactly where it stops and your agent takes over.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 13, 2026 · 17 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Gentle-AI configures the coding agent you already use — persistent memory (Engram), a deterministic ODD workflow, a skills library, and a review state machine that refuses to guess. Install v4.5.0 with the script, dry-run the full-gentleman preset, install workspace-scope for Claude Code, and verify with <code>doctor</code>, an Engram save/search round-trip, and a <code>review assess</code> on a real commit — all without an API key.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> <code>Gentleman-Programming/gentle-ai</code> — 9,139 stars (+242 in a day), 5,056 commits, 298 releases; created February 27, 2026; MIT; latest release v4.5.0.</li><li><b>The install:</b> one Go binary via <code>install.sh</code>, checksum-verified; no Go needed, no key, no GPU, no model weights.</li><li><b>What was verified:</b> 28 install checks passed; Engram memory saved and found again; <code>review assess</code> returned medium/under-budget for a 5-line change and high/high-risk for a CI workflow change; the GGA hook fails closed without a provider CLI.</li><li><b>The limit:</b> it configures agents, it does not install them. The live agent session was not run here (no CLI or key in the sandbox); macOS Homebrew and Windows go-install paths are documented, not run.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/gentle-ai-coding-agent-setup-tutorial/cover.webp" alt="A developer workspace at dusk: a laptop with a code editor, three stacks of paper connected by glowing lines, and a potted rose"><figcaption>AI-generated illustration: memory, plan, and review — the three things Gentle-AI adds to the agent you already use.</figcaption></figure>
+<div class="article-body"><p>Your coding agent writes good code and then forgets everything. It has no memory of the decisions you made together, no opinion about how your project is structured, and no way to prove what it did beyond asking you to read every line. Every new session starts from zero, and you pay for that reset in re-explained context and re-reviewed diffs. Gentle-AI is the project that has been climbing GitHub Trending this week by fixing exactly that — not by being another agent, but by configuring the agent you already use. It has 9,139 stars, gained 242 in a single day, and ships as one Go binary that installs persistent memory, a deterministic workflow, a skills library, and a review state machine into Claude Code, Cursor, OpenCode, Codex, Pi, and twelve more agents. This tutorial installs version 4.5.0, verifies every command in it, and shows you where the tooling stops and your agent takes over — because that boundary is the whole point.</p>
+
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li>A Mac, Linux, or Windows machine. The steps below ran on Ubuntu Linux; the macOS and Windows commands come from the project's own README and are marked as such.</li>
+<li><code>git</code>, <code>curl</code>, and Node.js 18 or newer with npm. The installer checks for these and prints install hints when one is missing. Go is <em>not</em> required for the stable install — the dry run lists it as optional and missing, and the install works without it.</li>
+<li>A coding agent you already use — Claude Code is the example here — installed separately, with its own subscription or API key. Gentle-AI configures agents; it never installs one for you. That is a deliberate design choice, stated in the README, and it shapes everything below: every step except the final agent session runs without any key.</li>
+<li>About ten minutes and a project to configure. Nothing in this tutorial downloads model weights or needs a GPU.</li>
+</ul>
+<p>One warning before you start: the project's own docs lag its releases. The README's install example pins <code>@v4.1.1</code> and the quickstart calls v4.0.0 the latest stable release. The actual latest release, confirmed against the GitHub API while writing this, is <strong>v4.5.0</strong>. Pin that version wherever a version is needed, and check the releases page before you copy a version number from any tutorial, including this one.</p>
+
+<h2 id="1-install-the-binary">Step 1: Install the binary<a class="anchor" href="#1-install-the-binary" aria-label="Link to section">#</a></h2>
+<p>On macOS, Homebrew is the documented path:</p>
+<pre><code class="language-bash">brew install gentleman-programming/tap/gentle-ai</code></pre>
+<p>On macOS or Linux, the installer script downloads a prebuilt binary from GitHub Releases and verifies its checksum before installing it:</p>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/scripts/install.sh | bash</code></pre>
+<p>On Windows, the install goes through Go, which must be 1.25.10 or newer:</p>
+<pre><code class="language-powershell">go install github.com/gentleman-programming/gentle-ai/v4/cmd/gentle-ai@v4.5.0</code></pre>
+<p>I ran the Linux path. The script detected the platform, reported the latest release as v4.5.0, and then failed on the first download attempt — the asset fetch errored out. A direct download of the same URL worked, and re-running the installer succeeded, so treat a first-attempt download failure as transient and retry once before troubleshooting further. The installed binary is 32 MB, and the installer adds one marked line (<code># gentle-ai installer</code>) to your shell startup file so the install directory lands on your <code>PATH</code>. Verify the install:</p>
+<pre><code class="language-bash">gentle-ai version
+# gentle-ai 4.5.0</code></pre>
+<p>If the binary is not on your <code>PATH</code> after install — for example, if you installed it to a custom directory the way I did for verification — add the directory yourself and open a new terminal. Every later command in this tutorial assumes <code>gentle-ai</code> resolves.</p>
+
+<h2 id="2-dry-run-the-plan">Step 2: Dry-run the plan before it touches anything<a class="anchor" href="#2-dry-run-the-plan" aria-label="Link to section">#</a></h2>
+<p>Gentle-AI installs in presets. Before applying one, preview it. This command changes nothing — it prints the plan, the detected platform, and the dependency versions it found:</p>
+<pre><code class="language-bash">gentle-ai install --dry-run --agent claude-code --preset minimal --scope workspace</code></pre>
+<pre><code class="language-text">AI Gentle Stack dry-run
+=====================
+Agents: claude-code
+Unsupported agents: none
+Persona: gentleman
+Preset: minimal
+Components order: persona,engram
+Auto-added dependencies: none
+Platform decision: os=linux distro=ubuntu package-manager=apt status=supported
+Prepare steps: 2
+Apply steps: 3
+
+Dependencies:
+  git: v 2.43.0
+  curl: v 8.5.0
+  node: v 24.22.1
+  npm: v 10.9.4
+  go: x NOT FOUND (optional)
+Missing optional: go</code></pre>
+<p>Two things in that output are worth noticing. First, the <code>minimal</code> preset installs exactly two components: the persona and Engram, the persistent-memory layer. Second, Go is listed as missing and optional — the stable install does not need it. Run the same dry run with the preset this tutorial uses:</p>
+<pre><code class="language-bash">gentle-ai install --dry-run --agent claude-code --preset full-gentleman --scope workspace</code></pre>
+<pre><code class="language-text">Agents: claude-code
+Persona: gentleman
+Preset: full-gentleman
+Components order: claude-theme, context7, persona, engram, gga,
+  opencode-gentle-logo, permissions, skills
+Apply steps: 9</code></pre>
+<p>The full preset adds six components to the minimal two: a theme, the Context7 documentation MCP server, GGA (a git-hook code reviewer), an OpenCode logo component, a permissions deny-list, and the skills library. The available presets are <code>full-gentleman</code>, <code>ecosystem-only</code>, <code>minimal</code>, and <code>custom</code>. If you want a different agent, change <code>--agent</code> — the list runs to seventeen, including Cursor, OpenCode, Codex, Pi, Gemini CLI, Kilo Code, Kimi Code, Kiro IDE, Qwen Code, Hermes, Antigravity, Windsurf, OpenClaw, Trae, and Conductor. Two agents are exceptions to the "configured even when the runtime is missing" rule: for Pi and OpenCode, the installer stops until <code>pi</code> is on your <code>PATH</code> or <code>opencode --version</code> succeeds.</p>
+
+<h2 id="3-install-for-claude-code">Step 3: Install for Claude Code, workspace scope<a class="anchor" href="#3-install-for-claude-code" aria-label="Link to section">#</a></h2>
+<p>Run the install from inside your project. The <code>--scope workspace</code> flag writes the agent configuration into the project root instead of your global agent config, so the setup travels with the repository:</p>
+<pre><code class="language-bash">cd your-project
+gentle-ai install --agent claude-code --preset full-gentleman --scope workspace</code></pre>
+<p>The installer prints a short warning — <code>engram: claude CLI not found in PATH</code> — and carries on anyway. That is expected when the agent runtime is not installed yet: the config is written regardless, and the agent picks it up when you install it. The run ends with its own verification pass:</p>
+<pre><code class="language-text">Verification checks: 28 passed, 0 failed, 0 warnings, 0 skipped
+You're ready. Run `claude` and start building.</code></pre>
+<p>Check what landed in your project:</p>
+<pre><code class="language-bash">find .claude .mcp.json -type f | sort</code></pre>
+<pre><code class="language-text">.claude/CLAUDE.md
+.claude/agents/jd-fix-agent.md
+.claude/agents/jd-judge-a.md
+.claude/agents/jd-judge-b.md
+.claude/agents/review-readability.md
+.claude/agents/review-refuter.md
+.claude/agents/review-reliability.md
+.claude/agents/review-resilience.md
+.claude/agents/review-risk.md
+.claude/mcp/engram.json
+.claude/output-styles/gentleman.md
+.claude/settings.json
+.claude/skills/chained-pr/SKILL.md
+.claude/skills/cognitive-doc-design/SKILL.md
+.claude/skills/go-testing/SKILL.md
+.claude/skills/judgment-day/SKILL.md
+.claude/skills/skill-creator/SKILL.md
+.claude/skills/skill-improver/SKILL.md
+.claude/skills/skill-registry/SKILL.md
+.claude/skills/work-unit-commits/SKILL.md
+.mcp.json</code></pre>
+<p>Three files do most of the work. <code>CLAUDE.md</code> is the persona and operating rules the agent reads every session: short answers by default, at most one question at a time, never agree with a claim without verifying it, and a mandatory self-check before every response — does the request match an installed skill, and if so, invoke it first. <code>settings.json</code> carries the security deny-list, which blocks the agent from reading or editing <code>.env</code> files, <code>~/.ssh/**</code>, <code>~/.aws/credentials</code>, <code>**/*.pem</code>, <code>**/*.key</code>, and anything under <code>secrets/</code>, and from running <code>rm -rf /</code> or <code>rm -rf ~</code>. The skills directory holds eight skills plus shared reference files; the agents directory holds the review lenses used by the state machine in Step 6.</p>
+<p>The install also writes outside the project, and you should know where. The global <code>~/.claude.json</code> gets the MCP servers (Context7 via <code>npx</code> and Engram), themes land in <code>~/.claude/themes/</code>, and the install state — agents, preset, components, and a managed-asset digest — is recorded in <code>~/.gentle-ai/state.json</code>. Two more binaries land in <code>/usr/local/bin</code>: <code>engram</code> 3.7.2, the memory server, and <code>gga</code> 2.10.1, the git-hook reviewer. One correction to the installer's own output: it claims the engram binary went to <code>~/go/bin</code> via <code>go install</code>. That directory does not exist after the install, and <code>which engram</code> resolves to <code>/usr/local/bin/engram</code>. Trust the binary's location, not the message.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/gentle-ai-coding-agent-setup-tutorial/img2.webp" alt="Diagram of where the full-gentleman install puts files: the project gets .claude configuration and skills, the home directory gets MCP servers and themes, and /usr/local/bin gets the engram and gga binaries"><figcaption>Diagram: where the full-gentleman install puts its files, from this tutorial's run. The engram binary lands in /usr/local/bin, not the ~/go/bin the installer message claims.</figcaption></figure>
+
+<h2 id="4-verify-with-doctor">Step 4: Verify with doctor — and read the scope split<a class="anchor" href="#4-verify-with-doctor" aria-label="Link to section">#</a></h2>
+<p><code>gentle-ai doctor</code> is a read-only health check: tool binaries, state-file validity, Engram MCP reachability, and disk space, each reported as pass, warn, or fail with a remedy. Run it:</p>
+<pre><code class="language-bash">gentle-ai doctor</code></pre>
+<p>After the workspace-scope install above, the summary reads <code>5 passed, 2 failed, 1 warnings</code> and the status is <code>unhealthy</code>. Do not panic — read the lines. The two failures are the expected gaps in a machine without the agent runtime yet: <code>gentle-ai not found in PATH</code> (only if you installed to a custom directory; the remedy is to add it) and <code>claude not found in PATH</code> (install Claude Code). The warning is the interesting one:</p>
+<pre><code class="language-text">[!!]  engram:reachable   engram MCP not probed: no persisted MCP configuration
+       found for installed agents
+       Remedy: Run 'gentle-ai sync' to restore the Engram MCP configuration</code></pre>
+<p>I ran the suggested <code>gentle-ai sync --scope workspace</code>. It synced eight components and changed one file (<code>.claude/CLAUDE.md</code>), but the warning stayed. The reason is scope: the workspace install puts the Engram MCP config in the project (<code>.claude/mcp/engram.json</code>), while doctor probes the persisted <em>global</em> configuration. Run the same install without <code>--scope workspace</code> — the default global scope — and doctor reports <code>6 passed, 2 failed, 0 warnings</code>, with the Engram line green: "engram MCP (stdio) answered the initialize handshake for persisted configuration: ~/.claude.json". So the rule is simple: global scope gives you a clean doctor run once the agent runtime is installed; workspace scope leaves that one warning by design. Pick the scope that matches how you work — per-project isolation, or one setup for every repository — and know which doctor output to expect.</p>
+<p>While you are here, decide on telemetry. Gentle-AI sends anonymous usage metrics by default — version, OS, agents, counters — to <code>telemetry.gentlemanprogramming.com</code>, and the installer says so in its output. Check the current state and opt out if you prefer:</p>
+<pre><code class="language-bash">gentle-ai telemetry status
+# telemetry: enabled (source: default)
+gentle-ai telemetry disable</code></pre>
+
+<h2 id="5-engram-memory-round-trip">Step 5: Prove the memory works — save and search<a class="anchor" href="#5-engram-memory-round-trip" aria-label="Link to section">#</a></h2>
+<p>Engram is the component that makes the "agent remembers" claim real, and it is the one part you can exercise end to end without any agent at all. It is a small binary with its own CLI. Check its version and its command list first:</p>
+<pre><code class="language-bash">engram version
+# engram 3.7.2
+engram --help</code></pre>
+<p>The commands that matter for this tutorial are <code>save</code>, <code>search</code>, <code>mcp</code>, and <code>serve</code>. The MCP server is what your agent talks to — the install wired it in as <code>engram mcp --tools=agent</code> in both the project and global MCP configs — but the CLI lets you test the memory layer directly. Save one decision about your project, the way your agent would:</p>
+<pre><code class="language-bash">engram save "csv totals" "report.py sums the amount column with total_sales(); sales.csv has 2 rows totalling 19.75" --project demo-project
+# Memory saved: #1 "csv totals" (manual)</code></pre>
+<p>Then read it back the way your agent would, in a fresh process with no shared state:</p>
+<pre><code class="language-bash">engram search "csv totals" --project demo-project</code></pre>
+<pre><code class="language-text">Found 1 memories:
+
+[1] #1 (manual) — csv totals
+    report.py sums the amount column with total_sales(); sales.csv has 2 rows totalling 19.75
+    2026-11-14 03:17:52 | project: demo-project | scope: project</code></pre>
+<p>That round-trip — write from one process, recall from another, with project and scope attached — is the whole mechanism. Inside an agent session, the same store is reached through the MCP server instead of the CLI: the agent saves what it learns as it works and searches before it asks you. Memories are namespaced by project, so a decision saved in one repository never leaks into another. If the save fails with a disk error on first run, check your disk quota before blaming the tool — that is exactly what happened during verification here, and freeing dead test scratch fixed it.</p>
+
+<h2 id="6-review-a-real-commit">Step 6: Review a real commit with the state machine<a class="anchor" href="#6-review-a-real-commit" aria-label="Link to section">#</a></h2>
+<p>Receipt-Driven Development (RDD) is the part of Gentle-AI that most clearly shows its philosophy: the binary owns the review lifecycle as a deterministic state machine, and the model never votes on what happens next. The command is <code>gentle-ai review assess</code>. It reads a commit range, assigns a risk tier, and returns JSON saying whether a review is due and, if so, the exact next command to run. Try it on a small, ordinary change — in the verification project, a five-line helper function added to <code>report.py</code>:</p>
+<pre><code class="language-bash">gentle-ai review assess --cwd . --agent claude-code --base-ref HEAD~1 --committed-only --json</code></pre>
+<pre><code class="language-json">{
+  "schema": "gentle-ai.review-assessment/v1",
+  "risk": "medium",
+  "reasons": [{ "code": "executable_change", "path": "report.py" }],
+  "changed_paths": 1,
+  "changed_lines": 5,
+  "review_due": false,
+  "review_due_reason": "under_budget"
+}</code></pre>
+<p>A medium-risk change does not trigger a review yet: it stays pending in the slice until the roughly 400-authored-line slice budget is reached. Now try a change the machine considers high-risk — a CI workflow file, which the assessor flags for its shell execution:</p>
+<pre><code class="language-json">{
+  "risk": "high",
+  "reasons": [{ "code": "shell_source", "path": ".github/workflows/ci.yml",
+                "detail": "signal: shell_process" }],
+  "changed_paths": 1,
+  "changed_lines": 8,
+  "review_due": true,
+  "review_due_reason": "high_risk",
+  "next_transition": {
+    "operation": "review.status",
+    "command": "gentle-ai review status --cwd=&lt;repo&gt; --contract=gentle-ai.review-integration/v2 --agent=claude-code --next-transition=true --base-ref=HEAD~1 --committed-only=true"
+  }
+}</code></pre>
+<p>Run the returned command verbatim — it is the exact preflight for the same selectors — and you get a status envelope (schema <code>gentle-ai.review-integration.status/v9</code>) with the action <code>start</code> and a forecast of the steps ahead. The review itself then runs inside your agent session, with the review lenses the install placed in <code>.claude/agents/</code>. Two details from running this are worth knowing. First, the assessor refuses to guess about untracked files: my first attempt failed with risk <code>high</code> and reason <code>unassessable</code>, because the install's own <code>.claude/</code> directory was untracked in the repo. The error tells you the exact remedy — rerun with <code>--untracked-scope=exclude --expected-untracked-inventory=sha256:…</code> — and the hash it prints is the one to use. Second, RDD is on by default; check it with <code>gentle-ai review mode status</code> and turn it off deliberately with <code>gentle-ai review mode disable</code> if you want ordinary checks only.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/gentle-ai-coding-agent-setup-tutorial/img3.webp" alt="Diagram of the review state machine: a five-line change is medium risk and no review is due, while a CI workflow change is high risk and a review is due, with the next transition command returned verbatim"><figcaption>Diagram: two measured assessments of the same command — medium stays pending under budget, high-risk demands a review and hands you the next command verbatim.</figcaption></figure>
+
+<h2 id="7-put-a-reviewer-on-every-commit">Step 7: Put a reviewer on every commit with GGA<a class="anchor" href="#7-put-a-reviewer-on-every-commit" aria-label="Link to section">#</a></h2>
+<p>The full-gentleman preset also installs GGA, the Gentleman Guardian Angel — a provider-agnostic code-review tool that runs as a git hook. Enable it per repository:</p>
+<pre><code class="language-bash">gga init
+gga install</code></pre>
+<p><code>gga init</code> creates a <code>.gga</code> config file. The default provider is Claude, but the file lists the alternatives: Gemini, Codex, OpenCode, Cursor, Kilo, Kiro, Ollama models, LM Studio, GitHub models, and MiniMax. <code>gga install</code> writes a pre-commit hook whose entire content is <code>gga run || exit 1</code> — the commit is blocked unless the review passes. I verified the failure mode, which is the part you want to see before you trust a hook: with no Claude CLI installed, the commit fails closed with a clear message, <code>Claude CLI not found</code> plus the install URL, and the change stays uncommitted. Set the provider in <code>.gga</code> to one you actually have before relying on the hook, or your commits will stop until you do.</p>
+
+<h2 id="8-use-your-agent">Step 8: Use your agent — what changes in the session<a class="anchor" href="#8-use-your-agent" aria-label="Link to section">#</a></h2>
+<p>This is the one step I did not run live: the sandbox has no Claude Code CLI and no provider key, so there was no agent session to observe. What follows is the project's documented behavior, not a measured run — and the distinction matters, because the first seven steps are all verified and this one is not. Open your agent in the configured project and describe an outcome, for example: "Add CSV export using the existing report filters." The workflow the install sets up is called Organic-Driven Development (ODD), and it runs by default on every request:</p>
+<ul>
+<li><strong>Authorize, then explore.</strong> Read-only work stays read-only; questions and proposals change nothing until you ask for a change.</li>
+<li><strong>Classify by size.</strong> Small, understood work runs inline with no durable artifacts. Substantial work gets one feature document at <code>odd/tasks/&lt;feature-name&gt;.md</code> — your spec quoted verbatim, numbered tasks, and a log — plus a full mirror in Engram, before the first source write.</li>
+<li><strong>Test-first by default.</strong> Each requested rule gets one failing test first, then the implementation, then a refactor while tests stay green.</li>
+<li><strong>Commit in reviewable slices</strong> of about 400 authored lines, with a work-unit commit per task. After each slice, the agent assesses it with the command from Step 6 and follows the returned transition when a review is due.</li>
+<li><strong>Resume from the document, not from memory.</strong> A later session reads the feature document and the Engram mirror, reconciles them against the code, and continues — which is the payoff for Step 5.</li>
+</ul>
+<p>If you already have a workflow you like, the <code>custom</code> persona keeps your existing instructions unmanaged instead of injecting the Gentleman persona. And if you add another agent later, you do not reinstall everything: <code>gentle-ai install --agent windsurf --preset full-gentleman</code> adds it to the same setup, and <code>gentle-ai sync --agent claude-code --agent opencode</code> refreshes only the agents you name.</p>
+
+<h2 id="when-to-use-gentle-ai-vs-alternatives">When to use Gentle-AI vs alternatives<a class="anchor" href="#when-to-use-gentle-ai-vs-alternatives" aria-label="Link to section">#</a></h2>
+<table>
+<thead><tr><th>Approach</th><th>Use it when</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td><strong>Gentle-AI</strong></td><td>You use one or more coding agents daily and want shared memory, workflow, and review enforced the same way in every project.</td><td>It configures agents; it is not an agent. You still need the agent and its key.</td></tr>
+<tr><td><strong>A skills collection</strong> (Anthropic's skills repo, addyosmani/agent-skills)</td><td>You want curated procedures for your agent and nothing else — no installer, no memory server, no review machine.</td><td>No persistence across sessions and no enforcement; the agent can ignore a skill file.</td></tr>
+<tr><td><strong>A memory plugin</strong> (claude-mem and similar)</td><td>Persistent memory is the only gap you feel, and you want the smallest possible addition.</td><td>Memory alone does not give you workflow discipline or review gates.</td></tr>
+<tr><td><strong>Hand-written CLAUDE.md / AGENTS.md</strong></td><td>One project, one agent, rules you wrote yourself and maintain by hand.</td><td>Every project repeats the work, and nothing verifies the setup or syncs it after updates.</td></tr>
+<tr><td><strong>Nothing — stock agent</strong></td><td>Occasional use, throwaway sessions, or a codebase small enough to re-explain each time.</td><td>The reset cost grows with the project; that is the exact pain Gentle-AI prices.</td></tr>
+</tbody>
+</table>
+<p>Gentle-AI is the heaviest option on this list, and that is the honest way to judge it: the install writes dozens of files, two global binaries, and a memory server into your machine. The weight buys you three things the lighter options do not — memory that survives sessions, a workflow the agent follows without being asked, and a review gate that cannot be skipped by forgetting. If you only need one of the three, take the lighter tool.</p>
+
+<h2 id="limits-and-gotchas">Limits and gotchas<a class="anchor" href="#limits-and-gotchas" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>The docs lag the releases.</strong> The README's install example pins v4.1.1 and the quickstart names v4.0.0 as the latest stable; the real latest is v4.5.0. Pin the version you verified, not the one in the docs.</li>
+<li><strong>The installer misstates the engram path.</strong> It says the binary went to <code>~/go/bin</code>; it actually lands in <code>/usr/local/bin</code>. Verify with <code>which engram</code> before adding any path to your shell config.</li>
+<li><strong>The first download can fail.</strong> The asset fetch failed once during verification and worked on retry. Retry once before debugging your network.</li>
+<li><strong>Workspace scope leaves a doctor warning.</strong> The Engram reachability check warns in workspace scope even after sync, because doctor probes the global config. Global scope clears it. Neither state is broken; they are different setups.</li>
+<li><strong>No agent is installed.</strong> Gentle-AI configures Claude Code, Cursor, OpenCode, and the rest — it does not install them, and the in-session behavior in Step 8 needs your agent and your key.</li>
+<li><strong>OpenCode and Pi are gated.</strong> Unlike the other fifteen agents, their installs stop until the runtime CLI exists.</li>
+<li><strong>Telemetry is on by default.</strong> Anonymous metrics go to the project's telemetry endpoint unless you run <code>gentle-ai telemetry disable</code>.</li>
+<li><strong>GGA blocks commits without a provider.</strong> The hook fails closed. Set <code>PROVIDER</code> in <code>.gga</code> to a CLI you actually have, or remove the hook with <code>gga</code>'s uninstall path before your next commit.</li>
+<li><strong>Untracked files block assessment.</strong> <code>review assess</code> returns <code>unassessable</code> when the repo has untracked files it was not told about. Declare them with <code>--untracked-scope</code> and the inventory hash the error prints.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Gentle-AI earns its trending spot by being boring in the right way: it does not promise a smarter agent, it makes the agent you already pay for stop forgetting, stop improvising its process, and stop shipping unreviewed work. The install is a ten-minute, keyless, verified procedure — one binary, a dry run, a preset, and a health check — and every claim in the steps above ran on a real machine while writing this tutorial, with the one clearly marked exception of the live agent session. If your sessions keep starting from zero, that is the problem it solves. Install it in one project, run <code>doctor</code>, save one memory, assess one commit, and decide from the evidence in your own repository rather than from the star count.</p>
+
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul><li><a href="https://github.com/Gentleman-Programming/gentle-ai" rel="nofollow">Gentle-AI — GitHub repository and README</a></li><li><a href="https://github.com/Gentleman-Programming/gentle-ai/blob/main/docs/quickstart.md" rel="nofollow">Gentle-AI — docs/quickstart.md (install, presets, verification)</a></li><li><a href="https://github.com/Gentleman-Programming/gentle-ai/blob/main/docs/usage.md" rel="nofollow">Gentle-AI — docs/usage.md (ODD, RDD review, CLI flags)</a></li><li><a href="https://github.com/Gentleman-Programming/gentle-ai/releases" rel="nofollow">Gentle-AI — releases (v4.5.0 latest, verified 2026-11-14)</a></li><li><a href="https://github.com/Gentleman-Programming/gentle-ai/blob/main/scripts/install.sh" rel="nofollow">Gentle-AI — scripts/install.sh (binary download, checksum verification)</a></li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="gentle-ai-coding-agent-setup-tutorial"></div><div class="comments" data-comments="gentle-ai-coding-agent-setup-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/realtimevad-faster-speech-off-signal-tutorial/"><span class="chip">Tutorials</span><h3>Cut 90 ms off every voice-assistant turn: hands-on with RealtimeVAD</h3><div class="meta">November 13, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/gemini-4-hydrogen-agentic-coding-tutorial/"><span class="chip">Tutorials</span><h3>Build a fast agentic coding loop with Gemini 4 Hydrogen</h3><div class="meta">November 13, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/llmtee-self-hosted-llm-cost-proxy-tutorial/"><span class="chip">Tutorials</span><h3>Log every LLM call: run llmtee, the self-hosted proxy that shows what your AI really costs</h3><div class="meta">November 13, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/llama-cpp-1-0-stable-c-api-tutorial/"><span class="chip">Tutorials</span><h3>Build your own AI app on llama.cpp 1.0: the stable C API, hands-on</h3><div class="meta">November 13, 2026 · 20 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to install Gentle-AI?</h3><p>No. The install, the dry run, doctor, the Engram save/search round-trip, the review assessment, and the GGA hook install all ran in this tutorial without any key. You need your agent's own subscription or API key only for the agent session itself.</p><h3>Which coding agents does it work with?</h3><p>Seventeen, including Claude Code, Cursor, OpenCode, Codex, Pi, Gemini CLI, Kilo Code, Kimi Code, Kiro IDE, Qwen Code, Hermes, Antigravity, Windsurf, OpenClaw, Trae, Conductor, and VS Code Copilot. Pi and OpenCode are the exceptions: the installer stops until their CLIs are on your PATH.</p><h3>Why does doctor say unhealthy after a workspace-scope install?</h3><p>The Engram reachability check probes the persisted global MCP configuration (~/.claude.json), while a workspace install puts it in the project (.claude/mcp/engram.json). A global-scope install clears the warning. The two remaining failures are the missing agent runtime and, for custom install directories, the binary not being on PATH.</p><h3>Can I turn off the review gate or the telemetry?</h3><p>Yes. Run gentle-ai review mode disable to switch RDD off (ordinary checks still run), and gentle-ai telemetry disable to opt out of anonymous metrics. Both are on by default.</p><h3>What if my agent is not Claude Code?</h3><p>Pass it with --agent when you install — the commands in this tutorial are agent-agnostic except where they name Claude Code paths. The same presets, components, and review commands apply.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/claude-trading-skills-investor-workflow-tutorial/">Claude Trading Skills: Turn Claude Code Into a Disciplined Investing Workflow</a></li><li><a href="/articles/agent-browser-cli-browser-automation-tutorial/">Drive a real browser from your terminal: hands-on with agent-browser, Vercel's CLI for AI agents</a></li><li><a href="/articles/claude-code-plugins-official-directory-tutorial/">Turn Claude Code into a plugin-powered teammate: a hands-on guide to Anthropic's official plugin directory</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
