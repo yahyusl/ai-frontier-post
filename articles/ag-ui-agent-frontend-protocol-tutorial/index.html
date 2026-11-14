@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Put your agent in a real UI: hands-on with AG-UI, the protocol that connects agents to frontends — AI Frontier Post</title>
+<meta name="description" content="AG-UI is the open protocol that turns any agent into a streaming, tool-calling, state-sharing UI — the missing third leg next to MCP and A2A. Build a working server in Python, drive it from TypeScript, and add a real tool call. Every command verified, no API key needed for the core loop.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/ag-ui-agent-frontend-protocol-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Put your agent in a real UI: hands-on with AG-UI, the protocol that connects agents to frontends">
+<meta property="og:description" content="AG-UI is the open protocol that turns any agent into a streaming, tool-calling, state-sharing UI — the missing third leg next to MCP and A2A. Build a working server in Python, drive it from TypeScript, and add a real tool call. Every command verified, no API key needed for the core loop.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/ag-ui-agent-frontend-protocol-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/ag-ui-agent-frontend-protocol-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-14">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Put your agent in a real UI: hands-on with AG-UI, the protocol that connects agents to frontends","description":"AG-UI is the open protocol that turns any agent into a streaming, tool-calling, state-sharing UI — the missing third leg next to MCP and A2A. Build a working server in Python, drive it from TypeScript, and add a real tool call. Every command verified, no API key needed for the core loop.","datePublished":"2026-11-14","dateModified":"2026-11-14","author":{"@type":"Person","name":"Marcus Doyle","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/ag-ui-agent-frontend-protocol-tutorial/"},"image":"https://aifrontierpost.com/articles/ag-ui-agent-frontend-protocol-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"Put your agent in a real UI: hands-on with AG-UI, the protocol that connects agents to frontends","description":"Build a working AG-UI server in Python, drive it from TypeScript, add a tool call, and scaffold a full-stack starter — no API key needed for the core loop.","step":[{"@type":"HowToStep","name":"Step 1: Learn the event model","text":"A run is a POST of RunAgentInput followed by a typed SSE event stream: RUN_STARTED, text message events, tool call events, and RUN_FINISHED."},{"@type":"HowToStep","name":"Step 2: Build the agent server","text":"Install ag-ui-protocol 1.0.0 with FastAPI and uvicorn, then write a small server that emits protocol 1.0 events with the official EventEncoder."},{"@type":"HowToStep","name":"Step 3: Prove it with curl","text":"POST a RunAgentInput document to the local server and read the nine-line SSE transcript: echo reply, get_time tool call, success outcome."},{"@type":"HowToStep","name":"Step 4: Drive it from TypeScript","text":"Install @ag-ui/core and @ag-ui/client 1.0.4, set agent.messages, and run the agent with HttpAgent to get the reply and tool result as messages."},{"@type":"HowToStep","name":"Step 5: Understand the tool call","text":"The client declares tools; the server emits TOOL_CALL_START, ARGS, END, and RESULT. The frontend renders the call — it never executes model output."},{"@type":"HowToStep","name":"Step 6: Scaffold the full-stack starter","text":"Run npx create-ag-ui-app with a framework flag; the scaffold asks for a project name, a deployment choice, and a CopilotKit browser sign-in before creating the project. Documented in this tutorial, not run end to end in the sandbox."},{"@type":"HowToStep","name":"Step 7: Swap the echo for a real framework agent","text":"Give the starter a model key for LangGraph, Pydantic AI, or another supported framework; the endpoint and the events stay the same."}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need an API key to follow this tutorial?","acceptedAnswer":{"@type":"Answer","text":"No. Steps 2–5 run entirely on localhost with a deterministic echo agent — no model, no key, no cost. A key only enters in step 7, when you swap the echo for a real LLM-backed framework agent."}},{"@type":"Question","name":"Is AG-UI only for React frontends?","acceptedAnswer":{"@type":"Answer","text":"No. AG-UI is a wire protocol — a POST in, a typed event stream out. There are SDKs for Python, TypeScript, Go, Rust, Java, Kotlin, Dart, Ruby, .NET, and C++, and clients include a terminal client, Slack and Teams via the Channels SDK, and React Native."}},{"@type":"Question","name":"How is AG-UI different from MCP?","acceptedAnswer":{"@type":"Answer","text":"MCP connects an agent to tools and data; AG-UI connects an agent to the user. They answer different questions and are complementary — a real agent usually speaks both, plus A2A for agent-to-agent coordination."}},{"@type":"Question","name":"What changed in protocol 1.0?","acceptedAnswer":{"@type":"Answer","text":"The event set is frozen and the SDKs are generated from a single spec, so the Python and TypeScript sides can no longer drift. The old THINKING_* events were removed in favor of REASONING_*, and the TypeScript client keeps a compatibility boundary that translates old streams."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Put your agent in a real UI: hands-on with AG-UI, the protocol that connects agents to frontends</h1>
+<p class="lede">AG-UI is the open protocol that turns any agent into a streaming, tool-calling, state-sharing UI — the missing third leg next to MCP and A2A. Build a working server in Python, drive it from TypeScript, and add a real tool call. Every command verified, no API key needed for the core loop.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 14, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> AG-UI is the open, MIT-licensed protocol that connects AI agents to user-facing apps with a typed event stream — the third leg next to MCP (tools) and A2A (agent-to-agent). In this tutorial you build a working AG-UI server in Python, prove it with curl, drive it from TypeScript, and add a real tool call — plus what the full-stack starter asks for (a CopilotKit sign-in) — with no API key needed until you swap in a real model.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem">
+    <li><b>Verified versions:</b> <code>ag-ui-protocol</code> 1.0.0 (Python, PyPI), <code>@ag-ui/client</code> 1.0.4 (npm, published November 5, 2026), <code>create-ag-ui-app</code> 0.0.59, FastAPI + uvicorn, Python 3.12.3, Node 24.22.1.</li>
+    <li><b>The core loop ran end to end with zero API keys:</b> a Python echo server on localhost, a curl transcript of the exact SSE wire format, and a TypeScript <code>HttpAgent</code> run that returned the echo and the tool result.</li>
+    <li><b>Gotcha 1 — the package name:</b> the Python SDK is <code>ag-ui-protocol</code>, not <code>ag-ui</code>. There is no <code>ag-ui</code> distribution on PyPI.</li>
+    <li><b>Gotcha 2 — message ownership:</b> <code>runAgent</code> does not take messages. The conversation lives on the agent instance (<code>agent.messages</code>); passing messages to <code>runAgent</code> silently runs with empty history.</li>
+    <li><b>Why now:</b> protocol 1.0 froze the event set in early November 2026; the repo sits at 17,179 stars with 1,577 forks, MIT-licensed, and trended on GitHub the day this was written.</li>
+</ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/ag-ui-agent-frontend-protocol-tutorial/cover.webp" alt="A glowing AI agent orb sending a stream of event packets into a chat application window"><figcaption>AI-generated illustration: an agent core streaming typed events into a chat UI.</figcaption></figure>
+<div class="article-body"><p>Your agent works. It answers in the terminal, calls tools, finishes the job — and nobody but you ever sees it do any of that. The moment you want a user to talk to it, you hit the part no framework documents well: the frontend. You need streaming text, tool calls the UI can render, shared state both sides can read, and a way for the user to interrupt mid-run. Every team wires this up by hand, differently, and breaks it differently.</p>
+<p>AG-UI is the open protocol that standardizes the wiring. It is the third leg of the agent protocol stack: MCP gives agents tools, A2A lets agents talk to each other, and AG-UI brings agents into user-facing applications. This tutorial builds a working AG-UI server in Python with the official SDK, proves it with curl, drives it from TypeScript with the official client, and adds a real tool call — then covers the full-stack starter, including the sign-in it asks for. Every command in the verified core was run for this article, and that core needs no API key at all.</p>
+<h2 id="why-ag-ui-is-blowing-up-now">Why AG-UI is blowing up now<a class="anchor" href="#why-ag-ui-is-blowing-up-now" aria-label="Link to section">#</a></h2>
+<p>AG-UI is not new — the <a href="https://github.com/ag-ui-protocol/ag-ui" rel="nofollow">repo</a> dates to May 2025 — but the last few weeks turned it from a CopilotKit-side project into a protocol with a stable 1.0. The TypeScript client hit <code>1.0.4</code> on November 5, 2026, the Python SDK is at <code>1.0.0</code>, and the <a href="https://docs.ag-ui.com/introduction" rel="nofollow">docs</a> were refreshed on November 12. It sits at 17,179 stars with 1,577 forks and 5,456 commits, MIT-licensed, and it trended on GitHub the day this tutorial was written. The 1.0 line matters because it freezes the event set: the SDKs are now generated from a single spec (<code>spec/1.0/schema.json</code> in the repo), so the Python and TypeScript sides can no longer drift apart, and the old <code>THINKING_*</code> events are gone, replaced by <code>REASONING_*</code>.</p>
+<p>The timing also reflects where agents are going. The first wave of agent work was about the model and its tools — MCP solved that side. The second wave is about putting agents in front of users, and until AG-UI there was no shared answer for what crosses that boundary. LangChain, CrewAI, Microsoft Agent Framework, Google ADK, Mastra, Pydantic AI, Agno, LlamaIndex, AG2, AWS Strands, and the Claude Agent SDK all ship AG-UI support now, which is why one protocol suddenly covers most of the frameworks you might already use.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.12 or newer</strong> (this walkthrough used 3.12.3) and <strong>Node.js 20 or newer</strong> (used 24.22.1 with npm 10.9.4).</li><li><strong>About 50 MB of free disk</strong> for the demo virtualenv and packages. No model weights, no GPU.</li><li><strong>No accounts, no API keys, no credit card</strong> for the core loop in steps 2–5. A model key only enters the picture in step 7, when the echo agent is swapped for a real LLM.</li><li><strong>A terminal and curl.</strong> Everything runs on localhost.</li></ul>
+<h2 id="step-1-the-event-model-in-60-seconds">Step 1: The event model in 60 seconds<a class="anchor" href="#step-1-the-event-model-in-60-seconds" aria-label="Link to section">#</a></h2>
+<p>AG-UI is not a library you import and forget. It is a wire protocol: a client POSTs a <code>RunAgentInput</code> JSON document to an agent endpoint, and the server answers with a stream of typed events over Server-Sent Events (<code>text/event-stream</code>, one <code>data: {...}</code> line per event). The client applies each event to its local state — messages, tool calls, shared state — so the UI is always a projection of the event stream, never a second source of truth.</p>
+<p>A run has a fixed lifecycle. These are the events you will actually see:</p>
+<div class="table-wrap"><table><thead><tr><th>Event</th><th>Meaning</th></tr></thead><tbody><tr><td><code>RUN_STARTED</code></td><td>The run begins; carries <code>threadId</code> and <code>runId</code>.</td></tr><tr><td><code>TEXT_MESSAGE_START</code> / <code>TEXT_MESSAGE_CONTENT</code> / <code>TEXT_MESSAGE_END</code></td><td>One assistant message, streamed in deltas, keyed by <code>messageId</code>.</td></tr><tr><td><code>TOOL_CALL_START</code> / <code>TOOL_CALL_ARGS</code> / <code>TOOL_CALL_END</code></td><td>One tool invocation, with its arguments streamed as JSON deltas.</td></tr><tr><td><code>TOOL_CALL_RESULT</code></td><td>The tool&#x27;s return value, as a message in the thread.</td></tr><tr><td><code>RUN_FINISHED</code></td><td>The run ends; carries an <code>outcome</code> such as <code>{"type": "success"}</code>.</td></tr><tr><td><code>RUN_ERROR</code></td><td>The run failed; the error event, not an HTTP error code.</td></tr><tr><td><code>STATE_SNAPSHOT</code> / <code>STATE_DELTA</code></td><td>Shared state the frontend and agent both read and write.</td></tr><tr><td><code>STEP_STARTED</code> / <code>STEP_FINISHED</code>, <code>REASONING_*</code>, <code>SUBAGENT_*</code></td><td>Progress, reasoning blocks, and sub-agent runs for richer agents.</td></tr></tbody></table></div>
+<p>Three identifiers hold the whole thing together: <code>threadId</code> (the conversation), <code>runId</code> (one agent execution), and <code>messageId</code> (one message inside the run). The client declares the tools the agent may call in the request itself — the server never has to guess what the UI can render. Keep that in mind; it is the detail that makes step 5 work.</p>
+<h2 id="step-2-build-the-agent-server">Step 2: Build the agent server<a class="anchor" href="#step-2-build-the-agent-server" aria-label="Link to section">#</a></h2>
+<p>The server is a small FastAPI app. Its only AG-UI-specific piece is the official SDK&#x27;s <code>EventEncoder</code>, which turns event objects into SSE lines. The agent itself is deterministic — it echoes the user&#x27;s last message and, when the client declares a <code>get_time</code> tool, calls it. No model, no key, and every event in the stream is one your code emitted on purpose, which is exactly what you want while learning the protocol.</p>
+<p>First, the install. One gotcha: the Python package is called <code>ag-ui-protocol</code>, not <code>ag-ui</code> — there is no <code>ag-ui</code> distribution on PyPI, and <code>pip install ag-ui</code> fails outright.</p>
+<pre><code class="language-bash">python3 -m venv agui-venv
+agui-venv/bin/pip install ag-ui-protocol==1.0.0 fastapi uvicorn</code></pre>
+<p>Now the server. Save this as <code>server.py</code>:</p>
+<pre><code class="language-python">"""Minimal AG-UI server: deterministic echo agent + a fake get_time tool.
+
+No LLM, no API key. Emits protocol 1.0 events via the official SDK encoder.
+"""
+import uuid
+from datetime import datetime, timezone
+
+from ag_ui.core.events import (
+    RunFinishedEvent,
+    RunFinishedSuccessOutcome,
+    RunStartedEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+    ToolCallArgsEvent,
+    ToolCallEndEvent,
+    ToolCallResultEvent,
+    ToolCallStartEvent,
+)
+from ag_ui.core.types import RunAgentInput
+from ag_ui.encoder import EventEncoder
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+
+app = FastAPI()
+encoder = EventEncoder()
+
+
+def now_iso() -&gt; str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+@app.post("/agui")
+async def run_agent(payload: RunAgentInput):
+    thread_id = payload.thread_id or str(uuid.uuid4())
+    run_id = payload.run_id or str(uuid.uuid4())
+    last_text = ""
+    for m in reversed(payload.messages or []):
+        if m.role == "user":
+            last_text = m.content if isinstance(m.content, str) else ""
+            break
+    tool_requested = any(
+        (t.name if hasattr(t, "name") else t.get("name")) == "get_time"
+        for t in (payload.tools or [])
+    )
+
+    async def stream():
+        yield encoder.encode(
+            RunStartedEvent(thread_id=thread_id, run_id=run_id)
+        )
+        msg_id = str(uuid.uuid4())
+        yield encoder.encode(
+            TextMessageStartEvent(message_id=msg_id, role="assistant")
+        )
+        reply = f"You said: {last_text}" if last_text else "Hello from AG-UI!"
+        yield encoder.encode(
+            TextMessageContentEvent(message_id=msg_id, delta=reply)
+        )
+        yield encoder.encode(TextMessageEndEvent(message_id=msg_id))
+        if tool_requested:
+            tc_id = str(uuid.uuid4())
+            yield encoder.encode(
+                ToolCallStartEvent(
+                    tool_call_id=tc_id,
+                    tool_call_name="get_time",
+                    parent_message_id=msg_id,
+                )
+            )
+            yield encoder.encode(
+                ToolCallArgsEvent(tool_call_id=tc_id, delta="{}")
+            )
+            yield encoder.encode(ToolCallEndEvent(tool_call_id=tc_id))
+            yield encoder.encode(
+                ToolCallResultEvent(
+                    message_id=str(uuid.uuid4()),
+                    tool_call_id=tc_id,
+                    content=f"The server time is {now_iso()}",
+                )
+            )
+        yield encoder.encode(
+            RunFinishedEvent(
+                thread_id=thread_id,
+                run_id=run_id,
+                outcome=RunFinishedSuccessOutcome(),
+            )
+        )
+
+    return StreamingResponse(stream(), media_type="text/event-stream")</code></pre>
+<p>Start it:</p>
+<pre><code class="language-bash">agui-venv/bin/uvicorn server:app --port 8123</code></pre>
+<p>Uvicorn reports <code>Uvicorn running on http://127.0.0.1:8123</code>. The endpoint is <code>POST /agui</code>, and it speaks nothing but AG-UI events.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/ag-ui-agent-frontend-protocol-tutorial/img2.webp" alt="Diagram of one AG-UI run: the frontend posts RunAgentInput to the agent server, which streams typed events back over SSE"><figcaption>One AG-UI run: a POST in, a typed event stream out. Diagram by AI Frontier Post.</figcaption></figure>
+<h2 id="step-3-prove-it-with-curl">Step 3: Prove it with curl<a class="anchor" href="#step-3-prove-it-with-curl" aria-label="Link to section">#</a></h2>
+<p>Before any client library touches the server, look at the raw protocol. This request declares the <code>get_time</code> tool and sends one user message:</p>
+<pre><code class="language-bash">curl -s -N -X POST http://127.0.0.1:8123/agui \
+  -H 'Content-Type: application/json' \
+  -d '{"threadId":"t1","runId":"r1",
+       "messages":[{"id":"m1","role":"user","content":"hello ag-ui"}],
+       "tools":[{"name":"get_time","description":"current server time","parameters":{}}]}'</code></pre>
+<p>The response is the whole protocol in nine lines:</p>
+<pre><code class="language-json">data: {"type":"RUN_STARTED","threadId":"t1","runId":"r1"}
+
+data: {"type":"TEXT_MESSAGE_START","messageId":"2072e6a1-...","role":"assistant"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"2072e6a1-...","delta":"You said: hello ag-ui"}
+
+data: {"type":"TEXT_MESSAGE_END","messageId":"2072e6a1-..."}
+
+data: {"type":"TOOL_CALL_START","toolCallId":"ad231120-...","toolCallName":"get_time","parentMessageId":"2072e6a1-..."}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"ad231120-...","delta":"{}"}
+
+data: {"type":"TOOL_CALL_END","toolCallId":"ad231120-..."}
+
+data: {"type":"TOOL_CALL_RESULT","messageId":"c4e82aad-...","toolCallId":"ad231120-...","content":"The server time is 2026-11-14T13:36:54.682135+00:00"}
+
+data: {"type":"RUN_FINISHED","threadId":"t1","runId":"r1","outcome":{"type":"success"}}</code></pre>
+<p>Two things worth noticing. First, the JSON keys are camelCase (<code>threadId</code>, <code>toolCallId</code>) even though the Python code uses snake_case — the SDK&#x27;s models serialize with aliases, so you write Pythonic code and the wire stays spec-compliant. Second, drop the <code>tools</code> array from the request and the run emits exactly five events — the tool call only happens because the client declared the tool. That is the protocol&#x27;s core deal: the frontend advertises capabilities, the agent uses them.</p>
+<h2 id="step-4-drive-it-from-typescript">Step 4: Drive it from TypeScript<a class="anchor" href="#step-4-drive-it-from-typescript" aria-label="Link to section">#</a></h2>
+<p>Raw SSE proves the server; the client library is what you would actually ship. Install the two packages — core holds the types and event definitions, client holds the <code>HttpAgent</code>:</p>
+<pre><code class="language-bash">mkdir agui-client &amp;&amp; cd agui-client
+npm init -y
+npm install @ag-ui/core @ag-ui/client   # @ag-ui/client 1.0.4</code></pre>
+<p>Save this as <code>run.mjs</code>:</p>
+<pre><code class="language-javascript">import { HttpAgent } from "@ag-ui/client";
+
+const agent = new HttpAgent({ url: "http://127.0.0.1:8123/agui" });
+agent.messages = [
+  { id: "m1", role: "user", content: "hello from the TS client" },
+];
+
+const result = await agent.runAgent({
+  tools: [
+    {
+      name: "get_time",
+      description: "current server time",
+      parameters: {},
+    },
+  ],
+});
+
+console.log("new messages:");
+for (const m of result.newMessages ?? []) {
+  console.log("-", m.role, JSON.stringify(m.content ?? m));
+}</code></pre>
+<pre><code class="language-bash">node run.mjs</code></pre>
+<pre><code class="language-text">new messages:
+- assistant "You said: hello from the TS client"
+- tool "The server time is 2026-11-14T13:36:55.040119+00:00"</code></pre>
+<p>The client did more than fetch a stream: it applied every event to its local state, so <code>result.newMessages</code> already holds the assistant reply and the tool result as ordinary messages. That state application is the part you do not want to hand-roll — ordering, deduplication, and partial-message assembly are all handled inside the client.</p>
+<p>One gotcha cost a debugging round while writing this tutorial: <code>runAgent</code> does <em>not</em> take messages. The conversation lives on the agent instance (<code>agent.messages</code>), and <code>runAgent</code> takes the per-run options — tools, context, forwarded props. Pass messages into <code>runAgent</code> and it silently runs with an empty history: no error, no warning, just an agent that never saw your message. Set <code>agent.messages</code> first, every time.</p>
+<h2 id="step-5-what-the-tool-call-really-teaches">Step 5: What the tool call really teaches<a class="anchor" href="#step-5-what-the-tool-call-really-teaches" aria-label="Link to section">#</a></h2>
+<p>The <code>get_time</code> tool in this demo is fake — it returns the server clock — but the shape is the whole point. In a real agent the flow is identical, only the decision-maker changes: the model reads the declared tools, picks one, and the server emits <code>TOOL_CALL_START</code>, streams the arguments as <code>TOOL_CALL_ARGS</code> deltas, closes with <code>TOOL_CALL_END</code>, executes, and returns the value as <code>TOOL_CALL_RESULT</code>. The frontend never executes anything itself; it renders the call and the result, which is why a UI can show a live tool call — a spinner, a card, a rendered component — without ever trusting the model with the DOM.</p>
+<p>That is also where generative UI enters. The protocol&#x27;s <code>STATE_SNAPSHOT</code> / <code>STATE_DELTA</code> events let the agent push structured state the frontend renders as components — a chart, a form, a confirmation dialog — instead of text. The Dojo at <a href="https://dojo.ag-ui.com" rel="nofollow">dojo.ag-ui.com</a> demonstrates each building block in 50–200 lines of code; the state-sync and human-in-the-loop examples are the ones to read after this tutorial.</p>
+<p>A note on honesty: this demo server calls <code>get_time</code> whenever the client declares it. A real agent decides from the model&#x27;s output. The event sequence is the same either way, which is why the demo is a faithful stand-in for the wire — but do not mistake the echo for an agent. The decision logic is step 7.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/ag-ui-agent-frontend-protocol-tutorial/img3.webp" alt="A dark chat interface showing a streaming assistant reply and a tool-call card with gear and clock icons"><figcaption>AI-generated illustration: a streaming reply and a live tool-call card in the chat UI.</figcaption></figure>
+<h2 id="step-6-scaffold-the-full-stack-starter">Step 6: Scaffold the full-stack starter<a class="anchor" href="#step-6-scaffold-the-full-stack-starter" aria-label="Link to section">#</a></h2>
+<p><strong>Read this step as documented, not run end to end:</strong> the scaffold stops at a CopilotKit browser sign-in, which needs your own account, so it could not be completed in this session&#x27;s sandbox. Everything before and after it in this tutorial was run and verified; this step records exactly what the scaffold asks for, so you hit no surprises.</p>
+<p>The starter is <code>create-ag-ui-app</code> (version 0.0.59). It scaffolds a chat UI wired to an AG-UI backend for one framework of your choice:</p>
+<pre><code class="language-bash">npx create-ag-ui-app my-agent-app</code></pre>
+<p>Run it in a real terminal — it is interactive and will not work piped. It asks for a project name, then a framework. The framework flags (all verified from the CLI&#x27;s own help) are <code>--langgraph-py</code>, <code>--langgraph-js</code>, <code>--crewai-flows</code>, <code>--mastra</code>, <code>--pydantic-ai</code>, <code>--llamaindex</code>, <code>--agno</code>, <code>--ag2</code>, and <code>--adk</code> — for example <code>npx create-ag-ui-app --pydantic-ai</code> for the Pydantic AI backend. The CLI&#x27;s own tip also names Strands, Microsoft Agent Framework, and A2A as starter options.</p>
+<p>After the framework choice, the CLI asks where to run the agent — the highlighted option is <strong>Self-hosted: try it on your machine (Docker)</strong> — then prints a summary and waits for you to press Enter to continue. Then comes the part that stops an unattended run: it opens a browser sign-in at the CopilotKit dashboard and waits for you to sign in and paste the short code it shows. That is a CopilotKit account step, not an AG-UI step — the protocol itself needs no account, but the scaffolding tool does.</p>
+<p>Once signed in, the CLI creates the project and installs its dependencies. Start it with the documented <code>npm run dev</code> command from the generated project, then point the frontend&#x27;s agent connection at your backend&#x27;s AG-UI endpoint — for the echo server from step 2, that is <code>http://127.0.0.1:8123/agui</code>. The chat UI talks to the endpoint the same way the TypeScript client in step 4 did: one POST per run, one typed event stream back.</p>
+<p>If you would rather skip the account step entirely, you do not need the starter at all. The server from step 2 plus any AG-UI client — the official TypeScript client, CopilotKit&#x27;s React components, or the terminal client — is already a complete AG-UI application. The starter is a shortcut, not a requirement.</p>
+
+<h2 id="step-7-swap-the-echo-for-a-real-framework-agent">Step 7: Swap the echo for a real framework agent<a class="anchor" href="#step-7-swap-the-echo-for-a-real-framework-agent" aria-label="Link to section">#</a></h2>
+<p>This step is documented, not run in this session: it needs a model API key, and the core loop above is deliberately key-free. The important fact is how little changes. The starter from step 6 already wires one of nine frameworks — LangGraph, CrewAI, Mastra, Pydantic AI, LlamaIndex, Agno, AG2, ADK, or LangGraph JS — to an AG-UI endpoint. Give it the framework&#x27;s credentials (for example, an OpenAI key for the LangGraph template), and the same <code>/agui</code> endpoint starts emitting the same events, now driven by a real model: the same <code>RUN_STARTED</code>, the same text deltas, the same tool-call sequence. The frontend code does not change at all, because the frontend never talked to the model — it talked to the protocol.</p>
+<p>That is the practical payoff of the whole exercise. If you build your UI against AG-UI instead of against one framework&#x27;s SDK, the agent behind the endpoint is replaceable: a LangGraph agent today, a Pydantic AI agent next quarter, a hand-rolled Python server like the one in step 2 for the parts that should stay deterministic. The UI keeps working because the contract is the event stream, not the framework.</p>
+<p>If you go this route, two things from the docs are worth knowing up front. First, each framework integration has its own quickstart in the AG-UI docs — the integration, not the protocol, owns the credential and model setup, so follow the framework&#x27;s page rather than guessing. Second, the protocol&#x27;s <code>RUN_ERROR</code> event is where model failures surface; a production client should handle it as a first-class state (retry, show the error, offer to resume) rather than treating a failed stream as a network error.</p>
+<h2 id="when-to-use-ag-ui-vs-the-alternatives">When to use AG-UI vs the alternatives<a class="anchor" href="#when-to-use-ag-ui-vs-the-alternatives" aria-label="Link to section">#</a></h2>
+<p>AG-UI is one protocol in a stack, not a replacement for the others. Place it correctly and it stays out of your way; reach for it where another tool fits and you will fight it.</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>What it is for</th><th>Use it when</th></tr></thead><tbody><tr><td><strong>AG-UI</strong></td><td>Agent ↔ user-facing app</td><td>You need streaming, tool rendering, shared state, and interrupts in a UI — and the agent may live in any stack.</td></tr><tr><td><strong>MCP</strong></td><td>Agent ↔ tools and data</td><td>Your agent needs to call tools and read data sources. Complementary to AG-UI: an agent can speak both at once.</td></tr><tr><td><strong>A2A</strong></td><td>Agent ↔ agent</td><td>Agents coordinate with each other across services. It answers a different question from AG-UI.</td></tr><tr><td><strong>Vercel AI SDK</strong></td><td>TypeScript toolkit for AI chat UIs</td><td>You are all-in on TypeScript/React and want the fastest path to a chat UI. Less useful when the agent lives in Python or another stack.</td></tr><tr><td><strong>Raw SSE / REST</strong></td><td>Hand-rolled streaming</td><td>One app, one agent, no interop needs. Cheapest to start; you re-implement event typing, state application, and tool rendering yourself.</td></tr></tbody></table></div>
+<p>The deciding question is who consumes the agent. If the answer is a person looking at a screen, AG-UI is the right layer. If the answer is another agent, that is A2A. If the answer is a tool or a database, that is MCP. Most real products end up using all three, each on its own boundary.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>AG-UI earns its place in the stack by being small: one POST in, one typed event stream out, with the client libraries doing the tedious state work. You verified every piece of that in this tutorial without spending anything — a Python server emitting protocol 1.0 events, a curl transcript of the exact wire format, and a TypeScript client that turns the stream into messages. The two gotchas to carry forward are the PyPI name (<code>ag-ui-protocol</code>, not <code>ag-ui</code>) and the client&#x27;s message ownership (<code>agent.messages</code>, not <code>runAgent</code> parameters). Everything else is the protocol doing what it says: the same events, whether the agent behind them is a twenty-line echo or a production framework agent with a model key.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="ag-ui-agent-frontend-protocol-tutorial"></div><div class="comments" data-comments="ag-ui-agent-frontend-protocol-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/vercel-ai-sdk-local-ollama-chat-tutorial/"><span class="chip">Tutorials</span><h3>Build a streaming AI chat app with the Vercel AI SDK and a local Ollama model — no API key needed</h3><div class="meta">November 14, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/daily-stock-analysis-ai-briefing-tutorial/"><span class="chip">Tutorials</span><h3>Run your own daily AI stock briefing: hands-on with Daily Stock Analysis</h3><div class="meta">November 14, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/agentrun-self-improving-managed-agents-tutorial/"><span class="chip">Tutorials</span><h3>AgentRun: Self-Improving Managed Agents You Can Run Yourself — Hands-On</h3><div class="meta">November 14, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/gentle-ai-coding-agent-setup-tutorial/"><span class="chip">Tutorials</span><h3>Stop re-explaining your codebase: set up Gentle-AI so your coding agent remembers, plans, and proves its work</h3><div class="meta">November 13, 2026 · 17 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to follow this tutorial?</h3><p>No. Steps 2–5 run entirely on localhost with a deterministic echo agent — no model, no key, no cost. A key only enters in step 7, when you swap the echo for a real LLM-backed framework agent.</p><h3>Is AG-UI only for React frontends?</h3><p>No. AG-UI is a wire protocol — a POST in, a typed event stream out. There are SDKs for Python, TypeScript, Go, Rust, Java, Kotlin, Dart, Ruby, .NET, and C++, and clients include a terminal client, Slack and Teams via the Channels SDK, and React Native.</p><h3>How is AG-UI different from MCP?</h3><p>MCP connects an agent to tools and data; AG-UI connects an agent to the user. They answer different questions and are complementary — a real agent usually speaks both, plus A2A for agent-to-agent coordination.</p><h3>What changed in protocol 1.0?</h3><p>The event set is frozen and the SDKs are generated from a single spec, so the Python and TypeScript sides can no longer drift. The old THINKING_* events were removed in favor of REASONING_*, and the TypeScript client keeps a compatibility boundary that translates old streams.</p></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
