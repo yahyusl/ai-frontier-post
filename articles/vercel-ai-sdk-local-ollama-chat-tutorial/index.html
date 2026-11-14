@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a streaming AI chat app with the Vercel AI SDK and a local Ollama model — no API key needed — AI Frontier Post</title>
+<meta name="description" content="A complete streaming chatbot — Next.js, AI SDK 7, and a local Ollama model — with a working tool call and zero API keys. Every command verified end to end.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/vercel-ai-sdk-local-ollama-chat-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a streaming AI chat app with the Vercel AI SDK and a local Ollama model — no API key needed">
+<meta property="og:description" content="A complete streaming chatbot — Next.js, AI SDK 7, and a local Ollama model — with a working tool call and zero API keys. Every command verified end to end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/vercel-ai-sdk-local-ollama-chat-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/vercel-ai-sdk-local-ollama-chat-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-14">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a streaming AI chat app with the Vercel AI SDK and a local Ollama model — no API key needed", "description": "A complete streaming chatbot — Next.js, AI SDK 7, and a local Ollama model — with a working tool call and zero API keys. Every command verified end to end.", "datePublished": "2026-11-14", "dateModified": "2026-11-14", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/vercel-ai-sdk-local-ollama-chat-tutorial/"}, "image": "https://aifrontierpost.com/articles/vercel-ai-sdk-local-ollama-chat-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build a streaming AI chat app with the Vercel AI SDK and a local Ollama model — no API key needed", "description": "Build a complete streaming chatbot with Next.js, the Vercel AI SDK 7, and a local Ollama model — with a working tool call and zero API keys.", "step": [{"@type": "HowToStep", "name": "Step 1: Install Ollama and pull a small model", "text": "Download Ollama, start ollama serve, and pull qwen3:0.6b (about 523 MB). Verify the model answers with a curl call to the local chat API."}, {"@type": "HowToStep", "name": "Step 2: Scaffold the Next.js app", "text": "Create a Next.js 16 App Router project with TypeScript, then install the exact AI SDK packages: ai 7, @ai-sdk/react 4, ollama-ai-provider-v2 4, and zod 4."}, {"@type": "HowToStep", "name": "Step 3: Write the chat API route", "text": "Add app/api/chat/route.ts using streamText, convertToModelMessages, and createUIMessageStreamResponse, pointed at ollama('qwen3:0.6b')."}, {"@type": "HowToStep", "name": "Step 4: Build the chat UI with useChat", "text": "Wire app/page.tsx to useChat from @ai-sdk/react with a DefaultChatTransport pointed at /api/chat, rendering message parts and a stop button."}, {"@type": "HowToStep", "name": "Step 5: Run it and watch the stream", "text": "Start the production build, POST a message to /api/chat, and confirm the UI message stream arrives token by token."}, {"@type": "HowToStep", "name": "Step 6: Give the model a real tool", "text": "Add a getTime tool with a Zod input schema and a server-side execute function, cap the agent loop with stopWhen: stepCountIs(5), and render the tool call in the UI."}, {"@type": "HowToStep", "name": "Step 7: Swap the model in one line", "text": "Point the same route at a bigger local model or a hosted provider by changing only the model argument — the rest of the app is untouched."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key for this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No. The model runs on your own machine through Ollama, and the AI SDK talks to it over localhost. The only cost is disk space for the model (about 523 MB for qwen3:0.6b) and the electricity to run it."}}, {"@type": "Question", "name": "Why use the Vercel AI SDK instead of calling Ollama's API directly?", "acceptedAnswer": {"@type": "Answer", "text": "Ollama's API gives you raw completions; the AI SDK gives you the whole chat product: token streaming framed for the browser, typed message parts, tool-call routing with multi-step loops, and a useChat hook that manages state, status, stop, and retry. And because every provider implements the same interface, swapping the local model for a hosted one later is a one-line change."}}, {"@type": "Question", "name": "Is qwen3:0.6b good enough for real use?", "acceptedAnswer": {"@type": "Answer", "text": "It is good enough to learn the stack and to prove the wiring — it answered questions and called the tool correctly in this tutorial's verification run. For anything you show to users, step up to qwen3:4b or qwen3:8b on a machine with more RAM, or swap in a hosted frontier model; the 0.6b model's reasoning and tool reliability are limited, which is the honest trade for running on a CPU."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a streaming AI chat app with the Vercel AI SDK and a local Ollama model — no API key needed</h1>
+<p class="lede">A complete streaming chatbot — Next.js, AI SDK 7, and a local Ollama model — with a working tool call and zero API keys. Every command verified end to end.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 14, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> The Vercel AI SDK 7 turns a Next.js app into a streaming chatbot with about 60 lines of code — and with the community Ollama provider, the model runs on your own machine, so the whole thing costs $0 and needs no API key. Install Ollama, pull qwen3:0.6b, add a chat API route with <code>streamText</code>, wire the page with <code>useChat</code>, then give the model a real tool and watch it call your code.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem">
+    <li>Verified versions: <code>ai</code> 7.0.173, <code>@ai-sdk/react</code> 4.0.177, <code>ollama-ai-provider-v2</code> 4.1.0, <code>zod</code> 4.6.7, Next.js 16.4.6, React 19.3.1, Ollama 0.40.x.</li>
+    <li>The full loop was run end to end on a 4-core CPU machine: <code>next build</code> clean, the chat route streaming real tokens, and a <code>getTime</code> tool call executed server-side and answered in the UI.</li>
+    <li>qwen3:0.6b is a 523 MB download (Q4_K_M), reports tool-calling and 40,960-token context, and answered a test question in about 0.1 seconds of model time.</li>
+    <li>Watch out: <code>@ai-sdk/react</code> 4.0.177 requires React <code>^19.2.1</code> — React 19.2.0 fails install with a peer-dependency error. Pin React 19.3.1.</li>
+    <li>Swapping the local model for a hosted one is a one-line change to the <code>model</code> argument — nothing else in the app moves.</li>
+</ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/vercel-ai-sdk-local-ollama-chat-tutorial/cover.webp" alt="A laptop showing a streaming AI chat interface beside a small glowing home server, with code on a second monitor"><figcaption>AI-generated illustration: a local model serving a streaming chat UI from your own desk.</figcaption></figure>
+<div class="article-body"><p>Every AI chat demo seems to start the same way: paste an API key, pick a model, watch the bill. That is fine for a weekend experiment, but it teaches you nothing about the shape of a real product — and it ties your app to one vendor's pricing page from day one.</p>
+<p>There is a better first build. The <a href="https://ai-sdk.dev/docs/introduction" rel="nofollow">Vercel AI SDK</a> is the TypeScript toolkit for AI apps: one set of functions — <code>streamText</code>, <code>generateText</code>, <code>useChat</code> — that works identically across providers. Version 7 is the current major release, and its docs now list community Ollama providers alongside the hosted ones. Pair it with <a href="https://ollama.com/" rel="nofollow">Ollama</a>, and the model runs on your own machine: no key, no account, no per-token meter, and your prompts never leave your network.</p>
+<p>That is what this tutorial builds: a real streaming chatbot in Next.js, with a working tool call, running entirely on localhost. Every command below was run and verified on a 4-core Linux machine with no GPU — the model answered, the tool fired, and the UI streamed. If it works there, it works on your laptop.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Node.js 20 or newer</strong> (this walkthrough used Node 24.22.1 with npm 10.9.4).</li><li><strong>Ollama 0.40.x</strong> — download it from <a href="https://ollama.com/download" rel="nofollow">ollama.com/download</a> for your OS.</li><li><strong>About 600 MB of free disk</strong> for the qwen3:0.6b model, plus room for <code>node_modules</code>.</li><li><strong>4 GB of RAM</strong> free while the model is loaded; the 0.6b model itself needs under 1 GB.</li><li><strong>No accounts, no API keys, no credit card.</strong> That is the point.</li></ul>
+<h2 id="step-1-install-ollama-and-pull-a-small-model">Step 1: Install Ollama and pull a small model<a class="anchor" href="#step-1-install-ollama-and-pull-a-small-model" aria-label="Link to section">#</a></h2>
+<p>Install Ollama for your platform, then start the server and pull a model small enough to run comfortably on a CPU. Qwen3 0.6b is the right starter: it is a 523 MB download, it reports tool-calling support, and it has a 40,960-token context window — generous for a chat demo.</p>
+<pre><code class="language-bash">ollama serve
+ollama pull qwen3:0.6b</code></pre>
+<p>Keep <code>ollama serve</code> running in its own terminal — everything else in this tutorial talks to it on <code>http://localhost:11434</code>. Confirm the model is actually there and answering before you touch any JavaScript:</p>
+<pre><code class="language-bash">curl http://localhost:11434/api/tags
+curl http://localhost:11434/api/chat -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"What is 2+2? Reply with just the number."}],"stream":false,"think":false}'</code></pre>
+<p>You should see <code>qwen3:0.6b</code> in the tag list, and the chat call should come back with <code>"content": "2"</code>. In this tutorial's verification run, that call returned in about 0.1 seconds of model time. If <code>curl</code> cannot connect, the server is not running — <code>ollama serve</code> first, everything else second.</p>
+<h2 id="step-2-scaffold-the-nextjs-app">Step 2: Scaffold the Next.js app<a class="anchor" href="#step-2-scaffold-the-nextjs-app" aria-label="Link to section">#</a></h2>
+<p>Create a Next.js 16 project with the App Router and TypeScript:</p>
+<pre><code class="language-bash">npx create-next-app@latest ai-chat</code></pre>
+<p>Answer the prompts: TypeScript <strong>Yes</strong>, ESLint <strong>Yes</strong>, Tailwind CSS <strong>No</strong>, <code>src/</code> directory <strong>No</strong>, App Router <strong>Yes</strong>, import alias <strong><code>@/*</code></strong>. Then install the AI SDK stack with the exact versions verified for this tutorial:</p>
+<pre><code class="language-bash">cd ai-chat
+npm install ai@7.0.173 @ai-sdk/react@4.0.177 ollama-ai-provider-v2@4.1.0 zod@4.6.7</code></pre>
+<p>Two things worth knowing about that install. First, <code>ollama-ai-provider-v2</code> is the provider the official AI SDK docs currently list for Ollama — it talks to Ollama's HTTP API directly and supports text, tools, and embeddings. Second, <code>@ai-sdk/react</code> 4.0.177 declares a peer dependency on React <code>^19.2.1</code>. If your scaffold lands on React 19.2.0, npm will refuse with an <code>ERESOLVE</code> error; the fix is to pin React to 19.3.1, which is what this tutorial's verified install uses:</p>
+<pre><code class="language-bash">npm install react@19.3.1 react-dom@19.3.1</code></pre>
+<h2 id="step-3-write-the-chat-api-route">Step 3: Write the chat API route<a class="anchor" href="#step-3-write-the-chat-api-route" aria-label="Link to section">#</a></h2>
+<p>The server side of the app is one file, <code>app/api/chat/route.ts</code>. It takes the chat history from the client, converts the UI messages into model messages, streams the response, and frames it in the format <code>useChat</code> expects. This is the exact code from the verified build — copy it as-is:</p>
+<pre><code class="language-ts">import {
+  convertToModelMessages,
+  createUIMessageStreamResponse,
+  streamText,
+  toUIMessageStream,
+  type UIMessage,
+} from 'ai';
+import { ollama } from 'ollama-ai-provider-v2';
+
+// Allow streaming responses up to 30 seconds
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { messages }: { messages: UIMessage[] } = await req.json();
+
+  const result = streamText({
+    model: ollama('qwen3:0.6b'),
+    instructions: 'You are a helpful assistant.',
+    messages: await convertToModelMessages(messages),
+  });
+
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({ stream: result.stream }),
+  });
+}</code></pre>
+<p>Three details matter here. <strong><code>convertToModelMessages</code></strong> translates the UI's message format — messages made of typed <code>parts</code> — into the plain role/content messages the model consumes. <strong><code>streamText</code></strong> starts generating immediately and returns a stream, not a finished answer; the route never waits for the full reply before responding. And <strong><code>createUIMessageStreamResponse</code> + <code>toUIMessageStream</code></strong> wrap that stream in the UI message protocol: a sequence of typed events (<code>text-start</code>, <code>text-delta</code>, <code>text-end</code>, <code>finish</code>) that the React hook knows how to apply incrementally.</p>
+<p>Note what is <em>not</em> here: no API key, no base URL, no headers. The Ollama provider defaults to <code>http://localhost:11434/api</code>, and the model id is just the Ollama tag — <code>ollama('qwen3:0.6b')</code>.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/vercel-ai-sdk-local-ollama-chat-tutorial/img2.webp" alt="Architecture diagram: browser to Next.js to AI SDK to Ollama to local model, with a stream arrow returning"><figcaption>AI-generated diagram: the request path and the stream coming back. Every hop runs on your machine.</figcaption></figure>
+<h2 id="step-4-build-the-chat-ui-with-usechat">Step 4: Build the chat UI with <code>useChat</code><a class="anchor" href="#step-4-build-the-chat-ui-with-usechat" aria-label="Link to section">#</a></h2>
+<p>The client is <code>app/page.tsx</code>. The <code>useChat</code> hook from <code>@ai-sdk/react</code> owns the whole conversation: it posts to <code>/api/chat</code>, decodes the stream frame by frame, and appends tokens to the latest assistant message as they arrive. You own the input field yourself — that changed in AI SDK 5 and is still the pattern in v7, so the component keeps its own <code>input</code> state and calls <code>sendMessage({ text: input })</code> on submit.</p>
+<pre><code class="language-tsx">'use client';
+
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import { useState } from 'react';
+
+export default function Page() {
+  const { messages, sendMessage, status, stop, error, regenerate } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  });
+
+  const [input, setInput] = useState('');
+
+  return (
+    &lt;main style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}&gt;
+      &lt;h1&gt;Local AI Chat&lt;/h1&gt;
+      &lt;p&gt;Powered by the Vercel AI SDK + Ollama (qwen3:0.6b, running on this machine).&lt;/p&gt;
+
+      {messages.map(message =&gt; (
+        &lt;div key={message.id} style={{ marginBottom: 16 }}&gt;
+          &lt;strong&gt;{message.role === 'user' ? 'You: ' : 'AI: '}&lt;/strong&gt;
+          {message.parts.map((part, index) =&gt;
+            part.type === 'text' ? &lt;span key={index}&gt;{part.text}&lt;/span&gt; : null,
+          )}
+        &lt;/div&gt;
+      ))}
+
+      {(status === 'submitted' || status === 'streaming') &amp;&amp; (
+        &lt;button type="button" onClick={() =&gt; stop()}&gt;Stop&lt;/button&gt;
+      )}
+
+      {error &amp;&amp; (
+        &lt;div&gt;
+          &lt;p&gt;Something went wrong.&lt;/p&gt;
+          &lt;button type="button" onClick={() =&gt; regenerate()}&gt;Retry&lt;/button&gt;
+        &lt;/div&gt;
+      )}
+
+      &lt;form
+        onSubmit={e =&gt; {
+          e.preventDefault();
+          if (input.trim()) {
+            sendMessage({ text: input });
+            setInput('');
+          }
+        }}
+      &gt;
+        &lt;input
+          value={input}
+          onChange={e =&gt; setInput(e.target.value)}
+          disabled={status !== 'ready'}
+          placeholder="Ask something — try “What time is it in Tokyo?”"
+          style={{ width: '70%', padding: 8 }}
+        /&gt;
+        &lt;button type="submit" disabled={status !== 'ready'}&gt;Send&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/main&gt;
+  );
+}</code></pre>
+<p>Render from <code>message.parts</code>, not from a <code>content</code> string — parts are how the SDK represents text, tool calls, and tool results in one typed array, and the tool step below depends on it. The <code>status</code> field tells you exactly where the conversation is: <code>submitted</code> (waiting for the stream to start), <code>streaming</code> (tokens arriving), <code>ready</code> (done — the input unlocks), or <code>error</code> (something failed, and <code>regenerate()</code> retries the last message).</p>
+<h2 id="step-5-run-it-and-watch-the-stream">Step 5: Run it and watch the stream<a class="anchor" href="#step-5-run-it-and-watch-the-stream" aria-label="Link to section">#</a></h2>
+<p>Build first — the build is your type-check, and it catches every wrong import or renamed export before you ever open a browser:</p>
+<pre><code class="language-bash">npm run build
+npm run start</code></pre>
+<p>The build should finish with <code>ƒ /api/chat</code> listed as a dynamic route. Then prove the stream works with <code>curl</code> before trusting the UI. POST a UI message — the same JSON shape <code>useChat</code> sends — and watch the event stream come back:</p>
+<pre><code class="language-bash">curl -X POST http://localhost:3000/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"id":"m1","role":"user","parts":[{"type":"text","text":"What is 2+2? Reply with just the number."}]}]}'</code></pre>
+<p>The response is a stream of <code>data:</code> lines. In this tutorial's verification run, the relevant ones were:</p>
+<pre><code>data: {"type":"start"}
+
+data: {"type":"start-step"}
+
+data: {"type":"text-start","id":"v1c1aUA4edDVA5dY"}
+
+data: {"type":"text-delta","id":"v1c1aUA4edDVA5dY","delta":"2"}
+
+data: {"type":"text-end","id":"v1c1aUA4edDVA5dY"}
+
+data: {"type":"finish-step"}
+
+data: {"type":"finish","finishReason":"stop"}
+
+data: [DONE]</code></pre>
+<p>That <code>text-delta</code> is the whole trick: the model produced <code>2</code>, the server forwarded it the moment it existed, and the client appended it without waiting for anything else. Now open <code>http://localhost:3000</code> in a browser and type a question. You will see the answer appear word by word — served by a model running on your own disk.</p>
+<h2 id="step-6-give-the-model-a-real-tool">Step 6: Give the model a real tool<a class="anchor" href="#step-6-give-the-model-a-real-tool" aria-label="Link to section">#</a></h2>
+<p>A chatbot that only talks is a demo. A chatbot that can call your code is a product. Add a <code>getTime</code> tool to the route: a Zod schema describing the input, and an <code>execute</code> function that runs on the server. The model decides when to call it; your code decides what happens.</p>
+<pre><code class="language-ts">import {
+  convertToModelMessages,
+  createUIMessageStreamResponse,
+  stepCountIs,
+  streamText,
+  toUIMessageStream,
+  tool,
+  type UIMessage,
+} from 'ai';
+import { ollama } from 'ollama-ai-provider-v2';
+import { z } from 'zod';
+
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { messages }: { messages: UIMessage[] } = await req.json();
+
+  const result = streamText({
+    model: ollama('qwen3:0.6b'),
+    instructions:
+      'You are a helpful assistant. When the user asks for the time, use the getTime tool.',
+    messages: await convertToModelMessages(messages),
+    stopWhen: stepCountIs(5),
+    tools: {
+      getTime: {
+        description: 'Get the current time in a given city',
+        inputSchema: z.object({
+          city: z.string().describe('The city to get the time for'),
+        }),
+        execute: async ({ city }: { city: string }) =&gt; {
+          const zones: Record&lt;string, string&gt; = {
+            tokyo: 'Asia/Tokyo',
+            'new york': 'America/New_York',
+            london: 'Europe/London',
+            paris: 'Europe/Paris',
+            sydney: 'Australia/Sydney',
+            'los angeles': 'America/Los_Angeles',
+          };
+          const timeZone = zones[city.toLowerCase()] ?? 'UTC';
+          const time = new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+          }).format(new Date());
+          return `The current time in ${city} is ${time} (${timeZone}).`;
+        },
+      },
+    },
+  });
+
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({ stream: result.stream }),
+  });
+}</code></pre>
+<p><code>stopWhen: stepCountIs(5)</code> is the part people miss. Without it, the model calls the tool, the tool returns, and the generation ends — the model never gets to use the result. <code>stepCountIs(5)</code> lets the loop run up to five steps: call the tool, read the result, and answer. That is the whole agentic loop, in one option.</p>
+<p>Ask the running app <em>“What time is it in Tokyo right now? Use the getTime tool.”</em> and the stream tells the story. In this tutorial's verification run, the events arrived in order: <code>tool-input-start</code> for <code>getTime</code>, the input streaming in as <code>{"city":"Tokyo"}</code>, then <code>tool-output-available</code> with <code>"The current time in Tokyo is 9:20:27 PM (Asia/Tokyo)."</code> — real time, from the server clock, through the model — followed by a second step in which the model streamed its answer: <em>“The current time in Tokyo is 9:20:27 PM.”</em> That second step is the proof <code>stopWhen</code> did its job.</p>
+<p>Render the tool call in the UI by adding a case to the parts switch in <code>page.tsx</code>:</p>
+<pre><code class="language-tsx">case 'tool-getTime': {
+  if (part.state === 'input-available') {
+    return &lt;div key={index}&gt;Checking the time…&lt;/div&gt;;
+  }
+  if (part.state === 'output-available') {
+    return &lt;div key={index}&gt;🕐 {String(part.output)}&lt;/div&gt;;
+  }
+  return null;
+}</code></pre>
+<p>Tool parts are typed by name — <code>tool-getTime</code> — and carry a <code>state</code> machine: <code>input-streaming</code>, <code>input-available</code>, <code>output-available</code>, <code>output-error</code>. Render each state and your users always know whether the model is thinking, calling, or done.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/vercel-ai-sdk-local-ollama-chat-tutorial/img3.webp" alt="A laptop showing a chat interface with a tool-call card and a streaming answer"><figcaption>AI-generated illustration: the user asks about Tokyo, the tool fires, and the answer streams in.</figcaption></figure>
+<h2 id="step-7-swap-the-model-in-one-line">Step 7: Swap the model in one line<a class="anchor" href="#step-7-swap-the-model-in-one-line" aria-label="Link to section">#</a></h2>
+<p>This is where the SDK earns its keep. Everything you built — the route, the stream framing, the hook, the tool — is provider-agnostic. To run a bigger local model, change one argument and pull it:</p>
+<pre><code class="language-bash">ollama pull qwen3:4b</code></pre>
+<pre><code class="language-ts">model: ollama('qwen3:4b'),</code></pre>
+<p>To switch to a hosted frontier model instead, install that provider's package and change the same line. The docs' own chatbot example uses the string form for this:</p>
+<pre><code class="language-ts">model: "anthropic/claude-sonnet-5.5",</code></pre>
+<p>Same route, same UI, same tool. That is the reason to learn this stack rather than hand-rolling fetch calls against one API: the day you outgrow the local model, you change a string, not an architecture.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<ul><li><strong><code>npm error ERESOLVE ... peer react</code>:</strong> your scaffold has React 19.2.0 and <code>@ai-sdk/react</code> 4.0.177 needs <code>^19.2.1</code>. Run <code>npm install react@19.3.1 react-dom@19.3.1</code>.</li><li><strong><code>Failed to fetch</code> in the browser, or an empty error state:</strong> Ollama is not running. Start <code>ollama serve</code> in its own terminal and confirm <code>curl http://localhost:11434/api/tags</code> responds.</li><li><strong><code>model 'qwen3:0.6b' not found</code>:</strong> you skipped the pull. Run <code>ollama pull qwen3:0.6b</code> and wait for the download to finish.</li><li><strong>First token is slow, then it speeds up:</strong> normal on CPU — the model loads into memory on the first request. Later requests reuse the loaded model. If it stays slow, the model is too big for the machine; drop back to <code>qwen3:0.6b</code> or add RAM.</li><li><strong>The model ignores the tool:</strong> small models sometimes answer from memory instead of calling. The <code>instructions</code> line telling it to use <code>getTime</code> helps; a bigger model (<code>qwen3:4b</code> or up) is the reliable fix.</li></ul>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Situation</th><th>Best choice</th></tr></thead><tbody><tr><td>Learning the stack, $0 budget, any laptop</td><td>Local Ollama + qwen3:0.6b, exactly as built here</td></tr><tr><td>Real users, still self-hosted</td><td>Same app, model swapped to qwen3:4b or qwen3:8b on a machine with 8–16 GB RAM</td></tr><tr><td>Best answers matter more than cost or privacy</td><td>Same app, model swapped to a hosted frontier model — one line, plus an API key</td></tr><tr><td>Chat must remember past sessions</td><td>Add persistence: save <code>messages</code> to a database on each turn and load them into <code>useChat</code></td></tr><tr><td>Tools that touch money, email, or deletion</td><td>Keep them server-side with an approval step — the SDK supports tools that pause for user confirmation before executing</td></tr></tbody></table></div>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>You now own a streaming chatbot that runs entirely on your hardware: a Next.js route that streams tokens the moment they exist, a React hook that manages the whole conversation state, and a tool the model can actually call — all verified against a real local model, with no API key anywhere in the project. The same sixty lines scale in both directions: a bigger local model when you want more capability, a hosted frontier model when you want the best answers, and more tools whenever you want the model to do something instead of just saying something. Start with the tool. That is where a chatbot stops being a demo and starts being useful.</p></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="vercel-ai-sdk-local-ollama-chat-tutorial"></div><div class="comments" data-comments="vercel-ai-sdk-local-ollama-chat-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/daily-stock-analysis-ai-briefing-tutorial/"><span class="chip">Tutorials</span><h3>Run your own daily AI stock briefing: hands-on with Daily Stock Analysis</h3><div class="meta">November 14, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/agentrun-self-improving-managed-agents-tutorial/"><span class="chip">Tutorials</span><h3>AgentRun: Self-Improving Managed Agents You Can Run Yourself — Hands-On</h3><div class="meta">November 14, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/gentle-ai-coding-agent-setup-tutorial/"><span class="chip">Tutorials</span><h3>Stop re-explaining your codebase: set up Gentle-AI so your coding agent remembers, plans, and proves its work</h3><div class="meta">November 13, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/realtimevad-faster-speech-off-signal-tutorial/"><span class="chip">Tutorials</span><h3>Cut 90 ms off every voice-assistant turn: hands-on with RealtimeVAD</h3><div class="meta">November 13, 2026 · 14 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions">
+<h2>Frequently asked questions</h2>
+<h3>Do I need an API key for this tutorial?</h3>
+<p>No. The model runs on your own machine through Ollama, and the AI SDK talks to it over localhost. The only cost is disk space for the model (about 523 MB for qwen3:0.6b) and the electricity to run it.</p>
+<h3>Why use the Vercel AI SDK instead of calling Ollama&#x27;s API directly?</h3>
+<p>Ollama&#x27;s API gives you raw completions; the AI SDK gives you the whole chat product: token streaming framed for the browser, typed message parts, tool-call routing with multi-step loops, and a <code>useChat</code> hook that manages state, status, stop, and retry. And because every provider implements the same interface, swapping the local model for a hosted one later is a one-line change.</p>
+<h3>Is qwen3:0.6b good enough for real use?</h3>
+<p>It is good enough to learn the stack and to prove the wiring — it answered questions and called the tool correctly in this tutorial&#x27;s verification run. For anything you show to users, step up to qwen3:4b or qwen3:8b on a machine with more RAM, or swap in a hosted frontier model; the 0.6b model&#x27;s reasoning and tool reliability are limited, which is the honest trade for running on a CPU.</p>
+</section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
