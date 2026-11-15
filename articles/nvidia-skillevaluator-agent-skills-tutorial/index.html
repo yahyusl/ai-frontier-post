@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop shipping untested agent skills: hands-on with NVIDIA&#x27;s SkillEvaluator — AI Frontier Post</title>
+<meta name="description" content="NVIDIA&#x27;s SkillEvaluator scores your agent skills across four dimensions and tells you exactly what to fix — no API key needed for the first tier. Version 0.9.0, 1,451 stars, and a first run we verified end to end, from a 69/100 fail to a 92.5/100 pass.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/nvidia-skillevaluator-agent-skills-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop shipping untested agent skills: hands-on with NVIDIA&#x27;s SkillEvaluator">
+<meta property="og:description" content="NVIDIA&#x27;s SkillEvaluator scores your agent skills across four dimensions and tells you exactly what to fix — no API key needed for the first tier. Version 0.9.0, 1,451 stars, and a first run we verified end to end, from a 69/100 fail to a 92.5/100 pass.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/nvidia-skillevaluator-agent-skills-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/nvidia-skillevaluator-agent-skills-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-15">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop shipping untested agent skills: hands-on with NVIDIA's SkillEvaluator", "description": "NVIDIA's SkillEvaluator scores your agent skills across four dimensions and tells you exactly what to fix \u2014 no API key needed for the first tier. Version 0.9.0, 1,451 stars, and a first run we verified end to end, from a 69/100 fail to a 92.5/100 pass.", "datePublished": "2026-11-15", "dateModified": "2026-11-15", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/nvidia-skillevaluator-agent-skills-tutorial/"}, "image": "https://aifrontierpost.com/articles/nvidia-skillevaluator-agent-skills-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key to use SkillEvaluator?", "acceptedAnswer": {"@type": "Answer", "text": "No, not for Tier 1. The quality check, schema, PII, license, secrets, and lint checks all run offline with no account and no key. Tiers 2 and 3 need a model provider (NVIDIA Build offers free prototyping for Developer Program members) and, for Tier 3, Docker for the live-evaluation sandbox."}}, {"@type": "Question", "name": "Why did validate fail on my skill folder?", "acceptedAnswer": {"@type": "Answer", "text": "validate expects a repository layout: the skill must live under a skills/ or team-skills/ directory. A loose folder fails the schema and repository governance check with 'Skill not in standard location'. Move the skill into repo/skills/<name>/ and re-run."}}, {"@type": "Question", "name": "Does a passing score mean my skill actually helps an agent?", "acceptedAnswer": {"@type": "Answer", "text": "No. Tier 1 measures authoring quality \u2014 structure, discoverability, reliability, efficiency. Only Tier 3 measures whether the skill helps a live agent, with paired trials and a Skill Lift number. The paper behind the tool found scan-only gates and LLM judges barely agree (Spearman 0.14), so a clean static score is not evidence of usefulness."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop shipping untested agent skills: hands-on with NVIDIA's SkillEvaluator</h1>
+<p class="lede">Agent skills are the fastest-growing artifact in AI coding — and almost nobody tests them. NVIDIA’s SkillEvaluator scores a skill, checks it against a catalog, and runs a live agent with and without it to measure whether it helps. Here is the install, the first scored run, and a skill of our own taken from a 69.0 fail to a 92.5 pass.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 15, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> NVIDIA’s SkillEvaluator (version 0.9.0, 1,451 stars) scores agent skills across four dimensions — correctness, discoverability, reliability, efficiency — and tells you exactly what to fix. The keyless Tier 1 check runs offline in seconds. We scored the bundled example at 86.2/100 (B), then took our own skill from 69.0 (D, fail) to 92.5 (A, pass) by applying the report’s fixes.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> NVIDIA’s three-tier framework for evaluating AI agent skills — static quality scoring, deduplication against a catalog, and live agent trials that measure whether a skill actually helps.</li><li><b>Why it is trending:</b> 1,451 stars, 188 forks, 541 commits, 11 releases, and a spot on GitHub’s daily trending list on November 15, 2026 — the week teams started treating skills as code that needs a gate.</li><li><b>Cost:</b> free and open source (Apache-2.0). Tier 1 needs no account and no API key; Tiers 2–3 need a model provider and Docker.</li><li><b>Verified in this tutorial:</b> every command below ran in our sandbox — pip install, the bundled example at 86.2/100, our own skill from 69.0 to 92.5, and the full Tier 1 gate at 10 of 11 checks passed.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/nvidia-skillevaluator-agent-skills-tutorial/cover.webp" alt="Editorial illustration of an inspection gate scoring folders of agent skill code with a gauge and checklist"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Agent skills went from a niche format to the default way teams package agent behavior in a single year. Anthropic publishes an official skills repository, community catalogs list thousands of them, and every coding agent now loads folders of instructions on demand. What almost nobody does is test those folders. A skill ships when someone writes a SKILL.md that reads well — and the first sign of trouble is an agent that ignores it, misuses its scripts, or leaks a secret at runtime.</p>
+<p>NVIDIA's SkillEvaluator is the first systematic answer to that gap: a three-tier framework that scores a skill, checks it for duplication against a catalog, and — in the top tier — runs a live agent with and without the skill to measure whether it actually helps. It is version 0.9.0, Apache-2.0, with 1,451 stars and 188 forks, and it holds a spot on GitHub's daily trending list today, November 15, 2026. The method behind it is published as "Evaluating Skills, Not Just Agents: Agentic Continuous Evaluation of Skills" (arXiv:2608.20614), which reports a mean composite Skill Lift of 0.2134 across 947 paired live trials — a skill that helps, measured rather than asserted.</p>
+<p>This tutorial runs the tool end to end. You will install version 0.9.0, score NVIDIA's bundled example skill, write a deliberately weak skill of your own, watch it fail at 69.0 out of 100, fix exactly what the report tells you to fix, and watch it pass at 92.5. Then you will run the full Tier 1 gate and see where it stays strict. Every command and every quoted output below ran in our sandbox on November 15, 2026.</p>
+<h2 id="what-you-ll-need">What you'll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.12 or later</strong> (3.13 used here).</li><li><strong>uv or pip, and Git.</strong></li><li><strong>No account, no API key, no GPU, no Docker for Tier 1</strong> — the whole first tier runs offline on your machine.</li><li><strong>Tiers 2 and 3 need a model provider</strong> (NVIDIA Build offers free prototyping for Developer Program members) <strong>and Docker</strong> for the live-evaluation sandbox. Those tiers are covered in step 6, with the exact commands, but were not run in this sandbox.</li></ul>
+<h2 id="1-install-skillevaluator">1. Install SkillEvaluator<a class="anchor" href="#1-install-skillevaluator" aria-label="Link to section">#</a></h2>
+<p>Two paths, same CLI. The standalone install is what most readers want:</p>
+<pre><code class="language-bash">python3 -m venv .venv-skilleval
+source .venv-skilleval/bin/activate
+pip install skillevaluator==0.9.0
+skillevaluator --version</code></pre>
+<p>Our run answered:</p>
+<pre><code>skillevaluator, version 0.9.0</code></pre>
+<p>Or run from a source checkout with uv — the path the README's quickstart uses, and the one we used for the examples below:</p>
+<pre><code class="language-bash">git clone --depth 1 https://github.com/NVIDIA/SkillEvaluator.git
+cd SkillEvaluator
+uv run --python 3.13 skillevaluator --version</code></pre>
+<p>uv provisions Python 3.13 and the dependencies on first run; on our machine that took under a minute after the clone. <code>skillevaluator --help</code> lists the surface: <code>tier1</code>, <code>tier2</code>, <code>tier3</code>, <code>validate</code>, <code>health-check</code>, <code>doctor</code>, <code>models</code>, and <code>dashboard</code>. Pin the version — 0.9.0 is what every output below comes from.</p>
+<h2 id="2-score-the-bundled-example">2. Score the bundled example<a class="anchor" href="#2-score-the-bundled-example" aria-label="Link to section">#</a></h2>
+<p>The repo ships reference skills under <code>src/skillevaluator/tier3/reference_skills/</code>. Score the <code>text-analyzer</code> one with the keyless quality check — no API key, no scanner, no Docker:</p>
+<pre><code class="language-bash">uv run --python 3.13 skillevaluator quality-check \
+  src/skillevaluator/tier3/reference_skills/text-analyzer \
+  -r cli -r json -o reports/first-quality</code></pre>
+<p>Our run answered:</p>
+<pre><code>[PASS] Passed required checks
+Tier 1: 1 of 1 checks passed; 0 failed, 0 incomplete, 0 skipped, 0 N/A
+Publication eligibility: Incomplete
+
+json report: reports/first-quality/skillevaluator-quality.json</code></pre>
+<p>The score itself sits in the JSON report: <strong>86.2 out of 100, grade B</strong>, against a default pass threshold of 70. The four dimensions — weighted as the tool prints them, Correctness 35%, Discoverability 25%, Reliability 25%, Efficiency 15% — came back 75.0, 85.0, 95.0, and 100.0. Six findings, three medium and three low, all with a fix attached. Three of them:</p>
+<ul><li><strong>Description very long (207 chars, recommend 50-150).</strong> Fix: keep descriptions concise for progressive disclosure.</li><li><strong>Description doesn't mention WHEN to use this skill.</strong> Fix: add trigger context — "Use for…", "When you need to…".</li><li><strong>No prerequisites/requirements documented.</strong> Fix: document dependencies, API keys, or setup needed.</li></ul>
+<p>That is the shape of the tool: it does not grade vibes. Each deduction names the dimension, the file, and the exact change. "Publication eligibility: Incomplete" is also doing work — the quality score alone does not clear a skill for publication. The security scan and live evaluation still have to run; a static score is necessary, not sufficient.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/nvidia-skillevaluator-agent-skills-tutorial/img2.webp" alt="Illustration of a three-stage evaluation pipeline: a skill folder passing through validation, comparison, and live-testing stations to a report card"><figcaption>Three tiers: validate the skill, check it against the catalog, then test it live. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="3-write-a-skill-and-watch-it-fail">3. Write a skill and watch it fail<a class="anchor" href="#3-write-a-skill-and-watch-it-fail" aria-label="Link to section">#</a></h2>
+<p>A bundled example only proves the tool runs. The real test is your own skill. Create a thin one — a PDF summarizer with a long, vague description, no metadata, no script table, and no examples:</p>
+<pre><code class="language-bash">mkdir -p my-skill/scripts
+cat &gt; my-skill/SKILL.md &lt;&lt;'EOF'
+---
+name: pdf-summarizer
+description: This skill helps you summarize PDF files and documents of various kinds, extracting the key points, the main arguments, the important data, and producing a concise summary that you can read quickly instead of reading the whole document yourself every time.
+---
+
+# PDF Summarizer
+
+Summarize PDFs. Run the script and read the output.
+EOF</code></pre>
+<p>A minimal <code>scripts/summarize.py</code> that prints a line is enough for the scorer, which grades the skill's documentation, not its runtime behavior. Score it:</p>
+<pre><code class="language-bash">uv run --python 3.13 skillevaluator quality-check ../my-skill -r cli -o ../reports/my-skill-v1</code></pre>
+<pre><code>Overall: 69.0/100 (Grade: D)
+  Skill Type: script-based
+[FAIL] Validation failed
+  • Quality score 69.0/100 is below the required 70/100
+Tier 1: 0 of 1 checks passed; 1 failed, 0 incomplete, 0 skipped, 0 N/A</code></pre>
+<p>Dimension scores: Correctness 65, Discoverability 55, Reliability 70, Efficiency 100. One error, fifteen warnings — and the warnings read like a code review from a strict colleague:</p>
+<ul><li>No documented scripts in table format — add an "Available Scripts" table with Script, Purpose, and Arguments.</li><li>Instructions don't mention <code>run_script</code> — add explicit <code>run_script()</code> call examples.</li><li>No examples provided; missing <code>metadata.author</code> and <code>metadata.tags</code>.</li><li>Description is 256 characters, uses vague words, and is written in first/second person.</li></ul>
+<p>Note what failed hardest: Discoverability at 55. The description is the part an agent reads first when deciding whether to load the skill at all — a 256-character ramble with no trigger context is the single most expensive defect in the file.</p>
+<h2 id="4-fix-what-the-report-says-then-re-run">4. Fix what the report says, then re-run<a class="anchor" href="#4-fix-what-the-report-says-then-re-run" aria-label="Link to section">#</a></h2>
+<p>Apply the fixes the report listed, nothing more: a short third-person description with a WHEN trigger, author and tags under <code>metadata:</code>, a prerequisites section, a scripts table, and <code>run_script()</code> examples:</p>
+<pre><code class="language-markdown">---
+name: pdf-summarizer
+description: Summarize a PDF into key points and action items. Use when a reader needs the essentials of a long PDF without reading the whole file.
+compatibility: Python 3.10+, no external dependencies
+metadata:
+  author: Tutorial Demo
+  tags: [pdf, summarization, documents]
+---
+
+# PDF Summarizer
+
+Summarize PDF files into key points and action items.
+
+## Prerequisites
+
+- Python 3.10 or later.
+- No external dependencies; the script uses the standard library only.
+
+## Agent Instructions
+
+1. Read this SKILL.md to understand capabilities.
+2. Run `scripts/summarize.py` with the PDF path using run_script().
+3. Return the summary to the user.
+
+## Available Scripts
+
+| Script | Purpose | Arguments |
+| --- | --- | --- |
+| `scripts/summarize.py` | Print a short summary of a PDF | `&lt;pdf-path&gt;` |
+
+## Examples
+
+### Usage
+
+```bash
+# Summarize a PDF with run_script()
+run_script("scripts/summarize.py", ["report.pdf"])
+```</code></pre>
+<p>Re-run the same command:</p>
+<pre><code class="language-bash">uv run --python 3.13 skillevaluator quality-check ../my-skill -r cli -r json -o reports/my-skill-v2</code></pre>
+<pre><code>Overall: 92.5/100 (Grade: A)
+[PASS] Validation passed
+Tier 1: 1 of 1 checks passed; 0 failed, 0 incomplete, 0 skipped, 0 N/A</code></pre>
+<p>Correctness 100, Discoverability 95, Reliability 75, Efficiency 100 — a 23.5-point jump from documentation changes alone. Five warnings remain, and they are the honest remainder: no "## Purpose" section, no mention of error handling, the script may lack error handling, no limitations documented. The tool tells you what "good enough" costs next, and leaves the call to you. This fix-and-rescore loop is the workflow: write the skill, score it, fix the top findings, score again, and stop when the remaining warnings are ones you accept deliberately.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/nvidia-skillevaluator-agent-skills-tutorial/img3.webp" alt="Illustration of two gauges, one low in red and one high in green, with a rising arrow between them"><figcaption>69.0 to 92.5 in one edit cycle — documentation changes, not code. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="5-run-the-full-tier-1-gate">5. Run the full Tier 1 gate<a class="anchor" href="#5-run-the-full-tier-1-gate" aria-label="Link to section">#</a></h2>
+<p><code>quality-check</code> scores one dimension. <code>validate</code> runs the whole Tier 1 gate — schema and repository governance, security, PII, license, secrets, code risk, lint, and harness compatibility — and it is stricter about layout. Run against the bare folder first:</p>
+<pre><code class="language-bash">uv run --python 3.13 skillevaluator validate ../my-skill --tiers 1 -r cli -o reports/my-skill-validate</code></pre>
+<p>It failed: "Skill not in standard location (skills/ or team-skills/)". <code>validate</code> expects a repository layout, not a loose folder. Move the skill into one and re-run:</p>
+<pre><code class="language-bash">mkdir -p repo/skills
+cp -r my-skill repo/skills/pdf-summarizer
+uv run --python 3.13 skillevaluator validate ../repo/skills/pdf-summarizer --tiers 1 -r cli -o reports/repo-validate</code></pre>
+<pre><code>│ Schema &amp; Repository Governance │    PASS    │ 10 checks passed               │
+│ PII Scan                       │    PASS    │ 2 checks passed                │
+│ License Compliance             │    PASS    │ 1 checks passed                │
+│ Secrets Detection              │    PASS    │ 1 checks passed                │
+│ QUALITY                        │    PASS    │ 1 checks passed; quality A     │
+Tier 1: 10 of 11 checks passed; 0 failed, 1 incomplete, 0 skipped, 1 N/A
+  Overall: 92.5/100 (Grade: A)</code></pre>
+<p>One check stayed incomplete: the Security Scan, because SkillSpector 2.13.4 could not be set up in this sandbox — its download of <code>markdown-it-py==4.3.0</code> failed on the sandbox proxy. The tool says so plainly and offers the remedies: check network access, install SkillSpector manually, or pass <code>--skip security</code>. The exit code stays 1 while anything is incomplete, and that is the correct behavior for a gate: it refuses to bless what it did not check. The run also prints a harness-compatibility table — Claude Code, Codex, Copilot CLI, Hermes, OpenClaw, and OpenCode all passed for this skill — which is the closest thing to a portability test in the suite.</p>
+<p>Two flags worth knowing: <code>--min-score</code> moves the pass threshold (default 70), and <code>--no-llm</code> keeps Tier 1 fully deterministic — no model calls, no key, same score every run.</p>
+<h2 id="6-what-tiers-2-and-3-add">6. What Tiers 2 and 3 add<a class="anchor" href="#6-what-tiers-2-and-3-add" aria-label="Link to section">#</a></h2>
+<p>Tier 1 answers "is this skill well written?" Tiers 2 and 3 answer the two questions that follow, and both need a model provider and — for Tier 3 — Docker. They were not run in this sandbox, so treat the commands below as documented, not verified here.</p>
+<p><strong>Tier 2 — Deduplication.</strong> <code>uv run --extra tier2 skillevaluator tier2 ./my-skill</code> embeds the skill's guidance and compares it against a catalog (<code>--catalog ./skill-catalog.json</code> for inter-skill comparison), reporting semantic overlap. The point is practical: in a repo with dozens of skills, two of them usually cover the same ground, and the agent loads both. Tier 2 finds the pair.</p>
+<p><strong>Tier 3 — Live evaluation.</strong> <code>uv run --extra tier3 skillevaluator tier3 ./my-skill</code> runs the agent on real tasks with and without the skill inside a sandbox (Docker by default; Harbor powers the runs) and reports Skill Lift — the skill's added value for a fixed task, harness, workspace, and scorer. This is the measurement the paper is built around: across 947 paired cases from 58 of 64 production skills, mean composite Skill Lift was 0.2134, positive in 72.8% of cases — and the paper's warning is that scan-only gates and LLM judges barely agree (Spearman ρ = 0.14), so a skill can look clean on paper and still not help an agent. Tier 3 is how you find out.</p>
+<p>To enable the model-backed tiers, set a provider. NVIDIA Build is the documented path for free prototyping (eligible Developer Program members):</p>
+<pre><code class="language-bash">export SKILL_EVAL_LLM_PROVIDER=nv_build
+export NVIDIA_API_KEY=&lt;your-key&gt;
+uv run --python 3.13 --extra llm skillevaluator rubric-eval \
+  src/skillevaluator/tier3/reference_skills/text-analyzer \
+  -r cli -r json -o reports/first-build</code></pre>
+<p>That runs the rubric evaluation — model-backed scores and feedback on the same example skill, saved to <code>reports/first-build/skillevaluator-rubric.json</code>. Before committing to the full pipeline, <code>skillevaluator doctor --env-mode docker</code> checks readiness; <code>skillevaluator ci init</code> opens a setup pull request that runs the gate on changed skills. The <code>dashboard</code> command, which compares saved JSON reports in tables, needs the dashboard extra (<code>uv run --extra dashboard skillevaluator dashboard</code>) — it is not installed by default.</p>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p><strong>Use SkillEvaluator when skills are a shared asset.</strong> The moment more than one person writes skills, or one repo holds more than a handful, an untested skill is a silent tax: agents load it, misuse it, and nobody can say why. The keyless Tier 1 check takes seconds and belongs in CI next to the linter.</p>
+<p><strong>Use SkillSpector when the question is security, not quality.</strong> NVIDIA's SkillSpector scans a skill for prompt injection, secret exfiltration, and supply-chain risk — Tier 1 fetches it as part of the security check, and we covered it on its own in October. A skill can score 92.5 on quality and still be unsafe; run both.</p>
+<p><strong>Use an LLM rubric when you want judgment, not just structure.</strong> <code>tier1 --llm</code> adds model-backed rubric scores to the deterministic checks. It costs a model call and needs a provider key, but it catches the things static rules cannot — instructions that are technically complete and practically confusing.</p>
+<p><strong>Use live evaluation when the claim is "this skill helps".</strong> Only Tier 3 measures that, with paired trials and a Skill Lift number. If a skill exists to make an agent faster or more accurate on a real task, a static A grade is not evidence — run the paired trial.</p>
+<p><strong>Skip it for a skill only you will ever use.</strong> A personal scratch skill does not need a gate. But the check is free and takes seconds, so even there it is the cheapest way to catch a missing script table or a description the agent will never trigger on.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Agent skills are code that happens to be written in Markdown, and they have been shipping with the testing practices of a README — none. SkillEvaluator treats them like what they are: versioned artifacts with a schema, a score, and a gate. The useful part is not the grade; it is the fix list attached to every deduction, and the fact that the cheapest tier needs no key, no GPU, and no Docker. Our demo skill went from 69.0 to 92.5 in one edit cycle, and the remaining five warnings are a to-do list, not a mystery.</p>
+<p>The workflow to keep: score every skill before it lands, keep the threshold at 70 until your catalog earns a higher one, and put <code>validate</code> in CI so the gate runs on every pull request. When a skill matters enough to claim it improves results, run Tier 3 and ask for the Skill Lift number — that is the only score that says the skill works, rather than that it reads well.</p>
+<p>Sources: the <a href="https://github.com/NVIDIA/SkillEvaluator" rel="nofollow">SkillEvaluator repository</a>, <a href="https://docs.nvidia.com/skills/skillevaluator/" rel="nofollow">NVIDIA's SkillEvaluator documentation</a>, and the paper <a href="https://arxiv.org/abs/2608.20614" rel="nofollow">"Evaluating Skills, Not Just Agents" (arXiv:2608.20614)</a>. Star counts and trending placement as observed November 15, 2026; version 0.9.0 and all command outputs verified by running them in our sandbox.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="nvidia-skillevaluator-agent-skills-tutorial"></div><div class="comments" data-comments="nvidia-skillevaluator-agent-skills-tutorial"></div></div>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to use SkillEvaluator?</h3><p>No, not for Tier 1. The quality check, schema, PII, license, secrets, and lint checks all run offline with no account and no key. Tiers 2 and 3 need a model provider (NVIDIA Build offers free prototyping for Developer Program members) and, for Tier 3, Docker for the live-evaluation sandbox.</p><h3>Why did validate fail on my skill folder?</h3><p><code>validate</code> expects a repository layout: the skill must live under a <code>skills/</code> or <code>team-skills/</code> directory. A loose folder fails the schema and repository governance check with “Skill not in standard location”. Move the skill into <code>repo/skills/&lt;name&gt;/</code> and re-run.</p><h3>Does a passing score mean my skill actually helps an agent?</h3><p>No. Tier 1 measures authoring quality — structure, discoverability, reliability, efficiency. Only Tier 3 measures whether the skill helps a live agent, with paired trials and a Skill Lift number. The paper behind the tool found scan-only gates and LLM judges barely agree (Spearman ρ = 0.14), so a clean static score is not evidence of usefulness.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/skills-cli-install-agent-skills-tutorial/">Stop copy-pasting SKILL.md files: install any agent skill with one command</a></li><li><a href="/articles/anthropic-official-agent-skills-tutorial/">Hands-on with Anthropic’s official Agent Skills: Word, Excel, PowerPoint and PDF, done by Claude Code</a></li><li><a href="/articles/nvidia-skillspector-skill-security-scanner-tutorial/">Scan every skill before you install it: hands-on with NVIDIA’s SkillSpector</a></li><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
