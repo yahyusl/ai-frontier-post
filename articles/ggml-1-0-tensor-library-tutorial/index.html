@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp — AI Frontier Post</title>
+<meta name="description" content="ggml 1.0.0 shipped on November 13 — the first stable release of the tensor library that powers llama.cpp and Ollama. Build it from source in about two minutes, run a two-layer neural net on CPU, quantize the weights to Q8_0, save them as GGUF, and time a 1024×1024 matmul. No GPU, no API key, no account.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/ggml-1-0-tensor-library-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp">
+<meta property="og:description" content="ggml 1.0.0 shipped on November 13 — the first stable release of the tensor library that powers llama.cpp and Ollama. Build it from source in about two minutes, run a two-layer neural net on CPU, quantize the weights to Q8_0, save them as GGUF, and time a 1024×1024 matmul. No GPU, no API key, no account.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/ggml-1-0-tensor-library-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/ggml-1-0-tensor-library-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-15">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp", "description": "ggml 1.0.0 shipped on November 13 — the first stable release of the tensor library that powers llama.cpp and Ollama. Build it from source in about two minutes, run a two-layer neural net on CPU, quantize the weights to Q8_0, save them as GGUF, and time a 1024×1024 matmul. No GPU, no API key, no account.", "datePublished": "2026-11-15", "dateModified": "2026-11-15", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/ggml-1-0-tensor-library-tutorial/"}, "image": "https://aifrontierpost.com/articles/ggml-1-0-tensor-library-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp", "description": "ggml 1.0.0 shipped on November 13 — the first stable release of the tensor library that powers llama.cpp and Ollama. Build it from source in about two minutes, run a two-layer neural net on CPU, quantize the weights to Q8_0, save them as GGUF, and time a 1024×1024 matmul. No GPU, no API key, no account.", "step": [{"@type": "HowToStep", "name": "Step 1: Build ggml 1.0.0 from source", "text": "Clone the v1.0.0 tag, configure a Release build with CMake, and build the CPU backend plus examples in about two minutes."}, {"@type": "HowToStep", "name": "Step 2: Run the bundled matmul example", "text": "Run build/bin/simple-backend and confirm the output matches the README's 4x3 matrix exactly."}, {"@type": "HowToStep", "name": "Step 3: Write a two-layer neural net", "text": "Save mlp_ggml.cpp, compile it against the built libraries, and run it: the MLP outputs [0.495000, -0.195000], matching the NumPy reference."}, {"@type": "HowToStep", "name": "Step 4: Quantize the weights to Q8_0", "text": "The same binary quantizes a 64x64 matrix from 16,384 to 4,352 bytes and measures the output error against the float32 original."}, {"@type": "HowToStep", "name": "Step 5: Save the weights as GGUF", "text": "Write the four MLP tensors to mlp.gguf and read them back: version 3, four tensors, names, shapes, and types intact."}, {"@type": "HowToStep", "name": "Step 6: Time a 1024x1024 matmul", "text": "Ten iterations average 130.8 ms each, 16.42 GFLOPS on this sandbox, with result[0] exactly 0.204800."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything here runs on the CPU backend, which is the default when no GPU backend is enabled at configure time. The CUDA, Metal, and Vulkan backends are separate build options; on a machine with a GPU, ggml_backend_init_best() would pick it automatically."}}, {"@type": "Question", "name": "Why pin v1.0.0 instead of building master?", "acceptedAnswer": {"@type": "Answer", "text": "Because 1.0.0 prunes the deprecated API and removes operators that 0.x code may rely on. Building master gives you a moving target; building the tag gives you the exact API this tutorial was verified against, including the commit 417a024 printed by CMake at configure time."}}, {"@type": "Question", "name": "Can I use ggml from Python?", "acceptedAnswer": {"@type": "Answer", "text": "There is a ctypes-based binding in examples/python/ in the repository, but it is an example, not a supported package. For Python, the maintained path is llama-cpp-python, which wraps libllama — which itself sits on ggml."}}, {"@type": "Question", "name": "How bad is Q8_0 quantization, really?", "acceptedAnswer": {"@type": "Answer", "text": "On the 64x64 toy matrix in this tutorial the worst output error was 0.0166 on outputs spanning +/-0.39. Real models quantize much larger matrices, where per-element errors partly cancel, and Q8_0 is the gentlest of the common formats — Q4_0 and Q4_K are smaller and lossier. The trade-off is always memory against error, and you measure it the way Step 4 does: same input, both precisions, compare."}}, {"@type": "Question", "name": "Is the GGUF file from Step 5 loadable by llama.cpp?", "acceptedAnswer": {"@type": "Answer", "text": "Structurally, yes — it is a valid GGUF version 3 file with named float32 tensors. Practically, llama.cpp expects a full model architecture with specific tensor names and metadata, so it will not run as a model. Treat it as proof that you can produce the format, not as a model."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp</h1>
+<p class="lede">ggml 1.0.0 shipped on November 13 — the first stable release of the tensor library that powers llama.cpp and Ollama. Build it from source in about two minutes, run a two-layer neural net on CPU, quantize the weights to Q8_0, save them as GGUF, and time a 1024×1024 matmul. No GPU, no API key, no account.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 15, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> ggml 1.0.0 shipped on November 13 — the first stable release of the tensor library underneath llama.cpp and Ollama. This tutorial builds it from source in about two minutes, runs a two-layer neural network on CPU, and checks the result against NumPy: the outputs match to five decimal places. Then it quantizes the weights to Q8_0 (3.76x smaller, worst error 0.0166), saves them as a valid GGUF file, and times a 1024×1024 matmul at 16.42 GFLOPS. No GPU, no API key, no account.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>ggml 1.0.0 was published November 13, 2026 — the first stable release after four years at 0.x. It prunes the deprecated API and the legacy DIAG_MASK ops, adds FP8 support and a YaRN truncation control, and ships backend performance work across CUDA, Metal, Vulkan, SYCL, and CPU. The repo has 15,880 stars and was number 8 on GitHub daily trending on November 15.</li><li>Build from source with CMake: configure prints ggml version 1.0.0, commit 417a024; the Release build took 2m14s on a 4-vCPU sandbox. The bundled simple-backend example reproduces the README's matrix exactly.</li><li>The two-layer MLP (4 inputs, 8 hidden ReLU units, 2 outputs) returns [0.495000, -0.195000] — identical to the NumPy reference to five decimal places. Five of the eight hidden units output zero for this input.</li><li>Q8_0 quantization shrinks a 64x64 weight matrix from 16,384 to 4,352 bytes (3.76x) with a worst output error of 0.0166 on outputs spanning ±0.39. The GGUF roundtrip writes a 576-byte version-3 file with all four tensors and reads it back intact.</li><li>A 1024x1024 float32 matmul runs at 130.8 ms per iteration — 16.42 GFLOPS on this sandbox — with result[0] = 0.204800, exactly the expected value.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/ggml-1-0-tensor-library-tutorial/cover.webp" alt="Three glowing matrix grids in teal and amber, connected by thin lines of light on a dark background"><figcaption>AI-generated cover illustration. Two matrices multiply into a third — the operation this tutorial runs for real.</figcaption></figure>
+<div class="article-body"><p>Every local LLM you have ever run on a laptop sits on top of the same piece of C code. llama.cpp, Ollama, LM Studio, and a dozen inference engines all do their tensor math through ggml — a small, dependency-free tensor library that has lived at version 0.x since 2022. On November 13 it shipped <strong>ggml 1.0.0</strong>, its first stable release, and the same day it climbed to number 8 on GitHub's daily trending list. The repository has 15,880 stars and 2,018 forks, and the 1.0 release is the reason it is moving now: it prunes the deprecated public API, removes the legacy <code>DIAG_MASK</code> operators, adds FP8 tensor support and a configurable YaRN truncation control, and lands a round of backend performance work across CUDA, Metal, Vulkan, SYCL, and CPU.</p>
+<p>This tutorial does the thing the release notes do not: it puts the library in your hands. You will build ggml 1.0.0 from source, run its bundled matrix-multiplication example, write a two-layer neural network against the 1.0 API, quantize its weights to Q8_0, save them as a GGUF file, and time a 1024&#215;1024 matmul. Everything runs on CPU. There is no GPU, no API key, and no account anywhere in this tutorial, and every number below comes from a run on a plain Linux sandbox — the commands are given so you can reproduce each one.</p>
+
+<h2 id="what-you-will-need">What you will need</h2>
+<ul>
+<li>A Linux or macOS machine. The steps below were run on Linux; macOS needs only the usual Xcode command-line tools in place of <code>apt</code>.</li>
+<li><code>git</code>, <code>cmake</code> 3.28 or newer, and a C/C++ compiler (<code>gcc</code> 13 or <code>clang</code> 16 or newer). Check with <code>cmake --version</code> and <code>gcc --version</code>.</li>
+<li>Python 3 with NumPy, used once to cross-check the network's output. Any NumPy from the last three years works.</li>
+<li>About 60 MB of disk for the source and build, and roughly 3 minutes for the build on a 4-vCPU machine. No model weights are downloaded at any point — the largest file this tutorial creates is a 576-byte GGUF.</li>
+<li>Nothing else. No GPU, no Hugging Face account, no API key, no Docker.</li>
+</ul>
+<p>One warning up front: 1.0 is a breaking release. Code written against the 0.x API — including anything that calls the removed <code>DIAG_MASK_INF</code> / <code>DIAG_MASK_ZERO</code> ops or a deprecated function — may not compile against 1.0.0. That is the point of a 1.0, and it is also why this tutorial pins the <code>v1.0.0</code> tag everywhere instead of tracking <code>master</code>.</p>
+
+<h2 id="step-1-build-ggml-1-0-0-from-source">Step 1: Build ggml 1.0.0 from source</h2>
+<p>Clone the tagged release, not <code>master</code>, and configure a Release build with the tests off. The defaults build the CPU backend; CUDA, Metal, and the other backends stay off unless you ask for them.</p>
+<pre><code class="language-bash">git clone --depth 1 --branch v1.0.0 https://github.com/ggml-org/ggml.git
+cd ggml
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_BUILD_TESTS=OFF
+cmake --build build --config Release -j 8</code></pre>
+<p>Configure takes about two seconds. Look for these three lines in its output — they confirm you have the right code:</p>
+<pre><code class="language-text">-- ggml version: 1.0.0
+-- ggml commit:  417a024
+-- Including CPU backend</code></pre>
+<p>The build itself took 2 minutes 14 seconds with <code>-j 2</code> on a 4-vCPU sandbox (AMD EPYC, <code>-march=native</code>, OpenMP detected and enabled). With <code>-j 8</code> on your own machine it will be faster. It produces three shared libraries in <code>build/src/</code> — <code>libggml.so</code>, <code>libggml-cpu.so</code>, <code>libggml-base.so</code> — plus the bundled examples in <code>build/bin/</code>. If the build fails, the usual cause is an old CMake: ggml 1.0 needs 3.28 or newer, and Ubuntu 24.04 ships exactly 3.28.3.</p>
+
+<h2 id="step-2-run-the-bundled-matmul-example">Step 2: Run the bundled matmul example</h2>
+<p>Before writing any code, run the example the README points to. It multiplies a 4&#215;2 matrix by a 2&#215;3 matrix through the backend scheduler — the same code path your program will use in Step 3.</p>
+<pre><code class="language-bash">./build/bin/simple-backend</code></pre>
+<p>Expected output, exactly:</p>
+<pre><code class="language-text">mul mat (4 x 3) (transposed result):
+[ 60.00 55.00 50.00 110.00
+ 90.00 54.00 54.00 126.00
+ 42.00 29.00 28.00 64.00 ]</code></pre>
+<p>If your numbers match, the library, the backend, and the scheduler all work on your machine. If they do not match, stop here — nothing later in this tutorial will work either, and the problem is in the build, not in your code. Keep this binary around: it is the fastest way to check whether a later change broke the install.</p>
+
+<h2 id="step-3-write-a-two-layer-neural-net">Step 3: Write a two-layer neural net</h2>
+<p>The network is deliberately tiny: 4 inputs, 8 hidden units with ReLU, 2 outputs. It is small enough to check by hand and big enough to exercise the four calls that make up most real ggml programs — create tensors, wire them into a graph, hand the graph to the backend scheduler, and read the result back.</p>
+<p>Two ggml conventions trip up first-time users, so get them straight before you read the code. First, a tensor's shape is <code>(ne0, ne1)</code> where <code>ne0</code> is the fastest-varying dimension, and data is filled row-major: a weight matrix with 8 output rows and 4 input columns is created as <code>ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4, 8)</code> and filled from an 8&#215;4 row-major array. Second, <code>ggml_mul_mat(A, B)</code> computes A times B-transposed, so the call reads <code>mul_mat(weights, input)</code>, not the other way round. Both conventions are visible in <code>examples/simple/simple-backend.cpp</code> in the repository.</p>
+<p>Save this as <code>mlp_ggml.cpp</code> next to the checkout. It runs four small demos in one binary — the MLP forward pass, a Q8_0 quantization comparison, a GGUF roundtrip, and a matmul benchmark — so the later steps reuse this file instead of asking you to write three more programs.</p>
+<pre><code class="language-cpp">// mlp_ggml.cpp — tiny 2-layer MLP on ggml 1.0.0 (CPU backend), Q8_0 quantization,
+// GGUF roundtrip, and a 1024x1024 matmul timing. All API calls verified against
+// the v1.0.0 headers and examples/simple/simple-backend.cpp.
+#include &quot;ggml.h&quot;
+#include &quot;ggml-backend.h&quot;
+#include &quot;gguf.h&quot;
+
+#include &lt;cmath&gt;
+#include &lt;functional&gt;
+#include &lt;cstdio&gt;
+#include &lt;cstring&gt;
+#include &lt;vector&gt;
+
+static void log_cb(ggml_log_level level, const char * text, void * user_data) {
+    (void) level; (void) user_data;
+    fputs(text, stderr); fflush(stderr);
+}
+
+struct Runner {
+    ggml_backend_t backend = nullptr;
+    ggml_backend_t cpu = nullptr;
+    ggml_backend_sched_t sched = nullptr;
+    std::vector&lt;uint8_t&gt; buf;
+
+    void init() {
+        ggml_time_init();
+        ggml_log_set(log_cb, nullptr);
+        ggml_backend_load_all();
+        backend = ggml_backend_init_best();
+        cpu = ggml_backend_init_by_type(GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+        ggml_backend_t backends[2] = { backend, cpu };
+        sched = ggml_backend_sched_new(backends, nullptr, 2, GGML_DEFAULT_GRAPH_SIZE, false, true);
+    }
+
+    // Build a no-alloc context + graph from a builder lambda; returns graph + ctx to free later.
+    struct ggml_cgraph * build(std::vector&lt;uint8_t&gt; &amp; buf_store, struct ggml_context *&amp; ctx_out,
+                                std::function&lt;struct ggml_tensor *(struct ggml_context *)&gt; build_fn) {
+        size_t buf_size = ggml_tensor_overhead() * GGML_DEFAULT_GRAPH_SIZE + ggml_graph_overhead();
+        buf_store.resize(buf_size);
+        struct ggml_init_params params = { buf_size, buf_store.data(), true };
+        struct ggml_context * ctx = ggml_init(params);
+        ctx_out = ctx;
+        struct ggml_cgraph * gf = ggml_new_graph(ctx);
+        struct ggml_tensor * out = build_fn(ctx);
+        ggml_build_forward_expand(gf, out);
+        ggml_free(ctx);
+        return gf;
+    }
+
+    void run(struct ggml_cgraph * gf) {
+        ggml_backend_sched_reset(sched);
+        ggml_backend_sched_alloc_graph(sched, gf);
+        ggml_backend_sched_graph_compute(sched, gf);
+    }
+};
+
+// ---- fixed weights (row-major: row = output neuron) ----
+static float X[4]   = { 0.5f, -1.0f, 2.0f, 0.25f };
+static float W1[32] = {  // 8x4
+     0.1f,  0.2f, -0.3f,  0.4f,
+    -0.5f,  0.6f,  0.7f, -0.8f,
+     0.9f, -1.0f,  0.3f,  0.2f,
+     0.4f,  0.4f, -0.4f, -0.4f,
+    -0.2f, -0.3f,  0.5f,  0.6f,
+     1.0f,  0.0f, -0.5f,  0.5f,
+     0.3f,  0.3f,  0.3f, -0.9f,
+    -0.7f,  0.8f,  0.1f,  0.2f };
+static float B1[8]  = { 0.1f, -0.2f, 0.0f, 0.3f, -0.1f, 0.2f, -0.3f, 0.1f };
+static float W2[16] = {  // 2x8
+     0.5f, -0.4f,  0.3f,  0.2f, -0.1f,  0.6f, -0.2f,  0.1f,
+    -0.3f,  0.2f, -0.5f,  0.4f,  0.7f, -0.6f,  0.1f, -0.2f };
+static float B2[2]  = { 0.05f, -0.05f };
+
+static struct ggml_tensor * g_x, * g_w1, * g_b1, * g_w2, * g_b2;
+static struct ggml_tensor * mlp_build(struct ggml_context * ctx) {
+    g_x  = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4, 1);
+    g_w1 = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4, 8);
+    g_b1 = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 8, 1);
+    g_w2 = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 8, 2);
+    g_b2 = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 2, 1);
+    struct ggml_tensor * h = ggml_relu(ctx, ggml_add(ctx, ggml_mul_mat(ctx, g_w1, g_x), g_b1));
+    return ggml_add(ctx, ggml_mul_mat(ctx, g_w2, h), g_b2);
+}
+
+int main() {
+    Runner r; r.init();
+    printf(&quot;backend: %s\n&quot;, ggml_backend_name(r.backend));
+
+    // ---- Demo 1: MLP forward pass ----
+    struct ggml_context * ctx = nullptr;
+    std::vector&lt;uint8_t&gt; buf;
+    struct ggml_cgraph * gf = r.build(buf, ctx, mlp_build);
+    ggml_backend_sched_reset(r.sched);
+    ggml_backend_sched_alloc_graph(r.sched, gf);
+    ggml_backend_tensor_set(g_x,  X,  0, ggml_nbytes(g_x));
+    ggml_backend_tensor_set(g_w1, W1, 0, ggml_nbytes(g_w1));
+    ggml_backend_tensor_set(g_b1, B1, 0, ggml_nbytes(g_b1));
+    ggml_backend_tensor_set(g_w2, W2, 0, ggml_nbytes(g_w2));
+    ggml_backend_tensor_set(g_b2, B2, 0, ggml_nbytes(g_b2));
+    ggml_backend_sched_graph_compute(r.sched, gf);
+    struct ggml_tensor * y = ggml_graph_node(gf, -1);
+    float y_out[2];
+    ggml_backend_tensor_get(y, y_out, 0, ggml_nbytes(y));
+    printf(&quot;MLP output: [%.6f, %.6f]\n&quot;, y_out[0], y_out[1]);
+
+    // ---- Demo 2: Q8_0 quantization of a 64x64 matmul ----
+    const int N = 64;
+    std::vector&lt;float&gt; wbig(N * N), xbig(N);
+    for (int i = 0; i &lt; N; ++i)
+        for (int j = 0; j &lt; N; ++j)
+            wbig[i * N + j] = 0.5f * sinf(i * 0.7f + j * 1.3f);
+    for (int j = 0; j &lt; N; ++j) xbig[j] = 0.7f * cosf(j * 0.9f);
+
+    printf(&quot;Q8_0: block=%lld type_size=%zu bytes\n&quot;,
+           (long long) ggml_blck_size(GGML_TYPE_Q8_0), ggml_type_size(GGML_TYPE_Q8_0));
+    const size_t qbytes = (size_t) N * N / ggml_blck_size(GGML_TYPE_Q8_0) * ggml_type_size(GGML_TYPE_Q8_0);
+    std::vector&lt;uint8_t&gt; wq(qbytes);
+    size_t qn = ggml_quantize_chunk(GGML_TYPE_Q8_0, wbig.data(), wq.data(), 0, N, N, nullptr);
+    printf(&quot;quantized 64x64 F32 (%zu bytes) -&gt; Q8_0 (%zu bytes, ggml_quantize_chunk returned %zu)\n&quot;,
+           (size_t) N * N * 4, qbytes, qn);
+
+    // F32 reference graph
+    struct ggml_tensor * q_w, * q_x;
+    auto quant_f32 = [&amp;](struct ggml_context * c) {
+        q_w = ggml_new_tensor_2d(c, GGML_TYPE_F32, N, N);
+        q_x = ggml_new_tensor_2d(c, GGML_TYPE_F32, N, 1);
+        return ggml_mul_mat(c, q_w, q_x);
+    };
+    std::vector&lt;uint8_t&gt; buf2; struct ggml_context * ctx2 = nullptr;
+    struct ggml_cgraph * gf2 = r.build(buf2, ctx2, quant_f32);
+    ggml_backend_sched_reset(r.sched);
+    ggml_backend_sched_alloc_graph(r.sched, gf2);
+    ggml_backend_tensor_set(q_w, wbig.data(), 0, ggml_nbytes(q_w));
+    ggml_backend_tensor_set(q_x, xbig.data(), 0, ggml_nbytes(q_x));
+    ggml_backend_sched_graph_compute(r.sched, gf2);
+    std::vector&lt;float&gt; y_f32(N);
+    ggml_backend_tensor_get(ggml_graph_node(gf2, -1), y_f32.data(), 0, N * sizeof(float));
+
+    // Q8_0 graph
+    auto quant_q8 = [&amp;](struct ggml_context * c) {
+        q_w = ggml_new_tensor_2d(c, GGML_TYPE_Q8_0, N, N);
+        q_x = ggml_new_tensor_2d(c, GGML_TYPE_F32, N, 1);
+        return ggml_mul_mat(c, q_w, q_x);
+    };
+    std::vector&lt;uint8_t&gt; buf3; struct ggml_context * ctx3 = nullptr;
+    struct ggml_cgraph * gf3 = r.build(buf3, ctx3, quant_q8);
+    ggml_backend_sched_reset(r.sched);
+    ggml_backend_sched_alloc_graph(r.sched, gf3);
+    ggml_backend_tensor_set(q_w, wq.data(), 0, ggml_nbytes(q_w));
+    ggml_backend_tensor_set(q_x, xbig.data(), 0, ggml_nbytes(q_x));
+    ggml_backend_sched_graph_compute(r.sched, gf3);
+    std::vector&lt;float&gt; y_q8(N);
+    ggml_backend_tensor_get(ggml_graph_node(gf3, -1), y_q8.data(), 0, N * sizeof(float));
+
+    double max_abs = 0, max_rel = 0;
+    for (int i = 0; i &lt; N; ++i) {
+        double d = fabs((double) y_q8[i] - (double) y_f32[i]);
+        if (d &gt; max_abs) max_abs = d;
+        double rel = d / (fabs((double) y_f32[i]) + 1e-9);
+        if (rel &gt; max_rel) max_rel = rel;
+    }
+    printf(&quot;Q8_0 vs F32 matmul: max abs diff %.6f, max rel diff %.6f\n&quot;, max_abs, max_rel);
+    printf(&quot;y_f32[0..2] = %.6f %.6f %.6f | y_q8[0..2] = %.6f %.6f %.6f\n&quot;,
+           y_f32[0], y_f32[1], y_f32[2], y_q8[0], y_q8[1], y_q8[2]);
+
+    // ---- Demo 3: GGUF roundtrip ----
+    {
+        struct ggml_init_params p = { 16 * 1024 * 1024, nullptr, false };
+        struct ggml_context * wctx = ggml_init(p);
+        auto mk = [&amp;](const char * name, int64_t ne0, int64_t ne1, const float * data) {
+            struct ggml_tensor * t = ggml_new_tensor_2d(wctx, GGML_TYPE_F32, ne0, ne1);
+            ggml_set_name(t, name);
+            memcpy(t-&gt;data, data, ggml_nbytes(t));
+            return t;
+        };
+        struct ggml_tensor * tw1 = mk(&quot;mlp.w1&quot;, 4, 8, W1);
+        struct ggml_tensor * tb1 = mk(&quot;mlp.b1&quot;, 8, 1, B1);
+        struct ggml_tensor * tw2 = mk(&quot;mlp.w2&quot;, 8, 2, W2);
+        struct ggml_tensor * tb2 = mk(&quot;mlp.b2&quot;, 2, 1, B2);
+        struct gguf_context * gctx = gguf_init_empty();
+        gguf_set_val_str(gctx, &quot;general.name&quot;, &quot;tiny-mlp-ggml-1.0&quot;);
+        gguf_set_val_str(gctx, &quot;general.architecture&quot;, &quot;tiny-mlp&quot;);
+        gguf_add_tensor(gctx, tw1);
+        gguf_add_tensor(gctx, tb1);
+        gguf_add_tensor(gctx, tw2);
+        gguf_add_tensor(gctx, tb2);
+        bool ok = gguf_write_to_file(gctx, &quot;mlp.gguf&quot;, false);
+        printf(&quot;GGUF write mlp.gguf: %s\n&quot;, ok ? &quot;ok&quot; : &quot;FAILED&quot;);
+        gguf_free(gctx);
+        ggml_free(wctx);
+
+        struct gguf_init_params rp = { /*.no_alloc=*/ true, /*.ctx=*/ nullptr };
+        struct gguf_context * rctx = gguf_init_from_file(&quot;mlp.gguf&quot;, rp);
+        if (rctx) {
+            printf(&quot;GGUF read back: version=%u n_tensors=%lld\n&quot;,
+                   gguf_get_version(rctx), (long long) gguf_get_n_tensors(rctx));
+            for (int64_t i = 0; i &lt; gguf_get_n_tensors(rctx); ++i) {
+                const int64_t * ne = gguf_get_tensor_ne(rctx, i);
+                printf(&quot;  tensor %lld: %s type=%s ne=[%lld,%lld] size=%zu\n&quot;,
+                       (long long) i, gguf_get_tensor_name(rctx, i),
+                       ggml_type_name(gguf_get_tensor_type(rctx, i)),
+                       (long long) ne[0], (long long) ne[1],
+                       gguf_get_tensor_size(rctx, i));
+            }
+            gguf_free(rctx);
+        } else {
+            printf(&quot;GGUF read back: FAILED\n&quot;);
+        }
+    }
+
+    // ---- Demo 4: 1024x1024 matmul timing ----
+    {
+        const int M = 1024;
+        std::vector&lt;float&gt; a(M * M, 0.01f), b(M * M, 0.02f);
+        struct ggml_tensor * t_a, * t_b;
+        auto big = [&amp;](struct ggml_context * c) {
+            t_a = ggml_new_tensor_2d(c, GGML_TYPE_F32, M, M);
+            t_b = ggml_new_tensor_2d(c, GGML_TYPE_F32, M, M);
+            return ggml_mul_mat(c, t_a, t_b);
+        };
+        std::vector&lt;uint8_t&gt; buf4; struct ggml_context * ctx4 = nullptr;
+        struct ggml_cgraph * gf4 = r.build(buf4, ctx4, big);
+        ggml_backend_sched_reset(r.sched);
+        ggml_backend_sched_alloc_graph(r.sched, gf4);
+        ggml_backend_tensor_set(t_a, a.data(), 0, ggml_nbytes(t_a));
+        ggml_backend_tensor_set(t_b, b.data(), 0, ggml_nbytes(t_b));
+        const int iters = 10;
+        int64_t t0 = ggml_time_us();
+        for (int i = 0; i &lt; iters; ++i) ggml_backend_sched_graph_compute(r.sched, gf4);
+        int64_t t1 = ggml_time_us();
+        double ms = (t1 - t0) / 1000.0 / iters;
+        double gflops = 2.0 * M * M * M / (ms / 1000.0) / 1e9;
+        printf(&quot;1024x1024 F32 matmul: %.3f ms/iter, %.2f GFLOPS (avg of %d)\n&quot;, ms, gflops, iters);
+        float first = 0;
+        ggml_backend_tensor_get(ggml_graph_node(gf4, -1), &amp;first, 0, sizeof(float));
+        printf(&quot;  result[0] = %.6f (expect %.6f)\n&quot;, first, (float)(M * 0.01 * 0.02));
+    }
+
+    ggml_backend_sched_free(r.sched);
+    ggml_backend_free(r.backend);
+    ggml_backend_free(r.cpu);
+    ggml_quantize_free();
+    return 0;
+}
+</code></pre>
+<p>Compile it against the libraries you just built. Step 1 left your shell inside the checkout, so step back out first — the program lives next to the checkout, not inside it. Set <code>GGML_DIR</code> to the checkout directory — the <code>build/src</code> path holds the shared libraries, and the <code>-rpath</code> flag bakes that path into the binary so you do not need <code>LD_LIBRARY_PATH</code> every time you run it:</p>
+<pre><code class="language-bash">cd ..
+GGML_DIR=$PWD/ggml
+g++ -O2 -I$GGML_DIR/include mlp_ggml.cpp -o mlp_ggml \
+  -L$GGML_DIR/build/src -lggml -lggml-cpu -lggml-base \
+  -Wl,-rpath,$GGML_DIR/build/src -fopenmp -lm
+./mlp_ggml</code></pre>
+<p>The first two lines of output are the MLP result:</p>
+<pre><code class="language-text">backend: CPU
+MLP output: [0.495000, -0.195000]</code></pre>
+<p>Verify that against NumPy before you trust anything else in this tutorial. The same weights, in float64:</p>
+<pre><code class="language-python">import numpy as np
+x  = np.array([0.5, -1.0, 2.0, 0.25])
+W1 = np.array([
+ [ 0.1,  0.2, -0.3,  0.4],
+ [-0.5,  0.6,  0.7, -0.8],
+ [ 0.9, -1.0,  0.3,  0.2],
+ [ 0.4,  0.4, -0.4, -0.4],
+ [-0.2, -0.3,  0.5,  0.6],
+ [ 1.0,  0.0, -0.5,  0.5],
+ [ 0.3,  0.3,  0.3, -0.9],
+ [-0.7,  0.8,  0.1,  0.2]])
+b1 = np.array([0.1, -0.2, 0.0, 0.3, -0.1, 0.2, -0.3, 0.1])
+W2 = np.array([
+ [ 0.5, -0.4,  0.3,  0.2, -0.1,  0.6, -0.2,  0.1],
+ [-0.3,  0.2, -0.5,  0.4,  0.7, -0.6,  0.1, -0.2]])
+b2 = np.array([0.05, -0.05])
+h = np.maximum(W1 @ x + b1, 0)
+print(W2 @ h + b2)   # [ 0.495 -0.195]</code></pre>
+<p>NumPy prints <code>[ 0.495 -0.195]</code>. The ggml output matches to five decimal places, which is the float32 rounding you should expect — the C++ side computes in float32, NumPy here in float64.</p>
+<p>The hidden layer is worth a closer look, because it shows what ReLU actually does to a real input. The pre-activation values are <code>[-0.55, 0.15, 2.1, -0.8, 1.25, -0.175, -0.075, -0.8]</code>; after ReLU they become <code>[0, 0.15, 2.1, 0, 1.25, 0, 0, 0]</code>. Five of the eight hidden units are dead for this input — their weights contribute nothing to the output. That is normal for a randomly-initialized toy network, and it is the same dead-unit behaviour you would see in a real model, just small enough to inspect by eye.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/ggml-1-0-tensor-library-tutorial/img2.webp" alt="Diagram of the toy network: four input nodes, eight hidden nodes with five greyed out by ReLU, two output nodes showing 0.495 and -0.195"><figcaption>Measured diagram. The hidden layer shows the post-ReLU values for the input [0.5, -1, 2, 0.25]: five of eight units output zero.</figcaption></figure>
+<h2 id="step-4-quantize-the-weights-to-q8-0">Step 4: Quantize the weights to Q8_0</h2>
+<p>Quantization is the reason ggml exists in its current form: it is what lets a 7-billion-parameter model run on a laptop. The same binary already ran the quantization demo — look at the next block of output:</p>
+<pre><code class="language-text">Q8_0: block=32 type_size=34 bytes
+quantized 64x64 F32 (16384 bytes) -&gt; Q8_0 (4352 bytes, ggml_quantize_chunk returned 4352)
+Q8_0 vs F32 matmul: max abs diff 0.016559, max rel diff 0.217393
+y_f32[0..2] = 0.041505 0.282341 0.390389 | y_q8[0..2] = 0.050275 0.281813 0.393775</code></pre>
+<p>Here is what happened. A 64&#215;64 weight matrix (4,096 floats, 16,384 bytes) was quantized to Q8_0 with <code>ggml_quantize_chunk</code>. Q8_0 stores each block of 32 floats as one float scale plus 32 int8 values — 34 bytes per block, confirmed by the <code>ggml_blck_size</code> and <code>ggml_type_size</code> calls in the program. The quantized matrix is 4,352 bytes: 3.76&#215; smaller than the float32 original. Then the same 64-element input was multiplied by both versions, and the outputs compared.</p>
+<p>The error is the honest part, so read it carefully. The largest absolute difference across all 64 outputs is 0.0166. The outputs themselves span roughly &#177;0.39, so that worst-case error is 4.2% of the peak output magnitude. The "max rel diff" of 0.217 looks alarming until you notice it is a ratio against outputs near zero — an absolute error of 0.009 on an output of 0.04 is a 21% relative error that changes nothing. For a toy matrix this error is larger than you would see in a real model, where dot products run over thousands of terms and the per-element errors partly cancel; but the direction is right, and it is the same trade-off every GGUF model makes: roughly a quarter of the memory for a few percent of numerical noise.</p>
+<p>Two practical rules fall out of this. First, Q8_0 rows must be a multiple of the 32-element block size — a 4-element row cannot be quantized, which is why the demo uses a 64&#215;64 matrix instead of the MLP's 8&#215;4 weights. Second, quantization is a property of the stored weights, not the computation: the program builds the same <code>ggml_mul_mat</code> graph with a Q8_0 tensor on one side and a float32 tensor on the other, and the backend handles the mixed types. That is exactly how llama.cpp serves a Q8_0 model.</p>
+
+<h2 id="step-5-save-the-weights-as-gguf">Step 5: Save the weights as GGUF</h2>
+<p>GGUF is the file format ggml's tensors travel in — it is what you download from Hugging Face when you fetch a <code>.gguf</code> model. The program writes the MLP's four tensors to <code>mlp.gguf</code> and reads them straight back:</p>
+<pre><code class="language-text">GGUF write mlp.gguf: ok
+GGUF read back: version=3 n_tensors=4
+  tensor 0: mlp.w1 type=f32 ne=[4,8] size=128
+  tensor 1: mlp.b1 type=f32 ne=[8,1] size=32
+  tensor 2: mlp.w2 type=f32 ne=[8,2] size=64
+  tensor 3: mlp.b2 type=f32 ne=[2,1] size=8</code></pre>
+<p>The file is 576 bytes: a small header, two metadata strings (<code>general.name</code> and <code>general.architecture</code>), and the four tensors with their names, shapes, and types. The read-back uses <code>gguf_init_from_file</code> with <code>no_alloc</code> set, which parses the metadata without loading tensor data — the same call a model loader makes before deciding whether it wants the file at all. The write path follows the pattern in the repository's own <code>examples/mnist/mnist-common.cpp</code>: duplicate the tensors into an allocating context, name them with <code>ggml_set_name</code>, add them with <code>gguf_add_tensor</code>, and write with <code>gguf_write_to_file</code>.</p>
+<p>This is the point where ggml stops being an abstract library and becomes infrastructure you can touch: the file you just wrote is structurally identical to the model files llama.cpp loads, minus a few thousand tensors and a few gigabytes. If you open it in a hex viewer, the first four bytes are the ASCII magic <code>GGUF</code>, followed by the version number 3.</p>
+
+<h2 id="step-6-time-a-1024x1024-matmul">Step 6: Time a 1024&#215;1024 matmul</h2>
+<p>The last block of output is the benchmark:</p>
+<pre><code class="language-text">1024x1024 F32 matmul: 130.800 ms/iter, 16.42 GFLOPS (avg of 10)
+  result[0] = 0.204800 (expect 0.204800)</code></pre>
+<p>A 1024&#215;1024 float32 matmul does 2 &#215; 1024&#179; floating-point operations — about 2.15 GFLOP. At 130.8 ms per iteration that is 16.42 GFLOPS on this 4-vCPU sandbox, and the <code>result[0]</code> check confirms the math: every output element is the dot product of a row of 0.01s and a column of 0.02s over 1,024 terms, which is exactly 0.2048. Run it on your own machine and compare; the command is the same binary, and the number moves with your CPU, your thread count, and whether OpenMP was detected at configure time.</p>
+<p>Do not over-read a single number. 16 GFLOPS is a reasonable CPU figure for a naive float32 matmul, and it is not the number that matters for real inference — production models run quantized weights through the same kernels, and the backend picks different code paths for different shapes. What the benchmark gives you is a baseline and a sanity check: if your build produces 1.6 GFLOPS instead of 16, something is wrong — usually a Release build that was accidentally configured as Debug, or OpenMP missing at configure time.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/ggml-1-0-tensor-library-tutorial/img3.webp" alt="Bar chart: the 64 by 64 weight matrix is 16,384 bytes in float32 and 4,352 bytes in Q8_0; beside it, the measured 1024 by 1024 matmul: 130.8 milliseconds per iteration, 16.42 GFLOPS"><figcaption>Measured on this sandbox: Q8_0 is 3.76x smaller with a worst-case output error of 0.0166; the 1024x1024 matmul ran at 16.42 GFLOPS.</figcaption></figure>
+<h2 id="when-to-use-ggml-vs-alternatives">When to use ggml vs alternatives</h2>
+<p>ggml is the bottom of the stack, and most readers should not start here. Use this table to decide whether you are one of the exceptions.</p>
+<table>
+<thead><tr><th>Tool</th><th>Use it when</th><th>Do not use it when</th></tr></thead>
+<tbody>
+<tr><td><strong>ggml 1.0</strong></td><td>You are building inference machinery, custom operators, or a new runtime, and you want a dependency-free C library with explicit control over memory and backends.</td><td>You just want to run or fine-tune a model. The API is verbose and there is no training framework attached.</td></tr>
+<tr><td><strong>llama.cpp / libllama</strong></td><td>You want to run a GGUF model — chat, completion, embeddings — from C, Python, or the command line. This is the usual answer.</td><td>You need an operator ggml does not have, or you are embedding tensor math in a larger C program that is not an LLM.</td></tr>
+<tr><td><strong>PyTorch</strong></td><td>You are training, prototyping, or researching. Autograd, optimizers, and the ecosystem are the point.</td><td>You are shipping a small native binary, or you need deterministic memory behaviour with zero runtime allocation.</td></tr>
+<tr><td><strong>ONNX Runtime</strong></td><td>You need to deploy a trained model across platforms with a stable, versioned API and hardware execution providers.</td><td>You need ggml's quantized formats or its GGUF tooling, or you want the smallest possible dependency footprint.</td></tr>
+</tbody>
+</table>
+<p>The honest summary: if your goal is "run Llama on my laptop", install Ollama or llama.cpp and never touch ggml directly. If your goal is "understand what Ollama is doing, or build something that does what Ollama does", ggml 1.0 is now the stable place to start — and that stability is the news. Before 1.0, the API moved under you; the 1.0 tag is a promise that the functions in this tutorial will still exist in a year.</p>
+
+<h2 id="honest-limitations">Honest limitations</h2>
+<ul>
+<li><strong>The 1.0 break is real.</strong> Deprecated functions and the <code>DIAG_MASK</code> ops are gone. Tutorials, forks, and Stack Overflow answers written against 0.x may not compile. Pin the tag, as this tutorial does, and expect to port old code.</li>
+<li><strong>The C API is verbose.</strong> A two-layer network takes a scheduler, a graph, a no-alloc context, and explicit tensor uploads. That is the price of zero runtime allocation and backend portability, but it is a real cost next to three lines of PyTorch.</li>
+<li><strong>CPU numbers here, GPU numbers elsewhere.</strong> Everything in this tutorial ran on CPU. The CUDA, Metal, and Vulkan backends exist and are where the 1.0 performance work landed, but they need their own toolchains and hardware, and their numbers will differ.</li>
+<li><strong>No training framework ships with it.</strong> ggml has an optimizer API (<code>ggml-opt.h</code>), and the MNIST example trains a small network with it, but there is no DataLoader, no checkpointing story, and no ecosystem. Do not pick ggml for training.</li>
+<li><strong>Documentation is the code.</strong> The README is a page long. The real reference is the headers in <code>include/</code> and the examples in <code>examples/</code> — both excellent, but you will read source, not docs pages.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway</h2>
+<p>In about fifteen minutes you built the tensor library that runs most local LLMs, verified it against its own example, ran a neural network whose output you checked independently in NumPy, shrank a weight matrix 3.76&#215; with Q8_0 quantization, wrote a valid GGUF file, and measured 16.42 GFLOPS on a plain CPU. None of that required a GPU, an account, or a download larger than the 40 MB source tree. The 1.0 tag matters because it freezes the API you just learned: the functions in <code>mlp_ggml.cpp</code> are now stable enough to build on. From here, the natural next step is the layer above — load a real GGUF model with llama.cpp and watch the same <code>ggml_mul_mat</code> calls run at a scale where the quantization trade-off from Step 4 decides whether the model fits in memory at all.</p>
+
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://github.com/ggml-org/ggml/releases" rel="nofollow">ggml releases — v1.0.0 notes</a> (pruned deprecated API, YaRN truncation, FP8, backend performance work)</li>
+<li><a href="https://github.com/ggml-org/ggml" rel="nofollow">ggml-org/ggml — README and examples/simple</a> (build instructions, matrix-multiplication example)</li>
+<li><a href="https://github.com/ggml-org/ggml/blob/v1.0.0/examples/mnist/mnist-common.cpp" rel="nofollow">examples/mnist/mnist-common.cpp at v1.0.0</a> (GGUF save pattern used in Step 5)</li>
+<li><a href="https://github.com/ggml-org/ggml/blob/v1.0.0/include/ggml.h" rel="nofollow">include/ggml.h at v1.0.0</a> (public API: tensors, ops, quantization, timing)</li>
+</ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="ggml-1-0-tensor-library-tutorial"></div><div class="comments" data-comments="ggml-1-0-tensor-library-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/minimax-h3-hailuo-video-api-tutorial/"><span class="chip">Tutorials</span><h3>Generate video with sound from one API call: hands-on with MiniMax H3 (Hailuo)</h3><div class="meta">November 15, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/nvidia-skillevaluator-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Stop shipping untested agent skills: hands-on with NVIDIA&#x27;s SkillEvaluator</h3><div class="meta">November 15, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/chrome-devtools-mcp-coding-agents-tutorial/"><span class="chip">Tutorials</span><h3>Give your coding agent a browser: hands-on with chrome-devtools-mcp</h3><div class="meta">November 15, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/instructor-structured-extraction-ollama-tutorial/"><span class="chip">Tutorials</span><h3>Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama</h3><div class="meta">November 15, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to follow this tutorial?</h3><p>No. Everything here runs on the CPU backend, which is the default when no GPU backend is enabled at configure time. The CUDA, Metal, and Vulkan backends are separate build options; on a machine with a GPU, ggml_backend_init_best() would pick it automatically.</p><h3>Why pin v1.0.0 instead of building master?</h3><p>Because 1.0.0 prunes the deprecated API and removes operators that 0.x code may rely on. Building master gives you a moving target; building the tag gives you the exact API this tutorial was verified against, including the commit 417a024 printed by CMake at configure time.</p><h3>Can I use ggml from Python?</h3><p>There is a ctypes-based binding in examples/python/ in the repository, but it is an example, not a supported package. For Python, the maintained path is llama-cpp-python, which wraps libllama — which itself sits on ggml.</p><h3>How bad is Q8_0 quantization, really?</h3><p>On the 64x64 toy matrix in this tutorial the worst output error was 0.0166 on outputs spanning +/-0.39. Real models quantize much larger matrices, where per-element errors partly cancel, and Q8_0 is the gentlest of the common formats — Q4_0 and Q4_K are smaller and lossier. The trade-off is always memory against error, and you measure it the way Step 4 does: same input, both precisions, compare.</p><h3>Is the GGUF file from Step 5 loadable by llama.cpp?</h3><p>Structurally, yes — it is a valid GGUF version 3 file with named float32 tensors. Practically, llama.cpp expects a full model architecture with specific tensor names and metadata, so it will not run as a model. Treat it as proof that you can produce the format, not as a model.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/llama-cpp-1-0-stable-c-api-tutorial/">Build your own AI app on llama.cpp 1.0: the stable C API, hands-on</a></li><li><a href="/articles/llama-cpp-python-local-api-tutorial/">Your laptop is the API: run a local LLM server with llama-cpp-python and a 398 MB GGUF model</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li><li><a href="/articles/qlora-fine-tune-qwen3-unsloth-tutorial/">Fine-tune Qwen3 with QLoRA: the complete Unsloth tutorial for one GPU</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
