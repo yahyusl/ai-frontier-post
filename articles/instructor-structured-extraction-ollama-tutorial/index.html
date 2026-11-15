@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama — AI Frontier Post</title>
+<meta name="description" content="Ollama&#x27;s JSON mode guarantees syntax, not semantics — our run returned &quot;confidence&quot;: &quot;high&quot;. Instructor 1.17.0 plus Pydantic turns a local qwen3:0.6b model into a typed extraction pipeline: schemas, validation, automatic retries, and four support tickets written to a file, all on localhost for $0.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/instructor-structured-extraction-ollama-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama">
+<meta property="og:description" content="Ollama&#x27;s JSON mode guarantees syntax, not semantics — our run returned &quot;confidence&quot;: &quot;high&quot;. Instructor 1.17.0 plus Pydantic turns a local qwen3:0.6b model into a typed extraction pipeline: schemas, validation, automatic retries, and four support tickets written to a file, all on localhost for $0.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/instructor-structured-extraction-ollama-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/instructor-structured-extraction-ollama-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-15">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama", "description": "Ollama's JSON mode guarantees syntax, not semantics — our run returned \"confidence\": \"high\". Instructor 1.17.0 plus Pydantic turns a local qwen3:0.6b model into a typed extraction pipeline: schemas, validation, automatic retries, and four support tickets written to a file, all on localhost for $0.", "datePublished": "2026-11-15", "dateModified": "2026-11-15", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/instructor-structured-extraction-ollama-tutorial/"}, "image": "https://aifrontierpost.com/articles/instructor-structured-extraction-ollama-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama", "description": "Ollama's JSON mode guarantees syntax, not semantics — our run returned \"confidence\": \"high\". Instructor 1.17.0 plus Pydantic turns a local qwen3:0.6b model into a typed extraction pipeline: schemas, validation, automatic retries, and four support tickets written to a file, all on localhost for $0.", "step": [{"@type": "HowToStep", "name": "Step 1: Install Ollama and pull the model", "text": "Install Ollama, pull qwen3:0.6b, start the server, and confirm the model is listed and the local API answers."}, {"@type": "HowToStep", "name": "Step 2: See the gap — raw JSON mode", "text": "Ask the model for JSON with response_format json_object and watch it return confidence as the string high: valid syntax, wrong semantics. Pydantic rejects the same kind of payload with precise field errors."}, {"@type": "HowToStep", "name": "Step 3: Your first typed extraction", "text": "Define the Ticket schema in Pydantic and call Instructor from_provider with response_model=Ticket; the result is a real Ticket object with a float confidence and a valid enum priority."}, {"@type": "HowToStep", "name": "Step 4: Batch it — four tickets to a file", "text": "Loop over four tickets, one model call each, and write validated records to tickets.jsonl: 114.4 seconds total on a CPU-only VM, 1,165 prompt and 1,250 completion tokens, $0."}, {"@type": "HowToStep", "name": "Step 5: Make the schema strict — and watch retries work", "text": "Add a digits-only order_id pattern and a numeric amount; the strict schema passes first try, and a stub-server test proves Instructor re-prompts with the validation error when the first payload is invalid."}, {"@type": "HowToStep", "name": "Step 6: One call or many?", "text": "Extract all four tickets in one streaming Iterable call: faster, but the 0.6B model collapses every priority to urgent, so one call per record is the reliable shape on small models."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key or a GPU?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything in this tutorial runs on localhost: Ollama serving qwen3:0.6b on CPU, Instructor, and Pydantic. There is no account, no key, and no bill; the batch of four tickets cost $0 and took 114.4 seconds on a CPU-only VM."}}, {"@type": "Question", "name": "Which models work with Instructor and Ollama?", "acceptedAnswer": {"@type": "Answer", "text": "Any model Ollama serves. We used qwen3:0.6b (522 MB) because it runs anywhere; Instructor picks JSON mode for it automatically. Models with function calling, such as qwen2.5, llama3.1/3.2, and mistral-nemo, use TOOLS mode instead. Qwen2.5:3B is the documented sweet spot for this workflow."}}, {"@type": "Question", "name": "What happens when validation keeps failing?", "acceptedAnswer": {"@type": "Answer", "text": "Instructor re-prompts the model with the validation error, up to max_retries. If the retries are exhausted it raises the last validation error instead of returning bad data — a loud failure you can log and re-queue. If that happens often, simplify the schema before raising max_retries."}}, {"@type": "Question", "name": "How is this different from Ollama's JSON mode?", "acceptedAnswer": {"@type": "Answer", "text": "JSON mode guarantees the output parses as JSON; it says nothing about whether confidence is a number between 0 and 1 or priority is one of your allowed values. Instructor adds the schema, the validation, and the retry loop on top of JSON mode (or tool calling)."}}, {"@type": "Question", "name": "Can I use the same code with a hosted model?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. from_provider takes the same call for OpenAI, Anthropic, Gemini, and other providers — swap the provider string and keep the schema, the retries, and the validation. Develop locally for free, then point the same code at a frontier model when judgment matters."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama</h1>
+<p class="lede">Ollama&#x27;s JSON mode guarantees syntax, not semantics — our run returned &quot;confidence&quot;: &quot;high&quot;. Instructor 1.17.0 plus Pydantic turns a local qwen3:0.6b model into a typed extraction pipeline: schemas, validation, automatic retries, and four support tickets written to a file, all on localhost for $0.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 15, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Ollama's JSON mode guarantees the output parses; it says nothing about whether confidence is a number between 0 and 1 or priority is one of your allowed values. Instructor 1.17.0 plus Pydantic closes that gap: you describe the record as a schema, the local qwen3:0.6b model fills it, validation rejects anything wrong, and retries re-ask with the error attached. This tutorial runs the full loop on localhost — no API key, no GPU, $0 — and turns four support tickets into validated records in 114.4 seconds, then measures exactly where the tiny model cuts corners.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>Raw JSON mode returned "confidence": "high" — a string, not a number. Valid syntax, wrong semantics; Pydantic rejects the same kind of payload with precise per-field errors.</li><li>Instructor 1.17.0 + Pydantic 2.14.3 + Ollama 0.40.11 serving qwen3:0.6b (522 MB) on CPU: first typed extraction in 69.7 s; a batch of four tickets in 114.4 s, one model call each, 1,165 prompt + 1,250 completion tokens, $0.</li><li>A stricter schema — digits-only order_id pattern, amount as a float — passed on the first call in 40.6 s, returning order_id "48210" and amount_usd 49.99.</li><li>The retry loop was verified deterministically with a stub server: an invalid first payload (confidence as a string) was re-prompted with the validation error and returned valid on the second request.</li><li>Small-model limits, measured: the damaged-parcel ticket says "no rush" but was labeled urgent; a /think fragment leaked into one summary; list extraction collapsed all four priorities to urgent. The schema guarantees shape, not judgment.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/instructor-structured-extraction-ollama-tutorial/cover.webp" alt="Messy text messages flow through a laptop into neat, checked record cards"><figcaption>AI-generated cover illustration. Messy text in, typed records out — the laptop in the middle is your own machine, not a cloud API.</figcaption></figure>
+<div class="article-body"><p>Every pipeline that turns language-model output into something a program can use starts the same way: ask the model for JSON, call <code>json.loads</code>, and hope. Most of the time it works. Then one day the model returns <code>"confidence": "high"</code> instead of a number, or <code>"priority": "ASAP"</code> instead of one of your four allowed values, and your code crashes at 2 a.m. — or worse, it doesn't crash, and the bad value flows downstream into a dashboard, a database, or a customer-facing reply.</p>
+<p>The usual fix is to ask for JSON more firmly: Ollama's JSON mode, a system prompt that says "reply with JSON only", a regex to strip the markdown fences. All of that helps with syntax. None of it checks meaning. JSON mode guarantees the output parses; it says nothing about whether <code>confidence</code> is a number between 0 and 1, whether <code>priority</code> is one of the values your code handles, or whether the order ID is digits instead of <code>#48210</code>.</p>
+<p><a href="https://python.useinstructor.com/">Instructor</a> closes that gap. You describe the shape you want as a Pydantic model — types, allowed values, ranges, patterns — and Instructor makes the model produce exactly that, re-asking with the validation error when the first attempt is wrong. This tutorial runs the whole loop end to end on your own machine: a local Ollama model, no API key, no GPU, no cloud bill. By the end you will have a four-ticket support inbox turned into typed, validated records written to a file — and you will know exactly where the small model you ran cuts corners, because we measured it.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Ollama 0.40.11</strong> (or newer) — the local model runtime. <a href="https://ollama.com/download">Download it for your OS</a>; on Linux the install script puts the binary and its runner in place.</li>
+<li><strong>Python 3.12</strong> and <code>pip</code>.</li>
+<li><strong>Instructor 1.17.0</strong>, <strong>Pydantic 2.14.3</strong>, and the <strong>OpenAI Python client 3.3.0</strong> — installed below.</li>
+<li><strong>The qwen3:0.6b model</strong> (522 MB) — small enough to run on any laptop CPU, which is the point: if the workflow holds up on a 0.6-billion-parameter model, it holds up anywhere.</li>
+<li><strong>No API key, no GPU, no account.</strong> Everything here runs on localhost. Expect roughly 20–35 seconds per ticket on a CPU-only machine; the timings in this tutorial were measured on a 1.5-core VM with 6 GB of RAM, so a real laptop will be faster.</li></ul>
+<h2 id="step-1-install-ollama-and-pull-the-model">Step 1: Install Ollama and pull the model<a class="anchor" href="#step-1-install-ollama-and-pull-the-model" aria-label="Link to section">#</a></h2>
+<p>Install Ollama from <a href="https://ollama.com/download">ollama.com/download</a>, then pull the model and start the server:</p>
+<pre><code>ollama pull qwen3:0.6b
+ollama serve
+ollama list</code></pre>
+<p>You should see the model listed, about 522 MB:</p>
+<pre><code>NAME            ID              SIZE      MODIFIED
+qwen3:0.6b      7df6b6e09427    522 MB    6 weeks ago</code></pre>
+<p>Confirm the server answers on its local API:</p>
+<pre><code>curl -s http://localhost:11434/api/tags | python3 -c "import json,sys; print([m['name'] for m in json.load(sys.stdin)['models']])"
+# ['nomic-embed-text:latest', 'qwen3:0.6b']</code></pre>
+<p>The <code>nomic-embed-text</code> entry is an embeddings model left over from an earlier experiment; ignore it. What matters is that <code>qwen3:0.6b</code> is present and the server is listening on port 11434. If <code>ollama list</code> shows nothing, the pull did not finish — re-run it; the model is only half a gigabyte, so it downloads in a minute or two on a normal connection.</p>
+<p>Now install the Python side. Instructor is a thin layer over the OpenAI client, and it uses Pydantic for the schemas:</p>
+<pre><code>python3 -m pip install "instructor==1.17.0"
+python3 -c "import instructor, pydantic, openai; print('instructor', instructor.__version__); print('pydantic', pydantic.VERSION); print('openai', openai.__version__)"
+# instructor 1.17.0
+# pydantic 2.14.3
+# openai 3.3.0</code></pre>
+<h2 id="step-2-see-the-gap-raw-json-mode">Step 2: See the gap — raw JSON mode<a class="anchor" href="#step-2-see-the-gap-raw-json-mode" aria-label="Link to section">#</a></h2>
+<p>Before adding Instructor, look at what plain JSON mode actually gives you. This script sends one support ticket to the local model and asks for a JSON object with four keys:</p>
+<pre><code>import json
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+
+TICKET = (
+    "Subject: Refund for order #48210\n"
+    "Hi, I was charged twice for order 48210 ($49.99 each). "
+    "Please refund the duplicate charge. This is urgent, I need it before Friday. - Dana"
+)
+
+resp = client.chat.completions.create(
+    model="qwen3:0.6b",
+    messages=[
+        {
+            "role": "system",
+            "content": "Reply with a JSON object only, with keys: title, priority, confidence, summary.",
+        },
+        {"role": "user", "content": TICKET},
+    ],
+    response_format={"type": "json_object"},
+    temperature=0,
+)
+print(resp.choices[0].message.content)</code></pre>
+<p>The output parses as JSON. That is the whole of what JSON mode promises — and it is not enough:</p>
+<pre><code>{
+  "title": "Refund for order #48210",
+  "priority": "high",
+  "confidence": "high",
+  "summary": "Refund duplicate charges for order #48210 ($49.99 each). Urgent request before Friday."
+}</code></pre>
+<p><code>confidence</code> came back as the string <code>"high"</code>, not a number between 0 and 1. <code>json.loads</code> accepts it happily. The first line of code that does arithmetic on it — an average, a threshold, a sort — fails, or silently does the wrong thing. This is the gap: syntax is valid, semantics are not.</p>
+<p>Now define what the record is supposed to look like, and watch Pydantic reject the kind of payload JSON mode can hand you:</p>
+<pre><code>from pydantic import BaseModel, Field, ValidationError
+from typing import Literal
+
+class Ticket(BaseModel):
+    title: str = Field(..., max_length=80)
+    priority: Literal["low", "medium", "high", "urgent"]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    summary: str
+
+bad_payload = {
+    "title": "Refund for order #48210",
+    "priority": "ASAP",          # not in the enum
+    "confidence": 1.4,          # outside 0..1
+    "summary": "Customer charged twice, wants a duplicate refund.",
+}
+try:
+    Ticket(**bad_payload)
+except ValidationError as e:
+    for err in e.errors():
+        print(f"  {err['loc'][0]}: {err['msg']}")
+#   priority: Input should be 'low', 'medium', 'high' or 'urgent'
+#   confidence: Input should be less than or equal to 1</code></pre>
+<p>Two precise errors, each naming the field and the rule it broke. That is the mechanism Instructor builds on: the model produces JSON, Pydantic validates it, and anything that fails gets sent back to the model with the error attached. Your code never sees an invalid record.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/instructor-structured-extraction-ollama-tutorial/img2.webp" alt="Diagram of the extraction pipeline: raw text goes to a local Ollama model, Instructor requests a typed Ticket, Pydantic validates it, and invalid results loop back for a retry"><figcaption>Diagram: Instructor turns the model into a typed function call — invalid output loops back with the validation error instead of reaching your code. (AI Frontier Post)</figcaption></figure>
+<h2 id="step-3-your-first-typed-extraction">Step 3: Your first typed extraction<a class="anchor" href="#step-3-your-first-typed-extraction" aria-label="Link to section">#</a></h2>
+<p>Same ticket, same model — but now the schema does the asking. Instructor's <code>from_provider</code> is the shortest path for a local model: it builds an OpenAI-compatible client pointed at Ollama and picks the right mode for the model. For qwen3:0.6b it picks JSON mode; for function-calling models such as qwen2.5 it picks tool-calling mode automatically. You can force either with <code>mode=instructor.Mode.JSON</code> or <code>mode=instructor.Mode.TOOLS</code>.</p>
+<pre><code>import instructor
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class Ticket(BaseModel):
+    """One support ticket, typed end to end."""
+
+    title: str = Field(..., max_length=80, description="Short ticket title")
+    priority: Literal["low", "medium", "high", "urgent"]
+    confidence: float = Field(..., ge=0.0, le=1.0, description="0..1, how sure the model is")
+    summary: str = Field(..., description="One-sentence summary of the request")
+
+client = instructor.from_provider("ollama/qwen3:0.6b", mode=instructor.Mode.JSON)
+
+ticket = client.create(
+    model="qwen3:0.6b",
+    messages=[
+        {
+            "role": "user",
+            "content": "Extract the support ticket into the Ticket schema.\n\n" + TICKET,
+        }
+    ],
+    response_model=Ticket,
+    max_retries=3,
+    temperature=0,
+)
+print(ticket.model_dump_json(indent=2))</code></pre>
+<p>Run it. The result is a real <code>Ticket</code> object, not a dict — this is the verified output from our run, in 69.7 seconds on the CPU-only VM (the first call includes loading the model into memory; later calls in the batch below ran 19–34 seconds each):</p>
+<pre><code>{
+  "title": "Refund for order #48210",
+  "priority": "urgent",
+  "confidence": 1.0,
+  "summary": "Refund for order #48210, duplicate charges detected, urgent request for refund before Friday."
+}</code></pre>
+<p>Note what changed versus the raw attempt: <code>confidence</code> is now the float <code>1.0</code>, <code>priority</code> is a valid enum value, and <code>ticket.confidence</code> is a float you can compare and average. The three arguments doing the work are <code>response_model=Ticket</code> (the schema), <code>max_retries=3</code> (how many times Instructor may re-ask after a validation failure), and <code>temperature=0</code> (deterministic output, which matters when you want the same ticket to extract the same way twice).</p>
+<h2 id="step-4-batch-it-four-tickets-to-a-file">Step 4: Batch it — four tickets to a file<a class="anchor" href="#step-4-batch-it-four-tickets-to-a-file" aria-label="Link to section">#</a></h2>
+<p>One ticket proves the mechanism. A batch proves the workflow. The script below loops over four tickets — a refund, a damaged parcel, a lockout, and a shipping question — and appends each validated record to <code>tickets.jsonl</code>:</p>
+<pre><code>import json
+import instructor
+from openai import OpenAI
+from pydantic import BaseModel, Field
+from typing import Literal
+
+client = instructor.from_openai(
+    OpenAI(base_url="http://localhost:11434/v1", api_key="ollama"),
+    mode=instructor.Mode.JSON,
+)
+
+class Ticket(BaseModel):
+    title: str = Field(..., max_length=80)
+    priority: Literal["low", "medium", "high", "urgent"]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    summary: str
+
+TICKETS = [
+    ("t1", "Subject: Refund for order #48210\nHi, I was charged twice for order 48210 "
+           "($49.99 each). Please refund the duplicate charge. This is urgent, "
+           "I need it before Friday. - Dana"),
+    ("t2", "Subject: Damaged delivery\nHello, the vase in order #99173 arrived broken — "
+           "the box was crushed on one side. Can you send a replacement? No rush, "
+           "next week is fine. - Marc"),
+    ("t3", "Subject: Can't log in\nI requested a password reset three times and the email "
+           "never arrives, not even in spam. I need to access my account today to "
+           "download an invoice. - Priya"),
+    ("t4", "Subject: Shipping question\nHi! Do you ship to Canada, and if so how long does "
+           "delivery usually take? Thanks! - Alex"),
+]
+
+with open("tickets.jsonl", "w") as f:
+    for tid, text in TICKETS:
+        ticket = client.create(
+            model="qwen3:0.6b",
+            messages=[{"role": "user", "content": "Extract the support ticket into the Ticket schema.\n\n" + text}],
+            response_model=Ticket,
+            max_retries=3,
+            temperature=0,
+        )
+        f.write(json.dumps({"id": tid, **ticket.model_dump()}) + "\n")</code></pre>
+<p>Measured on the same CPU-only VM: all four tickets extracted, one model call each, 114.4 seconds total, 1,165 prompt tokens and 1,250 completion tokens, cost $0. Per-ticket times were 19.5, 29.3, 34.2, and 31.4 seconds.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/instructor-structured-extraction-ollama-tutorial/img3.webp" alt="Bar chart of measured extraction times: 19.5, 29.3, 34.2 and 31.4 seconds for the four tickets, 114.4 seconds total"><figcaption>Measured on a CPU-only VM: four tickets, 114.4 seconds total, one model call each. A real laptop is faster; the shape — tens of seconds per record on a 0.6B model — is what to plan around. (AI Frontier Post)</figcaption></figure>
+<p>And here is the honest part. The records are all valid — every field type-checks — but the model's judgment is visibly that of a 0.6-billion-parameter model. Ticket t2, the damaged vase, says "No rush, next week is fine" and still came back <code>priority: "urgent"</code> with confidence 0.5: the model reacted to "broken" and "replacement" and ignored the explicit "no rush". Ticket t4's summary ends with a stray <code>/think</code> — a fragment of qwen3's reasoning trace leaking into the output. And the confidence values cluster at exactly 1.0 or 0.5, which is not a calibrated probability, it is a small model hedging in coarse steps.</p>
+<p>None of that is a schema failure. The schema guarantees shape; it cannot guarantee judgment. That distinction is the whole point of running this on a tiny model first: you see exactly which errors validation catches (types, enums, ranges) and which it cannot (a wrong priority that is still a valid enum value). If priority accuracy matters to you, the fix is a bigger model or better field descriptions — not a stricter schema.</p>
+<h2 id="step-5-make-the-schema-strict-and-watch-retries-work">Step 5: Make the schema strict — and watch retries work<a class="anchor" href="#step-5-make-the-schema-strict-and-watch-retries-work" aria-label="Link to section">#</a></h2>
+<p>Add two fields that a sloppy model gets wrong: an order ID that must be digits only, and an amount that must be a number:</p>
+<pre><code>class StrictTicket(BaseModel):
+    title: str = Field(..., max_length=80)
+    priority: Literal["low", "medium", "high", "urgent"]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    order_id: str = Field(..., pattern=r"^\d+$", description="digits only, no # prefix")
+    amount_usd: float = Field(..., ge=0.0, description="amount in USD, number only")
+    summary: str
+
+ticket = client.create(
+    model="qwen3:0.6b",
+    messages=[{"role": "user", "content": "Extract the support ticket into the StrictTicket schema.\n\n" + TICKET}],
+    response_model=StrictTicket,
+    max_retries=2,
+    temperature=0,
+)
+print(ticket.model_dump_json(indent=2))
+# {
+#   "title": "Refund for order #48210",
+#   "priority": "urgent",
+#   "confidence": 1.0,
+#   "order_id": "48210",
+#   "amount_usd": 49.99,
+#   "summary": "Refund the duplicate charge for order 48210 ($49.99 each)."
+# }</code></pre>
+<p>It succeeded on the first call, in 40.6 seconds: <code>order_id</code> came back as <code>"48210"</code> without the <code>#</code>, and <code>amount_usd</code> as the number <code>49.99</code>. The <code>pattern</code> and the <code>description</code> did real work here — the description tells the model what the field wants, and the pattern is the rule that rejects anything else.</p>
+<p>But what happens when the model <em>does</em> get it wrong? In our live runs it never did, so we tested the retry loop on demand instead: a tiny stub server that answers the first request with an invalid payload (<code>"confidence": "high"</code>, the exact mistake from Step 2) and the second with a valid one. Instructor made two requests and returned the valid record — the first failure was re-prompted with the validation error attached, exactly as designed. The mechanism is deterministic; whether it triggers on a given day depends on the model, not on your code. Two practical consequences follow. First, always set <code>max_retries</code> explicitly — the default is low, and a retry budget of 2–3 is cheap insurance. Second, if the retries are exhausted, Instructor raises the last validation error instead of returning bad data. That is a feature: a loud failure you can log and re-queue beats a silent bad record in your database.</p>
+<p>One more parameter worth knowing: <code>timeout</code>. With Ollama, Instructor's docs recommend setting it, because it bounds the total time across all retry attempts rather than per attempt — a 60-second timeout stays 60 seconds even if two retries fire. On a slow CPU model, set it generously (a few minutes) or the retries will be cut off before they can help.</p>
+<h2 id="step-6-one-call-or-many">Step 6: One call or many?<a class="anchor" href="#step-6-one-call-or-many" aria-label="Link to section">#</a></h2>
+<p>Instructor can also extract a list in a single call, streaming results as they arrive:</p>
+<pre><code>from typing import Iterable
+
+tickets = list(
+    client.create(
+        model="qwen3:0.6b",
+        messages=[{"role": "user", "content": PROMPT_WITH_ALL_FOUR_TICKETS}],
+        response_model=Iterable[Ticket],
+        max_retries=3,
+        temperature=0,
+        stream=True,
+    )
+)</code></pre>
+<p>We ran it: four tickets back in 109.1 seconds, one call. Slightly faster than four separate calls (114.4 seconds), and streaming means you can start processing the first record before the last one is generated. But there is a catch, and it is visible in the output: every ticket came back <code>priority: "urgent"</code> with confidence 1.0 — including the shipping question and the "no rush" parcel. Asked to produce a list, the small model collapsed to a single label for all four records. The per-ticket loop in Step 4 did better: three urgent, one medium, with confidences split between 1.0 and 0.5.</p>
+<p>The rule of thumb that falls out of the measurements: with a small local model, one call per record is the reliable shape, and the list form is for when you have a model big enough to keep four judgments distinct. With a hosted frontier model the list form is usually fine — the constraint here is the 0.6B model, not Instructor.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<table><thead><tr><th>Approach</th><th>What it guarantees</th><th>Use it when</th></tr></thead><tbody>
+<tr><td><code>json.loads</code> on raw output</td><td>Nothing — hope and a try/except</td><td>Throwaway scripts, never production</td></tr>
+<tr><td>Ollama JSON mode</td><td>Valid JSON syntax</td><td>Quick experiments where you validate by hand</td></tr>
+<tr><td>Instructor, JSON mode</td><td>Valid JSON <em>and</em> a valid schema, with retries</td><td>Local models without tool calling; this tutorial</td></tr>
+<tr><td>Instructor, TOOLS mode</td><td>Same, via the model's function-calling path</td><td>Models that support it — qwen2.5, llama3.1/3.2, mistral-nemo and similar</td></tr>
+<tr><td>Instructor + a hosted model</td><td>Same, with much better judgment</td><td>Priority and nuance matter more than $0 cost — same code, different provider string</td></tr>
+</tbody></table>
+<p>The last row is the reason to learn the pattern locally: <code>from_provider</code> takes the same call for OpenAI, Anthropic, Gemini, or a local Ollama model. You develop and test against the free local model, and when the extraction quality matters — a real support queue, a real customer — you swap the provider string and keep the schema, the retries, and the validation. Nothing else in the code changes.</p>
+<p>And if you stay local, the next step up is a bigger model. Qwen2.5:3B is the documented sweet spot for this workflow — it supports tool-calling mode, so Instructor can use the structured path natively — at roughly 2 GB of download and noticeably better judgment than the 0.6B model used here. Swap <code>qwen3:0.6b</code> for <code>qwen2.5:3b</code> in the pull and the <code>model=</code> argument; the rest of the tutorial is unchanged.</p>
+<h2 id="honest-limitations">Honest limitations<a class="anchor" href="#honest-limitations" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Small models sometimes wrap the object.</strong> On a toy schema (<code>Character</code> with <code>name</code> and <code>age</code>), qwen3:0.6b returned <code>{"char": {...}}</code> — the right data nested one level down under the class name — and Instructor's retries could not fix it, because the wrapper is valid JSON and the error message does not tell the model to unwrap it. If you hit this, simplify the prompt, rename the class, or use a bigger model.</li>
+<li><strong>The schema guarantees shape, not judgment.</strong> A wrong-but-valid priority sails through validation. Measure judgment separately — a small labeled set, scored by hand — before trusting the output.</li>
+<li><strong>Small-model quirks leak into fields.</strong> We saw a <code>/think</code> fragment in a summary and confidence values that only ever read 0.5 or 1.0. Strip reasoning traces from text fields, and never treat a small model's confidence as a probability.</li>
+<li><strong>CPU speed is the bottleneck.</strong> Twenty to thirty-five seconds per ticket on a weak VM is fine for a nightly batch of a few hundred tickets; it is not a live API. Parallelize with more Ollama workers, or move to a bigger machine, if latency matters.</li>
+<li><strong>Retries cost tokens and time.</strong> Every retry is another full generation. A schema the model cannot satisfy — too many pattern constraints, an enum it keeps missing — will burn your retry budget on every record. Simplify the schema first, then raise <code>max_retries</code>.</li>
+<li><strong>JSON mode is not free-form.</strong> With <code>response_format={"type": "json_object"}</code> the model must output JSON, which is what you want here — but it also means the model cannot explain itself, so debugging a bad extraction means reading the validation error, not the model's reasoning.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The pipeline that breaks in production is never the one that returns invalid JSON — that fails loudly and gets fixed. It is the one that returns valid JSON with wrong values inside it. Instructor moves the check to where it belongs: the schema is the contract, Pydantic enforces it, and the model re-tries until the record it returns actually satisfies it. Run it locally first, on a model that costs nothing, with tickets you can read. When the records look right, the same code runs against any provider. The checklist:</p>
+<ol><li><strong>Write the schema first.</strong> Types, enums, ranges, patterns — the Pydantic model is the specification, not an afterthought.</li>
+<li><strong>Use <code>from_provider</code> and <code>response_model</code>.</strong> One call pattern, local or hosted.</li>
+<li><strong>Set <code>max_retries</code> and <code>temperature=0</code>.</strong> Retries turn validation failures into corrections; temperature 0 makes the same ticket extract the same way twice.</li>
+<li><strong>Measure judgment, not just validity.</strong> A record can pass every check and still be wrong. Spot-check priorities on real data.</li>
+<li><strong>One call per record on small models.</strong> List extraction is faster, but a 0.6B model collapses to one label across the list.</li>
+<li><strong>Fail loudly.</strong> Exhausted retries should raise, log, and re-queue — never silently write a bad record.</li></ol>
+<p>The one-line version: JSON mode makes output that parses; Instructor makes output you can trust — and on a local model, that trust costs nothing but a few dozen seconds per record.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://python.useinstructor.com/integrations/ollama/" rel="nofollow">Instructor Docs — Structured outputs with Ollama</a></li>
+<li><a href="https://python.useinstructor.com/" rel="nofollow">Instructor — Structured outputs for LLMs</a></li>
+<li><a href="https://github.com/jxnl/instructor" rel="nofollow">Instructor on GitHub (jxnl/instructor)</a></li>
+<li><a href="https://ollama.com/" rel="nofollow">Ollama — Run large language models locally</a></li>
+<li><a href="https://docs.pydantic.dev/" rel="nofollow">Pydantic Documentation</a></li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="instructor-structured-extraction-ollama-tutorial"></div><div class="comments" data-comments="instructor-structured-extraction-ollama-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/text-to-cad-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Design physical products with AI: hands-on with text-to-cad</h3><div class="meta">November 15, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/antigravity-dynamic-workflows-run-workflow-tutorial/"><span class="chip">Tutorials</span><h3>Antigravity Dynamic Workflows: run a team of coding agents from one reviewable Python script</h3><div class="meta">November 15, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/ai-memory-cross-agent-handoff-tutorial/"><span class="chip">Tutorials</span><h3>ai-memory: one memory for every coding agent — hands-on with cross-agent handoffs</h3><div class="meta">November 15, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/pinky-let-ai-use-your-phone-tutorial/"><span class="chip">Tutorials</span><h3>Pinky: let your AI agent use your phone — hands-on with the MCP bridge for iPhone and Android</h3><div class="meta">November 14, 2026 · 15 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key or a GPU?</h3><p>No. Everything in this tutorial runs on localhost: Ollama serving qwen3:0.6b on CPU, Instructor, and Pydantic. There is no account, no key, and no bill; the batch of four tickets cost $0 and took 114.4 seconds on a CPU-only VM.</p><h3>Which models work with Instructor and Ollama?</h3><p>Any model Ollama serves. We used qwen3:0.6b (522 MB) because it runs anywhere; Instructor picks JSON mode for it automatically. Models with function calling, such as qwen2.5, llama3.1/3.2, and mistral-nemo, use TOOLS mode instead. Qwen2.5:3B is the documented sweet spot for this workflow.</p><h3>What happens when validation keeps failing?</h3><p>Instructor re-prompts the model with the validation error, up to max_retries. If the retries are exhausted it raises the last validation error instead of returning bad data — a loud failure you can log and re-queue. If that happens often, simplify the schema before raising max_retries.</p><h3>How is this different from Ollama&#x27;s JSON mode?</h3><p>JSON mode guarantees the output parses as JSON; it says nothing about whether confidence is a number between 0 and 1 or priority is one of your allowed values. Instructor adds the schema, the validation, and the retry loop on top of JSON mode (or tool calling).</p><h3>Can I use the same code with a hosted model?</h3><p>Yes. from_provider takes the same call for OpenAI, Anthropic, Gemini, and other providers — swap the provider string and keep the schema, the retries, and the validation. Develop locally for free, then point the same code at a frontier model when judgment matters.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/text-to-sql-local-ollama-tutorial/">Ask your database anything: build a local text-to-SQL assistant with Ollama and SQLite</a></li><li><a href="/articles/qlora-fine-tune-qwen3-unsloth-tutorial/">Fine-tune Qwen3 with QLoRA: the complete Unsloth tutorial for one GPU</a></li><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li><li><a href="/articles/structured-outputs-tutorial/">Structured outputs: getting JSON you can trust from LLMs</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
