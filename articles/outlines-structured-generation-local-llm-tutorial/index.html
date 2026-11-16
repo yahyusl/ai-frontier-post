@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop parsing broken LLM JSON: guaranteed-valid structured output with Outlines, locally — AI Frontier Post</title>
+<meta name="description" content="Outlines 1.3.3 constrains a local model at the token level, so the output cannot break your schema — no retries, no repair code. We ran it end to end on a CPU-only machine with Qwen2.5-0.5B: JSON, regex, choices, and a four-ticket batch, all validated first try, with the model’s judgment errors measured honestly.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/outlines-structured-generation-local-llm-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop parsing broken LLM JSON: guaranteed-valid structured output with Outlines, locally">
+<meta property="og:description" content="Outlines 1.3.3 constrains a local model at the token level, so the output cannot break your schema — no retries, no repair code. We ran it end to end on a CPU-only machine with Qwen2.5-0.5B: JSON, regex, choices, and a four-ticket batch, all validated first try, with the model’s judgment errors measured honestly.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/outlines-structured-generation-local-llm-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/outlines-structured-generation-local-llm-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-16">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop parsing broken LLM JSON: guaranteed-valid structured output with Outlines, locally", "description": "Outlines 1.3.3 constrains a local model at the token level, so the output cannot break your schema — no retries, no repair code. We ran it end to end on a CPU-only machine with Qwen2.5-0.5B: JSON, regex, choices, and a four-ticket batch, all validated first try, with the model’s judgment errors measured honestly.", "datePublished": "2026-11-16", "dateModified": "2026-11-16", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/outlines-structured-generation-local-llm-tutorial/"}, "image": "https://aifrontierpost.com/articles/outlines-structured-generation-local-llm-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Stop parsing broken LLM JSON: guaranteed-valid structured output with Outlines, locally", "description": "Outlines 1.3.3 constrains a local model at the token level, so the output cannot break your schema — no retries, no repair code. We ran it end to end on a CPU-only machine with Qwen2.5-0.5B: JSON, regex, choices, and a four-ticket batch, all validated first try, with the model’s judgment errors measured honestly.", "step": [{"@type": "HowToStep", "name": "Step 1: Install Outlines the right way", "text": "Install Outlines with the llamacpp extra so numba comes along; plain pip install outlines leaves structured calls silently unconstrained."}, {"@type": "HowToStep", "name": "Step 2: Get the model and load it", "text": "Download the 469 MB Qwen2.5-0.5B-Instruct Q4_K_M GGUF and load it with outlines.from_llamacpp; it loads in about 6 seconds on CPU."}, {"@type": "HowToStep", "name": "Step 3: Watch the failure first", "text": "Ask the unconstrained model for JSON and watch json.loads fail on markdown fences: the classic production failure, reproduced."}, {"@type": "HowToStep", "name": "Step 4: Your first constrained call — an integer", "text": "Pass int as the output type; the answer is digits only, and it is wrong (142 for a leap year) — shape guaranteed, truth not."}, {"@type": "HowToStep", "name": "Step 5: Multiple choice with Literal", "text": "Classify three reviews as positive, neutral, or negative; every output is exactly one word, and the angry review is misclassified."}, {"@type": "HowToStep", "name": "Step 6: Regex — a phone number and a date", "text": "Constrain output to a phone pattern and a date pattern; both match exactly, and the date is a nonsense value that still fits the pattern."}, {"@type": "HowToStep", "name": "Step 7: JSON from a Pydantic model", "text": "Define a Ticket schema and generate a record that validates first try in 99.4 seconds — the same prompt the unconstrained baseline failed."}, {"@type": "HowToStep", "name": "Step 8: Batch it — four tickets to a file", "text": "Four tickets, one call each, 4/4 validated first try in 228.8 seconds total, written to tickets.jsonl — with judgment errors documented."}, {"@type": "HowToStep", "name": "Step 9 (bonus): Grammars with CFG", "text": "Constrain output to a yes/no grammar; needs a separate pip install llguidance."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key or a GPU?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything in this tutorial runs on localhost: Outlines with llama.cpp serving Qwen2.5-0.5B-Instruct on CPU. There is no account, no key, and no bill; the batch of four tickets cost $0 and took 228.8 seconds on a CPU-only sandbox VM."}}, {"@type": "Question", "name": "Why did the integer answers come out wrong?", "acceptedAnswer": {"@type": "Answer", "text": "Outlines guarantees the shape of the output, not the truth of it. The 0.5B model answered 142 for a leap year, 18 legs for a spider, and 17 days for a week — all digits-only, all wrong. The constraint held every time; the values need a bigger model. Use the 0.5B model to learn the API, then swap in a 7B or larger GGUF with the same code."}}, {"@type": "Question", "name": "What happens if I install outlines without the [llamacpp] extra?", "acceptedAnswer": {"@type": "Answer", "text": "You get a silent failure: structured calls return unconstrained prose because the logits processor cannot import numba, and the ImportError only appears on stderr. Install with pip install \"outlines[llamacpp]\", which pulls numba as a dependency."}}, {"@type": "Question", "name": "How is this different from Instructor?", "acceptedAnswer": {"@type": "Answer", "text": "Outlines prevents invalid tokens during generation, so the mistake can never be made. Instructor validates after generation and re-asks with the error attached. They are complements: Outlines is the move when you self-host an open-weight model; Instructor is the move for hosted APIs. You can also validate Outlines output with Pydantic anyway, as this tutorial does."}}, {"@type": "Question", "name": "Can I use the same code with a bigger model or a hosted one?", "acceptedAnswer": {"@type": "Answer", "text": "A bigger GGUF works with the same two lines — point model_path at a 7B or 14B quant and keep every call identical. Hosted APIs are different: Outlines needs access to token scores, which text-only APIs do not expose, so for GPT, Claude, or Gemini use the provider's structured-output mode or Instructor instead."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop parsing broken LLM JSON: guaranteed-valid structured output with Outlines, locally</h1>
+<p class="lede">Outlines 1.3.3 constrains a local model at the token level, so the output cannot break your schema — no retries, no repair code. We ran it end to end on a CPU-only machine with Qwen2.5-0.5B: JSON, regex, choices, and a four-ticket batch, all validated first try, with the model’s judgment errors measured honestly.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 16, 2026 · 18 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Outlines 1.3.3 constrains a local model at the token level, so the output cannot break your schema — no retries, no repair code. We ran it end to end on a CPU-only machine with Qwen2.5-0.5B: an integer, a multiple-choice set, two regexes, a Pydantic ticket, and a four-ticket batch, all validated first try — and measured exactly where the tiny model’s judgment goes wrong while the shape stays perfect.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>Unconstrained, the model returns fenced JSON that json.loads() rejects (JSONDecodeError, line 1 column 1). The same prompt constrained by a Pydantic model validates first try in 99.4 s.</li><li>Outlines 1.3.3 + llama-cpp-python 0.3.35 + Pydantic 2.13.5, Qwen2.5-0.5B-Instruct Q4_K_M (469 MB), CPU-only, $0 — the model loads in about 6 seconds.</li><li>Batch: 4/4 tickets validated first try in 228.8 s total, written to tickets.jsonl — but ticket 0 invents order_id 90210000 and two tickets flag refunds nobody asked for.</li><li>Shape is not truth, measured: a leap year is not 142 days, an angry review is not neutral, and a regex date comes back 0101-01-20 — all valid shapes, all wrong values.</li><li>Install trap, verified: plain pip install outlines leaves structured calls silently unconstrained (missing numba); pip install “outlines[llamacpp]” pulls it. CFG needs a separate pip install llguidance.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/outlines-structured-generation-local-llm-tutorial/cover.webp" alt="A laptop pours tangled free-form text through a glowing JSON-schema filter, and neat checked record cards come out the other side"><figcaption>AI-generated cover illustration. Messy text in, typed records out — the laptop in the middle is your own machine, not a cloud API.</figcaption></figure>
+<div class="article-body"><p>Every pipeline that turns language-model output into something a program can use starts the same way: ask the model for JSON, call <code>json.loads()</code>, and hope. Most of the time it works. Then one day the model wraps the object in markdown fences, or returns <code>"urgency": "ASAP"</code> instead of one of your three allowed values, or truncates mid-object — and your code crashes at 2 a.m. Or worse, it does not crash, and the bad value flows downstream into a database, a dashboard, or a customer-facing reply.</p>
+<p>The usual fixes all work after the fact: validate with Pydantic and retry, strip the fences with a regex, ask more firmly in the system prompt. They help. But they all share the same weakness — the model is free to make the mistake, and you find out afterwards. <a href="https://dottxt-ai.github.io/outlines/latest/welcome/">Outlines</a> removes the mistake instead of catching it. You hand it a schema, a regex, or a set of choices, and it compiles that constraint into a finite-state machine that edits the model's choices token by token: at every step, any token that would break the shape is masked out before sampling. The output cannot be invalid, because the invalid tokens were never on the table.</p>
+<p>This tutorial runs that whole loop end to end on your own machine — a local Qwen2.5-0.5B model through llama.cpp, no API key, no GPU, $0. You will watch the unconstrained baseline fail exactly the way production pipelines fail, then constrain the same model with an integer type, a multiple-choice set, two regexes, a Pydantic model, and a context-free grammar, and finish with four support tickets written to a JSONL file. Every number in this article was measured on a CPU-only sandbox VM, and the places where the tiny model gets the <em>value</em> wrong while the <em>shape</em> stays perfect are reported honestly — because that distinction is the whole point of this tool.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Python 3.10 or newer.</strong> Verified here on Python 3.12.</li>
+<li><strong>Outlines 1.3.3</strong> with the llama.cpp extra — this is the step most people get wrong, see Step 1.</li>
+<li><strong>One GGUF model file, 469 MB.</strong> Qwen2.5-0.5B-Instruct, quantized to Q4_K_M, from Qwen's official Hugging Face repo. No account needed.</li>
+<li><strong>About 10 minutes of patience.</strong> A 0.5B model on CPU generates roughly 1–2 tokens per second on the shared sandbox VM used here; a modern laptop is several times faster. The code is identical either way.</li>
+<li><strong>No API key, no GPU, no cloud bill.</strong> Everything below runs on localhost.</li>
+</ul>
+<h2 id="step-1-install-outlines-the-right-way">Step 1: Install Outlines the right way<a class="anchor" href="#step-1-install-outlines-the-right-way" aria-label="Link to section">#</a></h2>
+<p>Outlines ships its backends as optional extras. The llama.cpp backend needs three pieces — <code>outlines</code> itself, <code>llama-cpp-python</code>, and <code>numba</code> — and the one command that pulls all three is:</p>
+<pre><code class="language-bash">python3 -m venv outlines-env
+source outlines-env/bin/activate
+pip install "outlines[llamacpp]" "pydantic&gt;=2.9"</code></pre>
+<p>That installed Outlines <strong>1.3.3</strong>, <code>outlines-core</code> 0.2.14, <code>llama-cpp-python</code> 0.3.35, Pydantic 2.13.5, and numba 0.68.1 in our verification run. The quotes around <code>"outlines[llamacpp]"</code> matter — without them your shell eats the brackets.</p>
+<p><strong>Do not install the pieces separately.</strong> We did, the first time: plain <code>pip install outlines</code> plus a system <code>llama-cpp-python</code>, which leaves numba out. The result is a trap. Structured calls still return text — no exception, no warning in the return value — but the constraint silently does nothing, because the logits processor fails to import numba inside the sampler callback (the <code>ImportError</code> only shows up on stderr). Our <code>int</code> call came back as the sentence "A leap year has 366 days," and a regex call came back as a refusal. The <code>[llamacpp]</code> extra lists numba as a dependency — verified in the installed package metadata — so one command avoids the whole failure mode. If you ever see unconstrained-looking output from a constrained call, check numba first.</p>
+<h2 id="step-2-get-the-model-and-load-it">Step 2: Get the model and load it<a class="anchor" href="#step-2-get-the-model-and-load-it" aria-label="Link to section">#</a></h2>
+<p>Outlines needs access to the model's raw token scores, so it only works with open-weight models you run yourself — llama.cpp, Transformers, vLLM, or MLX. We use llama.cpp because it runs a quantized model on any CPU with no server and no GPU. The model is Qwen2.5-0.5B-Instruct: half a billion parameters, small enough to run anywhere, instruct-tuned so it follows directions. Download the Q4_K_M quant from Qwen's official repo:</p>
+<pre><code class="language-bash">mkdir -p models
+curl -L -o models/qwen2.5-0.5b-instruct-q4_k_m.gguf \
+  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf
+ls -la models/
+# -rw-rw---- 491400032 bytes  qwen2.5-0.5b-instruct-q4_k_m.gguf</code></pre>
+<p>Check the size: the complete file is exactly <strong>491,400,032 bytes</strong>. A shorter file is a truncated download and llama.cpp will refuse to load it — we know, because a quota hiccup cut our first download off at 438 MB and the loader failed with <code>ValueError: Failed to load model from file</code>.</p>
+<p>Loading takes two lines. <code>from_llamacpp</code> wraps a <code>llama_cpp.Llama</code> instance; <code>chat_mode</code> defaults to <code>True</code>, which means a plain string is treated as a user message in a chat conversation and the model's chat template is applied:</p>
+<pre><code class="language-python">import outlines
+from llama_cpp import Llama
+
+llm = Llama(
+    model_path="models/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    n_ctx=2048,
+    verbose=False,
+)
+model = outlines.from_llamacpp(llm)</code></pre>
+<p>Measured load time: <strong>5.0–6.3 seconds</strong>. A 2,048-token context is plenty for the short calls in this tutorial and keeps memory well under a gigabyte. From here on, every generation is one call: <code>model(prompt, output_type, max_tokens=..., temperature=...)</code>. We pass <code>temperature=0.0</code> throughout so the same prompt gives the same output twice — that is what makes the numbers below reproducible.</p>
+<h2 id="step-3-watch-the-failure-first">Step 3: Watch the failure first<a class="anchor" href="#step-3-watch-the-failure-first" aria-label="Link to section">#</a></h2>
+<p>Before fixing anything, reproduce the bug. Ask the model — with no constraint at all — to extract a support ticket as JSON:</p>
+<pre><code class="language-python">import json
+
+prompt_ticket = (
+    "Extract the support ticket as JSON with keys order_id (string), "
+    "issue (string), urgency (low/medium/high). "
+    "Message: 'My order 48151623 arrived dented, the screen is cracked. "
+    "I need a replacement before Friday, this is urgent.' "
+    "Reply with ONLY the JSON object."
+)
+raw = model(prompt_ticket, max_tokens=120, temperature=0.0)
+print(raw)
+print(json.loads(raw))</code></pre>
+<p>The model returned, after 166.4 seconds on our sandbox VM:</p>
+<pre><code class="language-text">```json
+{
+  "order_id": "48151623",
+  "issue": "My order 48151623 arrived dented, the screen is cracked. I need a replacement before Friday, this is urgent.",
+  "urgency": "high"
+}
+```</code></pre>
+<p>The JSON inside is perfect. The output is not: it is wrapped in markdown fences, so <code>json.loads()</code> raises <code>JSONDecodeError: Expecting value: line 1 column 1 (char 0)</code>. This is the classic failure — valid content, invalid envelope — and it is the failure that "reply with ONLY the JSON object" does not prevent. The same prompt, run twice, produced the same fenced output both times. Keep this prompt: it is the baseline every constrained call below is measured against.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/outlines-structured-generation-local-llm-tutorial/img2.webp" alt="Diagram comparing unconstrained generation, where the model can emit fences and prose and json.loads crashes, with Outlines constrained decoding, where the schema becomes a finite-state machine that masks invalid tokens before sampling"><figcaption>Diagram: without a constraint the model can emit anything and you find out after the fact; with Outlines the schema edits the model's choices at every step, so the mistake can never be made. (AI Frontier Post)</figcaption></figure>
+<h2 id="step-4-your-first-constrained-call-an-integer">Step 4: Your first constrained call — an integer<a class="anchor" href="#step-4-your-first-constrained-call-an-integer" aria-label="Link to section">#</a></h2>
+<p>The simplest output type is a Python primitive. Pass <code>int</code> as the output type and Outlines allows only digit tokens (plus the end-of-sequence token) through:</p>
+<pre><code class="language-python">answer = model("How many days are there in a leap year?",
+               int, max_tokens=10, temperature=0.0)
+print(answer)  # '142'</code></pre>
+<p>Two things are true about that result, and both matter. First, the constraint held completely: the answer is digits and nothing else — no words, no punctuation, no explanation. Second, the answer is <strong>wrong</strong>: a leap year has 366 days, not 142. We asked the same model two more integer questions to check whether this was a fluke. A spider has 8 legs; it answered <code>'18'</code>. A week has 7 days; it answered <code>'17'</code>. All three answers start with a stray <code>1</code> — the 0.5B model's first digit token in this setup — and none of the three is right.</p>
+<p>This is the most important lesson in the tutorial, so say it plainly: <strong>Outlines guarantees shape, not truth.</strong> It guarantees the output will be an integer. It cannot make a half-billion-parameter model know how many days a leap year has. If you need correct values, use a bigger model — the same two lines of code work with a 7B or 14B GGUF, which is what you would run in production. What the constraint buys you is that the failure mode changes from "your parser crashed" to "a value is wrong", and a wrong value is something your code can check, log, and handle.</p>
+<h2 id="step-5-multiple-choice-with-literal">Step 5: Multiple choice with Literal<a class="anchor" href="#step-5-multiple-choice-with-literal" aria-label="Link to section">#</a></h2>
+<p>When the answer must be one of a fixed set, use <code>typing.Literal</code>. Outlines constrains generation to exactly those strings — the model cannot hedge, explain, or invent a fourth label:</p>
+<pre><code class="language-python">from typing import Literal
+
+sentiments = Literal["positive", "neutral", "negative"]
+reviews = [
+    "The replacement arrived in two days and works perfectly.",
+    "It does what it says on the box, nothing more.",
+    "Third failure this month, I am done with this brand.",
+]
+for r in reviews:
+    out = model(f"Classify the sentiment of this review as positive, neutral, or negative. Review: '{r}'",
+                sentiments, max_tokens=10, temperature=0.0)
+    print(out)</code></pre>
+<p>Measured output, one word each, 35–39 seconds per review on the sandbox VM:</p>
+<pre><code class="language-text">positive
+neutral
+neutral</code></pre>
+<p>The first two are right. The third is wrong — "Third failure this month, I am done with this brand" is plainly negative, and the model called it neutral. Same story as Step 4: the constraint is airtight (every output is exactly one of the three words, no prose attached), the judgment is a property of the model. For a classifier you actually ship, that means the schema solves the parsing problem completely, and the accuracy problem is solved by a bigger model or a few examples in the prompt — not by more parsing code.</p>
+<h2 id="step-6-regex-a-phone-number-and-a-date">Step 6: Regex — a phone number and a date<a class="anchor" href="#step-6-regex-a-phone-number-and-a-date" aria-label="Link to section">#</a></h2>
+<p>Some outputs are not JSON and not a choice — they are a pattern. A phone number, a date, an order code, an ISBN. That is what <code>Regex</code> is for:</p>
+<pre><code class="language-python">from outlines.types import Regex
+
+phone = model("Generate a fake US phone number in the format 555-123-4567.",
+              Regex(r"\d{3}-\d{3}-\d{4}"), max_tokens=20, temperature=0.0)
+print(phone)  # '123-456-7890'
+
+date = model("What date is the first Monday of January 2027? Answer with the date only, YYYY-MM-DD.",
+             Regex(r"\d{4}-\d{2}-\d{2}"), max_tokens=20, temperature=0.0)
+print(date)  # '0101-01-20'</code></pre>
+<p>Both outputs match their patterns exactly — verified with <code>re.fullmatch</code>. The phone call took 28.4 seconds, the date 37.5. And both are worth reading closely. The phone number is <code>123-456-7890</code>, the textbook placeholder, not a real number — fine for a pattern demo. The date is <code>0101-01-20</code>: it matches <code>\d{4}-\d{2}-\d{2}</code>, but it is not a real date in any useful sense, and it is not the right answer either — January 1, 2027 is a Friday, so the first Monday is <strong>2027-01-04</strong>.</p>
+<p>Two things to take from that. First, a regex constrains the <em>characters</em>, not the <em>meaning</em> — <code>0101-01-20</code> is four digits, dash, two digits, dash, two digits, and nothing in the pattern says the month has to be 1–12. If you need a valid calendar date, put the range in the pattern (<code>(0[1-9]|1[0-2])</code> for the month) or validate after generation. Second, notice what the unconstrained model did with the same phone prompt before we constrained it: it refused outright — "I'm sorry, but I can't assist with that." Under the regex, refusal is impossible, because every token the model emits has to match the pattern. The constraint does not just fix formatting; it removes whole classes of unwanted behavior.</p>
+<h2 id="step-7-json-from-a-pydantic-model">Step 7: JSON from a Pydantic model<a class="anchor" href="#step-7-json-from-a-pydantic-model" aria-label="Link to section">#</a></h2>
+<p>This is the call the whole tutorial builds toward: describe the record as a Pydantic model and let Outlines generate JSON that satisfies it by construction. The schema is the same ticket shape as the Step 3 baseline, plus a <code>refund_requested</code> flag and a pattern that forces the order ID to be exactly eight digits:</p>
+<pre><code class="language-python">from typing import Literal
+from pydantic import BaseModel, Field
+
+class Ticket(BaseModel):
+    order_id: str = Field(pattern=r"^\d{8}$")
+    issue: str
+    urgency: Literal["low", "medium", "high"]
+    refund_requested: bool
+
+raw = model(
+    "Extract the support ticket from this message. "
+    "order_id is the 8-digit order number, issue is a short summary, "
+    "urgency is low/medium/high, refund_requested is true if the customer asks for a refund. "
+    "Message: 'My order 48151623 arrived dented, the screen is cracked. "
+    "I need a replacement before Friday, this is urgent. I want a refund.'",
+    Ticket, max_tokens=150, temperature=0.0,
+)
+ticket = Ticket.model_validate_json(raw)
+print(ticket)</code></pre>
+<p>Measured: 99.4 seconds, and the output validated on the first try — no fences, no repair, no retry:</p>
+<pre><code class="language-text">{"order_id": "48151623", "issue": "My order 48151623 arrived dented, the screen is cracked. I need a replacement before Friday, this is urgent. I want a refund.", "urgency": "high", "refund_requested": true}</code></pre>
+<p>Compare that with the Step 3 baseline: same message, same model, same temperature. Unconstrained, the model produced fenced JSON that <code>json.loads()</code> rejected. Constrained, the identical request produced a record that <code>model_validate_json</code> accepted immediately. The only thing that changed was the output type.</p>
+<p>One honest flaw in the result: the <code>issue</code> field is the entire message copied verbatim, not the short summary the prompt asked for. The schema says <code>issue</code> is a string; it says nothing about length or style, so the model took the easiest path. If you need short summaries, add <code>max_length</code> to the field or a length rule to the prompt — the schema is the place where those requirements live, so write them there.</p>
+<h2 id="step-8-batch-it-four-tickets-to-a-file">Step 8: Batch it — four tickets to a file<a class="anchor" href="#step-8-batch-it-four-tickets-to-a-file" aria-label="Link to section">#</a></h2>
+<p>One call proves the mechanism. A batch proves the workflow. Loop over four messages, one model call each, validate each result, and append the valid records to <code>tickets.jsonl</code>:</p>
+<pre><code class="language-python">messages = [
+    "Order 90210abc never arrived, tracking shows it in Ohio for a week. Not urgent.",
+    "Order 11223344 charged twice on my card, please refund the duplicate charge.",
+    "Order 55667788: the wrong size was sent, medium instead of large. Can you exchange it?",
+    "Order 99887766 stopped working after two days. Very unhappy, want my money back.",
+]
+with open("tickets.jsonl", "w") as f:
+    for m in messages:
+        raw = model(
+            "Extract the support ticket from this message. "
+            "order_id is the 8-digit order number (if the message has no 8-digit number, use \"00000000\"), "
+            "issue is a short summary, urgency is low/medium/high, "
+            "refund_requested is true if the customer asks for a refund. "
+            f"Message: '{m}'",
+            Ticket, max_tokens=150, temperature=0.0,
+        )
+        ticket = Ticket.model_validate_json(raw)
+        f.write(ticket.model_dump_json() + "\n")</code></pre>
+<p>Measured: <strong>4 out of 4 tickets validated on the first try</strong>, in 80.7, 31.3, 23.8, and 93.0 seconds — 228.8 seconds total, $0. The file:</p>
+<pre><code class="language-text">{"order_id": "90210000", "issue": "Order 90210abc never arrived", "urgency": "low", "refund_requested": true}
+{"order_id": "11223344", "issue": "Duplicate charge", "urgency": "high", "refund_requested": true}
+{"order_id": "55667788", "issue": "the wrong size was sent, medium instead of large", "urgency": "medium", "refund_requested": true}
+{"order_id": "99887766", "issue": "Order 99887766 stopped working after two days", "urgency": "high", "refund_requested": true}</code></pre>
+<p>Every line parses. But read the values, not just the shapes. Ticket 0 is the one to study: the message's order reference is <code>90210abc</code> — there is no eight-digit number in it at all — and the prompt told the model to use <code>00000000</code> in that case. Instead the model invented <code>90210000</code>, padding the five digits with zeros. It matches the pattern, it validates, and it is a number that appears nowhere in the message. Ticket 0 also says <code>refund_requested: true</code> although nobody asked for a refund, and ticket 2 says the same although the customer asked for an <em>exchange</em>. Two of the four records have a wrong boolean.</p>
+<p>That is the real-world shape of this tool: <strong>structural validity 4/4, factual accuracy roughly 2/4 on a 0.5B model.</strong> In a production pipeline the fix is not more parsing — it is a bigger model for the judgment calls, plus a validation layer that checks values against your own data (does this order ID exist in the orders table?) rather than only against the schema. The schema guarantees the record is well-formed; your database guarantees it is real. Both checks belong in the pipeline, and they are different checks.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/outlines-structured-generation-local-llm-tutorial/img3.webp" alt="Bar chart of measured call times on a CPU-only sandbox VM: unconstrained JSON 166.4 seconds, int 70.4, three choices 112.3 total, regex phone 28.4, regex date 37.5, Pydantic JSON 99.4, batch of four tickets 228.8 seconds"><figcaption>Measured on a CPU-only sandbox VM with other jobs running: every call took tens of seconds on the 0.5B model. A laptop CPU is faster; the shape — short calls in tens of seconds, batches in minutes — is what to plan around. (AI Frontier Post)</figcaption></figure>
+<h2 id="step-9-bonus-grammars-with-cfg">Step 9 (bonus): Grammars with CFG<a class="anchor" href="#step-9-bonus-grammars-with-cfg" aria-label="Link to section">#</a></h2>
+<p>JSON, regex, and choices cover most pipelines. When the output is a small language of its own — a yes/no answer, a SQL fragment, an arithmetic expression — Outlines accepts a context-free grammar in EBNF:</p>
+<pre><code class="language-python">from outlines.types import CFG
+
+grammar = """
+root ::= answer
+answer ::= "yes" | "no"
+"""
+answer = model("Are you an AI language model? Answer yes or no.",
+               CFG(grammar), max_tokens=10, temperature=0.0)
+print(answer)  # 'yes'</code></pre>
+<p>Measured: 65.2 seconds, answer <code>'yes'</code>. One install note: CFG support needs the <code>llguidance</code> package, which is not pulled in by <code>outlines[llamacpp]</code> — without it the call fails with <code>ModuleNotFoundError: No module named 'llguidance'</code>. Install it with <code>pip install llguidance</code> (1.9.1 in our run) before using <code>CFG</code>. Grammars are the most powerful output type Outlines has, and the least used; if you ever need output that is a tiny programming language rather than a record, this is the one to reach for.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Four tools solve "JSON I can trust", and they solve it in different places. Pick by where your model runs, not by which one is newest.</p>
+<table>
+<thead><tr><th>Approach</th><th>Where the guarantee lives</th><th>Use it when</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td><strong>Outlines</strong> (this tutorial)</td><td>During generation, token by token</td><td>You self-host an open-weight model and want regex, choices, and grammars as well as JSON</td><td>Needs logit access — no closed API; values can still be wrong</td></tr>
+<tr><td><strong>Instructor + Pydantic</strong></td><td>After generation, by validation + retry</td><td>You use a hosted API or Ollama and want retries with the error attached</td><td>Costs extra calls when the first attempt is invalid</td></tr>
+<tr><td><strong>Provider JSON mode</strong> (OpenAI, Gemini)</td><td>On the provider's side</td><td>You already pay for a frontier API and need JSON only</td><td>Guarantees syntax, not schema adherence; no regex or grammar</td></tr>
+<tr><td><strong>vLLM / SGLang built-in</strong></td><td>During generation, in the server</td><td>You serve a model at scale and want structured output as an API feature</td><td>Needs a GPU server; the same trade-offs as Outlines on values</td></tr>
+</tbody>
+</table>
+<p>The honest summary: Outlines and Instructor are complements, not rivals. Outlines prevents the mistake; Instructor catches it and re-asks. If you self-host, start with Outlines — it removes the retry loop entirely. If you call a hosted API, Instructor is the equivalent move. And if you self-host <em>and</em> want a safety net, there is nothing stopping you from validating Outlines output with Pydantic anyway — that is what Step 7 does, and it costs nothing.</p>
+<h2 id="honest-limitations">Honest limitations<a class="anchor" href="#honest-limitations" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Structure is not truth.</strong> Measured three times in this tutorial: a leap year is not 142 days, an angry review is not neutral, and order <code>90210000</code> does not exist. A schema guarantees the shape of the answer. Correctness comes from the model and from checks against your own data.</li>
+<li><strong>The 0.5B model is a learning tool, not a production model.</strong> It follows the shape perfectly and gets the judgment wrong about half the time on real tickets. Use it to learn the API for $0; run a 7B or larger model — same code, bigger GGUF — for anything real.</li>
+<li><strong>CPU speed is the bottleneck.</strong> Our calls took 24–166 seconds each on a shared sandbox VM; the batch of four tickets took 228.8 seconds. A laptop CPU is faster and a GPU is far faster, but budget minutes, not milliseconds, for CPU batches — or serve the model with vLLM on a GPU and keep the same Outlines calls.</li>
+<li><strong>First call with a new schema costs extra.</strong> Outlines compiles each constraint into a state machine on first use. That compile is seconds, not minutes, but it is part of the latency of the first request — warm it up before you measure.</li>
+<li><strong>Refusals and cutoffs can still break the shape.</strong> A constraint cannot force a model to answer, and a <code>max_tokens</code> cutoff mid-object produces a truncated record that fails validation. Set <code>max_tokens</code> generously for JSON and treat a validation failure as a loud, loggable error, not a silent skip.</li>
+<li><strong>Closed APIs are out of reach.</strong> Outlines edits token scores, which a text-only API does not expose. For GPT, Claude, or Gemini, use the provider's structured-output mode or Instructor instead.</li>
+</ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The pipeline that breaks in production is never the one that returns invalid JSON — that fails loudly and gets fixed. It is the one that returns valid JSON with wrong values inside it, or the one whose retry loop quietly burns money re-asking a model that keeps making the same mistake. Outlines moves the check to the only place it cannot be bypassed: inside generation itself, where the invalid token is never sampled. A local 0.5B model, a 469 MB file, and two lines of loading code are enough to get there — and the four tickets in <code>tickets.jsonl</code> prove the shape holds on the first try, four times out of four.</p>
+<ol>
+<li><strong>Install the extra, not the base package.</strong> <code>pip install "outlines[llamacpp]"</code> pulls numba; plain <code>pip install outlines</code> leaves structured calls silently unconstrained.</li>
+<li><strong>Write the schema first.</strong> Types, enums, patterns — the Pydantic model is the specification, and every requirement you forget to write down is a wrong value waiting to happen.</li>
+<li><strong>Set <code>temperature=0</code> and generous <code>max_tokens</code>.</strong> Deterministic output you can reproduce; headroom so JSON never truncates mid-object.</li>
+<li><strong>Validate anyway.</strong> <code>model_validate_json</code> after generation costs nothing and turns a truncated or refused response into a loud error.</li>
+<li><strong>Measure judgment, not just validity.</strong> A record can pass every check and still be wrong. Spot-check values against your own data before you trust the pipeline.</li>
+<li><strong>Use a bigger model for real work.</strong> The 0.5B model teaches the API; a 7B+ model is what makes the values right.</li>
+</ol>
+<p>The one-line version: JSON mode makes output that parses; Outlines makes output that cannot be anything but the shape you asked for — and on a local model, that guarantee costs nothing but time.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://dottxt-ai.github.io/outlines/latest/features/models/llamacpp/" rel="nofollow">Outlines Docs — llama.cpp integration</a></li>
+<li><a href="https://dottxt-ai.github.io/outlines/latest/installation/" rel="nofollow">Outlines Docs — Installation</a></li>
+<li><a href="https://github.com/dottxt-ai/outlines" rel="nofollow">Outlines on GitHub (dottxt-ai/outlines)</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF" rel="nofollow">Qwen2.5-0.5B-Instruct-GGUF on Hugging Face</a></li>
+<li><a href="https://llama-cpp-python.readthedocs.io/" rel="nofollow">llama-cpp-python documentation</a></li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="outlines-structured-generation-local-llm-tutorial"></div><div class="comments" data-comments="outlines-structured-generation-local-llm-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/airllm-run-huge-models-tiny-gpu-tutorial/"><span class="chip">Tutorials</span><h3>Run a 70B model on a 4GB GPU: hands-on with AirLLM</h3><div class="meta">November 15, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/pr-agent-ai-code-review-tutorial/"><span class="chip">Tutorials</span><h3>Let an AI review your pull requests: hands-on with PR-Agent</h3><div class="meta">November 15, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/pardig-rainfall-maps-weathernext-tutorial/"><span class="chip">Tutorials</span><h3>Build a live rainfall map from Google’s open PARDIG dataset — hands-on with the data behind WeatherNext 3</h3><div class="meta">November 15, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/minimax-h3-hailuo-video-api-tutorial/"><span class="chip">Tutorials</span><h3>Generate video with sound from one API call: hands-on with MiniMax H3 (Hailuo)</h3><div class="meta">November 15, 2026 · 15 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key or a GPU?</h3><p>No. Everything in this tutorial runs on localhost: Outlines with llama.cpp serving Qwen2.5-0.5B-Instruct on CPU. There is no account, no key, and no bill; the batch of four tickets cost $0 and took 228.8 seconds on a CPU-only sandbox VM.</p><h3>Why did the integer answers come out wrong?</h3><p>Outlines guarantees the shape of the output, not the truth of it. The 0.5B model answered 142 for a leap year, 18 legs for a spider, and 17 days for a week — all digits-only, all wrong. The constraint held every time; the values need a bigger model. Use the 0.5B model to learn the API, then swap in a 7B or larger GGUF with the same code.</p><h3>What happens if I install outlines without the [llamacpp] extra?</h3><p>You get a silent failure: structured calls return unconstrained prose because the logits processor cannot import numba, and the ImportError only appears on stderr. Install with pip install "outlines[llamacpp]", which pulls numba as a dependency.</p><h3>How is this different from Instructor?</h3><p>Outlines prevents invalid tokens during generation, so the mistake can never be made. Instructor validates after generation and re-asks with the error attached. They are complements: Outlines is the move when you self-host an open-weight model; Instructor is the move for hosted APIs. You can also validate Outlines output with Pydantic anyway, as this tutorial does.</p><h3>Can I use the same code with a bigger model or a hosted one?</h3><p>A bigger GGUF works with the same two lines — point model_path at a 7B or 14B quant and keep every call identical. Hosted APIs are different: Outlines needs access to token scores, which text-only APIs do not expose, so for GPT, Claude, or Gemini use the provider's structured-output mode or Instructor instead.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/structured-outputs-tutorial/">Structured outputs: getting JSON you can trust from LLMs</a></li><li><a href="/articles/instructor-structured-extraction-ollama-tutorial/">Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/gguf-quantization-imatrix-measured/">Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</a></li><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
