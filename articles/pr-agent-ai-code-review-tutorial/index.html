@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Let an AI review your pull requests: hands-on with PR-Agent — AI Frontier Post</title>
+<meta name="description" content="PR-Agent is the original open-source AI code reviewer — and it is trending again after Qodo donated it to the community. Install 0.50.0, point it at a local Ollama model, and review a real pull request for $0: doctor passes 3 of 3, review takes 4m12s, describe 4m29s. No token, no API key, no account.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/pr-agent-ai-code-review-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Let an AI review your pull requests: hands-on with PR-Agent">
+<meta property="og:description" content="PR-Agent is the original open-source AI code reviewer — and it is trending again after Qodo donated it to the community. Install 0.50.0, point it at a local Ollama model, and review a real pull request for $0: doctor passes 3 of 3, review takes 4m12s, describe 4m29s. No token, no API key, no account.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/pr-agent-ai-code-review-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/pr-agent-ai-code-review-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-15">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Let an AI review your pull requests: hands-on with PR-Agent", "description": "PR-Agent is the original open-source AI code reviewer — and it is trending again after Qodo donated it to the community. Install 0.50.0, point it at a local Ollama model, and review a real pull request for $0: doctor passes 3 of 3, review takes 4m12s, describe 4m29s. No token, no API key, no account.", "datePublished": "2026-11-15", "dateModified": "2026-11-15", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/pr-agent-ai-code-review-tutorial/"}, "image": "https://aifrontierpost.com/articles/pr-agent-ai-code-review-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Let an AI review your pull requests: hands-on with PR-Agent", "description": "PR-Agent is the original open-source AI code reviewer — and it is trending again after Qodo donated it to the community. Install 0.50.0, point it at a local Ollama model, and review a real pull request for $0: doctor passes 3 of 3, review takes 4m12s, describe 4m29s. No token, no API key, no account.", "step": [{"@type": "HowToStep", "name": "Step 1: Install PR-Agent", "text": "Install pr-agent 0.50.0 with the GitHub extra: pip install \"pr-agent[github]\"; confirm with pr-agent --version."}, {"@type": "HowToStep", "name": "Step 2: Point it at a local model", "text": "Serve Ollama with OLLAMA_CONTEXT_LENGTH=8192, set CONFIG__MODEL=ollama/qwen3:0.6b and the matching env vars, then run pr-agent doctor: 3 of 3 checks pass."}, {"@type": "HowToStep", "name": "Step 3: Review a real pull request", "text": "Fetch PR #4970 as a unified diff and run pr-agent --diff-file pr4970.diff --output review.md review with CONFIG__AI_TIMEOUT=600; it completes in 4m12s."}, {"@type": "HowToStep", "name": "Step 4: Generate a PR description with describe", "text": "Run pr-agent --diff-file pr4970.diff --output describe.md describe; it completes in 4m29s with PR type, description, and a Mermaid walkthrough."}, {"@type": "HowToStep", "name": "Step 5: The GitHub path — token, CLI, and Action", "text": "Export GITHUB__USER_TOKEN and a model key for CLI reviews against --pr_url, or install the GitHub Action workflow for automatic reviews on every pull request."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GitHub token to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No — Steps 1–4 use the plain-diff provider, which reviews a raw unified diff with no hosting platform and no token. The GitHub provider (Step 5) does require a personal access token with repo scope, and fails with an exact error if it is missing."}}, {"@type": "Question", "name": "Do I need an API key or a GPU?", "acceptedAnswer": {"@type": "Answer", "text": "No. The local path runs entirely on CPU with a free Ollama model (qwen3:0.6b, 522 MB) and no API key. The trade-off is speed: review took 4m12s and describe 4m29s on a 2-core sandbox, versus about 30 seconds per command with a hosted model."}}, {"@type": "Question", "name": "Why does the review need CONFIG__AI_TIMEOUT=600?", "acceptedAnswer": {"@type": "Answer", "text": "PR-Agent's default LLM timeout is 120 seconds, and the 0.6B model generates at 7.8 tokens per second on this sandbox. The first review attempt timed out at exactly 120.0 seconds; raising the timeout to 600 seconds let it finish in 4m12s."}}, {"@type": "Question", "name": "How good is the review from a 0.6B local model?", "acceptedAnswer": {"@type": "Answer", "text": "Structurally correct but shallow: the output has the right format (effort estimate, test and security rows, focus areas) and the describe output correctly identifies the Fable 5.2 change, but the review asserts correctness without evidence and the describe output repeats labels and misattributes a filename. Treat small-model output as a first draft a human still reads."}}, {"@type": "Question", "name": "What is the difference between PR-Agent and Qodo Merge?", "acceptedAnswer": {"@type": "Answer", "text": "PR-Agent is the community-owned open-source project (The-PR-Agent/pr-agent on GitHub, MIT) after Qodo donated it; Qodo Merge is Qodo's hosted commercial code-review offering. They share history but are distinct products."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Let an AI review your pull requests: hands-on with PR-Agent</h1>
+<p class="lede">PR-Agent is the original open-source AI code reviewer — and it is trending again after Qodo donated it to the community. Install 0.50.0, point it at a local Ollama model, and review a real pull request for $0: doctor passes 3 of 3, review takes 4m12s, describe 4m29s. No token, no API key, no account.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 15, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> PR-Agent — the original open-source AI code reviewer — is trending again after Qodo donated it to the community: 16,235 stars, 1,733 gained in a week, v0.50.0 actively maintained. This tutorial installs it, points it at a free local Ollama model, and reviews a real pull request for $0: doctor passes 3 of 3, review takes 4m12s, describe 4m29s. No token, no API key, no account — and the failure modes (120-second default timeout, token required for GitHub) are shown, not hidden.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>The-PR-Agent/pr-agent has 16,235 stars and 2.2k forks; it gained 1,733 stars in the week to November 8, 2026 — the second-fastest growth of any AI project that week. Qodo donated the project to the community, moving it from QodoAI/pr-agent; v0.50.0 is the latest release and 23 commits landed on November 15 alone.</li><li>Install with pip install "pr-agent[github]" — verified as pr-agent 0.50.0. The default model is gpt-6.1-sol; the local path overrides it with CONFIG__MODEL=ollama/qwen3:0.6b plus OLLAMA__API_BASE and a raised timeout.</li><li>pr-agent doctor passes 3 of 3 checks against local Ollama in 46 seconds — no token, no API key. Ollama must be served with OLLAMA_CONTEXT_LENGTH=8192; the 2,048-token default is too small for PR-Agent prompts.</li><li>Review of real PR #4970 (Claude Fable 5.2 support, 4 files, +31/−2, 2,959 tokens) completed in 4m12s via plain-diff mode; describe took 4m29s. Both outputs are quoted verbatim in the tutorial.</li><li>The default 120-second LLM timeout fails on a 2-core CPU (first review attempt timed out at exactly 120.0 s); CONFIG__AI_TIMEOUT=600 fixes it. The GitHub CLI path refuses to start without GITHUB__USER_TOKEN — the exact error is quoted in Step 5.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/pr-agent-ai-code-review-tutorial/cover.webp" alt="A programmer in a modern office working on computer code on a large monitor"><figcaption>Photo by cottonbro studio on Pexels. A programmer reviewing code — the job PR-Agent automates.</figcaption></figure>
+<div class="article-body"><h2 id="why-pr-agent-is-trending-now">Why PR-Agent is trending now</h2>
+<p>PR-Agent is the original open-source AI code reviewer: point it at a pull request and it returns a structured review — estimated effort, security notes, test coverage gaps, and line-level suggestions — plus a generated PR description, code improvements, and answers to questions about the diff. It has been around since the early wave of LLM developer tools, but this week it spiked back onto GitHub Trending for a specific reason: Qodo, the company that built it, donated the project to the open-source community. The repository moved from <code>QodoAI/pr-agent</code> to <code>The-PR-Agent/pr-agent</code>, the docs moved to <code>docs.pr-agent.ai</code>, and the project is now community-owned and community-maintained, distinct from Qodo's hosted offering.</p>
+<p>The numbers behind the spike: 16,235 stars and 2.2k forks as of November 15, 2026, with 1,733 stars gained in the week to November 8 — the second-fastest growth of any AI project that week, a 12.5% jump. The latest release is v0.50.0, and development is active: 23 commits landed on November 15 alone, including support for Claude Fable 5.2, and the repository has 6,571 commits from 471 contributors. It is MIT-licensed and almost entirely Python.</p>
+<p>What makes it worth a tutorial rather than a news item is that it runs entirely on your own machine and your own model. You can point it at a hosted model through LiteLLM — OpenAI, Anthropic, Gemini, DeepSeek, Mistral — or at a local model through Ollama, which is what this tutorial does: the whole pipeline runs for $0, with no account and no API key, against a real pull request from the project's own repository.</p>
+
+<h2 id="what-you-will-need">What you will need</h2>
+<ul>
+<li>Python 3.10 or newer and <code>pip</code>. Verified here with Python 3.12.3.</li>
+<li>Ollama, with the <code>qwen3:0.6b</code> model pulled (522 MB). Any Ollama model works; this one is the smallest that produces usable structured output, and it is what the timings below were measured with.</li>
+<li>About 10 minutes of wall-clock time per command on a 2-core CPU. A hosted model finishes the same work in about 30 seconds; the local path is slow but free.</li>
+<li>No GitHub token and no API key for the local path. The GitHub path (Step 5) needs a personal access token with repo scope.</li>
+<li>Optional, for the GitHub Action path: a repository where you can add a workflow file and a secret.</li>
+</ul>
+<p>A note on scope: every command in Steps 1–4 was run in a sandbox and produced the output shown. Step 5's GitHub Action workflow is quoted from the project's README and validated as YAML, but not executed — running it requires a repository and secrets this sandbox does not have. That distinction is marked wherever it applies.</p>
+
+<h2 id="step-1-install-pr-agent">Step 1: Install PR-Agent</h2>
+<p>Install the package with the GitHub extra, which pulls in PyGithub and the GitHub provider:</p>
+<pre><code class="language-bash">pip install "pr-agent[github]"</code></pre>
+<p>Confirm the install:</p>
+<pre><code class="language-bash">pr-agent --version
+# pr-agent 0.50.0</code></pre>
+<p>The install pulls a large dependency tree — LiteLLM, FastAPI, OpenAI and Anthropic SDKs, GitPython — so expect a few minutes on a first install. Other providers have their own extras: <code>pr-agent[gitlab]</code>, <code>pr-agent[bitbucket]</code>, <code>pr-agent[azure]</code>, <code>pr-agent[gitea]</code>, and <code>pr-agent[all]</code> for everything. The version matters: v0.50.0 is the release this tutorial was verified against, and the configuration defaults below (including the default model) are taken from that release.</p>
+<p>Check the full command list while you are here:</p>
+<pre><code class="language-bash">pr-agent --help</code></pre>
+<p>The commands you will use most are <code>review</code>, <code>describe</code>, <code>improve</code>, and <code>ask</code>. The complete list is <code>review</code>, <code>describe</code>, <code>improve</code>, <code>ask</code>, <code>update_changelog</code>, <code>add_docs</code>, <code>generate_labels</code>, <code>analyze</code>, <code>similar_issue</code>, <code>doctor</code>, and <code>auto_review</code>. In pull-request comments the same commands are invoked with a leading slash, for example <code>/describe</code> or <code>/review</code>.</p>
+
+<h2 id="step-2-point-it-at-a-local-model">Step 2: Point it at a local model</h2>
+<p>PR-Agent's default model in v0.50.0 is <code>gpt-6.1-sol</code>, with <code>gpt-6-luna</code> as fallback — both hosted models that need an OpenAI key. To run locally, override the model with environment variables. The variable names use double underscores to separate sections, for example <code>CONFIG__MODEL</code>:</p>
+<pre><code class="language-bash">export CONFIG__MODEL="ollama/qwen3:0.6b"
+export CONFIG__FALLBACK_MODELS="[]"
+export CONFIG__CUSTOM_MODEL_MAX_TOKENS=8192
+export CONFIG__DUPLICATE_PROMPT_EXAMPLES=true
+export OLLAMA__API_BASE="http://localhost:11434"</code></pre>
+<p>Three of these settings deserve an explanation, because the defaults will bite you with a small local model:</p>
+<ul>
+<li><code>CONFIG__MODEL="ollama/qwen3:0.6b"</code> selects the Ollama provider through LiteLLM. The <code>ollama/</code> prefix is what routes the request to your local server instead of OpenAI.</li>
+<li><code>CONFIG__CUSTOM_MODEL_MAX_TOKENS=8192</code> tells PR-Agent how much prompt it may build. The default Ollama context window is 2,048 tokens, which the project's own docs say is not enough for a PR-Agent prompt. Start Ollama with a larger window:</li>
+</ul>
+<pre><code class="language-bash">OLLAMA_CONTEXT_LENGTH=8192 ollama serve</code></pre>
+<ul>
+<li><code>CONFIG__DUPLICATE_PROMPT_EXAMPLES=true</code> repeats the format examples in the prompt. The docs recommend it for local models, which are less reliable at producing the structured output PR-Agent parses.</li>
+</ul>
+<p>Verify the setup with the built-in health check, which needs no token and no pull request:</p>
+<pre><code class="language-bash">pr-agent doctor</code></pre>
+<p>Expected output, verified in the sandbox:</p>
+<pre><code>✓ config.model = ollama/qwen3:0.6b
+✓ no static key for 'ollama' (ambient auth or custom endpoint); ping decides
+✓ model completion succeeded
+3 of 3 checks passed</code></pre>
+<p>If <code>doctor</code> reports that the model completion failed, check that Ollama is serving (<code>curl http://localhost:11434/api/tags</code> should list <code>qwen3:0.6b</code>) and that <code>OLLAMA__API_BASE</code> points at it.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/pr-agent-ai-code-review-tutorial/img2.webp" alt="Six-step workflow diagram: install PR-Agent, serve the Ollama model, configure the model and timeout, run the doctor health check, fetch the real PR diff, and run the review into a Markdown file"><figcaption>Measured path. Every step ran in the sandbox: install, Ollama serve with an 8K context window, doctor 3 of 3, PR #4970 diff, review into review.md.</figcaption></figure>
+<h2 id="step-3-review-a-real-pull-request">Step 3: Review a real pull request, no token required</h2>
+<p>The GitHub provider requires a token, which you may not have handy. PR-Agent also ships a <code>plain-diff</code> provider that reviews a raw unified diff with no hosting platform involved — no token, no account, nothing posted anywhere. That is the path this step uses, against a real merged pull request from PR-Agent's own repository: <a href="https://github.com/The-PR-Agent/pr-agent/pull/4970" rel="nofollow">PR #4970, "feat(models): add Claude Fable 5.2 support"</a>, merged November 15, 2026, four files changed, 31 additions and 2 deletions.</p>
+<p>Fetch the diff:</p>
+<pre><code class="language-bash">curl -sL "https://github.com/The-PR-Agent/pr-agent/pull/4970.diff" -o pr4970.diff
+grep -c "^diff --git" pr4970.diff
+# 4</code></pre>
+<p>Run the review, writing the result to a file instead of posting it anywhere:</p>
+<pre><code class="language-bash">pr-agent --diff-file pr4970.diff --output review.md review</code></pre>
+<p>One setting is essential on slow hardware. PR-Agent's default LLM timeout is 120 seconds (<code>config.ai_timeout</code>), and the 0.6B model on a 2-core CPU needs longer: the first attempt in this sandbox timed out at exactly 120.0 seconds. Raise it:</p>
+<pre><code class="language-bash">export CONFIG__AI_TIMEOUT=600
+pr-agent --diff-file pr4970.diff --output review.md review</code></pre>
+<p>The review completed in 4 minutes 12 seconds. The diff was 2,959 tokens against the 8,192-token budget, and the output was this, verbatim:</p>
+<pre><code class="language-markdown">## PR Reviewer Guide 🔍
+
+Here are some key observations to aid the review process:
+
+⏱️ Estimated effort to review: 3 🔵🔵🔵⚪⚪
+🧪 No relevant tests
+🔒 No security concerns identified
+⚡ Recommended focus areas for review
+
+Possible Issue
+The PR adds two model alias configurations in the __new hunk__
+section. These changes are confirmed to be correct and do not
+introduce any new code or security issues.
+
+Test suite is intact with existing model aliases
+The PR's test suite includes all necessary tests for the model
+alias configurations. No new tests were added or updated.</code></pre>
+<p>That is a real PR-Agent review in its standard format: the effort estimate, the test and security rows, and the focus areas. It is also, honestly, a thin review — a 0.6B model confirming that a docs-and-config change "is correct" is not a finding. The structure is right and the content is weak, which is the trade you make with the smallest local model. With a larger local model (the docs' example is <code>ollama/qwen2.5-coder:32b</code>) or a hosted model, the same command produces line-level findings. The mechanics — install, configure, run, output file — are identical either way.</p>
+
+<h2 id="step-4-generate-a-pr-description">Step 4: Generate a PR description with describe</h2>
+<p>The <code>describe</code> command writes the parts of a pull request that humans usually skip: type, summary, and a file-by-file walkthrough. Same diff, same flags:</p>
+<pre><code class="language-bash">pr-agent --diff-file pr4970.diff --output describe.md describe</code></pre>
+<p>It completed in 4 minutes 29 seconds and produced 2,241 bytes. The core of the output, verbatim:</p>
+<pre><code class="language-markdown">### **PR Type**
+enhancement, enhancement, enhancement
+
+### **Description**
+- Add support for Claude Fable 5.2 model alias with 1,000,000 tokens.
+- Update existing Claude Sonnet 4.6, Opus 4.6, and Fable 5.2 aliases.
+- Adjust the model configuration to include the new model aliases.
+
+### Diagram Walkthrough
+
+```mermaid
+flowchart LR
+  node1 ["Model Aliases"]
+  node2 ["Configuration Update"]
+  node1 -- "Update model aliases" --> node2
+```</code></pre>
+<p>The description itself is accurate — the PR really does add the Fable 5.2 alias with a 1,000,000-token context window — and the Mermaid diagram is a usable summary of the change. The flaws are visible too: the type is repeated three times, and the file walkthrough further down the file misattributes a couple of filenames. Treat <code>describe</code> output as a draft to edit, not copy to paste into a PR untouched. The same applies to the other generation commands, <code>improve</code> (actionable code suggestions), <code>add_docs</code>, and <code>generate_labels</code>, which take the same <code>--diff-file</code> / <code>--output</code> form. <code>ask</code> answers a free-text question about the diff, for example <code>pr-agent --diff-file pr4970.diff ask "What does this PR change?"</code>.</p>
+<p>Two flags worth knowing for this mode: <code>--output</code> must come before the command and writes the result as Markdown, and <code>--json-output</code> writes the parsed results plus token usage as JSON. Both are only supported in plain-diff mode. You can also pipe a diff straight in: <code>git diff | pr-agent --stdin --output review.md review</code>.</p>
+
+<h2 id="step-5-the-github-path">Step 5: The GitHub path — token, CLI, and Action</h2>
+<p>Plain-diff mode is for local, one-off reviews. For the full experience — reviews posted as PR comments, <code>/ask</code> in a thread, automatic reviews on every pull request — you need the GitHub provider and a token. Without one, the CLI fails fast with an exact error, verified in the sandbox:</p>
+<pre><code>ValueError: GitHub token is required when using user deployment.
+See: https://docs.pr-agent.ai/installation/locally/#run-from-source</code></pre>
+<p>Create a personal access token with repo scope, then export it alongside your model key. Note the double underscores in the CLI variables — a common mistake is to use the single-underscore names from the Action example below:</p>
+<pre><code class="language-bash">export OPENAI__KEY=your_openai_key
+export GITHUB__USER_TOKEN=your_github_token
+pr-agent --pr_url https://github.com/owner/repo/pull/123 review</code></pre>
+<p>The same command works with <code>describe</code>, <code>improve</code>, <code>ask "your question"</code>, <code>add_docs</code>, and <code>generate_labels</code> in place of <code>review</code>. With a token set, the CLI posts its output as a PR comment; add <code>--output review.md</code> before the command only in plain-diff mode — it is not accepted with <code>--pr_url</code>.</p>
+<p>For automatic reviews, the project recommends its GitHub Action. The workflow below is quoted from the README and validated as YAML; it was not executed in this sandbox. It runs on every opened or updated pull request:</p>
+<pre><code class="language-yaml">name: PR Agent
+on:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+jobs:
+  pr-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: the-pr-agent/pr-agent@main
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}</code></pre>
+<p>Save it as <code>.github/workflows/pr-agent.yml</code> in your repository and add <code>OPENAI_KEY</code> as a repository secret; <code>GITHUB_TOKEN</code> is provided automatically. Once installed, commenting <code>/review</code>, <code>/describe</code>, or <code>/ask "What does this PR change?"</code> on any pull request triggers the matching command. Each <code>/review</code> or <code>/ask</code> uses a single LLM call, which the README says takes about 30 seconds with a hosted model.</p>
+<p>Repository-level behaviour is customized with a <code>.pr_agent.toml</code> file in the repo — model choice, which files to ignore, extra review instructions — and the same settings can be passed as environment variables or CLI flags. The Docker form needs no local install: <code>docker run --rm -it -e OPENAI__KEY=&lt;key&gt; -e GITHUB__USER_TOKEN=&lt;token&gt; pragent/pr-agent:latest --pr_url &lt;pr_url&gt; review</code>. Note the image name: releases 0.34.2 and later are published under <code>pragent/pr-agent</code>; older releases under the legacy <code>codiumai/pr-agent</code> namespace are a frozen archive.</p>
+
+<h2 id="when-to-use-pr-agent-vs-alternatives">When to use PR-Agent vs alternatives</h2>
+<p>Use PR-Agent when you want review automation you can self-host and reconfigure: your model, your prompts, your ignore rules, running on your infrastructure, with the review output as Markdown you can file, post, or discard. The local-model path is the cheapest way to get a working AI reviewer — $0, no account — and the plain-diff mode is genuinely useful as a pre-push self-review: generate the diff, run <code>review</code>, read the output before you open the PR.</p>
+<p>Use a hosted reviewer instead when review quality is the priority and you are willing to pay per PR or per seat. Qodo Merge is the commercial successor built by the same team; GitHub Copilot's code review is the zero-setup option if your code already lives on GitHub and you use Copilot. OpenAI's Codex Security CLI is the better tool when the question is specifically "find vulnerabilities" rather than "review this diff" — it scans for security issues rather than writing PR descriptions. Static analysis (linters, type checkers, Reviewdog) still belongs in CI alongside any of these: an LLM reviewer catches design and logic issues that linters cannot see, and misses deterministic issues that linters catch every time.</p>
+<p>Do not use the 0.6B local setup as your only reviewer on consequential code. The sandbox runs show why: the review correctly structured its output and missed nothing in a 33-line change, but it also asserted correctness it had not verified and the describe output repeated itself. Treat small-model output as a first pass that a human still reads.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/pr-agent-ai-code-review-tutorial/img3.webp" alt="Horizontal bar chart: pr-agent doctor 46 seconds, review 4 minutes 12 seconds, describe 4 minutes 29 seconds, measured on a 2-core CPU sandbox with qwen3:0.6b via Ollama"><figcaption>Measured on this sandbox: doctor 46s, review 4m12s, describe 4m29s; raw generation 7.8 tokens per second. The default 120-second timeout failed the first review attempt.</figcaption></figure>
+<h2 id="honest-limitations">Honest limitations</h2>
+<ul>
+<li><strong>Speed on CPU.</strong> Measured on a 2-core sandbox: <code>doctor</code> took 46 seconds, <code>review</code> 4 minutes 12 seconds, <code>describe</code> 4 minutes 29 seconds, and raw generation ran at 7.8 tokens per second. The default 120-second LLM timeout fails at this speed; <code>CONFIG__AI_TIMEOUT=600</code> is required, not optional, for the 0.6B model. A hosted model does the same work in about 30 seconds per the README.</li>
+<li><strong>Small-model quality.</strong> The outputs quoted above are verbatim. The structure is correct; the judgment is shallow and occasionally sloppy (repeated labels, a misattributed filename in the walkthrough, an assertion of correctness with no evidence). Larger models — local 7B–32B coders or hosted frontier models — are the fix, at the cost of speed or money.</li>
+<li><strong>Token required for GitHub.</strong> The CLI's GitHub provider refuses to start without <code>GITHUB__USER_TOKEN</code>. Public pull requests are readable without authentication through the API, but PR-Agent does not offer a token-free GitHub path; plain-diff is the token-free route.</li>
+<li><strong>One command in the Action is disabled.</strong> <code>/help_docs</code> has been disabled since v0.36.1 pending a fix for a credential-exposure issue (#2445). Everything else in the command list works.</li>
+<li><strong>Configuration surface.</strong> Model, provider, timeouts, ignore rules, and prompt behaviour live across <code>configuration.toml</code>, <code>.secrets.toml</code>, <code>.pr_agent.toml</code>, and double-underscore environment variables. It is flexible and, on first contact, confusing — <code>pr-agent doctor</code> is the fastest way to confirm a given combination actually works.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway</h2>
+<p>PR-Agent's trending week is a governance story as much as a technical one: a widely used reviewer — 16,235 stars, second-fastest weekly growth among AI projects — is now community-owned after Qodo donated it, and v0.50.0 is actively maintained. The tool itself earns the attention: install it with one pip command, point it at a local Ollama model with five environment variables, and you can review a real pull request end to end for $0, with the review saved as a Markdown file you own. The 0.6B-model output is a draft, not a verdict, and the GitHub integration needs a token — but the mechanics are verified, the failure modes are explicit, and the upgrade path to a stronger model is a one-line change.</p>
+
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://github.com/The-PR-Agent/pr-agent" rel="nofollow">The-PR-Agent/pr-agent on GitHub</a> — README, install instructions, command list; 16,235 stars, v0.50.0, MIT</li>
+<li><a href="https://docs.pr-agent.ai/usage-guide/changing_a_model/" rel="nofollow">Changing a model — PR-Agent docs</a> — Ollama configuration, context-length note, <code>duplicate_prompt_examples</code></li>
+<li><a href="https://docs.pr-agent.ai/usage-guide/automations_and_usage/" rel="nofollow">Usage and Automation — PR-Agent docs</a> — <code>pr-agent doctor</code>, provider list, model configuration patterns</li>
+<li><a href="https://docs.pr-agent.ai/installation/locally/" rel="nofollow">Install locally — PR-Agent docs</a> — Docker commands per provider</li>
+<li><a href="https://github.com/The-PR-Agent/pr-agent/pull/4970" rel="nofollow">PR #4970: feat(models): add Claude Fable 5.2 support</a> — the real pull request reviewed in Steps 3–4</li>
+<li><a href="https://www.ainomam.com/post/github-ai-agent-stars-weekly-20261109" rel="nofollow">This week's GitHub stars ranking, November 9, 2026</a> — PR Agent +1,733 stars in a week, second in growth</li>
+</ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="pr-agent-ai-code-review-tutorial"></div><div class="comments" data-comments="pr-agent-ai-code-review-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/pardig-rainfall-maps-weathernext-tutorial/"><span class="chip">Tutorials</span><h3>Build a live rainfall map from Google’s open PARDIG dataset — hands-on with the data behind WeatherNext 3</h3><div class="meta">November 15, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/ggml-1-0-tensor-library-tutorial/"><span class="chip">Tutorials</span><h3>ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp</h3><div class="meta">November 15, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/minimax-h3-hailuo-video-api-tutorial/"><span class="chip">Tutorials</span><h3>Generate video with sound from one API call: hands-on with MiniMax H3 (Hailuo)</h3><div class="meta">November 15, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/nvidia-skillevaluator-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Stop shipping untested agent skills: hands-on with NVIDIA&#x27;s SkillEvaluator</h3><div class="meta">November 15, 2026 · 14 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GitHub token to follow this tutorial?</h3><p>No — Steps 1–4 use the plain-diff provider, which reviews a raw unified diff with no hosting platform and no token. The GitHub provider (Step 5) does require a personal access token with repo scope, and fails with an exact error if it is missing.</p><h3>Do I need an API key or a GPU?</h3><p>No. The local path runs entirely on CPU with a free Ollama model (qwen3:0.6b, 522 MB) and no API key. The trade-off is speed: review took 4m12s and describe 4m29s on a 2-core sandbox, versus about 30 seconds per command with a hosted model.</p><h3>Why does the review need CONFIG__AI_TIMEOUT=600?</h3><p>PR-Agent&#x27;s default LLM timeout is 120 seconds, and the 0.6B model generates at 7.8 tokens per second on this sandbox. The first review attempt timed out at exactly 120.0 seconds; raising the timeout to 600 seconds let it finish in 4m12s.</p><h3>How good is the review from a 0.6B local model?</h3><p>Structurally correct but shallow: the output has the right format (effort estimate, test and security rows, focus areas) and the describe output correctly identifies the Fable 5.2 change, but the review asserts correctness without evidence and the describe output repeats labels and misattributes a filename. Treat small-model output as a first draft a human still reads.</p><h3>What is the difference between PR-Agent and Qodo Merge?</h3><p>PR-Agent is the community-owned open-source project (The-PR-Agent/pr-agent on GitHub, MIT) after Qodo donated it; Qodo Merge is Qodo&#x27;s hosted commercial code-review offering. They share history but are distinct products.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/codex-security-openai-scanner-tutorial/">Find, validate, and fix vulnerabilities with OpenAI&#x27;s Codex Security CLI — hands-on</a></li><li><a href="/articles/claude-mem-persistent-memory-tutorial/">Stop re-explaining your project to Claude Code: hands-on with claude-mem</a></li><li><a href="/articles/agent-browser-cli-browser-automation-tutorial/">Drive a real browser from your terminal: hands-on with agent-browser, Vercel&#x27;s CLI for AI agents</a></li><li><a href="/articles/instructor-structured-extraction-ollama-tutorial/">Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/ggml-1-0-tensor-library-tutorial/">ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
