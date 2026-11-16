@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a live rainfall map from Google’s open PARDIG dataset — hands-on with the data behind WeatherNext 3 — AI Frontier Post</title>
+<meta name="description" content="Google DeepMind opened PARDIG and SatWeave on November 13 — the satellite rainfall data behind WeatherNext 3, free under CC BY 4.0, no access form. This tutorial opens the live 15-minute feed with xarray, finds the wettest place on Earth right now, plots it, and replays Hurricane Helene from the archive. Every command verified, no account needed.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/pardig-rainfall-maps-weathernext-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a live rainfall map from Google’s open PARDIG dataset — hands-on with the data behind WeatherNext 3">
+<meta property="og:description" content="Google DeepMind opened PARDIG and SatWeave on November 13 — the satellite rainfall data behind WeatherNext 3, free under CC BY 4.0, no access form. This tutorial opens the live 15-minute feed with xarray, finds the wettest place on Earth right now, plots it, and replays Hurricane Helene from the archive. Every command verified, no account needed.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/pardig-rainfall-maps-weathernext-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/pardig-rainfall-maps-weathernext-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-15">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a live rainfall map from Google’s open PARDIG dataset — hands-on with the data behind WeatherNext 3", "description": "Google DeepMind opened PARDIG and SatWeave on November 13 — the satellite rainfall data behind WeatherNext 3, free under CC BY 4.0, no access form. This tutorial opens the live 15-minute feed with xarray, finds the wettest place on Earth right now, plots it, and replays Hurricane Helene from the archive. Every command verified, no account needed.", "datePublished": "2026-11-15", "dateModified": "2026-11-15", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/pardig-rainfall-maps-weathernext-tutorial/"}, "image": "https://aifrontierpost.com/articles/pardig-rainfall-maps-weathernext-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build a live rainfall map from Google’s open PARDIG dataset — hands-on with the data behind WeatherNext 3", "description": "Google DeepMind opened PARDIG and SatWeave on November 13 — the satellite rainfall data behind WeatherNext 3, free under CC BY 4.0, no access form. This tutorial opens the live 15-minute feed with xarray, finds the wettest place on Earth right now, plots it, and replays Hurricane Helene from the archive. Every command verified, no account needed.", "step": [{"@type": "HowToStep", "name": "Step 1: What PARDIG is — and which variant you want", "text": "PARDIG's two variants, the 0.1-degree grid, the 75 mm/h cap, and the 0–360° longitudes."}, {"@type": "HowToStep", "name": "Step 2: Install the stack", "text": "Install xarray, zarr, obstore, dask, and matplotlib — including the dask the docs leave out."}, {"@type": "HowToStep", "name": "Step 3: Open the live feed without an account", "text": "Find the newest frame and open it over anonymous HTTPS with obstore's HTTPStore."}, {"@type": "HowToStep", "name": "Step 4: Find the wettest place on Earth right now", "text": "Scan the live frame for the wettest 30-by-30-degree box and the wettest single cell."}, {"@type": "HowToStep", "name": "Step 5: Plot the rainfall map", "text": "Plot the wettest box with matplotlib and read what a single 15-minute frame shows — and hides."}, {"@type": "HowToStep", "name": "Step 6: Replay Hurricane Helene from the archive", "text": "Open the 9 TB archive, pull Helene's landfall frame, and plot the Southeast US."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a Google Cloud account to use PARDIG?", "acceptedAnswer": {"@type": "Answer", "text": "No — not for the route in this tutorial. The bucket is public, and the HTTPStore code reads it over plain HTTPS with no credentials. The docs' GCSStore recipe is the one that needs a Google Cloud account: without credentials it tries the GCE metadata server and fails."}}, {"@type": "Question", "name": "Why does open_zarr fail with \"chunk manager 'dask' is not available\"?", "acceptedAnswer": {"@type": "Answer", "text": "Because the docs' install line leaves out dask, and opening a Zarr store with chunks={} needs a chunk manager. Install dask alongside xarray, zarr, and obstore and the same code works."}}, {"@type": "Question", "name": "How fresh is the live feed?", "acceptedAnswer": {"@type": "Answer", "text": "Frames arrive in six-hourly batches at roughly five hours of average latency, two to eight hours in practice. When this tutorial ran, the newest frame was 16:30 UTC, about seven hours behind real time. It is near-real-time data, not live data."}}, {"@type": "Question", "name": "Can I use PARDIG for flood warnings or safety decisions?", "acceptedAnswer": {"@type": "Answer", "text": "No. PARDIG is an experimental research dataset, provided as-is. It is validated against ground radar and 36,000+ stations, but it is not an observation, a forecast, or a warning. For anything involving life or property, use official alerts from your national meteorological service."}}, {"@type": "Question", "name": "What is SatWeave, and do I need it?", "acceptedAnswer": {"@type": "Answer", "text": "SatWeave is the 17-channel mosaic of geostationary satellite imagery — GOES-East and West, two Meteosat positions, and Himawari — that gives WeatherNext 3 its live view of clouds and storms. It lives in the same bucket pattern as PARDIG. You do not need it to map rainfall, but it is the obvious next dataset if you want to train a precipitation model of your own."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a live rainfall map from Google’s open PARDIG dataset — hands-on with the data behind WeatherNext 3</h1>
+<p class="lede">Google DeepMind opened PARDIG and SatWeave on November 13 — the satellite rainfall data behind WeatherNext 3, free under CC BY 4.0, no access form. This tutorial opens the live 15-minute feed with xarray, finds the wettest place on Earth right now, plots it, and replays Hurricane Helene from the archive. Every command verified, no account needed.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 15, 2026 · 13 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Google DeepMind opened PARDIG on November 13 — the AI rainfall dataset behind WeatherNext 3, free under CC BY 4.0 with no access form. This tutorial opens the live 15-minute feed over plain HTTPS (no Google Cloud account), finds the wettest place on Earth at 16:30 UTC on November 15 (the equatorial Pacific, 75 mm/h at the model’s cap), plots it, and replays Hurricane Helene from the 9 TB archive — max 75 mm/h, box average 1.13 mm/h. Three gotchas the docs don’t warn you about: the install line omits dask, the GCS recipe needs credentials, and xarray rejects nearest-time selection combined with slices.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>PARDIG was released November 13, 2026: AI precipitation estimates every 15 minutes at 0.1° (~10 km), 1999 to the present, CC BY 4.0, in the public bucket gs://pardig_1 as Zarr v3. It is trained on GPM CORRA radar retrievals; the near-real-time variant takes ECMWF HRES fields plus the SatWeave satellite mosaic.</li><li>Live feed verified: the newest frame when this ran was 20261115T163000 (2026-11-15 16:30 UTC), opened over anonymous HTTPS with obstore's HTTPStore — no Google Cloud account. The whole planet at one timestamp is a single 1.2 MB chunk.</li><li>Wettest place on Earth at that hour: the equatorial Pacific box 15°S–15°N, 172°W–142°W; the wettest cell sat at 8.8°S, 159.2°W, raining at 75.0 mm/h — exactly the model's documented rate cap.</li><li>Helene replay from the archive (350,657 timesteps, 9 TB): the frame is exactly 2024-09-26T12:00:00Z, time index 306,353; the Southeast US box peaks at 75.0 mm/h with a mean of 1.13 mm/h.</li><li>Docs gaps found by running the code: the install line omits dask, so open_zarr(chunks={}) fails without it; the GCSStore recipe needs Google Cloud credentials; and xarray rejects method="nearest" combined with slices — select the time first, then slice space.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/pardig-rainfall-maps-weathernext-tutorial/cover.webp" alt="Earth seen from space with a huge spiralling storm system over the Pacific Ocean and a faint data grid overlaid on the planet"><figcaption>AI-generated cover illustration. A cyclone from orbit — the kind of system PARDIG turns into a rainfall map every 15 minutes.</figcaption></figure>
+<div class="article-body"><p>On November 13, Google DeepMind did something weather models rarely get: it opened the data. PARDIG and SatWeave — the two datasets behind WeatherNext 3, DeepMind's current global weather model — are now public on Google Cloud Storage under a CC BY 4.0 licence, with historical archives and live feeds, and no access-request form. PARDIG is the interesting one for builders: an AI model that turns sparse satellite radar into a global rainfall map every 15 minutes, at roughly 10-kilometre resolution, from 1999 to the present.</p>
+<p>This tutorial does the obvious next thing with it: it opens the live feed, finds the wettest place on Earth right now, plots it, and then replays Hurricane Helene from the archive. No Google Cloud account, no API key, no bill. Every command below was run against the real public bucket, and every number comes from that run — including the three places where the official docs led me astray, which I flag as I go.</p>
+
+<h2 id="what-you-will-need">What you will need</h2>
+<ul>
+<li>Python 3.10 or newer. The steps below ran on Python 3.12 on Linux; macOS and Windows with Python work the same way.</li>
+<li>Five Python packages: <code>xarray</code>, <code>zarr</code>, <code>obstore</code>, <code>dask</code>, and <code>matplotlib</code>. Versions used here: xarray 2026.9.0, zarr 3.4.2, dask 2026.8.0, matplotlib 3.11.2.</li>
+<li>Internet access and about 30 MB of downloads. The whole planet, one timestamp, is a single 1.2 MB chunk — you never download the 9 TB archive.</li>
+<li>Nothing else. No Google Cloud account, no API key, no Earth Engine project. The route in Step 3 reads the public bucket over plain HTTPS.</li>
+</ul>
+
+<h2 id="step-1-what-pardig-is">Step 1: What PARDIG is — and which variant you want</h2>
+<p>PARDIG stands for Precipitation AI Reanalysis: Densely Inferred GPM. It is a model, and a dataset the model produced. The model was trained directly on precipitation retrievals from the Combined Radar-Radiometer Algorithm (CORRA) aboard the NASA/JAXA Global Precipitation Measurement (GPM) Core Observatory — sparse radar swaths, a few orbits a day — paired with satellite imagery and atmospheric fields, and it learned to infer a dense global rainfall map from those inputs. The output is a single variable, <code>precipitation</code>, an instantaneous rate in metres per hour on a uniform 0.1° latitude-longitude grid (1,801 × 3,600 cells), every 15 minutes.</p>
+<p>There are two variants. <strong>PARDIG-NRT</strong> (near-real-time) covers 2016 to the present, is updated every six hours with roughly five hours of average latency, and takes ECMWF HRES fields plus SatWeave — the geostationary satellite mosaic — as inputs. <strong>PARDIG-LR</strong> (long-record) covers 1999 to 2023 as a static archive and takes coarser ERA5 fields plus historical satellite imagery. Use NRT for anything operational or from 2016 onward; use LR only when you need the record back to 1999, and do not stitch the two together for trend analysis without reading the caveats in Step 6 — the inputs changed, so the seams are not climatic signals.</p>
+<p>Three properties matter for everything that follows. First, longitudes are 0° to 360°, not −180° to 180°: New York is at 286°E, not −74°. Second, instantaneous rates cap at 75 mm/h, the top of the model's calibration range — hurricane eyewalls will sit exactly on that cap, as you will see in Step 6. Third, PARDIG is experimental AI-estimated data, not an official observation. It is validated against ground radar in the US, Europe, and Japan and against 36,000+ weather stations, and Google reports its WeatherNext 3 precipitation head trained on PARDIG beats the IMERG-trained head by about 15% on probabilistic error — but none of that makes it a source for safety decisions. For those, your national meteorological service is the only authority.</p>
+
+<h2 id="step-2-install-the-stack">Step 2: Install the stack</h2>
+<p>Install the five packages:</p>
+<pre><code class="language-bash">pip install xarray zarr obstore dask matplotlib</code></pre>
+<p>One correction to the official docs here: their install line is <code>pip install xarray zarr obstore</code>, and it is missing <code>dask</code>. Their own first code sample opens the archive with <code>chunks={}</code>, which needs a chunk manager — without dask, xarray raises <code>ImportError: chunk manager 'dask' is not available</code>. I hit exactly that. Add dask, or the first sample in the docs fails on a fresh machine.</p>
+<p>Verify the install:</p>
+<pre><code class="language-bash">python -c "import xarray, zarr, obstore, dask, matplotlib; print('ok')"</code></pre>
+<pre><code class="language-text">ok</code></pre>
+
+<h2 id="step-3-open-the-live-feed">Step 3: Open the live feed without an account</h2>
+<p>The live frames live under <code>gs://pardig_1/NRT/zarr/2026_to_present/</code>, one directory per 15-minute timestamp, each holding a single-frame Zarr store. Find the newest frame with the public bucket listing API:</p>
+<pre><code class="language-bash">curl -s "https://storage.googleapis.com/storage/v1/b/pardig_1/o?prefix=NRT/zarr/2026_to_present/20261115&delimiter=/" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['prefixes'][-1])"</code></pre>
+<pre><code class="language-text">NRT/zarr/2026_to_present/20261115T163000/</code></pre>
+<p>When I ran this, the newest frame was stamped 16:30 UTC — roughly seven hours behind real time, inside the 2–8 hour latency band the docs promise. The docs' own recipe opens the store with <code>obstore.store.GCSStore</code>, which assumes Google Cloud credentials; on a machine with none, it spends its time trying to reach the GCE metadata server and fails. The bucket is public, so read it over plain HTTPS instead — this is the route I verified:</p>
+<pre><code class="language-python">import obstore
+import xarray as xr
+import zarr
+
+store = obstore.store.HTTPStore(
+    url="https://storage.googleapis.com/pardig_1"
+        "/NRT/zarr/2026_to_present/20261115T163000/predictions.zarr",
+)
+ds = xr.open_zarr(zarr.storage.ObjectStore(store), chunks={})
+print(ds)</code></pre>
+<pre><code class="language-text">&lt;xarray.Dataset&gt; Size: 26MB
+Dimensions:        (latitude: 1801, longitude: 3600)
+Coordinates:
+  * latitude       (latitude) float64 14kB -90.0 -89.9 -89.8 ... 89.8 89.9 90.0
+  * longitude      (longitude) float64 29kB 0.0 0.1 0.2 ... 359.7 359.8 359.9
+    time           datetime64[ns] 8B ...
+Data variables:
+    precipitation  (latitude, longitude) float32 26MB dask.array&lt;chunksize=(1801, 3600), meta=np.ndarray&gt;</code></pre>
+<p>Nothing has been downloaded yet — xarray and dask are lazy. The whole frame is one chunk of about 1.2 MB compressed, so the first <code>.compute()</code> pulls the entire planet in a couple of seconds. Note the frame time: 2026-11-15 16:30 UTC. If you run this later, swap in the newest frame from the listing above; the rest of the tutorial is identical.</p>
+
+<h2 id="step-4-find-the-wettest-place">Step 4: Find the wettest place on Earth right now</h2>
+<p>Load the frame, convert metres per hour to millimetres per hour, and scan for the wettest 30° × 30° box on the planet:</p>
+<pre><code class="language-python">import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
+
+rate = ds["precipitation"].compute() * 1000.0  # m/h -&gt; mm/h
+arr = rate.values
+lat = ds["latitude"].values
+lon = ds["longitude"].values
+
+# Coarsen to 1-degree block maxima, then find the wettest 30x30-degree box
+h, w = arr.shape
+h1, w1 = h // 10 * 10, w // 10 * 10
+a = arr[:h1, :w1].reshape(h1 // 10, 10, w1 // 10, 10).max(axis=(1, 3))
+s = sliding_window_view(a, (30, 30)).sum(axis=(2, 3))
+bi, bj = np.unravel_index(np.argmax(s), s.shape)
+box_lat0, box_lon0 = float(lat[bi * 10]), float(lon[bj * 10])
+print("wettest 30x30 box: lat %.1f..%.1f lon %.1f..%.1f sum %.0f" % (
+    box_lat0, box_lat0 + 30, box_lon0, box_lon0 + 30, s[bi, bj]))
+imax = np.unravel_index(np.argmax(arr), arr.shape)
+print("wettest cell: lat %.1f lon %.1f (%.1fE) rate %.1f mm/h" % (
+    lat[imax[0]], lon[imax[1]], lon[imax[1]], arr[imax]))</code></pre>
+<pre><code class="language-text">wettest 30x30 box: lat -15.0..15.0 lon 188.0..218.0 sum 5823
+wettest cell: lat -8.8 lon 200.8 (200.8E) rate 75.0 mm/h</code></pre>
+<p>At 16:30 UTC on November 15, the wettest place on Earth was the equatorial Pacific: the box from 15°S to 15°N and 172°W to 142°W, with the single wettest cell at 8.8°S, 159.2°W, raining at 75.0 mm/h — exactly the model's cap. That is the Intertropical Convergence Zone doing what it does in November: a band of deep convection straddling the equator, thousands of kilometres from the nearest rain gauge. It is also the point of PARDIG. A gauge network would see nothing here; a geostationary satellite sees the cloud tops; PARDIG turns that into a rainfall rate.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/pardig-rainfall-maps-weathernext-tutorial/img2.webp" alt="Rainfall map of the equatorial Pacific from 15 degrees south to 15 degrees north, showing scattered intense rain cells along the equator with rates up to 30 millimetres per hour"><figcaption>Measured from the live PARDIG-NRT frame 2026-11-15 16:30 UTC: the wettest 30° × 30° box on Earth, 15°S–15°N, 172°W–142°W. The band of cells along the equator is the Intertropical Convergence Zone. Data: Google DeepMind PARDIG, CC BY 4.0.</figcaption></figure>
+
+<h2 id="step-5-plot-the-map">Step 5: Plot the rainfall map</h2>
+<p>The plot is one xarray call on the slice you already computed:</p>
+<pre><code class="language-python">import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(10, 6))
+sub = rate.sel(latitude=slice(box_lat0, box_lat0 + 30),
+               longitude=slice(box_lon0, box_lon0 + 30))
+sub.plot(ax=ax, cmap="YlGnBu", vmin=0, vmax=30,
+         cbar_kwargs={"label": "Precipitation rate (mm/h)"})
+ax.set_title("PARDIG-NRT precipitation rate — 2026-11-15 16:30 UTC
+"
+             f"wettest 30°×30° box: {box_lat0:.0f}°–{box_lat0+30:.0f}°N, "
+             f"{box_lon0:.0f}°–{box_lon0+30:.0f}°E")
+ax.set_xlabel("Longitude (°E)")
+ax.set_ylabel("Latitude (°N)")
+fig.tight_layout()
+fig.savefig("live_wettest_box.png", dpi=130)</code></pre>
+<p>The figure above is the literal output of that code. Two things to notice. First, the colour scale tops out at 30 mm/h while the data caps at 75, so the darkest cells are clipped — that is deliberate: most of the planet is under 5 mm/h, and a scale that reaches 75 would wash out everything except the eyewall. Second, a single 15-minute frame is speckled. Rain at this resolution is intermittent; a snapshot shows individual convective cells, not a smooth field. If you want the shape of a storm rather than a moment of it, accumulate: sum 96 frames for a daily total, or average 4 frames for an hourly rate. The archive in Step 6 makes that cheap, because each timestep is one chunk.</p>
+
+<h2 id="step-6-replay-hurricane-helene">Step 6: Replay Hurricane Helene from the archive</h2>
+<p>The live feed is the present. The archive is the past — the full PARDIG-NRT record from 2016 to 2025, 350,657 timesteps, about 9 TB in Zarr, chunked (4, 1801, 3600). Open it the same way, then pull one frame: Hurricane Helene at 12:00 UTC on September 26, 2024, the day it came ashore in Florida.</p>
+<pre><code class="language-python">store = obstore.store.HTTPStore(
+    url="https://storage.googleapis.com/pardig_1"
+        "/NRT/zarr/2016_to_2025/predictions.zarr",
+)
+ds_arc = xr.open_zarr(zarr.storage.ObjectStore(store), chunks={})
+print(ds_arc)
+
+# Two selections, not one: xarray rejects method="nearest" combined with slices
+frame = ds_arc["precipitation"].sel(time="2024-09-26T12:00:00", method="nearest")
+helene = frame.sel(latitude=slice(24.0, 36.0),
+                   longitude=slice(274.0, 286.0)).compute() * 1000.0
+print("frame:", str(helene["time"].values),
+      "max mm/h:", float(helene.max()), "mean mm/h:", float(helene.mean()))</code></pre>
+<pre><code class="language-text">&lt;xarray.Dataset&gt; Size: 9TB
+Dimensions:        (time: 350657, latitude: 1801, longitude: 3600)
+Coordinates:
+  * time           (time) datetime64[ns] 3MB 2016-01-01T07:45:00 ... 2025-12-31T23:45:00
+  * latitude       (latitude) float64 14kB -90.0 -89.9 -89.8 ... 89.9 90.0
+  * longitude      (longitude) float64 29kB 0.0 0.1 0.2 ... 359.7 359.8 359.9
+Data variables:
+    precipitation  (time, latitude, longitude) float32 9TB dask.array&lt;chunksize=(4, 1801, 3600), meta=np.ndarray&gt;
+
+frame: 2024-09-26T12:00:00.000000000 max mm/h: 75.0 mean mm/h: 1.1277673244476318</code></pre>
+<p>The two-step selection matters: xarray raises <code>NotImplementedError</code> if you pass <code>method="nearest"</code> and a slice in the same <code>.sel()</code> call. Select the time first, then slice space. The frame it returns is exactly 2024-09-26T12:00:00 — I cross-checked the archive's time coordinate independently, and that timestamp is index 306,353 of the record. Longitudes again use the 0–360° convention: 274°–286°E is 86°–74°W, the Southeast US.</p>
+<p>Plot it the same way:</p>
+<pre><code class="language-python">fig, ax = plt.subplots(figsize=(10, 6))
+helene.plot(ax=ax, cmap="YlGnBu", vmin=0, vmax=40,
+            cbar_kwargs={"label": "Precipitation rate (mm/h)"})
+ax.set_title("PARDIG-NRT — Hurricane Helene, 2024-09-26 12:00 UTC
+"
+             "Southeast US (24°–36°N, 86°–74°W)")
+ax.set_xlabel("Longitude (°E)")
+ax.set_ylabel("Latitude (°N)")
+fig.tight_layout()
+fig.savefig("helene_20240926.png", dpi=130)</code></pre>
+
+<figure class="inline-art"><img class="story-image" src="/articles/pardig-rainfall-maps-weathernext-tutorial/img3.webp" alt="Rainfall map of the Southeast US during Hurricane Helene, with the heaviest rain over the eastern Gulf of Mexico and Florida at rates up to 40 millimetres per hour"><figcaption>Measured from the PARDIG-NRT archive: Hurricane Helene, 2024-09-26 12:00 UTC. The heaviest cells sit at the 75 mm/h cap over the eastern Gulf and the Florida coast; the box average is 1.13 mm/h. Data: Google DeepMind PARDIG, CC BY 4.0.</figcaption></figure>
+
+<p>Read the map against the numbers. The box average is 1.13 mm/h — most of the Southeast was not raining at noon — but the maximum is 75.0 mm/h, hard against the cap, in the cells over the eastern Gulf and the Florida coast where Helene's core was. That gap between mean and max is the whole story of a hurricane in a rainfall field: a small number of cells doing nearly all of the damage. It is also a reminder of what the cap hides: anything above 75 mm/h is recorded as 75, so this map understates the eyewall. For totals, accumulate the frames across the landfall window instead of trusting any single one.</p>
+
+<h2 id="which-approach-should-you-use">Which approach should you use?</h2>
+<p>Three routes reach the same data, and the right one depends on the job:</p>
+<ul>
+<li><strong>Live frames over HTTPS (this tutorial).</strong> For dashboards, monitoring, and "what is raining now" questions. Each frame is one small chunk, no account, no download step. The cost is latency: you are always several hours behind real time.</li>
+<li><strong>The archive over HTTPS or GCS.</strong> For replaying events, training models, and validation. The <code>zarr/</code> layout is chunked for spatial reads — one timestep of one region still pulls whole-globe chunks, so keep your slices small. For the opposite pattern, extracting a multi-year time series at one location, use the <code>zarr_rechunked_as_timeseries/</code> layout instead: it stores the full time axis per 0.5° × 0.5° tile, so a station's whole history is a single chunk read.</li>
+<li><strong>Google Earth Engine.</strong> For planetary-scale analysis where downloading is the bottleneck. PARDIG-NRT and PARDIG-LR are public ImageCollections (<code>projects/gcp-public-data-weathernext/assets/PARDIG_1_NRT</code> and <code>..._LR</code>), but the Earth Engine copies are static archives — the live feed is Cloud Storage only — and you need an Earth Engine project.</li>
+</ul>
+<p>And NRT versus LR: NRT for anything from 2016 onward and all operational use; LR only when the question genuinely reaches back before 2016. If you do combine them, say so in your methods — the input change from ERA5/GridSat to HRES/SatWeave is a discontinuity in the record, not weather.</p>
+
+<h2 id="honest-limitations">Honest limitations</h2>
+<ul>
+<li><strong>Latency.</strong> The live feed is not live. Frames arrive in six-hourly batches at roughly five hours of average latency, two to eight hours in practice. Do not build a warning system on it.</li>
+<li><strong>The 75 mm/h cap.</strong> Rates above 75 mm/h are clipped to 75. Hurricane eyewalls, intense tropical convection, and flash-flood cores all saturate. Totals built from capped rates understate the worst cells.</li>
+<li><strong>Poles and mountains.</strong> Poleward of about 67° the GPM orbit never sampled and geostationary coverage degrades, so the grid there is extrapolation, not measurement. Skill also narrows over high terrain and for light snowfall and drizzle, which spaceborne radar barely sees.</li>
+<li><strong>Single frames are noisy.</strong> A 15-minute snapshot shows individual cells. Accumulate over hours for storm structure, over days for totals.</li>
+<li><strong>It is experimental.</strong> PARDIG is a research dataset, provided as-is. It is not an observation, a forecast, or a warning, and the licence and terms say so plainly. For anything involving life or property, official alerts from your national meteorological service take priority — always.</li>
+<li><strong>SatWeave is the other half.</strong> This tutorial uses PARDIG only. SatWeave — the 17-channel geostationary mosaic that feeds WeatherNext 3's live view of clouds and storms — lives in the same bucket pattern, and pairing the two is the obvious next step if you want to train your own precipitation model.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway</h2>
+<p>In about twenty minutes you opened the dataset behind one of the world's best weather models, found the wettest place on Earth at a specific hour, plotted it, and replayed a hurricane from the archive — with no account, no key, and no bill. The total download for both maps was a few megabytes against a 9 TB archive, because Zarr lets you read one chunk instead of the dataset. The three things worth remembering are the 0–360° longitudes, the 75 mm/h cap, and the latency: get those right and the rest of the WeatherNext ecosystem — SatWeave, the Earth Engine collections, the training targets — opens the same way. The rain data is now a public utility. Use it like one.</p>
+
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://deepmind.google/blog/opening-the-datasets-behind-our-ai-weather-models/" rel="nofollow">Google DeepMind — PARDIG &amp; SatWeave: Foundational Datasets for Earth Science</a> (November 13, 2026 release announcement)</li>
+<li><a href="https://developers.google.com/weathernext/guides/pardig" rel="nofollow">PARDIG developer documentation</a> (dataset guide: variants, grid, Zarr layouts, query recipes)</li>
+<li><a href="https://developers.google.com/weathernext/guides/satweave" rel="nofollow">SatWeave developer documentation</a> (the satellite mosaic that feeds WeatherNext 3)</li>
+<li><a href="https://arxiv.org/abs/2611.13941" rel="nofollow">Shalev et al. — PARDIG: Global Precipitation Estimates Learned from Sparse Satellite Observations</a> (arXiv:2611.13941, November 10, 2026)</li>
+</ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="pardig-rainfall-maps-weathernext-tutorial"></div><div class="comments" data-comments="pardig-rainfall-maps-weathernext-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/ggml-1-0-tensor-library-tutorial/"><span class="chip">Tutorials</span><h3>ggml 1.0 hands-on: run a tiny neural net on the tensor library behind llama.cpp</h3><div class="meta">November 15, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/minimax-h3-hailuo-video-api-tutorial/"><span class="chip">Tutorials</span><h3>Generate video with sound from one API call: hands-on with MiniMax H3 (Hailuo)</h3><div class="meta">November 15, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/nvidia-skillevaluator-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Stop shipping untested agent skills: hands-on with NVIDIA's SkillEvaluator</h3><div class="meta">November 15, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/chrome-devtools-mcp-coding-agents-tutorial/"><span class="chip">Tutorials</span><h3>Give your coding agent a browser: hands-on with chrome-devtools-mcp</h3><div class="meta">November 15, 2026 · 14 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a Google Cloud account to use PARDIG?</h3><p>No — not for the route in this tutorial. The bucket is public, and the HTTPStore code reads it over plain HTTPS with no credentials. The docs' GCSStore recipe is the one that needs a Google Cloud account: without credentials it tries the GCE metadata server and fails.</p><h3>Why does open_zarr fail with "chunk manager 'dask' is not available"?</h3><p>Because the docs' install line leaves out dask, and opening a Zarr store with chunks={} needs a chunk manager. Install dask alongside xarray, zarr, and obstore and the same code works.</p><h3>How fresh is the live feed?</h3><p>Frames arrive in six-hourly batches at roughly five hours of average latency, two to eight hours in practice. When this tutorial ran, the newest frame was 16:30 UTC, about seven hours behind real time. It is near-real-time data, not live data.</p><h3>Can I use PARDIG for flood warnings or safety decisions?</h3><p>No. PARDIG is an experimental research dataset, provided as-is. It is validated against ground radar and 36,000+ stations, but it is not an observation, a forecast, or a warning. For anything involving life or property, use official alerts from your national meteorological service.</p><h3>What is SatWeave, and do I need it?</h3><p>SatWeave is the 17-channel mosaic of geostationary satellite imagery — GOES-East and West, two Meteosat positions, and Himawari — that gives WeatherNext 3 its live view of clouds and storms. It lives in the same bucket pattern as PARDIG. You do not need it to map rainfall, but it is the obvious next dataset if you want to train a precipitation model of your own.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/envision-tianji-weather-foundation-model-ecmwf-ai-weather-quest/">Envision’s Tianji tops ECMWF’s AI Weather Quest: a physics-AI model aimed at the 19–25 day window</a></li><li><a href="/articles/ai2-neuralgcm-plus-google-5m-climate-projections/">NeuralGCM+: Google gives Ai2 $5M to turn its AI weather model into a climate projector for decades ahead</a></li><li><a href="/articles/ai2-olmoearth-v1-3-planet-scale-satellite-embeddings/">Ai2 precomputes the entire planet: OlmoEarth v1.3 turns a year of satellite data into ready-made embeddings</a></li><li><a href="/articles/gods-eye-view-spy-satellite-globe-tutorial/">Build your own spy-satellite console: track every plane, ship, and satellite live — hands-on with God's Eye View</a></li><li><a href="/articles/kronos-financial-forecasting-tutorial/">Forecast the next 120 candles with Kronos, the foundation model that speaks the language of markets</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
