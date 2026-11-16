@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Hands-on with Lance: the open lakehouse format built for AI data — AI Frontier Post</title>
+<meta name="description" content="Lance (lance-format/lance, 7,336 stars) is the open lakehouse format for multimodal AI: Parquet-compatible storage with fast random access, built-in vector search, and zero-copy versioning. This guide installs pylance 14.0.3, converts a Parquet dataset, and verifies random access, ANN search, and time travel — every command run in our sandbox.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Hands-on with Lance: the open lakehouse format built for AI data">
+<meta property="og:description" content="Lance (lance-format/lance, 7,336 stars) is the open lakehouse format for multimodal AI: Parquet-compatible storage with fast random access, built-in vector search, and zero-copy versioning. This guide installs pylance 14.0.3, converts a Parquet dataset, and verifies random access, ANN search, and time travel — every command run in our sandbox.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-16">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Hands-on with Lance: the open lakehouse format built for AI data", "description": "Lance (lance-format/lance, 7,336 stars) is the open lakehouse format for multimodal AI: Parquet-compatible storage with fast random access, built-in vector search, and zero-copy versioning. This guide installs pylance 14.0.3, converts a Parquet dataset, and verifies random access, ANN search, and time travel — every command run in our sandbox.", "datePublished": "2026-11-16", "dateModified": "2026-11-16", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/"}, "image": "https://aifrontierpost.com/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is Lance a database?", "acceptedAnswer": {"@type": "Answer", "text": "No. Lance is a file and table format — data lives in Lance files on disk or object storage, and you read it with pylance, DuckDB, Spark, or other tools. There is no server to run. LanceDB, a separate project built on the Lance format, adds a database-style API on top."}}, {"@type": "Question", "name": "Does Lance replace Parquet?", "acceptedAnswer": {"@type": "Answer", "text": "Not for everything. Parquet remains the best default for pure SQL analytics and has the widest tool support. Lance is the better choice when the workload is AI-shaped: random row access for training, vector search over embeddings, and versioned datasets. Converting between the two takes two lines."}}, {"@type": "Question", "name": "Do I need a GPU, a cloud account, or an API key to use Lance?", "acceptedAnswer": {"@type": "Answer", "text": "No. Lance runs locally on a laptop; this tutorial ran entirely on a 4-core VM with no GPU, no account, and no key. Cloud storage (S3, Azure, GCS) is supported, but local files work the same way."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Hands-on with Lance: the open lakehouse format built for AI data</h1>
+<p class="lede">Parquet was designed for SQL analytics: scan whole columns, filter fast, write once. AI workloads want the opposite — fetch 200 random rows for a training batch, search a million embeddings by similarity, store images next to their vectors, and roll a dataset back to last Tuesday. Lance is the open format built for exactly that, and version 14.0.3 just shipped. Here is the install, the conversion, and every feature verified end to end.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 16, 2026 · 12 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Lance (lance-format/lance, Apache-2.0) is an open lakehouse format for multimodal AI: a Parquet-compatible columnar format with fast random access, built-in vector search, and zero-copy versioning. This guide installs pylance 14.0.3, converts a 20,000-row Parquet dataset, measures random access against Parquet, builds an IVF_PQ vector index and queries it, appends data and time-travels to the old version, and queries the result with DuckDB — verified end to end in a sandbox.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> an open lakehouse format for multimodal AI — a file format, table format, and catalog spec for storing images, video, audio, text, and embeddings with vector search, full-text search, and versioning built in.</li><li><b>Why it is trending:</b> 7,336 stars, 944 forks, 6,501 commits, and a place on GitHub&#x27;s daily trending list on November 16, 2026 — the day after pylance 14.0.3 shipped.</li><li><b>Cost:</b> free and open source (Apache-2.0). No account, no API key, no GPU; everything below runs on a laptop.</li><li><b>Verified in this tutorial:</b> every command below ran in our sandbox on November 16, 2026 — install, Parquet-to-Lance conversion, random-access timings at 20,000 and 200,000 rows, IVF_PQ index build and ANN queries, append plus time travel, a DuckDB query, and a scalar index.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/cover.webp" alt="Editorial illustration of a data lakehouse for AI, with vector embeddings as a constellation above layered data flowing into a lake"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Every AI project eventually hits the same wall. The training loop wants 200 random rows, and Parquet makes you decompress the whole file to find them. The retrieval layer wants nearest-neighbour search over embeddings, and Parquet has no index for that — so you bolt on a vector database and keep two copies of the data in sync. The dataset changes, and Parquet gives you no way back to the version that produced last week&#x27;s model.</p>
+<p>Lance answers all three from inside the file format. It is a columnar format in the Apache Arrow family, so it reads and writes through the same PyArrow tables as Parquet, but it stores a row-location index that makes random access cheap, ships vector and full-text indices as part of the dataset, and versions every write with ACID transactions, so you can check out an earlier version of a table the way you check out an earlier commit. It runs on local disk or object storage (S3, Azure, GCS, Hugging Face Hub), and it plugs into Pandas, Polars, DuckDB, Spark, and Ray.</p>
+<p>The numbers explain the timing: the project has 7,336 stars and 944 forks, 699 releases, and pylance 14.0.3 landed on PyPI on November 15, 2026 — the release that put it on GitHub&#x27;s daily trending list the next morning. This tutorial installs that exact version and puts each of its three headline features through a real run: conversion, random access, vector search, and versioning, with the timings we measured rather than the ones on the tin.</p>
+<h2 id="what-you-ll-need">What you&#x27;ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> We used Python 3.12.3. A virtual environment is recommended.</li><li><strong>pip and about 500 MB of disk</strong> for the libraries and the tutorial datasets. The 200,000-row benchmark file is about 105 MB; the main dataset is 11 MB.</li><li><strong>No account, no API key, no GPU, no server.</strong> Everything below runs locally; Lance has no hosted component to sign into.</li></ul>
+<h2 id="1-install-pylance">1. Install pylance<a class="anchor" href="#1-install-pylance" aria-label="Link to section">#</a></h2>
+<p>Create a virtual environment and install the pinned versions we verified. pylance is the Python package; the other four are the libraries this tutorial uses alongside it.</p>
+<pre><code class="language-bash">python3 -m venv lance-env
+source lance-env/bin/activate
+pip install pylance==14.0.3 pyarrow==26.0.1 pandas==3.1.1 duckdb==2.0.0 numpy==2.5.5</code></pre>
+<p>Confirm the install answers with the version you asked for:</p>
+<pre><code class="language-bash">python -c "import lance; print(lance.__version__)"</code></pre>
+<pre><code>14.0.3</code></pre>
+<p>That is the whole install. There is no server to start, no daemon, and no configuration file. If the import fails, the usual cause is a Python older than 3.10 or a stale pip — upgrade pip and retry before anything else.</p>
+<h2 id="2-build-a-test-dataset">2. Build a test dataset<a class="anchor" href="#2-build-a-test-dataset" aria-label="Link to section">#</a></h2>
+<p>Real AI datasets pair rows of metadata with embedding vectors. This script builds a stand-in with the same shape: 20,000 rows, each with an id, a text field, a label, and a 128-dimensional float32 embedding. The vectors are random and seeded, so your run reproduces ours exactly; in your own work you would swap in embeddings from your encoder and keep the rest of the script unchanged.</p>
+<pre><code class="language-python">import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+N, DIM = 20_000, 128
+rng = np.random.default_rng(42)
+labels = rng.choice(["cat", "dog", "bird", "fish"], size=N)
+texts = [f"sample {i} a {labels[i]} in the wild" for i in range(N)]
+vectors = rng.standard_normal((N, DIM)).astype(np.float32)
+vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+
+table = pa.table({
+    "id": pa.array(np.arange(N, dtype=np.int64)),
+    "text": pa.array(texts),
+    "label": pa.array(labels),
+    "vector": pa.FixedSizeListArray.from_arrays(vectors.reshape(-1), DIM),
+})
+pq.write_table(table, "data.parquet")</code></pre>
+<p>Two details matter for what follows. First, the vector column is a <code>fixed_size_list</code> of 128 floats — Lance&#x27;s vector index expects exactly this shape, so build it that way from the start rather than storing vectors as a variable-length list. Second, the vectors are L2-normalized, which makes Euclidean distance equivalent to cosine similarity for the nearest-neighbour queries in step 5.</p>
+<h2 id="3-convert-parquet-to-lance">3. Convert Parquet to Lance<a class="anchor" href="#3-convert-parquet-to-lance" aria-label="Link to section">#</a></h2>
+<p>The conversion is the two lines the README promises: open the Parquet file as a dataset and write it out as Lance.</p>
+<pre><code class="language-python">import lance
+
+parquet = pa.dataset.dataset("data.parquet", format="parquet")
+ds = lance.write_dataset(parquet, "data.lance")
+print(ds.count_rows())   # 20000
+print(ds.schema)</code></pre>
+<pre><code>20000
+id: int64
+text: string
+label: string
+vector: fixed_size_list&lt;item: float&gt;[128]</code></pre>
+<p>The schema survives the round trip unchanged, and the dataset object you get back is itself a PyArrow dataset, so every Arrow tool keeps working. On our run the Parquet file was 11,163,841 bytes and the Lance file 10,509,460 bytes — essentially the same size, which is the point: Lance does not buy its features with a storage penalty. Read it back the same way you would read anything else:</p>
+<pre><code class="language-python">ds = lance.dataset("data.lance")
+df = ds.to_table().to_pandas()
+df.head(3)</code></pre>
+<p>If you already have a Parquet lake, this is the migration story in full: convert in place, keep the same tooling, and gain the three features below. Nothing about the conversion is destructive — the Parquet file stays where it was.</p>
+<h2 id="4-random-access-fetch-rows-by-id">4. Random access: fetch rows by id<a class="anchor" href="#4-random-access-fetch-rows-by-id" aria-label="Link to section">#</a></h2>
+<p>This is the feature that justifies the format for training workloads. A training loop, an evaluation harness, or an annotation tool fetches scattered rows by id; Parquet has no row index, so the honest way to do it is to read the whole file and filter. Lance keeps a map from row number to file location, so <code>take()</code> reads only the pages that hold your rows.</p>
+<pre><code class="language-python">import time
+import pyarrow.compute as pc
+
+ids = sorted(rng.choice(20_000, size=200, replace=False).tolist())
+t0 = time.perf_counter()
+rows = ds.take(ids)
+print(f"lance take(200): {(time.perf_counter() - t0) * 1000:.1f} ms, got {rows.num_rows} rows")
+
+full = pq.read_table("data.parquet")
+t0 = time.perf_counter()
+sel = full.filter(pc.is_in(full["id"], value_set=pa.array(ids, type=pa.int64())))
+print(f"parquet read-all + filter: {(time.perf_counter() - t0) * 1000:.1f} ms, got {sel.num_rows} rows")</code></pre>
+<p>Our run answered 13.0&nbsp;ms for Lance against 77.1&nbsp;ms for the Parquet read-and-filter, on the 20,000-row file. At 200,000 rows (a 105&nbsp;MB file) the gap widened: Lance took 183–586&nbsp;ms across three trials while Parquet took 378–2,528&nbsp;ms. The ranges are wide because this ran on a shared 4-core VM, so treat the numbers as direction, not gospel — but the mechanism is not noisy: Lance reads only the pages it needs, Parquet decompresses the whole file, and the larger the file, the worse that ratio gets. Lance&#x27;s own published benchmark, on the Oxford Pets image dataset, puts batched random access at 100x over Parquet; our small-scale run points the same way without reaching that multiple.</p>
+<p>The practical consequence is mundane and valuable: random sampling for training batches, spot-checking rows during annotation, and fetching examples by id all stop being full-file scans.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/img2.webp" alt="Illustration of a magnifying lens picking out a few glowing rows from a vast grid of data columns"><figcaption>Random access reads only the pages that hold your rows. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="5-vector-search-build-an-ivf-pq-index">5. Vector search: build an IVF_PQ index<a class="anchor" href="#5-vector-search-build-an-ivf-pq-index" aria-label="Link to section">#</a></h2>
+<p>Storing embeddings next to their metadata is only half the job; the other half is searching them. Lance builds the index inside the dataset, so there is no second system to keep in sync. IVF_PQ is the standard choice at this scale: inverted-file partitioning (IVF) narrows the search to a few partitions, product quantization (PQ) compresses the vectors so the index stays small.</p>
+<pre><code class="language-python">ds.create_index("vector",
+                index_type="IVF_PQ",
+                num_partitions=16,   # IVF
+                num_sub_vectors=8)   # PQ
+print(ds.list_indices())</code></pre>
+<pre><code>[{'name': 'vector_idx', 'type': 'IVF_PQ', 'fields': ['vector'], 'version': 1, ...}]</code></pre>
+<p>The build took 4.3–6.0&nbsp;seconds on 20,000 rows. Query it with the <code>nearest</code> argument to <code>to_table</code> — column, k, and the query vector:</p>
+<pre><code class="language-python">q = vectors[0]
+res = ds.to_table(nearest={"column": "vector", "k": 10, "q": q})
+print(res["id"].to_pylist())
+print([round(d, 4) for d in res["_distance"].to_pylist()])</code></pre>
+<pre><code>[0, 19108, 9097, 6273, 2913, 5557, 3123, 19671, 10221, 6910]
+[0.4814, 1.0149, 1.0154, 1.0353, 1.0429, 1.0432, 1.0614, 1.0615, 1.067, 1.0685]</code></pre>
+<p>The first query took 129.4&nbsp;ms cold and 3.8&nbsp;ms warm. Two things in that output deserve a second look. First, row 0 ranks first, as it must — the query vector is row 0&#x27;s own embedding. Second, its distance is 0.4814, not 0. That is not a bug: product quantization compresses the stored vectors, so the distance you get back is measured against the quantized copy. Run the same query with the index switched off and the exact answer appears:</p>
+<pre><code class="language-python">exact = ds.to_table(nearest={"column": "vector", "k": 10, "q": q, "use_index": False})
+print(exact["id"].to_pylist()[:3])          # [0, 19043, 14806]
+print(exact["_distance"][0].as_py())        # 0.0</code></pre>
+<p>Exact search took 24.5&nbsp;ms on 20,000 rows and returned distance 0.0 for row 0, as expected. That comparison is the honest way to think about approximate indices: IVF_PQ trades a little accuracy for speed and size, and the trade is worth it once the row count makes brute force slow. On 20,000 rows brute force is still faster than the cold index query; at a million rows it is not. Notice also that the exact top 10 and the indexed top 10 disagree after rank 1 — the quantization reorders near-ties. If your application needs exact recall, run with <code>use_index=False</code> or add a re-ranking pass over the indexed candidates; if it needs speed at scale, IVF_PQ is the default for a reason.</p>
+<h2 id="6-versioning-and-time-travel">6. Versioning and time travel<a class="anchor" href="#6-versioning-and-time-travel" aria-label="Link to section">#</a></h2>
+<p>Every mutation of a Lance dataset — a write, an append, an index build — creates a new version, and old versions stay readable. Append 5,000 fresh rows and watch the version counter move:</p>
+<pre><code class="language-python">extra = pa.table({
+    "id": pa.array(np.arange(20_000, 25_000, dtype=np.int64)),
+    "text": pa.array([f"sample {i} extra" for i in range(20_000, 25_000)]),
+    "label": pa.array(rng.choice(["cat", "dog", "bird", "fish"], size=5000)),
+    "vector": pa.FixedSizeListArray.from_arrays(
+        (lambda v: v / np.linalg.norm(v, axis=1, keepdims=True))(
+            rng.standard_normal((5000, 128)).astype(np.float32)).reshape(-1), 128),
+})
+ds2 = lance.write_dataset(extra, "data.lance", mode="append")
+print(ds2.count_rows())                    # 25000
+print([v["version"] for v in ds2.versions()])  # [1, 2, 3]</code></pre>
+<p>Three versions: v1 was the original write, v2 the index build in step 5, v3 the append. Check out the first version and it is exactly as it was:</p>
+<pre><code class="language-python">v1 = lance.dataset("data.lance", version=1)
+print(v1.count_rows())   # 20000
+latest = lance.dataset("data.lance")
+print(latest.count_rows())  # 25000</code></pre>
+<p>Nothing is copied when you time-travel — versions share the underlying files and only the manifest changes, which is why the feature is described as zero-copy. For ML work this is the missing piece Parquet never had: the dataset version that produced a model is recoverable by number, so an experiment is reproducible from the data side, not just the code side. Tags and branches exist for naming versions (a <code>prod</code> tag, a <code>dev</code> branch); the version numbers are enough for most teams.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/img3.webp" alt="Illustration of dataset versioning as a branching timeline of stacked translucent data layers"><figcaption>Every write is a version; old versions stay readable without copying data. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="7-query-it-with-duckdb">7. Query it with DuckDB<a class="anchor" href="#7-query-it-with-duckdb" aria-label="Link to section">#</a></h2>
+<p>Lance datasets are Arrow datasets, so DuckDB can query them without any export step. Register the table and run SQL over it:</p>
+<pre><code class="language-python">import duckdb
+
+con = duckdb.connect()
+con.register("lance_tbl", latest.to_table())
+print(con.execute(
+    "SELECT label, count(*) AS n FROM lance_tbl GROUP BY label ORDER BY label"
+).fetchall())</code></pre>
+<pre><code>[('bird', 6246), ('cat', 6357), ('dog', 6271), ('fish', 6126)]</code></pre>
+<p>The counts sum to 25,000 — the appended dataset, as expected. For columns you filter on often, add a scalar index the same way you added the vector index:</p>
+<pre><code class="language-python">latest.create_scalar_index("label", index_type="BTREE")
+print([v["version"] for v in latest.versions()])  # [1, 2, 3, 4]</code></pre>
+<p>The scalar index is itself a version bump — v4 — which is a useful reminder that in Lance, indices are part of the dataset&#x27;s history, not sidecar files you can lose. The same dataset also answers to Pandas, Polars, Spark, and Ray without conversion; the DuckDB path above is the shortest route to SQL analytics over data that also serves vector search.</p>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p><strong>Use Lance when the workload is AI-shaped.</strong> Training loops that sample random rows, retrieval corpora where each row carries an embedding, datasets that mix images or audio with their metadata, and any pipeline where you need to roll a dataset back to the version that trained a model. That is the workload the format was designed for, and the three features above are the reason to switch.</p>
+<p><strong>Keep Parquet when the workload is pure SQL analytics.</strong> Parquet has the widest tool support of any columnar format, every warehouse and query engine reads it natively, and for scan-heavy analytics it is as fast as anything. If nothing in your pipeline fetches random rows or searches vectors, Lance adds nothing you need.</p>
+<p><strong>Use LanceDB when you want a database API, not a file format.</strong> LanceDB is a separate project built on the Lance format; it adds collections, a server, and a query API. Choose it when you want to call a vector database; choose Lance when you want files you can copy, version, and open in any Arrow tool.</p>
+<p><strong>Use DuckDB or pgvector when the data already lives in a database.</strong> If your embeddings are already in Postgres with pgvector, or your analytics already run in DuckDB, moving the data into Lance files is a migration, not a free win. Lance&#x27;s advantage is for data that lives as files — in a lake, on object storage, or on a training machine.</p>
+<p><strong>Do not use Lance as a transactional database.</strong> It versions tables and supports ACID writes, but it is not a replacement for Postgres or SQLite for row-level updates and concurrent writers. Its transaction model is built for dataset-scale writes: appends, overwrites, and index builds.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The interesting thing about Lance is not any single feature — random access, vector search, and versioning each exist elsewhere — but that all three live in the file format, with no server and no second system. A dataset that used to need Parquet plus a vector database plus a versioning scheme becomes one directory you can copy, query with DuckDB, and check out by version number.</p>
+<p>The workflow to keep: convert a Parquet dataset with two lines, build an IVF_PQ index on the embedding column, and version every append so the data behind each model run is recoverable. Start with the 20,000-row script above, swap in your own embeddings, and measure the random-access gap on your own file sizes before deciding how much of your lake to move. The conversion is cheap and reversible — the Parquet file stays put — which makes the experiment nearly free. Our run converted, indexed, queried, and time-travelled on a 4-core VM in under a minute of compute; the format&#x27;s case gets stronger as the files get bigger.</p>
+<p>Sources: the <a href="https://github.com/lance-format/lance" rel="nofollow">lance-format/lance repository</a> and <a href="https://lance.org/" rel="nofollow">lance.org</a>. Star count, fork count, and trending placement as observed November 16, 2026; pylance 14.0.3 (PyPI, November 15, 2026) and all command outputs verified by running them in our sandbox. The 100x random-access figure is Lance&#x27;s own published benchmark on the Oxford Pets dataset, cited as their claim.</p></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="lance-open-lakehouse-format-multimodal-ai-tutorial"></div><div class="comments" data-comments="lance-open-lakehouse-format-multimodal-ai-tutorial"></div></div>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Is Lance a database?</h3><p>No. Lance is a file and table format — data lives in Lance files on disk or object storage, and you read it with pylance, DuckDB, Spark, or other tools. There is no server to run. LanceDB, a separate project built on the Lance format, adds a database-style API on top.</p><h3>Does Lance replace Parquet?</h3><p>Not for everything. Parquet remains the best default for pure SQL analytics and has the widest tool support. Lance is the better choice when the workload is AI-shaped: random row access for training, vector search over embeddings, and versioned datasets. Converting between the two takes two lines.</p><h3>Do I need a GPU, a cloud account, or an API key to use Lance?</h3><p>No. Lance runs locally on a laptop; this tutorial ran entirely on a 4-core VM with no GPU, no account, and no key. Cloud storage (S3, Azure, GCS) is supported, but local files work the same way.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/outlines-structured-generation-local-llm-tutorial/">Stop parsing broken LLM JSON: guaranteed-valid structured output with Outlines, locally</a></li><li><a href="/articles/instructor-structured-extraction-ollama-tutorial/">Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama</a></li><li><a href="/articles/sqlite-vec-semantic-search-tutorial/">Semantic search in a single SQLite file: build a local document search engine with sqlite-vec</a></li><li><a href="/articles/e-means-faiss-k-means-tutorial/">e-means hands-on: cluster embeddings in one-tenth the passes of k-means</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
