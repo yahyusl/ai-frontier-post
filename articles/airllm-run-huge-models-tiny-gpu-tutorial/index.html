@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run a 70B model on a 4GB GPU: hands-on with AirLLM — AI Frontier Post</title>
+<meta name="description" content="AirLLM streams a model one layer at a time, so a 70B model fits on a 4GB card and a 671B model on 12GB — no quantization, no pruning. I verified the install, the layer-sharding, and CPU generation end to end.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/airllm-run-huge-models-tiny-gpu-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run a 70B model on a 4GB GPU: hands-on with AirLLM">
+<meta property="og:description" content="AirLLM streams a model one layer at a time, so a 70B model fits on a 4GB card and a 671B model on 12GB — no quantization, no pruning. I verified the install, the layer-sharding, and CPU generation end to end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/airllm-run-huge-models-tiny-gpu-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/airllm-run-huge-models-tiny-gpu-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-15">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run a 70B model on a 4GB GPU: hands-on with AirLLM", "description": "AirLLM streams a model one layer at a time, so a 70B model fits on a 4GB card and a 671B model on 12GB — no quantization, no pruning. I verified the install, the layer-sharding, and CPU generation end to end.", "datePublished": "2026-11-15", "dateModified": "2026-11-15", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/airllm-run-huge-models-tiny-gpu-tutorial/"}, "image": "https://aifrontierpost.com/articles/airllm-run-huge-models-tiny-gpu-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to use AirLLM?", "acceptedAnswer": {"@type": "Answer", "text": "No. It runs on CPU if you pass device=\"cpu\", and this tutorial does exactly that. But at about 0.12 tokens per second on CPU it is a demo, not a workflow — the tool is designed for a small GPU, where the same code runs much faster. For real CPU work, use llama.cpp or Ollama instead."}}, {"@type": "Question", "name": "Why is AirLLM so slow on CPU?", "acceptedAnswer": {"@type": "Answer", "text": "Every generated token re-streams all of the model's layers from disk, and on a CPU the per-layer overhead dominates. On a GPU the layer loads overlap with fast GPU compute, so the same mechanism is much faster there. The trade is memory for speed: in our measurement AirLLM used 44% less RAM than plain Transformers (788 MB vs 1,405 MB) and ran about twenty times slower on CPU."}}, {"@type": "Question", "name": "Can I really run a 70B model on a 4GB card?", "acceptedAnswer": {"@type": "Answer", "text": "That figure is the project's own measurement — Llama 3.x 70B at about 4 GB of VRAM, from the AirLLM README's table. We verified the mechanism on CPU with a 0.5B model (install, split, generation, memory); we did not run a 70B model on a 4 GB card in this sandbox, which has no GPU. The VRAM scales with the largest layer, so the claim follows from the architecture, but the specific GPU numbers are the project's."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run a 70B model on a 4GB GPU: hands-on with AirLLM</h1>
+<p class="lede">AirLLM streams a model one layer at a time, so a 70B model fits on a 4GB card and a 671B model on 12GB — no quantization, no pruning. Here is the install, the layer split, and three questions answered on a CPU-only machine, with the memory measured against plain Transformers.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 15, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> AirLLM (version 4.0.0, 42,466 stars) streams a model one layer at a time, so the GPU only ever holds a single layer — a 70B model fits on 4 GB, a 671B model on 12 GB. We verified the install, the per-layer split (52 shards, 988 MB), and CPU generation end to end: three questions answered correctly at 0.12–0.13 tokens per second, peaking at 788 MB of RAM against 1,405 MB for plain Transformers.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> AirLLM streams a large language model one layer at a time from disk, so the memory a model needs is set by its largest layer, not by its total size.</li><li><b>Why it is trending:</b> 42,466 stars, 4,391 forks, +6,055 stars in the last month, and #23 on GitHub&#x27;s monthly trending list for AI. Version 4.0.0 adds support for the 2.8-trillion-parameter Kimi K3.</li><li><b>Cost:</b> free and open source (Apache-2.0). No account, no API key, no GPU required for the CPU path in this tutorial.</li><li><b>Verified in this tutorial:</b> every command below ran in our sandbox — the install, the layer split (52 shards, 988.1 MB), three questions answered on CPU at 0.12–0.13 tok/s, and the memory measured against plain Transformers (788 MB vs 1,405 MB).</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/airllm-run-huge-models-tiny-gpu-tutorial/cover.webp" alt="Illustration of a graphics card with a glowing neural network streaming into it, representing a large model running on a small GPU"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>A 70-billion-parameter model needs roughly 140 GB of GPU memory in full precision. A 4 GB graphics card holds about 3% of that. The usual answer is quantization — shrink the weights until they fit — but that trades accuracy for size, and a 671-billion-parameter model stays out of reach no matter how aggressively you quantize.</p>
+<p>AirLLM takes a different route. Instead of loading the whole model, it streams it one layer at a time: load a layer from disk, run it, unload it, load the next. The GPU only ever holds a single layer, so the memory a model needs is set by its largest layer, not by its total size. That is how the project runs a 70B model on a 4 GB card, a 405B model on 8 GB, and a 671B model on 12 GB — in full precision, with no quantization and no pruning. The project, <a href="https://github.com/lyogavin/airllm" rel="nofollow">lyogavin/airllm</a>, has 42,466 stars and 4,391 forks, gained 6,055 stars in the last month, and sits at #23 on GitHub's monthly trending list for AI. Version 4.0.0 landed on PyPI on September 5, 2026, adding support for the 2.8-trillion-parameter Kimi K3.</p>
+<p>This tutorial runs it end to end. You will install AirLLM 4.0.0, load a small model, watch it split the weights into per-layer shards, ask it three questions, and measure exactly how much memory it uses versus plain Transformers — all on a CPU-only machine with no GPU at all. Every command and every quoted output below ran in our sandbox on November 15, 2026.</p>
+<h2 id="what-you-ll-need">What you'll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.9 or later</strong> (3.12 used here).</li><li><strong>pip, and about 2 GB of free disk</strong> for the per-layer shards — the first run splits the model into shards roughly the size of the model itself, so you need room for the model twice over, briefly.</li><li><strong>No account, no API key, no GPU.</strong> The whole tutorial runs on CPU. A GPU makes it faster; the code is identical, except you pass <code>device="cuda:0"</code> (the default) instead of <code>device="cpu"</code>.</li><li><strong>A Hugging Face model ID.</strong> We use <code>Qwen/Qwen2.5-0.5B-Instruct</code> (954 MB) because it is small enough to verify on CPU. The same steps work for Qwen3-32B, Llama 3.x 70B, and the rest — the only difference is download size and speed.</li></ul>
+<h2 id="1-install-airllm">1. Install AirLLM<a class="anchor" href="#1-install-airllm" aria-label="Link to section">#</a></h2>
+<p>AirLLM is a plain PyPI package. Pin the version — 4.0.0 is what every output below comes from — and let pip pull its dependencies:</p>
+<pre><code class="language-bash">pip install airllm==4.0.0</code></pre>
+<p>That installs <code>airllm</code> plus <code>torch&gt;=2.4</code>, <code>transformers&gt;=4.49,&lt;6</code>, <code>accelerate&gt;=1.0</code>, <code>safetensors</code>, <code>huggingface-hub</code>, <code>scipy</code>, and <code>sentencepiece</code>. On a CPU-only machine, use the CPU torch wheel to avoid downloading the ~800 MB CUDA build:</p>
+<pre><code class="language-bash">pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install airllm==4.0.0</code></pre>
+<p>Verify the install:</p>
+<pre><code class="language-bash">python3 -c "import airllm; print('airllm OK')"</code></pre>
+<p>Our sandbox answered <code>airllm OK</code> with torch 2.15.0+cpu and transformers 5.21.0. One gotcha worth knowing before you start: AirLLM's <code>AutoModel.from_pretrained</code> defaults to <code>device="cuda:0"</code>. On a CPU-only install, pass <code>device="cpu"</code> explicitly — otherwise the first tensor move fails with <code>AssertionError: Torch not compiled with CUDA enabled</code>. That is the only CPU-specific change in this tutorial.</p>
+<h2 id="2-run-your-first-model">2. Run your first model — and watch it split the weights<a class="anchor" href="#2-run-your-first-model" aria-label="Link to section">#</a></h2>
+<p>AirLLM's API mirrors Transformers. The difference is what happens on first load: it splits the model into one file per layer, under the directory you name, and reuses those shards on later runs. Run this:</p>
+<pre><code class="language-python">from airllm import AutoModel
+
+model = AutoModel.from_pretrained(
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    layer_shards_saving_path="./airllm-shards",
+    device="cpu",
+)</code></pre>
+<p>Our run answered:</p>
+<pre><code>using generic AirLLM streaming model for architecture: Qwen2ForCausalLM
+saved layers already found in /var/tmp/airllm-shards/splitted_model
+built empty Qwen2ForCausalLM via AutoModelForCausalLM (attn=sdpa)
+LOAD 1.8s device=cpu peakRSS=479MB</code></pre>
+<p>The load took 1.8 seconds and the process held 479 MB of RAM — the model itself is 954 MB, and it is not fully in memory. The split wrote 52 files totalling 988.1 MB into <code>airllm-shards/splitted_model/</code>: one <code>.safetensors</code> per layer plus a <code>.done</code> marker each. The embedding table is the big one at 272 MB; each of the 24 transformer layers is about 29.8 MB. That is the whole trick made visible: the largest single file the GPU (or CPU) ever has to hold is the 272 MB embedding, not the 954 MB model.</p>
+<p>On the first run the split itself takes a minute or two while it reads the model and writes the shards. On later runs AirLLM prints <code>saved layers already found</code> and skips straight to loading. The shards are a cache, not a copy you need to manage — but they do cost disk, roughly the size of the model, on top of the original download. The project's FAQ warns that the split is disk-consuming, and that a <code>MetadataIncompleteBuffer</code> error means you are out of disk.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/airllm-run-huge-models-tiny-gpu-tutorial/img2.webp" alt="Diagram of a hard drive feeding glowing model layer slabs one at a time into a GPU chip"><figcaption>One layer at a time: the disk holds the model, the GPU holds a single layer. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="3-ask-it-questions">3. Ask it questions<a class="anchor" href="#3-ask-it-questions" aria-label="Link to section">#</a></h2>
+<p>Load the model once, then generate with the chat template. The <code>generate</code> call is the same shape as the README's quickstart — <code>use_cache=True</code> and <code>return_dict_in_generate=True</code> — with <code>max_new_tokens</code> capped so a CPU run finishes in a reasonable time:</p>
+<pre><code class="language-python">tok = model.tokenizer
+messages = [{"role": "user", "content": "What is the capital of France?"}]
+prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+inputs = tok(prompt, return_tensors="pt", return_attention_mask=False,
+             truncation=True, max_length=128, padding=False)
+out = model.generate(
+    inputs["input_ids"].to(model.device),
+    max_new_tokens=40,
+    use_cache=True,
+    return_dict_in_generate=True,
+)
+new_ids = out.sequences[0][inputs["input_ids"].shape[1]:]
+print(tok.decode(new_ids, skip_special_tokens=True).strip())</code></pre>
+<p>Three questions, verbatim from our run:</p>
+<pre><code>Q: What is the capital of France?
+A: The capital of France is Paris.
+  (8 tokens in 62.7s = 0.13 tok/s, peakRSS=785MB)
+
+Q: Explain in one sentence why the sky is blue.
+A: The sky appears blue because of the scattering of sunlight by tiny
+water droplets or ice crystals in the atmosphere. This process causes
+light to be scattered and bent as it passes through the air, resulting in
+  (40 tokens in 325.0s = 0.12 tok/s, peakRSS=788MB)
+
+Q: Write a Python function that returns the square of a number.
+A: Certainly! Below is a Python function that takes an integer as input
+and returns its square:
+
+```python
+def square_number(n):
+    """
+    Returns the square of the given number.
+
+    Parameters:
+  (40 tokens in 297.0s = 0.13 tok/s, peakRSS=788MB)</code></pre>
+<p>Two things to notice. First, the answers are correct as far as they go — but the second and third hit the 40-token cap and stop mid-sentence and mid-docstring. That cap is a choice for this CPU demo, not a limit of the tool; raise <code>max_new_tokens</code> and the model finishes the thought. Second, the 0.5B demo model's science is shaky: the sky is blue because of Rayleigh scattering off air molecules, not "water droplets or ice crystals." Treat the small model as a way to verify the mechanism, not as an oracle. Use a larger model for answers you will rely on.</p>
+<p>And the speed: about 0.12–0.13 tokens per second on CPU. A 40-token answer takes five minutes. That is the honest CPU number, and it is slow — the next section explains why, and why it is not the number that matters.</p>
+<h2 id="4-measure-the-memory-win">4. Measure the memory win<a class="anchor" href="#4-measure-the-memory-win" aria-label="Link to section">#</a></h2>
+<p>The same model, the same three questions, loaded the ordinary way with plain Transformers — whole model in RAM, no streaming. The comparison, all on the same CPU-only machine:</p>
+<table><thead><tr><th></th><th>AirLLM</th><th>Plain Transformers</th></tr></thead><tbody><tr><td>Load time</td><td>1.8 s</td><td>9.3 s</td></tr><tr><td>Peak RAM after load</td><td>479 MB</td><td>487 MB</td></tr><tr><td>Peak RAM during generation</td><td>788 MB</td><td>1,405 MB</td></tr><tr><td>"Capital of France" (8 tokens)</td><td>62.7 s · 0.13 tok/s</td><td>4.9 s · 1.64 tok/s</td></tr><tr><td>"Why is the sky blue" (40 tokens)</td><td>325.0 s · 0.12 tok/s</td><td>15.2 s · 2.63 tok/s</td></tr><tr><td>"Python square function" (40 tokens)</td><td>297.0 s · 0.13 tok/s</td><td>15.7 s · 2.54 tok/s</td></tr></tbody></table>
+<p>AirLLM peaks at 788 MB where Transformers peaks at 1,405 MB — 44% less RAM for the same 0.5B model. But it is about twenty times slower on CPU. That is the trade, stated plainly: layer streaming buys memory with time. Every generated token re-streams all 24 layers from disk, and on a CPU the per-layer overhead dominates. On a GPU the balance shifts — the layer loads overlap with fast GPU compute, which is why the tool is designed for small GPUs, not for CPUs. The CPU run proves the mechanism works; it is not the configuration you would choose for real use.</p>
+<p>Why does the memory win look modest here? Because the model is tiny. The 0.5B weights are only 954 MB, so most of both processes' memory is Python, torch, and the KV cache, not the weights. The win scales with the model: for a 70B model, Transformers needs the whole ~140 GB in memory, while AirLLM needs roughly one layer at a time — about 4 GB. The 0.5B demo shows the shape of the saving; the big models are where it becomes the difference between running and not running.</p>
+<h2 id="5-keep-a-reusable-ask-script">5. Keep a reusable ask script<a class="anchor" href="#5-keep-a-reusable-ask-script" aria-label="Link to section">#</a></h2>
+<p>Wrap the load-and-generate loop in a small CLI so you can ask questions without rewriting the boilerplate. Save this as <code>ask_airllm.py</code>:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""Ask a local model a question using AirLLM's layer-streaming inference."""
+import argparse, os, sys, time
+
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+def main():
+    ap = argparse.ArgumentParser(description="Ask a local model via AirLLM.")
+    ap.add_argument("question", help="Question to ask the model.")
+    ap.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct",
+                    help="Hugging Face model ID (default: %(default)s).")
+    ap.add_argument("--max-new-tokens", type=int, default=120)
+    ap.add_argument("--shards-dir", default="./airllm-shards",
+                    help="Where AirLLM stores the per-layer shards.")
+    args = ap.parse_args()
+
+    from airllm import AutoModel
+
+    t0 = time.time()
+    model = AutoModel.from_pretrained(args.model,
+        layer_shards_saving_path=args.shards_dir, device="cpu")
+    load_s = time.time() - t0
+
+    tok = model.tokenizer
+    messages = [{"role": "user", "content": args.question}]
+    prompt = tok.apply_chat_template(messages, tokenize=False,
+                                     add_generation_prompt=True)
+    inputs = tok(prompt, return_tensors="pt", return_attention_mask=False,
+                 truncation=True, max_length=512, padding=False)
+    t1 = time.time()
+    out = model.generate(inputs["input_ids"].to(model.device),
+                         max_new_tokens=args.max_new_tokens,
+                         use_cache=True, return_dict_in_generate=True)
+    gen_s = time.time() - t1
+    n_new = out.sequences.shape[1] - inputs["input_ids"].shape[1]
+    new_ids = out.sequences[0][inputs["input_ids"].shape[1]:]
+    print(tok.decode(new_ids, skip_special_tokens=True).strip())
+    print(f"[loaded {args.model} in {load_s:.1f}s; "
+          f"{n_new} tokens in {gen_s:.1f}s ({n_new / gen_s:.2f} tok/s) "
+          f"on {model.device}]", file=sys.stderr)
+
+if __name__ == "__main__":
+    main()</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">python3 ask_airllm.py --max-new-tokens 30 "What is the capital of France?"</code></pre>
+<p>Our run answered:</p>
+<pre><code>The capital of France is Paris.
+[loaded Qwen/Qwen2.5-0.5B-Instruct in 2.1s; 8 tokens in 90.7s (0.09 tok/s) on cpu]</code></pre>
+<p>The answer goes to stdout, the timings to stderr, so you can pipe the answer somewhere else. Swap <code>--model</code> for any Hugging Face ID AirLLM supports — Qwen3-32B, Llama 3.x 70B, DeepSeek-V3 — and the first run splits that model into shards under <code>--shards-dir</code>. Later runs reuse them. One decoding note that cost us a debugging round: decode only the newly generated tokens (<code>out.sequences[0][inputs["input_ids"].shape[1]:]</code>), not the full sequence sliced by the prompt's character length. The tokenizer's decoded prompt and the prompt string differ in length, so slicing by <code>len(prompt)</code> silently drops the answer and leaves an empty string.</p>
+<h2 id="going-bigger-what-changes-on-a-real-gpu">Going bigger: what changes on a real GPU<a class="anchor" href="#going-bigger-what-changes-on-a-real-gpu" aria-label="Link to section">#</a></h2>
+<p>Everything above ran on a CPU, because that is what this sandbox has. The numbers that make AirLLM worth using are the GPU ones — and those come from the project's own measurements, not from this run, so treat them as the project's claims on named hardware, not as verified here. From the project's README, measured VRAM on a single GPU:</p>
+<table><thead><tr><th>Model</th><th>VRAM on one GPU</th></tr></thead><tbody><tr><td>Qwen3 / Mistral / Phi, ~8B</td><td>~1–2 GB</td></tr><tr><td>Qwen3-30B / Mixtral</td><td>~1–3 GB</td></tr><tr><td>Qwen3.8-27B</td><td>3.33 GB</td></tr><tr><td>Qwen3-235B</td><td>~3 GB</td></tr><tr><td>Llama 3.x 70B</td><td>~4 GB</td></tr><tr><td>Qwen3.8-Flash-Next, ~180B</td><td>5.95 GB (RTX 4090)</td></tr><tr><td>Llama 3.1 405B</td><td>~8 GB</td></tr><tr><td>DeepSeek-V3 671B</td><td>~12 GB</td></tr><tr><td>Kimi K3 2.8T</td><td>3.72 GB (RTX 6000 Ada)</td></tr></tbody></table>
+<p>The pattern is the point: VRAM tracks the largest layer, not the model. A 2.8-trillion-parameter model needs 3.72 GB because its layers are small; a 405B model needs 8 GB because its layers are bigger. That is why the headline number — 70B on a 4 GB card — is not a special case. It is the same mechanism at every scale.</p>
+<p>Two newer capabilities from the project's 2026 updates are worth knowing. Training support landed in September 2026: Qwen3.8-Flash-Next 125B trains under 6 GB and Qwen3.8-27B trains at about 2 GB with a 512-token sequence, using the same layer-streaming idea in reverse. And 4-bit/8-bit compression via bitsandbytes is available — the README claims up to a 3x speedup — but it needs the <code>bitsandbytes</code> package, and on a CPU-only install it fails outright. Our test:</p>
+<pre><code>COMPRESSION 4bit: ImportError: WARNING: bitsandbytes not found. Compression
+needs bitsandbytes. To use compression, please install bitsandbytes:
+`pip install bitsandbytes`</code></pre>
+<p>Install bitsandbytes if you want compression, and note that its 4-bit kernels need a CUDA GPU — compression is a GPU feature in practice, not something to reach for on CPU.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/airllm-run-huge-models-tiny-gpu-tutorial/img3.webp" alt="A server rack running a large brain-network model beside a laptop running stacked model layers"><figcaption>A 671B model on a server, a 70B model on a laptop — the same code, different hardware. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p><strong>Use AirLLM when the model is bigger than your GPU and you want full precision.</strong> That is the case it is built for: a 70B model on a 4 GB card, a 405B model on 8 GB, with no quantization and no pruning. The cost is speed — on CPU it runs at about 0.12 tokens per second, and even on a GPU the per-token layer streaming is slower than a model that sits fully loaded in VRAM. Use it for interactive exploration, for running a model you could not otherwise load at all, or for a single-GPU workstation where the alternative is not running the model.</p>
+<p><strong>Use llama.cpp or Ollama when you want fast local inference and accept quantization.</strong> GGUF-quantized models run well on CPU and on small GPUs, and Ollama makes them a one-command install. You trade a little quality for the quantization, and you need a quantized build of the model — but for everyday chatting and coding help, that trade is usually the right one, and the speed is an order of magnitude better than AirLLM on CPU.</p>
+<p><strong>Use Transformers with <code>device_map="auto"</code> when the model fits in RAM plus VRAM combined.</strong> Accelerate loads the whole model and offloads the layers that do not fit in VRAM to CPU RAM. It is simpler — no re-sharding step, no extra disk — and it keeps the fast path for the layers that do fit on the GPU. It only fails when the model is bigger than your RAM and VRAM together, which is exactly where AirLLM's disk streaming takes over.</p>
+<p><strong>Use vLLM when you are serving a model to many users.</strong> vLLM is built for throughput: continuous batching, paged attention, high requests per second. It needs the model (or most of it) in GPU memory, so it is not the tool for a 4 GB card and a 70B model — but if you have the VRAM, it will serve that model far faster than AirLLM's one-layer-at-a-time streaming.</p>
+<p><strong>Use Strata when you want another way to run a very large model on consumer hardware.</strong> We covered <a href="/articles/strata-125b-model-gaming-pc-tutorial/">Strata, which runs a 125B model on a gaming PC</a>, in October. It takes a different approach to the same problem — a large model on hardware that should not be able to hold it — and the two are worth comparing on the same machine before you commit to one.</p>
+<h2 id="limitations-and-honest-caveats">Limitations and honest caveats<a class="anchor" href="#limitations-and-honest-caveats" aria-label="Link to section">#</a></h2>
+<ul><li><strong>CPU is a demo, not a configuration.</strong> At 0.12–0.13 tokens per second, a 40-token answer takes five minutes. If you have no GPU, use llama.cpp or Ollama instead. AirLLM's value is on a small GPU.</li><li><strong>The first load doubles your disk usage, briefly.</strong> The split writes a full copy of the model as per-layer shards (988 MB for a 954 MB model). You need the model on disk twice over. Delete the shards and the original and you have to re-split.</li><li><strong>Per-token latency is higher than a loaded model.</strong> Every token re-streams every layer. That is the price of the memory saving, and it does not go away on GPU — it just matters less, because the compute is fast.</li><li><strong>The big-model GPU numbers are the project's, not ours.</strong> The 70B-on-4GB, 405B-on-8GB, and 671B-on-12GB figures come from the AirLLM README's own measurement table. We verified the mechanism (install, split, generation, memory) on CPU with a 0.5B model; we did not run a 70B model on a 4 GB card here, because this sandbox has no GPU.</li><li><strong>The small demo model's answers are unreliable.</strong> Our 0.5B model said the sky is blue because of "water droplets or ice crystals." It is Rayleigh scattering off air molecules. Use a larger model for answers you will rely on.</li><li><strong>Compression needs bitsandbytes and a CUDA GPU.</strong> The 4-bit/8-bit path fails on a CPU-only install without bitsandbytes, and its kernels are a GPU feature.</li><li><strong>Training support is new and unverified here.</strong> The September 2026 training mode (125B under 6 GB) is a project claim; we did not test it.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The VRAM a model needs is not set by its size. It is set by its largest layer — if you are willing to stream the rest from disk, one layer at a time. AirLLM is the cleanest implementation of that idea we have tested: a PyPI install, a three-line load, a per-layer split you can watch happen, and a memory footprint that stays near one layer while the model itself can be hundreds of billions of parameters. The cost is speed, and on CPU that cost is severe — 0.12 tokens per second is a demo, not a workflow. But on the hardware the tool is actually for — a 4 GB card that should not be able to hold a 70B model — the trade is the whole point. Install it, split a model, and the card you thought was too small stops being the limit.</p>
+<p>Sources: the <a href="https://github.com/lyogavin/airllm" rel="nofollow">AirLLM repository</a> and <a href="https://pypi.org/project/airllm/" rel="nofollow">airllm 4.0.0 on PyPI</a>. Star counts, fork counts, and trending placement as observed November 15, 2026; version 4.0.0 and all command outputs verified by running them in our sandbox. GPU VRAM figures are the project's own measurements from its README, not verified here.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="airllm-run-huge-models-tiny-gpu-tutorial"></div><div class="comments" data-comments="airllm-run-huge-models-tiny-gpu-tutorial"></div></div>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to use AirLLM?</h3><p>No. It runs on CPU if you pass device=&quot;cpu&quot;, and this tutorial does exactly that. But at about 0.12 tokens per second on CPU it is a demo, not a workflow — the tool is designed for a small GPU, where the same code runs much faster. For real CPU work, use llama.cpp or Ollama instead.</p><h3>Why is AirLLM so slow on CPU?</h3><p>Every generated token re-streams all of the model&#x27;s layers from disk, and on a CPU the per-layer overhead dominates. On a GPU the layer loads overlap with fast GPU compute, so the same mechanism is much faster there. The trade is memory for speed: in our measurement AirLLM used 44% less RAM than plain Transformers (788 MB vs 1,405 MB) and ran about twenty times slower on CPU.</p><h3>Can I really run a 70B model on a 4GB card?</h3><p>That figure is the project&#x27;s own measurement — Llama 3.x 70B at about 4 GB of VRAM, from the AirLLM README&#x27;s table. We verified the mechanism on CPU with a 0.5B model (install, split, generation, memory); we did not run a 70B model on a 4 GB card in this sandbox, which has no GPU. The VRAM scales with the largest layer, so the claim follows from the architecture, but the specific GPU numbers are the project&#x27;s.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/qwen3-8-27b-local-setup/">Qwen3.8-27B on your own hardware: the complete local setup guide</a></li><li><a href="/articles/speculative-decoding-llamacpp-tutorial/">Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</a></li><li><a href="/articles/strata-125b-model-gaming-pc-tutorial/">Run a 125-billion-parameter model on your own gaming PC: hands-on with Strata</a></li><li><a href="/articles/instructor-structured-extraction-ollama-tutorial/">Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
