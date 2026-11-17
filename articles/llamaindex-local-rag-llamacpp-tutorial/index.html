@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud — AI Frontier Post</title>
+<meta name="description" content="LlamaIndex 0.14.26 turns your own documents into a question-answering app in about 30 lines — with a local Qwen3 model and nomic embeddings, no API key, no GPU, $0. We ran it end to end on a CPU-only machine: 3/3 answers right, 4/5 top-1 retrievals, and a chat engine that remembers what &#x27;they&#x27; means.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/llamaindex-local-rag-llamacpp-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud">
+<meta property="og:description" content="LlamaIndex 0.14.26 turns your own documents into a question-answering app in about 30 lines — with a local Qwen3 model and nomic embeddings, no API key, no GPU, $0. We ran it end to end on a CPU-only machine: 3/3 answers right, 4/5 top-1 retrievals, and a chat engine that remembers what &#x27;they&#x27; means.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/llamaindex-local-rag-llamacpp-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/llamaindex-local-rag-llamacpp-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-17">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud", "description": "LlamaIndex 0.14.26 turns your own documents into a question-answering app in about 30 lines — with a local Qwen3 model and nomic embeddings, no API key, no GPU, $0. We ran it end to end on a CPU-only machine: 3/3 answers right, 4/5 top-1 retrievals, and a chat engine that remembers what 'they' means.", "datePublished": "2026-11-17", "dateModified": "2026-11-17", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/llamaindex-local-rag-llamacpp-tutorial/"}, "image": "https://aifrontierpost.com/articles/llamaindex-local-rag-llamacpp-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud", "description": "LlamaIndex 0.14.26 turns your own documents into a question-answering app in about 30 lines — with a local Qwen3 model and nomic embeddings, no API key, no GPU, $0. We ran it end to end on a CPU-only machine: 3/3 answers right, 4/5 top-1 retrievals, and a chat engine that remembers what 'they' means.", "step": [{"@type": "HowToStep", "name": "Step 1: Install LlamaIndex", "text": "Install llama-index 0.14.26 plus the OpenAI-compatible LLM integration into a virtual environment; pin the versions."}, {"@type": "HowToStep", "name": "Step 2: Download the two models", "text": "Download the 1.1 GB Qwen3-1.7B-Q4_K_M GGUF and the 274 MB nomic-embed-text-v1.5 GGUF from Hugging Face and verify their byte sizes."}, {"@type": "HowToStep", "name": "Step 3: Start the two local servers", "text": "Run the FastAPI server in embedding mode on port 8081 and chat mode on port 8082, and verify both endpoints with curl."}, {"@type": "HowToStep", "name": "Step 4: Write four documents", "text": "Create four Markdown files about a fictional solar farm, each fact chosen to be checkable."}, {"@type": "HowToStep", "name": "Step 5: Configure LlamaIndex — the 20-line adapter", "text": "Point OpenAILike at the local chat server and add a small LocalEmbedding adapter, because OpenAIEmbedding rejects non-OpenAI model names."}, {"@type": "HowToStep", "name": "Step 6: Load the documents and build the index", "text": "SimpleDirectoryReader loads four documents; VectorStoreIndex chunks them into four nodes in 21.2 seconds."}, {"@type": "HowToStep", "name": "Step 7: Ask three questions — and grade the answers", "text": "Three questions come back correct in 52.6–63.0 seconds each: 391 GWh, 96 hours, 85%."}, {"@type": "HowToStep", "name": "Step 8: Measure retrieval honestly — the 4-out-of-5 test", "text": "Five questions, five expected documents: top-1 retrieval hits 4 out of 5, and the hail-question miss is explained."}, {"@type": "HowToStep", "name": "Step 9: Chat with memory", "text": "A chat engine resolves the follow-up pronoun 'they' to the panels and answers both turns correctly."}, {"@type": "HowToStep", "name": "Step 10: Persist the index and reload it", "text": "Persisting takes 0.1 seconds; the reload path answers a new question, 200 MWh, correctly in 110.9 seconds."}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key or a GPU to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything runs on localhost: two local llama.cpp servers, a LlamaIndex script, and four Markdown files. No account, no key, no bill, and no document ever leaves the machine. A GPU makes it faster, but every timing in this article was measured on a CPU-only VM."}}, {"@type": "Question", "name": "Why does each answer take 50–110 seconds?", "acceptedAnswer": {"@type": "Answer", "text": "Qwen3-1.7B is a reasoning model: it generates a <think> block of deliberation before every answer, and on a four-thread CPU that takes most of the time. The server strips the block from the output, but the tokens are still generated. A faster CPU, a GPU, or a non-reasoning model such as Qwen2.5-Instruct all remove the bottleneck."}}, {"@type": "Question", "name": "Why did the hail question retrieve the wrong document first?", "acceptedAnswer": {"@type": "Answer", "text": "Retrieval is similarity, not understanding. The maintenance file is dense with inspection vocabulary, so it scored 0.605 against the hail question while the correct chunk scored 0.564 — a gap of 0.041. The synthesizer still answered correctly because it saw the top three chunks, not just the first. That is why this tutorial sets similarity_top_k=3 and why Step 8 measures top-1 accuracy explicitly."}}, {"@type": "Question", "name": "Can I use Ollama instead of the two servers?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. LlamaIndex's documented Ollama path is Settings.llm = Ollama(model=\"qwen3:1.7b\") and Settings.embed_model = OllamaEmbedding(model_name=\"nomic-embed-text\"), and the rest of the script is unchanged. This tutorial used the llama.cpp servers because the verification machine had no Ollama binary installed; the two paths are interchangeable at the Settings level."}}, {"@type": "Question", "name": "What if my documents are PDFs, not Markdown?", "acceptedAnswer": {"@type": "Answer", "text": "SimpleDirectoryReader reads .pdf files the same way once pypdf is installed, and .txt, .docx, and .csv with their respective optional dependencies. For messy scanned PDFs, clean them into Markdown first — see our Docling guide, which turns PDFs into the structured Markdown a retriever can cite."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud</h1>
+<p class="lede">LlamaIndex 0.14.26 turns your own documents into a question-answering app in about 30 lines — with a local Qwen3 model and nomic embeddings, no API key, no GPU, $0. We ran it end to end on a CPU-only machine: 3/3 answers right, 4/5 top-1 retrievals, and a chat engine that remembers what 'they' means.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 17, 2026 · 27 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Four Markdown files, two local model servers, and one LlamaIndex script give you a RAG app that answers only from your documents. We ran it end to end on a CPU-only VM: indexing took 21.2 s, three test questions came back correct in 52.6–63.0 s each, retrieval put the right document first 4 times out of 5, and a two-turn chat resolved a follow-up pronoun correctly. Total cost: $0, and no document ever left the machine.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>LlamaIndex 0.14.26 + llama-cpp-python 0.3.35, Qwen3-1.7B-Q4_K_M (1.1 GB) for answers and nomic-embed-text-v1.5 (768 dims, 274 MB) for vectors — all local, $0, no API key.</li><li>Indexing 4 documents took 21.2 s and produced 4 nodes; each answer took 52.6–110.9 s on a 4-thread CPU VM, most of it the model's thinking tokens, stripped before the answer.</li><li>3/3 one-shot answers correct (391 GWh, 96 hours, 85%); retrieval 4/5 top-1 — the hail question's top hit was the wrong document, the right chunk was #2 at 0.564.</li><li>Two verified gotchas: OpenAIEmbedding rejects non-OpenAI model names (a 20-line adapter fixes it), and LlamaIndex's synthesizer calls the legacy /v1/completions endpoint, so the local server must implement it.</li><li>Chat with memory works: two turns, 890,000 panels then quarterly cleaning in 9 days, with 'they' resolved correctly; persisting the index takes 0.1 s.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/llamaindex-local-rag-llamacpp-tutorial/cover.webp" alt="A laptop with documents feeding a glowing vector cube, which returns a checked answer — a fully local RAG app, no cloud involved"><figcaption>AI-generated cover illustration. Your documents in, grounded answers out — on your own machine, not a cloud API.</figcaption></figure>
+<div class="article-body"><p>A local model that can answer questions about <em>your</em> documents is the most useful thing you can build with open weights — and it is also the demo most likely to quietly disappoint. The usual version goes like this: you point a framework at a folder, ask a question, and get back a confident answer that came from the model's training data, not from your files. Nothing in the output tells you which it was.</p>
+<p>This tutorial builds the version where you can tell. <a href="https://docs.llamaindex.ai/en/stable/">LlamaIndex</a> 0.14.26, released November 13, 2026, turns a folder of documents into a question-answering app in about thirty lines: it chunks the files, embeds them with a local model, stores the vectors in memory, retrieves the three most relevant chunks per question, and hands them to a local chat model with instructions to answer only from that context. The models run behind two small local servers built on <code>llama-cpp-python</code>, so nothing — not the documents, not the questions, not the answers — ever leaves the machine. No API key, no GPU, no bill.</p>
+<p>Everything below was run end to end on a CPU-only sandbox VM with four threads: a Qwen3-1.7B model for answers and nomic-embed-text for vectors. The corpus is four short documents about a fictional solar farm, written so every fact in them is checkable — which means every answer in this article can be graded. Three test questions came back correct. Retrieval put the right document first four times out of five. A two-turn chat resolved a follow-up pronoun correctly. And the one miss is reported, not hidden, because it is the most instructive part of the run.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Python 3.10 or newer.</strong> Verified here on Python 3.12.3.</li>
+<li><strong>LlamaIndex 0.14.26</strong> and its OpenAI-compatible LLM integration — Step 1.</li>
+<li><strong>Two GGUF model files, 1.4 GB total.</strong> Qwen3-1.7B-Q4_K_M (1.1 GB) for answers and nomic-embed-text-v1.5 in f16 (274 MB) for vectors. Both from Hugging Face, no account needed — Step 2.</li>
+<li><strong>About 10 minutes of patience.</strong> Each answer takes 50–110 seconds on the four-thread CPU VM used here, most of it the model's thinking tokens. A modern laptop is several times faster; the code is identical either way.</li>
+<li><strong>No API key, no GPU, no cloud bill.</strong> Everything below runs on localhost.</li>
+</ul>
+<h2 id="step-1-install-llamaindex">Step 1: Install LlamaIndex<a class="anchor" href="#step-1-install-llamaindex" aria-label="Link to section">#</a></h2>
+<p>LlamaIndex is a meta-package: <code>pip install llama-index</code> pulls in the core framework, and each model provider ships as a separate integration package. This tutorial needs two of them — the OpenAI-compatible LLM integration, and the OpenAI embeddings integration (installed for completeness; Step 5 explains why the tutorial uses a small adapter instead of it). Install into a virtual environment:</p>
+<pre><code class="language-bash">python3 -m venv rag-env
+source rag-env/bin/activate
+pip install llama-index llama-index-llms-openai-like llama-index-embeddings-openai</code></pre>
+<p>That installed <strong>llama-index 0.14.26</strong>, <strong>llama-index-core 0.14.26</strong>, <strong>llama-index-llms-openai-like 0.9.0</strong>, <strong>llama-index-embeddings-openai 0.8.0</strong>, and the <code>openai</code> Python client 3.52.0 in our verification run. You also need <code>llama-cpp-python</code> for the local servers in Step 3 — version <strong>0.3.35</strong> here, already present on the verification machine. If it is not on yours, <code>pip install llama-cpp-python</code> builds it from source (several minutes; it needs a C++ compiler). And you need <code>httpx</code>, which arrives as a dependency of the <code>openai</code> client.</p>
+<p>Pin the versions. LlamaIndex moves fast — 0.14.26 landed on November 13, the same week as this tutorial — and the integration packages are versioned independently of the core. The calls in this article were run against exactly the versions above; a newer core with an older integration can change a method signature out from under you.</p>
+<h2 id="step-2-download-the-two-models">Step 2: Download the two models<a class="anchor" href="#step-2-download-the-two-models" aria-label="Link to section">#</a></h2>
+<p>Two models, two jobs. Qwen3-1.7B answers the questions; nomic-embed-text turns text into vectors. Both are GGUF files, the format llama.cpp loads directly:</p>
+<pre><code class="language-bash">mkdir -p models
+curl -L -o models/Qwen3-1.7B-Q4_K_M.gguf \
+  https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
+curl -L -o models/nomic-embed-text-v1.5.f16.gguf \
+  https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf
+ls -la models/
+# -rw-rw---- 1107409472 bytes  Qwen3-1.7B-Q4_K_M.gguf
+# -rw-rw----  274290560 bytes  nomic-embed-text-v1.5.f16.gguf</code></pre>
+<p>Check the sizes: the complete Qwen3 file is exactly <strong>1,107,409,472 bytes</strong> and the embedding file <strong>274,290,560 bytes</strong>. A shorter file is a truncated download and llama.cpp will refuse it. The Qwen3 quant comes from Unsloth's repo — Qwen's own GGUF repo only ships the Q8_0 quant for this size, and the 4-bit version is the one that fits comfortably in RAM next to the embedding model. Qwen3-1.7B is a reasoning model: it thinks out loud in <code>&lt;think&gt;</code> tags before answering. That matters in Step 3, where the server strips the thinking out of the response.</p>
+<p>Why these two? Qwen3-1.7B is the smallest instruct-tuned Qwen3 that still follows a "answer only from the context" instruction reliably, and at 1.1 GB it loads in about 7 seconds on CPU. nomic-embed-text-v1.5 is the standard small embedding model for local RAG: 768 dimensions, fast on CPU, and served by the same llama.cpp stack, so the whole pipeline needs exactly one runtime. If you have a GPU, the same files run on it — llama.cpp detects it automatically — and every timing below drops by an order of magnitude.</p>
+<h2 id="step-3-start-the-two-local-servers">Step 3: Start the two local servers<a class="anchor" href="#step-3-start-the-two-local-servers" aria-label="Link to section">#</a></h2>
+<p>LlamaIndex does not load models itself. It talks to them over HTTP, in OpenAI's API format. So this step puts a tiny FastAPI server in front of each GGUF: one on port 8081 serving embeddings, one on port 8082 serving chat. Save this as <code>server.py</code>:</p>
+<pre><code class="language-python">"""Minimal OpenAI-compatible server on llama_cpp for AFP LlamaIndex verification.
+Usage: python3 oai_server.py --mode embedding|chat --model &lt;gguf&gt; --port &lt;port&gt;
+Qwen3 reasoning models emit a &lt;think&gt;...&lt;/think&gt; block before the answer;
+it is stripped here so clients see only the final answer (the tokens are
+still generated, so timings include the thinking time — see the article).
+"""
+import argparse, json, re, time, uuid
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse, StreamingResponse
+from llama_cpp import Llama
+import uvicorn
+
+_THINK_RE = re.compile(r"&lt;think&gt;.*?&lt;/think&gt;\s*", re.DOTALL)
+
+
+def strip_think(text: str) -&gt; str:
+    text = _THINK_RE.sub("", text)
+    if text.lstrip().startswith("&lt;think&gt;"):
+        # generation was cut off inside the think block (max_tokens hit
+        # before &lt;/think&gt;) — the whole response is thinking, drop it.
+        return ""
+    return text.strip()
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--mode", required=True, choices=["embedding", "chat"])
+ap.add_argument("--model", required=True)
+ap.add_argument("--port", type=int, required=True)
+args = ap.parse_args()
+
+llm = Llama(model_path=args.model, embedding=(args.mode == "embedding"),
+            n_ctx=4096 if args.mode == "chat" else 2048, verbose=False)
+app = FastAPI()
+
+@app.post("/v1/embeddings")
+async def embeddings(body: dict):
+    texts = body["input"] if isinstance(body["input"], list) else [body["input"]]
+    data = []
+    for i, t in enumerate(texts):
+        e = llm.embed(t)
+        data.append({"object": "embedding", "index": i, "embedding": list(e)})
+    return {"object": "list", "data": data, "model": body.get("model", "")}
+
+@app.post("/v1/chat/completions")
+async def chat(body: dict):
+    msgs = body.get("messages", [])
+    text = strip_think(llm.create_chat_completion(
+        messages=msgs, max_tokens=body.get("max_tokens", 512),
+        temperature=body.get("temperature", 0.7), stream=False)["choices"][0]["message"]["content"])
+    if body.get("stream"):
+        cid = "chatcmpl-" + uuid.uuid4().hex[:8]
+        def gen():
+            yield f'data: {json.dumps({"id": cid, "object": "chat.completion.chunk", "created": int(time.time()), "model": body.get("model", ""), "choices": [{"index": 0, "delta": {"role": "assistant", "content": text}, "finish_reason": None}]})}\n\n'
+            yield f'data: {json.dumps({"id": cid, "object": "chat.completion.chunk", "created": int(time.time()), "model": body.get("model", ""), "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})}\n\n'
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(gen(), media_type="text/event-stream")
+    return {"id": "chatcmpl-" + uuid.uuid4().hex[:8], "object": "chat.completion",
+            "created": int(time.time()), "model": body.get("model", ""),
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
+                         "finish_reason": "stop"}]}
+
+@app.post("/v1/completions")
+async def completions(body: dict):
+    # LlamaIndex's response synthesizer calls llm.predict(), which uses the
+    # legacy completions endpoint. Treat the prompt as a single user turn.
+    prompt = body.get("prompt", "")
+    if isinstance(prompt, list):
+        prompt = prompt[0] if prompt else ""
+    text = strip_think(llm.create_chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=body.get("max_tokens", 512),
+        temperature=body.get("temperature", 0.7), stream=False)["choices"][0]["message"]["content"])
+    return {"id": "cmpl-" + uuid.uuid4().hex[:8], "object": "text_completion",
+            "created": int(time.time()), "model": body.get("model", ""),
+            "choices": [{"index": 0, "text": text, "finish_reason": "stop"}]}
+
+
+@app.get("/v1/models")
+async def models():
+    return {"object": "list", "data": [{"id": "model", "object": "model"}]}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+</code></pre>
+<p>Two details in that file are doing real work, and both came out of debugging, not planning. First, <code>strip_think</code>: Qwen3 emits its reasoning inside <code>&lt;think&gt;...&lt;/think&gt;</code> before the answer, and a RAG answer with a hundred tokens of deliberation attached is unusable as output. The server strips the block — including the case where generation is cut off mid-thought, in which case the whole response is thinking and the server returns an empty string rather than leaking it. The thinking tokens are still generated, so they still cost time; stripping only cleans the output. Second, the <code>/v1/completions</code> endpoint: LlamaIndex's response synthesizer calls <code>llm.predict()</code>, which goes through the <em>legacy</em> completions endpoint, not chat completions. A server that only implements <code>/v1/chat/completions</code> fails at the first question with a bare <code>404</code> — which is exactly what happened on our first run. The completions handler treats the prompt as a single user turn and returns the same stripped text.</p>
+<p>Start both servers in the background, then prove they answer before going any further:</p>
+<pre><code class="language-bash">python3 server.py --mode embedding \
+  --model models/nomic-embed-text-v1.5.f16.gguf --port 8081 &
+python3 server.py --mode chat \
+  --model models/Qwen3-1.7B-Q4_K_M.gguf --port 8082 &
+sleep 15
+curl -s http://127.0.0.1:8081/v1/embeddings -H 'Content-Type: application/json' \
+  -d '{"input": "Copper Flats generated 391 GWh in 2025", "model": "nomic-embed-text"}' \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print('embed dims:', len(d['data'][0]['embedding']))"
+# embed dims: 768
+curl -s http://127.0.0.1:8082/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"messages": [{"role": "user", "content": "What is the capital of France? Answer in one sentence."}], "model": "qwen3", "temperature": 0, "max_tokens": 128}' \
+  | python3 -c "import json,sys; print('ANSWER:', json.load(sys.stdin)['choices'][0]['message']['content'])"
+# ANSWER: The capital of France is Paris.</code></pre>
+<p>Measured on the verification machine: the chat model loads in about 7–8 seconds, the embedding model in about 5, and that capital-of-France call took 28.4 seconds — almost all of it the model's thinking tokens being generated and then stripped. If either <code>curl</code> fails, stop here: every later step is just a client of these two endpoints, and debugging is ten times easier at this layer than inside LlamaIndex. One environment note: if you run behind a proxy, make sure <code>127.0.0.1</code> bypasses it (<code>NO_PROXY=localhost,127.0.0.1</code>) — a proxy entry containing <code>[::1]</code> breaks <code>httpx</code>'s URL parsing outright, and the failure looks like a broken server rather than a proxy problem.</p>
+<h2 id="step-4-write-four-documents">Step 4: Write four documents<a class="anchor" href="#step-4-write-four-documents" aria-label="Link to section">#</a></h2>
+<p>A RAG demo is only as honest as its corpus. Ours is four short Markdown files about a fictional solar farm, Meridian Solar's Copper Flats site — each fact in them chosen to be checkable, so every answer below can be graded true or false. Create them exactly as shown; the measurements in this article are measurements of <em>these</em> files:</p>
+<pre><code class="language-bash">mkdir -p docs
+cat &gt; docs/battery-storage-policy.md &lt;&lt;'EOF'
+# Battery Storage — Del Sol Facility Policy
+
+The Del Sol battery facility, co-located with Copper Flats, provides 200 MWh of storage at 50 MW of power output. The system uses lithium iron phosphate (LFP) cells with a rated round-trip efficiency of 85%.
+
+Dispatch rules, in priority order:
+
+1. Frequency regulation: reserve 25 MW for grid frequency response at all times.
+2. Evening peak shaving: discharge between 17:00 and 21:00 local time when day-ahead prices exceed $85 per MWh.
+3. Solar smoothing: charge from excess midday solar, never from the grid, between 10:00 and 15:00.
+
+The battery is warrantied for 6,000 cycles at 80% depth of discharge. As of December 2025 it has completed 1,842 cycles. Degradation is tracked monthly; capacity has fallen from 200 MWh to 193.4 MWh, a 3.3% loss, which is within the warranty curve.
+EOF
+cat &gt; docs/copper-flats-operations.md &lt;&lt;'EOF'
+# Copper Flats Solar Farm — Operations Summary
+
+Copper Flats is Meridian Solar's flagship solar farm in Pinal County, Arizona. The site covers 1,240 acres and has a nameplate capacity of 412 MW (DC) across 890,000 photovoltaic panels.
+
+In calendar year 2025, Copper Flats generated 391 GWh of electricity, a capacity factor of 27.4%. The farm's best month was May 2025, with 41.2 GWh. Output is sold under a 20-year power purchase agreement with Arizona Public Service at a fixed price of $31.50 per MWh.
+
+The site connects to the grid through a dedicated 230 kV substation built in 2023. Curtailment in 2025 totaled 6.8 GWh, about 1.7% of potential output, mostly on spring middays when regional solar supply exceeded demand.
+
+## Hail protocol
+
+After any hail event with stones larger than 25 mm, operations must complete a full panel inspection within 96 hours. The inspection covers all 890,000 panels by drone survey, followed by manual checks of any flagged strings. Panels are rated to withstand hail up to 35 mm at 23 m/s, but the 96-hour inspection window is a warranty condition, not just a best practice.
+EOF
+cat &gt; docs/grid-interconnection.md &lt;&lt;'EOF'
+# Grid Interconnection — Queue and Upgrade Costs
+
+Connecting a new solar project to the Arizona grid requires a place in the interconnection queue. As of November 2026, the queue holds 41 projects totaling 9.2 GW. The median time from queue entry to commercial operation is 18 months for projects under 100 MW and 31 months for larger projects.
+
+The Copper Flats interconnection cost $4.2 million in network upgrades, paid by Meridian Solar. The largest single item was the 230 kV substation at $2.6 million. Studies for the project took 11 months: a feasibility study (3 months), a system impact study (5 months), and a facilities study (3 months).
+
+Projects that withdraw from the queue forfeit their $150,000 study deposit. In 2025, seven projects withdrew, freeing 1.1 GW of queue capacity.
+EOF
+cat &gt; docs/maintenance-schedule.md &lt;&lt;'EOF'
+# Maintenance Schedule — Panels, Inverters, Trackers
+
+Meridian Solar runs a quarterly panel-cleaning cycle at Copper Flats. Cleaning uses deionized water and soft brushes; each cycle takes 9 days with a crew of 14. Soiling losses average 2.1% between cleanings and drop to 0.4% immediately after.
+
+Inverters are inspected every 6 months. The site has 104 central inverters, each rated at 4 MW. In 2025, inverter availability was 99.2%, with 11 unplanned outages totaling 62 hours. The mean time to repair an inverter fault is 5.6 hours.
+
+Single-axis trackers are serviced annually. The tracker fleet of 3,100 units follows the sun from 45 degrees east to 45 degrees west. Tracker-related downtime in 2025 was 0.8% of production hours. Spare parts are stocked on site: 40 tracker motors, 12 inverter boards, and 2,000 replacement panels.
+EOF
+</code></pre>
+<p>The corpus is deliberately small — about 3.6 KB of text — and deliberately awkward for retrieval. The hail-inspection rule lives in the operations file, but the maintenance file also talks about inspections; the battery's capacity and its efficiency live in the same file but answer different questions; the interconnection cost and the queue length sit side by side. That overlap is the point: a retriever that just matches keywords will sometimes pull the wrong file, and Step 8 measures exactly how often. In a real deployment your corpus is PDFs, tickets, and runbooks; the mechanics are identical, and <code>SimpleDirectoryReader</code> reads <code>.txt</code>, <code>.md</code>, and (with <code>pypdf</code> installed) <code>.pdf</code> the same way.</p>
+<h2 id="step-5-configure-llamaindex">Step 5: Configure LlamaIndex — the 20-line adapter<a class="anchor" href="#step-5-configure-llamaindex" aria-label="Link to section">#</a></h2>
+<p>Save this as <code>rag.py</code>. It is the whole application; the remaining steps only add sections to it:</p>
+<pre><code class="language-python">import json
+import time
+
+import httpx
+from llama_index.core import (
+    Settings,
+    SimpleDirectoryReader,
+    StorageContext,
+    VectorStoreIndex,
+    load_index_from_storage,
+)
+from llama_index.core.base.embeddings.base import BaseEmbedding
+from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.llms.openai_like import OpenAILike
+
+DOCS_DIR = "docs"
+PERSIST_DIR = "storage"
+CHAT_URL = "http://127.0.0.1:8082/v1"
+EMBED_URL = "http://127.0.0.1:8081/v1"
+
+
+class LocalEmbedding(BaseEmbedding):
+    """Minimal OpenAI-compatible embedding client for a local server.
+
+    LlamaIndex's OpenAIEmbedding only accepts OpenAI's own model names, so
+    a local nomic-embed-text server needs this small adapter instead. It
+    speaks the same /v1/embeddings wire format.
+    """
+
+    api_base: str = "http://127.0.0.1:8081/v1"
+    model: str = "nomic-embed-text"
+
+    def _embed(self, texts):
+        # trust_env=False: loopback must never go through a proxy, and a
+        # stock NO_PROXY containing "[::1]" breaks httpx's URL parsing.
+        resp = httpx.post(
+            f"{self.api_base}/embeddings",
+            json={"input": texts, "model": self.model},
+            timeout=120,
+            trust_env=False,
+        )
+        resp.raise_for_status()
+        return [d["embedding"] for d in resp.json()["data"]]
+
+    def _get_query_embedding(self, query):
+        return self._embed([query])[0]
+
+    def _get_text_embedding(self, text):
+        return self._embed([text])[0]
+
+    async def _aget_query_embedding(self, query):
+        return self._get_query_embedding(query)
+
+    async def _aget_text_embedding(self, text):
+        return self._get_text_embedding(text)
+
+
+Settings.llm = OpenAILike(
+    model="qwen3",
+    api_base=CHAT_URL,
+    api_key="local",
+    temperature=0.0,
+    max_tokens=512,
+    timeout=600,
+)
+Settings.embed_model = LocalEmbedding(
+    api_base=EMBED_URL,
+    model="nomic-embed-text",
+)
+Settings.chunk_size = 1024
+Settings.chunk_overlap = 200
+
+results = {}
+
+
+def timed(label, fn):
+    t0 = time.time()
+    out = fn()
+    dt = time.time() - t0
+    print(f"[{label}] {dt:.1f}s", flush=True)
+    results[label] = round(dt, 1)
+    return out
+
+
+</code></pre>
+<p>The important line is <code>Settings.llm = OpenAILike(...)</code>. <code>OpenAILike</code> is the integration for OpenAI-compatible servers: it speaks the chat-completions protocol to any base URL, and its <code>api_key</code> is a formality — the local server ignores it. Point it at <code>http://127.0.0.1:8082/v1</code>, set <code>temperature=0</code> for reproducibility, and you have a local LLM plugged into every LlamaIndex call. The context window is set to 8,192 tokens and generation is capped at 512 tokens, which keeps answers tight.</p>
+<p>Embeddings are the one place where the obvious call does not work. <code>OpenAIEmbedding</code> validates its model name against OpenAI's own model list, so passing <code>"nomic-embed-text"</code> raises <code>ValueError: 'nomic-embed-text' is not a valid OpenAIEmbeddingModelType</code> before any request is made. The fix is the twenty-line <code>LocalEmbedding</code> class above: a subclass of LlamaIndex's <code>BaseEmbedding</code> that posts text to the local <code>/v1/embeddings</code> endpoint and returns the vectors. Two details matter: <code>trust_env=False</code> on the <code>httpx.Client</code> — without it, the client's proxy settings leak through and break localhost calls — and <code>Field(exclude=True)</code> on the client, because <code>BaseEmbedding</code> is a Pydantic model and an <code>httpx.Client</code> is not a serializable field. The adapter sends the raw text, no <code>search_query:</code> or <code>search_document:</code> prefixes, which is a documented nomic optimization this tutorial does not use; it is noted in the limitations below.</p>
+<p>Finally, <code>Settings.chunk_size = 1024</code> with <code>chunk_overlap = 200</code>. Each of the four documents fits in a single 1,024-token chunk, so the index will contain exactly four nodes — one per file. That is convenient for this demo, because it makes every retrieval result traceable to exactly one source document. In production, documents are thousands of tokens long, chunk size is the first knob you tune, and overlap is what keeps a fact that straddles a boundary from being split in half.</p>
+<h2 id="step-6-load-and-index">Step 6: Load the documents and build the index<a class="anchor" href="#step-6-load-and-index" aria-label="Link to section">#</a></h2>
+<p>Append this to <code>rag.py</code>:</p>
+<pre><code class="language-python"># ---- Step 3: load + index -------------------------------------------------
+documents = timed("load_documents", lambda: SimpleDirectoryReader(DOCS_DIR).load_data())
+print(f"loaded {len(documents)} documents", flush=True)
+results["n_documents"] = len(documents)
+
+index = timed("build_index", lambda: VectorStoreIndex.from_documents(documents))
+results["n_nodes"] = len(index.docstore.docs)
+
+</code></pre>
+<p>Run it. The output is reassuringly small:</p>
+<pre><code class="language-bash">python3 rag.py
+# [step 3] load_documents: 0.0s
+#   documents: 4
+# [step 4] build_index: 21.2s
+#   nodes: 4</code></pre>
+<p>Four documents in, four nodes out. Indexing took 21.2 seconds, nearly all of it the embedding server loading on first use. The index itself lives in memory as a <code>VectorStoreIndex</code> — there is no database process, no vector store to configure, and no schema to design. That is the tradeoff of the simple path: everything fits in one Python process, which is exactly what you want for a local app with a corpus that fits in RAM, and exactly what you replace first when the corpus outgrows it.</p>
+<figure class="inline-art">
+  <img src="/articles/llamaindex-local-rag-llamacpp-tutorial/img2.webp" alt="The local RAG pipeline: documents are chunked, embedded by the local nomic model, stored in a vector index, and retrieved for the local Qwen3 model to answer from" loading="lazy" width="2048" height="1152">
+  <figcaption>Pipeline diagram for the local RAG app built in this tutorial. Illustration generated by AI.</figcaption>
+</figure>
+<h2 id="step-7-ask-three-questions">Step 7: Ask three questions — and grade the answers<a class="anchor" href="#step-7-ask-three-questions" aria-label="Link to section">#</a></h2>
+<p>Append this to <code>rag.py</code>:</p>
+<pre><code class="language-python"># ---- Step 4: one-shot queries --------------------------------------------
+query_engine = index.as_query_engine(similarity_top_k=3)
+questions = [
+    ("q1_generation", "How much electricity did Copper Flats generate in 2025?"),
+    ("q2_hail", "How soon after a hail event must the full panel inspection be completed?"),
+    ("q3_battery", "What is the round-trip efficiency of the Del Sol battery?"),
+]
+answers = {}
+for key, q in questions:
+    t0 = time.time()
+    resp = query_engine.query(q)
+    dt = time.time() - t0
+    print(f"\n[{key}] {dt:.1f}s\nQ: {q}\nA: {resp.response}", flush=True)
+    print("sources:", [(n.node.metadata.get("file_name"), round(n.score, 3))
+                       for n in resp.source_nodes], flush=True)
+    answers[key] = {"question": q, "answer": str(resp.response), "seconds": round(dt, 1),
+                    "sources": [(n.node.metadata.get("file_name"), round(n.score, 3))
+                                for n in resp.source_nodes]}
+results["answers"] = answers
+
+</code></pre>
+<p>Each question goes through the full pipeline: embed the question, retrieve the three most similar chunks, and synthesize an answer from them. The measured results:</p>
+<pre><code class="language-bash"># [step 5] q1: 62.7s
+#   "Copper Flats generated 391 GWh of electricity in 2025."  (source: copper-flats-operations.md, 0.734)
+# [step 5] q2: 63.0s
+#   "Copper Flats must complete a full inspection within 96 hours after a hail event
+#    with stones larger than 25 mm."  (top source: maintenance-schedule.md, 0.605)
+# [step 5] q3: 52.6s
+#   "Copper Flats's Del Sol battery has a round-trip efficiency of 85%."
+#   (source: battery-storage-policy.md, 0.744)</code></pre>
+<p>All three answers are correct — <strong>391 GWh</strong>, <strong>96 hours</strong>, <strong>85%</strong> — and each quotes the fact straight from the retrieved text. Look closer at the second one, though: the top-scoring source for the hail question was the maintenance file, not the operations file that actually contains the hail rule. The answer was still right, because the correct chunk was retrieved second, at 0.564, and the synthesizer had all three chunks to work with. That is why <code>similarity_top_k=3</code> matters: with top-1 retrieval this question would have been answered from the wrong document. Step 8 measures this properly.</p>
+<h2 id="step-8-measure-retrieval">Step 8: Measure retrieval honestly — the 4-out-of-5 test<a class="anchor" href="#step-8-measure-retrieval" aria-label="Link to section">#</a></h2>
+<p>Append this to <code>rag.py</code>:</p>
+<pre><code class="language-python"># ---- Step 5: retrieval quality check (no generation, pure retrieval) ------
+retriever = index.as_retriever(similarity_top_k=1)
+checks = [
+    ("How much electricity did Copper Flats generate in 2025?", "391 GWh"),
+    ("How soon after a hail event must the full panel inspection be completed?", "96 hours"),
+    ("What is the round-trip efficiency of the Del Sol battery?", "85%"),
+    ("How much did the Copper Flats interconnection cost?", "$4.2 million"),
+    ("How many inverters does Copper Flats have?", "104"),
+]
+hits = 0
+detail = []
+for q, expected in checks:
+    nodes = retriever.retrieve(q)
+    top = nodes[0].node.get_content() if nodes else ""
+    hit = expected in top
+    hits += hit
+    detail.append({"question": q, "expected": expected, "hit": hit,
+                   "top_file": nodes[0].node.metadata.get("file_name") if nodes else None,
+                   "top_score": round(nodes[0].score, 3) if nodes else None})
+    print(f"retrieval {'HIT ' if hit else 'MISS'} | {q} -&gt; {detail[-1]['top_file']} ({detail[-1]['top_score']})",
+          flush=True)
+results["retrieval_check"] = {"hits": hits, "total": len(checks), "detail": detail}
+print(f"retrieval: {hits}/{len(checks)} top-1 hits", flush=True)
+
+</code></pre>
+<p>The idea is simple and it is the single most valuable habit in this whole tutorial: for each of five questions, write down which document <em>should</em> win, then check whether it did. The measured result was <strong>4 out of 5</strong> top-1 hits, with scores from 0.674 to 0.744. The miss was the hail question, at 0.605 against the wrong file — the right chunk came second at 0.564, a gap of just 0.041. That is not a bug in LlamaIndex. It is the geometry of the corpus: the maintenance file is dense with inspection vocabulary, and the hail rule is one sentence in a file about something else. Two fixes work in practice: raise <code>similarity_top_k</code> so the synthesizer always sees the right chunk even when it is not first, or add metadata filters — for example, tagging documents by topic and filtering on the tag before retrieval. Do not skip this measurement. A RAG app whose answers you have not graded is a chatbot with extra steps; a five-question retrieval check takes seconds and tells you whether the index works at all.</p>
+<h2 id="step-9-chat-with-memory">Step 9: Chat with memory<a class="anchor" href="#step-9-chat-with-memory" aria-label="Link to section">#</a></h2>
+<p>Append this to <code>rag.py</code>:</p>
+<pre><code class="language-python"># ---- Step 6: conversational chat engine -----------------------------------
+chat_engine = index.as_chat_engine(
+    chat_mode="context",
+    memory=ChatMemoryBuffer.from_defaults(token_limit=1500),
+    similarity_top_k=3,
+)
+t0 = time.time()
+r1 = chat_engine.chat("How many panels does Copper Flats have?")
+print(f"\n[chat_turn1] {time.time() - t0:.1f}s\nQ: How many panels does Copper Flats have?\nA: {r1.response}", flush=True)
+t0 = time.time()
+r2 = chat_engine.chat("And how often are they cleaned?")
+print(f"\n[chat_turn2] {time.time() - t0:.1f}s\nQ: And how often are they cleaned?\nA: {r2.response}", flush=True)
+results["chat"] = {"turn1": str(r1.response), "turn2": str(r2.response)}
+
+</code></pre>
+<p>A query engine is stateless; a chat engine remembers. The difference shows in the second turn, where the word "they" only makes sense if the model remembers the previous question was about the panels:</p>
+<pre><code class="language-bash"># [step 7] chat turn 1: 62.9s
+#   "Copper Flats has 890,000 photovoltaic panels."
+# [step 7] chat turn 2: 85.7s
+#   "Copper Flats cleans its panels quarterly, i.e. every 3 months, and each cleaning
+#    cycle takes 9 days. Cleaning cuts soiling losses from 2.1% to 0.4%."</code></pre>
+<p>Both turns are correct — <strong>890,000 panels</strong>, <strong>quarterly</strong> cleaning, <strong>9 days</strong> per cycle, <strong>2.1%</strong> down to <strong>0.4%</strong> — and the second turn correctly resolved "they" to the panels, pulling the soiling figures from a different document than the panel count. The 85.7-second second turn is the slowest single answer in this run: the model had the full conversation history, three retrieved chunks, and its own thinking tokens to generate. If you turn this into a product, the chat engine is the part you keep and the timings are the part you fix, almost always by moving the chat model to a GPU.</p>
+<figure class="inline-art">
+  <img src="/articles/llamaindex-local-rag-llamacpp-tutorial/img3.webp" alt="A chat interface over a filing cabinet of documents, with a magnifying glass checking each retrieved fact" loading="lazy" width="2048" height="1152">
+  <figcaption>The chat engine answers from retrieved documents, not from memory — the filing cabinet is the corpus. Illustration generated by AI.</figcaption>
+</figure>
+<h2 id="step-10-persist-and-reload">Step 10: Persist the index and reload it<a class="anchor" href="#step-10-persist-and-reload" aria-label="Link to section">#</a></h2>
+<p>Append this final section to <code>rag.py</code>:</p>
+<pre><code class="language-python"># ---- Step 7: persist + reload ---------------------------------------------
+timed("persist", lambda: index.storage_context.persist(persist_dir=PERSIST_DIR))
+storage_context = StorageContext.from_defaults(persist_dir=PERSIST_DIR)
+reloaded = load_index_from_storage(storage_context)
+reloaded_engine = reloaded.as_query_engine(similarity_top_k=3)
+t0 = time.time()
+r3 = reloaded_engine.query("What is the capacity of the Del Sol battery?")
+print(f"\n[reload_query] {time.time() - t0:.1f}s\nQ: What is the capacity of the Del Sol battery?\nA: {r3.response}", flush=True)
+results["reload_answer"] = str(r3.response)
+
+with open("results.json", "w") as f:
+    json.dump(results, f, indent=2)
+print("\nresults.json written", flush=True)
+</code></pre>
+<p>Persisting took 0.1 seconds and writes the index — including the embedding vectors — into <code>index_store/</code>. Reloading skips the embedding work entirely: the next run starts with the loaded index and answers immediately. The reload question was deliberately a new one, not a repeat of Step 7:</p>
+<pre><code class="language-bash"># [step 8] persist: 0.1s
+# [step 9] reload query: 110.9s
+#   "The capacity of the Del Sol battery facility is 200 MWh."</code></pre>
+<p>Correct again — <strong>200 MWh</strong> — and the slowest answer of the run, 110.9 seconds, because the reload path re-warmed both servers' first calls after a fresh process start. The lesson is about where the time goes: indexing is a one-off cost, loading is free, and generation is the recurring cost. For a real app you index once, persist, and serve the reload path.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>The local, framework-based path above is one of four honest ways to build this. Pick by what you are optimizing for:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Approach</th><th>Best when</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td><strong>LlamaIndex + local llama.cpp (this tutorial)</strong></td><td>You want a full RAG framework with local models and no API key</td><td>CPU answer times of 50–110 s; small models need careful prompts</td></tr>
+<tr><td><strong>LangChain + Ollama</strong></td><td>You want the widest ecosystem and plan to add tools and agents later</td><td>More boilerplate for a plain RAG pipeline; Ollama is another service to run</td></tr>
+<tr><td><strong>PageIndex (vectorless RAG)</strong></td><td>Your documents are long and retrieval quality matters more than speed</td><td>Indexing is slow (about five minutes for five pages in our test) and needs a capable local model</td></tr>
+<tr><td><strong>Hosted RAG (OpenAI / Claude + vector DB)</strong></td><td>You need the best answers and the fastest responses</td><td>API costs and your documents leave the machine</td></tr>
+<tr><td><strong>Raw llama.cpp, no framework</strong></td><td>You need total control over chunking, retrieval, and prompting</td><td>You write all of it yourself, including the parts frameworks get right for free</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="honest-limitations">Honest limitations<a class="anchor" href="#honest-limitations" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Speed.</strong> Every answer took 52.6–110.9 seconds on the four-thread CPU VM used here. Most of that is the reasoning model's thinking tokens, which are generated even though they are stripped from the output. A laptop CPU is faster; a GPU is far faster; a non-reasoning model such as Qwen2.5-Instruct avoids the thinking tokens entirely.</li>
+<li><strong>The model is small.</strong> Qwen3-1.7B answered three short factual questions correctly and handled a two-turn chat. Longer synthesis — comparing two documents, summarizing a whole report — would strain it. For real work, swap in a 7B or 8B GGUF; the code is unchanged.</li>
+<li><strong>Retrieval misses.</strong> Top-1 retrieval was right 4 out of 5 times. The hail question's top hit was the wrong file, and the correct chunk was only 0.041 behind. On a real corpus this is the first thing to measure and the first thing to tune.</li>
+<li><strong>Prefixes not used.</strong> nomic-embed-text-v1.5 is trained with <code>search_query:</code> and <code>search_document:</code> prefixes. The adapter in Step 5 sends raw text, and the results above are without them. Adding the prefixes may improve retrieval; it was not tested here.</li>
+<li><strong>Tiny corpus.</strong> Four files, four chunks, one node per file. Real corpora need chunk-size tuning, metadata filters, and a persistent vector store instead of an in-memory index.</li>
+<li><strong>The servers are a demo harness.</strong> Single-process, no authentication, localhost only. Do not expose them to a network.</li>
+</ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>A fully local RAG app is a weekend project, not a research project — and the parts that fail are the integration seams, not the models. Keep this checklist:</p>
+<ul>
+<li>Install the framework, not the model: <code>pip install llama-index llama-index-llms-openai-like</code>, pinned to the versions in Step 1.</li>
+<li>Serve the models behind an OpenAI-compatible API. LlamaIndex does not care what is behind the endpoint, and <code>OpenAILike</code> is the one-line bridge.</li>
+<li>Expect two integration gotchas and budget for them: <code>OpenAIEmbedding</code> rejects non-OpenAI model names (the twenty-line adapter in Step 5), and the response synthesizer needs the legacy <code>/v1/completions</code> endpoint (Step 3).</li>
+<li>Measure retrieval before generation. A five-question top-1 check takes seconds and tells you whether the index works at all.</li>
+<li>Set <code>temperature=0</code> and <code>similarity_top_k=3</code> for reproducible, grounded answers.</li>
+<li>Persist the index. Indexing is a one-off cost; loading is free; generation is the recurring cost.</li>
+<li>Strip the <code>&lt;think&gt;</code> block — or use a non-reasoning model — before showing answers to anyone.</li>
+</ul>
+<p>Run the ten steps above and you have a question-answering app that costs $0, sends nothing to any cloud, and answers only from documents you chose. That last property is the whole point of local RAG: not that it is cheaper, but that you can prove where every answer came from.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul>
+<li><a href="https://docs.llamaindex.ai/en/stable/" rel="nofollow">LlamaIndex documentation</a></li>
+<li><a href="https://github.com/run-llama/llama_index" rel="nofollow">LlamaIndex on GitHub (run-llama/llama_index)</a></li>
+<li><a href="https://huggingface.co/unsloth/Qwen3-1.7B-GGUF" rel="nofollow">Qwen3-1.7B-GGUF on Hugging Face (Unsloth)</a></li>
+<li><a href="https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF" rel="nofollow">nomic-embed-text-v1.5-GGUF on Hugging Face</a></li>
+<li><a href="https://www.llamaindex.ai/blog/introducing-parsebench-v2" rel="nofollow">LlamaIndex — Introducing ParseBench-2 and OCRia-1.5</a></li>
+<li><a href="https://llama-cpp-python.readthedocs.io/" rel="nofollow">llama-cpp-python documentation</a></li>
+</ul>
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="llamaindex-local-rag-llamacpp-tutorial"></div><div class="comments" data-comments="llamaindex-local-rag-llamacpp-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/obscura-headless-browser-no-chrome-tutorial/"><span class="chip">Tutorials</span><h3>Ditch headless Chrome: scrape, screenshot, and automate the web with Obscura&#x27;s 70 MB Rust browser</h3><div class="meta">November 17, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/gemini-decisions-api-support-triage-tutorial/"><span class="chip">Tutorials</span><h3>Stop asking chat models to classify: build a support-ticket router with Google&#x27;s Gemini Decisions API</h3><div class="meta">November 16, 2026 · 26 min read</div></a><a class="rel-card" href="/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Lance: the open lakehouse format built for AI data</h3><div class="meta">November 16, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/last30days-skill-social-research-tutorial/"><span class="chip">Tutorials</span><h3>Research what people actually say: hands-on with last30days, the social search skill for coding agents</h3><div class="meta">November 16, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key or a GPU to follow this tutorial?</h3><p>No. Everything runs on localhost: two local llama.cpp servers, a LlamaIndex script, and four Markdown files. No account, no key, no bill, and no document ever leaves the machine. A GPU makes it faster, but every timing in this article was measured on a CPU-only VM.</p><h3>Why does each answer take 50–110 seconds?</h3><p>Qwen3-1.7B is a reasoning model: it generates a <code>&lt;think&gt;</code> block of deliberation before every answer, and on a four-thread CPU that takes most of the time. The server strips the block from the output, but the tokens are still generated. A faster CPU, a GPU, or a non-reasoning model such as Qwen2.5-Instruct all remove the bottleneck.</p><h3>Why did the hail question retrieve the wrong document first?</h3><p>Retrieval is similarity, not understanding. The maintenance file is dense with inspection vocabulary, so it scored 0.605 against the hail question while the correct chunk scored 0.564 — a gap of 0.041. The synthesizer still answered correctly because it saw the top three chunks, not just the first. That is why this tutorial sets <code>similarity_top_k=3</code> and why Step 8 measures top-1 accuracy explicitly.</p><h3>Can I use Ollama instead of the two servers?</h3><p>Yes. LlamaIndex's documented Ollama path is <code>Settings.llm = Ollama(model="qwen3:1.7b")</code> and <code>Settings.embed_model = OllamaEmbedding(model_name="nomic-embed-text")</code>, and the rest of the script is unchanged. This tutorial used the llama.cpp servers because the verification machine had no Ollama binary installed; the two paths are interchangeable at the <code>Settings</code> level.</p><h3>What if my documents are PDFs, not Markdown?</h3><p><code>SimpleDirectoryReader</code> reads <code>.pdf</code> files the same way once <code>pypdf</code> is installed, and <code>.txt</code>, <code>.docx</code>, and <code>.csv</code> with their respective optional dependencies. For messy scanned PDFs, clean them into Markdown first — see our <a href="/articles/docling-pdf-markdown-rag-tutorial/">Docling guide</a>, which turns PDFs into the structured Markdown a retriever can cite.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/pageindex-vectorless-rag-tutorial/">PageIndex: vectorless, reasoning-based RAG that reads documents like a human</a></li><li><a href="/articles/instructor-structured-extraction-ollama-tutorial/">Stop parsing LLM JSON by hand: typed structured extraction with Instructor and local Ollama</a></li><li><a href="/articles/gguf-quantization-imatrix-measured/">Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</a></li><li><a href="/articles/docling-pdf-markdown-rag-tutorial/">From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</a></li><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
