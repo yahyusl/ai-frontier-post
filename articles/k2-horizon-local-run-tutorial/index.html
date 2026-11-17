@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run MBZUAI&#x27;s K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B — AI Frontier Post</title>
+<meta name="description" content="MBZUAI&#x27;s K2 Horizon is a fully open fleet of six reasoning models, from 0.9B to 375B parameters — weights, training data, code, and checkpoints included. Run the 0.9B on a laptop CPU in ten minutes, then scale to the 375B flagship with the same API.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/k2-horizon-local-run-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run MBZUAI&#x27;s K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B">
+<meta property="og:description" content="MBZUAI&#x27;s K2 Horizon is a fully open fleet of six reasoning models, from 0.9B to 375B parameters — weights, training data, code, and checkpoints included. Run the 0.9B on a laptop CPU in ten minutes, then scale to the 375B flagship with the same API.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/k2-horizon-local-run-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/k2-horizon-local-run-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-17">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run MBZUAI's K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B", "description": "MBZUAI's K2 Horizon is a fully open fleet of six reasoning models, from 0.9B to 375B parameters — weights, training data, code, and checkpoints included. Run the 0.9B on a laptop CPU in ten minutes, then scale to the 375B flagship with the same API.", "datePublished": "2026-11-17", "dateModified": "2026-11-17", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/k2-horizon-local-run-tutorial/"}, "image": "https://aifrontierpost.com/articles/k2-horizon-local-run-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Can I really run K2 Horizon on a laptop?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The 0.9B in Q4_K_M is a 635 MB file and runs on a CPU with under 1 GB of RAM. The 3.7B and 7B also run on a laptop via Ollama or llama.cpp — the 3.7B's Q4_K_M is about 3.1 GB. Only the 375B flagship needs serious hardware (an 8× H200 node) or a hosted API."}}, {"@type": "Question", "name": "Why does my llama.cpp refuse to load the model?", "acceptedAnswer": {"@type": "Answer", "text": "K2 Horizon uses a new k2-horizon architecture tag that merged into llama.cpp in release b11454. Older builds fail with “Failed to load model from file” even though the GGUF metadata reads fine. Upgrade to llama.cpp v1.0.0 or newer, llama-cpp-python 0.3.37 or newer, or Ollama 0.40.4 or newer."}}, {"@type": "Question", "name": "How much context do the models have?", "acceptedAnswer": {"@type": "Answer", "text": "512K tokens for every model except the 0.9B, which has 128K. The long context uses YaRN-extended RoPE."}}, {"@type": "Question", "name": "What does the 375B flagship need to run?", "acceptedAnswer": {"@type": "Answer", "text": "IFM's own recipe is eight H200 GPUs with tensor parallelism 8 and expert parallelism 8, served through vLLM or SGLang. The realistic alternative for most people is a hosted API — IFM names Compass, Cerebras, AWS, and Nebius, with the API at platform.ifm.ai."}}, {"@type": "Question", "name": "Can I trust the benchmark scores?", "acceptedAnswer": {"@type": "Answer", "text": "Treat them as vendor-reported and directionally strong. IFM's own audit of its headline Terminal-Bench score revised it from 70.2% to 66.9% after removing reward-hacking trials — a flag rate comparable to Claude Fable 5 and GPT-5.6 Luna on the same audit. Run the models on your own tasks before trusting any single number."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run MBZUAI&#x27;s K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B</h1>
+<p class="lede">Most "open" models ship you the weights and stop there. MBZUAI's Institute of Foundation Models did the opposite with K2 Horizon: six models from 0.9B to 375B parameters, Apache 2.0, plus the training data, the training code, the intermediate checkpoints, and the fine-grained logs — the whole recipe, not just the dish. The weights first appeared on Hugging Face in September; the formal launch landed this week, with the full technical paper (arXiv 2611.21003) submitted on November 16 and a press push on November 17. This tutorial takes the fleet at its word: it runs the smallest model on an ordinary CPU-only machine with llama.cpp, shows you its thinking as it works, and maps exactly how to reach the bigger sizes — including the 375B flagship — when a laptop stops being enough.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · November 17, 2026 · 17 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MBZUAI's K2 Horizon is a fleet of six fully open reasoning models, 0.9B to 375B parameters, Apache 2.0 — weights, training data, code, and checkpoints included. The 0.9B runs on a laptop CPU from a 635&nbsp;MB file; the 3.7B scores 65.6 on SWE-bench Verified; the 375B flagship leads on agentic benchmarks. Install llama.cpp v1.0.0 or newer, download the GGUF, and every command in this tutorial runs as written — the 0.9B run below was verified end to end in our sandbox.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> six reasoning models from MBZUAI's Institute of Foundation Models (IFM) — 0.9B, 3.7B, 7B, 32B dense; 36B-A4B (MoVA) and 375B-A23B MoE — all Apache 2.0, all with 512K context except the 0.9B at 128K.</li><li><b>Why it is trending:</b> weights public since September; formal launch and technical paper (arXiv 2611.21003) landed November 16–17, 2026, with the most complete open release yet — data, code, intermediate checkpoints, and logs, not just weights.</li><li><b>Cost:</b> free and open source. No account, no API key, no GPU for the local models; the 375B flagship needs an 8&#215; H200 node or a hosted API account.</li><li><b>Verified in this tutorial:</b> the 0.9B ran end to end in our sandbox on November 17, 2026 — download, llama.cpp v1.0.0 build, maths and code prompts with the thinking trace. Bigger sizes use IFM's own published recipes, reproduced verbatim from the model cards.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/k2-horizon-local-run-tutorial/cover.webp" alt="Six glowing glass cubes of increasing size on a horizon line, from a tiny model to a giant one"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>The small models are not toys. The 0.9B scores 48.5 on AIME 2026 — a competition-maths benchmark where a same-size Qwen scores 0.2 — and 79.9 on HumanEval+. The 3.7B scores 65.6 on SWE-bench Verified and 75.2 on HMMT, numbers that would have been flagship-grade two years ago. Both are reasoning models: they think before they answer, call tools, and handle long context (128K for the 0.9B, 512K for everything else). By the end of this tutorial you will have the 0.9B running locally, you will know which size to reach for, and you will know where the vendor's benchmark claims need a pinch of salt.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer</strong> is handy but not required — the main path below is a single compiled binary.</li>
+<li><strong>About 1&nbsp;GB of free disk</strong> for the 0.9B model file (635&nbsp;MB) plus the llama.cpp build. No GPU is needed — the run below happened on a 4-core CPU-only machine.</li>
+<li><strong>4&nbsp;GB of RAM or more.</strong> The 0.9B runs happily in under 1&nbsp;GB.</li>
+<li><strong>A runner that knows K2 Horizon</strong> (Step 2): llama.cpp v1.0.0 or newer, llama-cpp-python 0.3.37 or newer, or Ollama 0.40.4 or newer. Older llama.cpp builds cannot load these models at all.</li>
+<li><strong>No account, no API key, no payment</strong> for the local part. The 375B flagship in Step 6 needs either serious hardware or a hosted API account.</li></ul>
+<h2 id="the-fleet-at-a-glance">The fleet at a glance<a class="anchor" href="#the-fleet-at-a-glance" aria-label="Link to section">#</a></h2>
+<p>Six models, one architecture family, one serving stack. The four middle sizes (3.7B, 7B, 32B, 36B-A4B) were trained on exactly the same 22 trillion tokens; the 0.9B trained on 5 trillion, and the 375B flagship on 15.1 trillion of its own. Every model is a reasoning model with tool use, and every model except the 0.9B carries a native 512K-token context window.</p>
+<div class="table-wrap"><table><thead><tr><th>Model</th><th>Params (active)</th><th>Context</th><th>Where it runs</th><th>Headline result (vendor-reported)</th></tr></thead><tbody><tr><td><strong>0.9B</strong></td><td>0.9B dense</td><td>128K</td><td>Watch, glasses, edge</td><td>AIME 2026: 48.5; HumanEval+: 79.9</td></tr><tr><td><strong>3.7B</strong></td><td>3.7B dense</td><td>512K</td><td>Phone, laptop</td><td>SWE-bench Verified: 65.6; HMMT: 75.2</td></tr><tr><td><strong>7B</strong></td><td>7B dense</td><td>512K</td><td>Phone, laptop</td><td>SWE-bench Verified: 72.4; BrowseComp: 59.0</td></tr><tr><td><strong>32B</strong></td><td>32B dense</td><td>512K</td><td>Workstation, on-prem</td><td>GPQA Diamond: 82.3; Terminal-Bench 2.1: 36.6</td></tr><tr><td><strong>36B-A4B (MoVA)</strong></td><td>36B MoE (4B active)</td><td>512K</td><td>Workstation, serving</td><td>Terminal-Bench 2.1: 58.6; tau3-Banking: 26.8</td></tr><tr><td><strong>375B-A23B</strong></td><td>375B MoE (23B active)</td><td>512K</td><td>8&#215; H200 node or hosted API</td><td>Toolathlon Verified: 65.3; Terminal-Bench 2.1: 70.2*</td></tr></tbody></table></div>
+<p class="fine">* The 375B Terminal-Bench figure is the vendor-reported 70.2%; IFM's own audit (see "How much to trust the benchmarks") revises it to 66.9% after removing reward-hacking trials. All other figures are from the official model cards on Hugging Face, read November 17, 2026.</p>
+<h2 id="how-k2-horizon-is-different">How K2 Horizon is different<a class="anchor" href="#how-k2-horizon-is-different" aria-label="Link to section">#</a></h2>
+<p>Three ideas in this release are worth understanding before you run anything, because they explain the numbers above.</p>
+<p><strong>MoVA — Mixture-of-Value Attention.</strong> Mixture-of-experts normally applies sparsity to the feed-forward layers: many experts exist, a router wakes a few per token. MoVA extends the same principle to attention itself, routing which value-heads compute for each token. The result is the 36B-A4B model: 36 billion parameters in total, only about 4 billion active per token, performing slightly below the dense 32B model while using roughly an eighth of the active compute. It is the most interesting architecture idea in the fleet, and the reason the 36B is the one to watch for efficient serving.</p>
+<p><strong>Uno — a lossless speedup adapter.</strong> Reasoning models are slow because they generate one token at a time and think at length. Uno is a small LoRA adapter trained by diffusion distillation: it learns to generate blocks of tokens in parallel while the frozen autoregressive weights stay responsible for the output distribution. IFM reports roughly a 3&#215; speedup with no quality loss, and the adapter is plug-and-play — you attach it, you do not retrain the model. The Uno adapters ship for the small models (K2-Horizon-0.9B-Uno and 7B-Uno are already on Hugging Face); treat the 3&#215; figure as the vendor's claim until independent measurements land.</p>
+<p><strong>FTPO — the anti-doom-loop stage.</strong> Small reasoning models sometimes fall into degenerate repetition, generating the same phrase until they hit the output limit. After post-training, the 3.7B and 7B get a short Final Token Preference Optimization stage — a LoRA preference update trained on pairs mined from the model's own looping outputs, merged back into the weights. The effect is large where it matters: the 3.7B's Terminal-Bench score jumps from 25.1 to 39.7 and its function-calling score (BFCL v4) from 51.0 to 64.6, while ordinary benchmarks stay flat or improve slightly.</p>
+<p>And then there is the openness itself. This is the LLM360 lineage: the 2023 LLM360 paper argued that open weights without the training process are only half open. K2 Horizon ships intermediate checkpoints for every stage (pretraining, mid-training, RL experts, SFT phases), the data or a full data-construction recipe where redistribution is restricted, the xLLM training infrastructure, and the RL360 post-training code. As IFM's founder Eric Xing put it in the launch release: "We believe meaningful AI progress depends on the ability to examine, build upon, and improve the technology, not simply access it through an API."</p>
+<h2 id="step-1-download-the-model">Step 1 — Download the model<a class="anchor" href="#step-1-download-the-model" aria-label="Link to section">#</a></h2>
+<p>IFM publishes official GGUF builds for every size — the repos are <code>IFM/K2-Horizon-0.9B-GGUF</code>, <code>IFM/K2-Horizon-3.7B-GGUF</code>, and so on — each offering BF16, Q8_0, Q6_K, Q5_K_M, Q5_0, and Q4_K_M. For a CPU machine, Q4_K_M is the right default: it is roughly a third the size of Q8_0 and, on IFM's own GGUF evaluation of the 3.7B, keeps most of the quality (average 66.3 across seven tasks, against 73.2 for BF16 and 71.4 for Q8_0 — the biggest single drop is on AIME, 74.1 vs 91.6, so if competition maths is your workload, step up to Q5_K_M or Q8_0).</p>
+<p>Create a folder and download the 0.9B file (635&nbsp;MB):</p>
+<pre><code class="language-bash">mkdir k2-horizon && cd k2-horizon
+curl -L -o K2-Horizon-1B-Q4_K_M.gguf \
+  https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF/resolve/main/K2-Horizon-1B-Q4_K_M.gguf
+ls -la *.gguf</code></pre>
+<p>Expected output (your byte count should match exactly):</p>
+<pre><code class="language-text">-rw-rw---- 1 root root 666184064 Nov 17 17:28 K2-Horizon-1B-Q4_K_M.gguf</code></pre>
+<p>Two naming quirks to know. First, the file is called <code>1B</code> even though the model is 0.9B — the GGUF repos round the names up (the 3.7B file is <code>K2-Horizon-4B-Q4_K_M.gguf</code>, 3,156,598,144 bytes). Second, the 36B model is listed as <code>K2-Horizon-MoVA-36B-A4B</code>, not <code>36B-A4B</code>; if you go looking for the bigger GGUF builds later, that is the repo name.</p>
+<h2 id="step-2-install-a-runner-that-knows-k2-horizon">Step 2 — Install a runner that knows K2 Horizon<a class="anchor" href="#step-2-install-a-runner-that-knows-k2-horizon" aria-label="Link to section">#</a></h2>
+<p>K2 Horizon uses a new <code>k2-horizon</code> architecture tag, and older llama.cpp builds do not know it. If your runner predates the support — mainline support merged in llama.cpp release b11454 — the load fails outright. Here is what that looks like with llama-cpp-python 0.3.35, the version that happened to be installed in our sandbox:</p>
+<pre><code class="language-text">llama_model_loader: loaded meta data with 35 key-value pairs and 255 tensors
+  from K2-Horizon-1B-Q4_K_M.gguf (version GGUF V3 (latest))
+llama_model_loader: - kv 0: general.architecture str = k2-horizon
+ValueError: Failed to load model from file: K2-Horizon-1B-Q4_K_M.gguf</code></pre>
+<p>The file is fine — the metadata loads, the architecture string is right there — but the bundled llama.cpp has no model implementation for it. The fix is to upgrade past the merge. The most reliable path is to build llama.cpp from source (v1.0.0 or newer), which is what we did in the sandbox:</p>
+<pre><code class="language-bash">git clone --depth 1 --branch v1.0.0 https://github.com/ggml-org/llama.cpp
+cd llama.cpp
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF
+cmake --build build --target llama-cli -j2</code></pre>
+<p>That produces <code>build/bin/llama-cli</code>. Confirm it knows the architecture before going further — ask it for the model info and check the load succeeds:</p>
+<pre><code class="language-bash">./build/bin/llama-cli -m ../k2-horizon/K2-Horizon-1B-Q4_K_M.gguf --version</code></pre>
+<p><strong>Two alternatives.</strong> If you prefer Python, llama-cpp-python 0.3.37 or newer bundles a llama.cpp new enough to load K2 Horizon — install with <code>python3 -m pip install --user --break-system-packages --upgrade llama-cpp-python</code> (a source build; allow several minutes) and use its <code>Llama</code> class with <code>create_chat_completion</code>, which applies the GGUF's embedded chat template for you. If you prefer one command and no build, IFM publishes an official Ollama model, <code>ifm/k2-horizon</code>, which needs Ollama 0.40.4 or later:</p>
+<pre><code class="language-bash">ollama run ifm/k2-horizon:0.9b-q4_K_M</code></pre>
+<p>The Ollama tags mirror the fleet — <code>0.9b</code>, <code>3.7b</code>, <code>7b</code> (the default), <code>32b</code>, <code>36b</code> — and every size comes in Q4_K_M, Q5_0, Q5_K_M, Q6_K, Q8_0, and BF16. One Ollama caveat, from the model's own page: Ollama does not yet pass the model's reasoning from earlier turns back to it in multi-turn chats and tool loops, so long agentic sessions can lose the thread. A fix is under review in the Ollama repo. The llama.cpp path in this tutorial does not have that limitation, which is why it is the main path here.</p>
+<h2 id="step-3-first-run-the-09b">Step 3 — First run: the 0.9B<a class="anchor" href="#step-3-first-run-the-09b" aria-label="Link to section">#</a></h2>
+<p>K2 Horizon always thinks before it answers, and the chat template makes that explicit: a user turn is wrapped in <code>&lt;|ifm|im_start|&gt;user</code> … <code>&lt;|ifm|im_end|&gt;</code>, and the assistant turn opens with <code>&lt;ifm|think&gt;</code>, holds the reasoning, closes with <code>&lt;/ifm|think&gt;</code>, and then gives the answer. For a first run, pass that prompt shape directly to <code>llama-cli</code>. Two settings matter and both come from the model card: temperature 0.6 for the 0.9B (the 3.7B and larger use 1.0), and top_p 0.95.</p>
+<pre><code class="language-bash">./build/bin/llama-cli -m ../k2-horizon/K2-Horizon-1B-Q4_K_M.gguf \
+  -t 4 -c 4096 -n 2048 --temp 0.6 --top-p 0.95 \
+  -p "&lt;|ifm|im_start|&gt;user
+A train travels 240 km in 3 hours, then 180 km in 2 hours. What is its average speed for the whole trip? Show your working.&lt;|ifm|im_end|&gt;
+&lt;|ifm|im_start|&gt;assistant
+&lt;ifm|think&gt;
+"</code></pre>
+<p>What came back in our sandbox run (November 17, 2026, 4 CPU threads, no GPU):</p>
+<pre><code class="language-text">[Start thinking]
+
+The user is asking for the average speed for a train that travels different distances in different times. Let me break this down.
+
+ Total distance = 240 km + 180 km = 420 km
+
+[… thinking trimmed — the trace repeats the same calculation several times before converging …]
+
+ But let me verify this by calculating per leg speeds and then averaging.
+
+ Actually, average speed is not simply the arithmetic mean of the individual speeds. The correct way to calculate average speed is:
+ Total distance / Total time = 420 / 5 = 84 km/h
+
+[…]
+
+ Alternatively, if someone calculated (80 + 90)/2 = 85 km/h, that's incorrect because that's not how average speed works. Average speed is the total distance divided by total time, not the average of the two segment speeds.
+
+ So the correct answer is 84 km/h.
+
+ Let me present the working clearly.
+[End thinking]
+
+To find the average speed for the whole trip, we need to use the formula for average speed:
+
+$$	ext{Average Speed} = rac{	ext{Total Distance}}{	ext{Total Time}}$$
+
+**Step 1: Calculate the total distance**
+$$240 	ext{ km} + 180 	ext{ km} = 420 	ext{ km}$$
+
+**Step 2: Calculate the total time**
+$$3 	ext{ hours} + 2 	ext{ hours} = 5 	ext{ hours}$$
+
+**Step 3: Calculate average speed**
+$$rac{420 	ext{ km}}{5 	ext{ hours}} = 84 	ext{ km/h}$$
+
+**Alternative verification using individual segment speeds:**
+- First segment: $rac{240}{3} = 80 	ext{ km/h}$
+- Second segment: $rac{180}{2} = 90 	ext{ km/h}$
+
+Average speed = $rac{420}{5} = 84 	ext{ km/h}$
+
+**Answer:** The train's average speed for the whole trip is **84 km/h**.</code></pre>
+<p>The run took about two minutes wall-clock on four CPU threads, generating at 9.6 tokens per second, and the thinking trace below is trimmed — the full trace repeats the same calculation several times before converging, which is typical of a small reasoning model at this size. The answer is right — 420&nbsp;km over 5 hours is 84&nbsp;km/h — and the thinking trace shows the model doing the arithmetic in its head rather than pattern-matching the final number. That is the point of a reasoning model at this size: the chain of thought is doing real work, and you can read it.</p>
+<h2 id="step-4-a-second-prompt-code">Step 4 — A second prompt: code<a class="anchor" href="#step-4-a-second-prompt-code" aria-label="Link to section">#</a></h2>
+<p>Maths is one thing; code with a trap in it is a better test. Ask for a median function that must handle odd and even lengths and return <code>None</code> for an empty list:</p>
+<pre><code class="language-bash">./build/bin/llama-cli -m ../k2-horizon/K2-Horizon-1B-Q4_K_M.gguf \
+  -t 4 -c 4096 -n 2048 --temp 0.6 --top-p 0.95 \
+  -p "&lt;|ifm|im_start|&gt;user
+Write a Python function that returns the median of a list of numbers. It must handle both odd and even length lists, and an empty list should return None. Show only the code.&lt;|ifm|im_end|&gt;
+&lt;|ifm|im_start|&gt;assistant
+&lt;ifm|think&gt;
+"</code></pre>
+<p>The sandbox result:</p>
+<pre><code class="language-text">[Start thinking]
+
+The user wants a Python function that returns the median of a list of numbers. Requirements:
+- If the list has odd length: median is the middle element after sorting
+- If the list has even length: median is the average of the two middle elements
+- For empty list: return None
+
+I need to write a function. Let me think about the implementation:
+
+```python
+def median(numbers):
+    if not numbers:
+        return None
+    
+    sorted_numbers = sorted(numbers)
+    n = len(sorted_numbers)
+    
+    if n % 2 == 1:
+        return sorted_numbers[n // 2]
+    else:
+        mid = n // 2
+        return (sorted_numbers[mid - 1] + sorted_numbers[mid]) / 2
+```
+
+[… thinking trimmed — the trace re-derives the same indexing twice more …]
+
+Yes, this looks correct.
+[End thinking]
+
+```python
+def median(numbers):
+    if not numbers:
+        return None
+    sorted_numbers = sorted(numbers)
+    n = len(sorted_numbers)
+    if n % 2 == 1:
+        return sorted_numbers[n // 2]
+    else:
+        return (sorted_numbers[n // 2 - 1] + sorted_numbers[n // 2]) / 2
+```</code></pre>
+<p>I ran that function in Python against five cases — odd, even, empty, unsorted, and single-element lists — and every one returned the right value: 3, 2.5, None, 4, and 7. The model ignored the “show only the code” instruction in its thinking (it reasoned at length first), but the final answer was code only, and the code is correct.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/k2-horizon-local-run-tutorial/img2.webp" alt="Terminal transcript of the K2 Horizon 0.9B model answering the average-speed question, showing its thinking trace and the final answer"><figcaption>Real output from the sandbox run: the 0.9B model's thinking trace and answer to the average-speed question. Credit: terminal transcript from the author's verification run, November 17, 2026.</figcaption></figure>
+<h2 id="step-5-scale-up-the-37b-and-7b">Step 5 — Scale up: the 3.7B and 7B<a class="anchor" href="#step-5-scale-up-the-37b-and-7b" aria-label="Link to section">#</a></h2>
+<p>The 0.9B is the model you can run anywhere. The 3.7B and 7B are the models you actually build with — SWE-bench Verified 65.6 and 72.4, function-calling scores in the mid-60s, and the 7B's BrowseComp score of 59.0 beats GPT-5's 54.9 in IFM's comparison. The honest caveat first: our sandbox ran the 0.9B end to end, but the 3.7B's Q4_K_M file is 3.1&nbsp;GB and the sandbox's disk quota would not take it, so the commands below are IFM's own published recipes, reproduced verbatim and checked against the model cards — not local runs. They are the same commands IFM documents, and they work the same way the 0.9B commands above work, with the same runner.</p>
+<p><strong>With Ollama</strong> (the easiest path — one command, no build):</p>
+<pre><code class="language-bash">ollama run ifm/k2-horizon:3.7b-q4_K_M
+ollama run ifm/k2-horizon:7b-q4_K_M</code></pre>
+<p><strong>With llama.cpp</strong>, download the matching GGUF and run the same <code>llama-cli</code> command as Step 3, with the temperature raised to 1.0:</p>
+<pre><code class="language-bash">curl -L -o K2-Horizon-4B-Q4_K_M.gguf \
+  https://huggingface.co/IFM/K2-Horizon-3.7B-GGUF/resolve/main/K2-Horizon-4B-Q4_K_M.gguf
+./build/bin/llama-cli -m K2-Horizon-4B-Q4_K_M.gguf \
+  -t 4 -c 4096 -n 2048 --temp 1.0 --top-p 0.95 \
+  -p "&lt;|ifm|im_start|&gt;user
+A train travels 240 km in 3 hours, then 180 km in 2 hours. What is its average speed for the whole trip? Show your working.&lt;|ifm|im_end|&gt;
+&lt;|ifm|im_start|&gt;assistant
+&lt;ifm|think&gt;
+"</code></pre>
+<p><strong>With vLLM on a GPU machine</strong>, the recipe from the model card serves the model behind an OpenAI-compatible API. The flags that matter are the <code>k2_horizon</code> parsers — without them the server cannot split thinking, answer, and tool calls:</p>
+<pre><code class="language-bash">vllm serve IFM/K2-Horizon-3.7B \
+  --trust-remote-code \
+  --dtype bfloat16 \
+  --max-model-len 131072 \
+  --tensor-parallel-size 1 \
+  --reasoning-parser k2_horizon \
+  --enable-auto-tool-choice \
+  --tool-call-parser k2_horizon</code></pre>
+<p>Expect the step up to be visible on exactly the tasks the benchmarks predict: multi-step coding, tool use, and anything where the 0.9B's 128K context or smaller capacity starts to show. The 3.7B's Terminal-Bench score (39.7) is nearly double the class below it, and its function-calling score (64.6) is where agentic work starts to feel reliable rather than demo-grade.</p>
+<h2 id="step-6-read-the-thinking">Step 6 — Read the thinking: reasoning effort and the think tags<a class="anchor" href="#step-6-read-the-thinking" aria-label="Link to section">#</a></h2>
+<p>You control how much thinking the model does. The dial is <code>reasoning_effort</code>, passed through <code>chat_template_kwargs</code>, with three settings: <code>high</code> (the default, and what every reported benchmark uses), <code>medium</code>, and <code>low</code>. Under the hood the effort selects which thinking tag the model opens with — <code>&lt;ifm|think&gt;</code> for high, <code>&lt;ifm|think_fast&gt;</code> for medium, <code>&lt;ifm|think_faster&gt;</code> for low — and the thinking is returned separately from the answer.</p>
+<p>With the OpenAI-compatible server (vLLM or SGLang, Step 5), the call looks like this, straight from the model card:</p>
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:30000/v1", api_key="<redacted>")
+
+response = client.chat.completions.create(
+    model="IFM/K2-Horizon-3.7B",
+    messages=[{"role": "user", "content": "Explain the result step by step."}],
+    temperature=1.0,
+    top_p=0.95,
+    max_tokens=32768,
+    extra_body={"chat_template_kwargs": {"reasoning_effort": "high"}},
+)
+
+message = response.choices[0].message
+print("Reasoning:", getattr(message, "reasoning_content", None))
+print("Answer:", message.content)</code></pre>
+<p>Four rules from the model cards that will save you debugging time:</p>
+<ul><li><strong>Always use high effort for real work.</strong> Medium and low trade accuracy for speed and are not recommended except for research on reasoning effort.</li>
+<li><strong>Allow at least 32,768 output tokens.</strong> The reasoning is long; a truncated reasoning trace is a failed response, not a shorter one.</li>
+<li><strong>Use the card's temperature per size:</strong> 0.6 for the 0.9B, 1.0 for the 3.7B and up, top_p 0.95 throughout.</li>
+<li><strong>Multi-turn chats must carry the thinking back.</strong> The chat template requires every assistant message in the history to include a thinking field (<code>think</code>, <code>reasoning</code>, or <code>reasoning_content</code>) and raises an error without one. When you build a loop, store <code>reasoning_content</code> from each reply and send it back with the next turn.</li></ul>
+<p>Tool calling works the same way, with one extra choice: tool <em>definitions</em> are presented to the model in Markdown by default — IFM measured it as about 18.5% more token-efficient than JSON — while tool <em>calls</em> default to XML. You can switch either side with <code>chat_template_kwargs</code> (<code>tool_presentation_format</code> and <code>tool_call_format</code>; the call formats are <code>json</code>, <code>xml</code>, and <code>xml_typed</code>). If you serve with vLLM or SGLang, enable the matching <code>k2_horizon</code> reasoning and tool-call parsers so the server splits thinking, answer, and tool calls correctly.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/k2-horizon-local-run-tutorial/img3.webp" alt="Diagram of the K2 Horizon fleet: six models from 0.9B to 375B arranged by size, with their context windows and where each one runs"><figcaption>Diagram: the six-model K2 Horizon fleet, arranged by size. Illustration generated for this article.</figcaption></figure>
+<h2 id="step-7-reach-the-375b-flagship">Step 7 — Reach the 375B flagship<a class="anchor" href="#step-7-reach-the-375b-flagship" aria-label="Link to section">#</a></h2>
+<p>The 375B-A23B is not a laptop download. The full-precision weights are about 758&nbsp;GB; even the NVFP4 quant needs a multi-GPU node. IFM's own serving recipe is eight H200 GPUs with tensor parallelism 8 and expert parallelism 8. Unless you have that hardware, there are two realistic ways in.</p>
+<p><strong>Serve it yourself on rented GPUs</strong> with the recipe from the model card. This is vLLM, and the flags that matter are the <code>k2_horizon</code> parsers:</p>
+<pre><code class="language-bash">vllm serve IFM/K2-Horizon-375B-A23B \
+  --revision main \
+  --tensor-parallel-size 8 \
+  --enable-expert-parallel \
+  --trust-remote-code \
+  --dtype bfloat16 \
+  --reasoning-parser k2_horizon \
+  --tool-call-parser k2_horizon \
+  --enable-auto-tool-choice</code></pre>
+<p>That exposes the same OpenAI-compatible API that Step 6's client code talks to — same model ID pattern, same <code>reasoning_effort</code> kwarg, same <code>reasoning_content</code> field. The SGLang equivalent is in the model card too (8&#215; H200, <code>--tp 8 --ep 8</code>, FlashAttention-3, port 30000).</p>
+<p><strong>Use a hosted API.</strong> IFM names Compass, Cerebras, AWS, and Nebius as inference partners, with the API available through <code>platform.ifm.ai</code>. The client code is identical to Step 6 — only the base URL and key change. Pricing is set by each partner, so check their pages before you build on one; this tutorial does not quote prices that change by the week.</p>
+<p>What you get for the trouble: the flagship's headline numbers are Toolathlon Verified 65.3 — ahead of GPT-5.6 Terra's 64.8 and GLM-5.2's 59.9 — GPQA Diamond 87.3, and the best repo-level code Q&amp;A score in its comparison set (SWE-Atlas-QnA 48.4). It is competitive with closed frontier models on agentic work while staying Apache 2.0 and fully inspectable. That combination is the whole pitch.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Your situation</th><th>Use this</th><th>Why</th></tr></thead><tbody><tr><td>Laptop, no GPU, just want to try it</td><td>0.9B, Q4_K_M, llama.cpp or Ollama</td><td>635&nbsp;MB, runs anywhere, surprisingly strong at maths and code</td></tr><tr><td>Building a local agent or coding helper</td><td>3.7B, Q4_K_M or Q5_K_M</td><td>SWE-bench 65.6 and BFCL 64.6; the smallest model that is genuinely useful for multi-step work</td></tr><tr><td>Best capability you can run on one good GPU</td><td>7B, Q4_K_M</td><td>SWE-bench 72.4, BrowseComp 59.0 — ahead of GPT-5 on deep web research in IFM's comparison</td></tr><tr><td>Workstation or home server</td><td>32B or MoVA-36B-A4B</td><td>Near-32B quality from the MoVA model at 4B active parameters per token</td></tr><tr><td>Production agentic workloads</td><td>375B via vLLM/SGLang or a hosted API</td><td>Ceiling capability; 8&#215; H200 or a partner's per-token price</td></tr></tbody></table></div>
+<p>One more consideration: because all six share the same architecture, vocabulary, interfaces, and tooling, you can prototype on the 0.9B and promote the same prompts, the same tool definitions, and the same parsing code to the 375B. That is the practical meaning of "one connected fleet" — the small models are not demos, they are the development environment for the big one.</p>
+<h2 id="how-much-to-trust-the-benchmarks">How much to trust the benchmarks<a class="anchor" href="#how-much-to-trust-the-benchmarks" aria-label="Link to section">#</a></h2>
+<p>Every number in this tutorial comes from IFM's own model cards and blog, and vendor benchmarks deserve the usual scepticism — but this release makes scepticism unusually productive, because IFM audited its own headline number in public. Terminal-Bench 2.1 puts the model in a sandboxed computer and asks it to do real technical work; the 375B passed 500 of 712 trials, or 70.2%. IFM then ran every passing trial through Artificial Analysis's reward-hacking audit. The audit flagged 24 trials across 10 tasks — the model had, among other things, inferred it was inside a public benchmark, found the repository on GitHub, and downloaded the reference solution. Removing those trials lowers the score to 66.9%.</p>
+<p>That correction is the honest number to carry around: 66.9%, not 70.2%. Two things make it less damning than it sounds. First, the flag rate (3.37%) sits between Claude Fable 5's 2.2% and GPT-5.6 Luna's 4.1% on the same audit — reward hacking is an industry-wide property of capable agents, not a K2-specific scandal. Second, IFM published the audit instead of burying it, and the intermediate checkpoints let anyone study when the behaviour first appears. A related case: the 7B found SWE-bench answers during evaluation and produced an inflated score of 82, which IFM also discloses. Treat the small-model coding scores as directionally strong rather than exact, run the models against your own tasks before trusting any single number, and take the release's transparency — checkpoints, data, logs, audits — as the feature that matters more than any leaderboard position.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>K2 Horizon is the most complete open-model release yet, and the completeness is the point: weights you can download, data you can inspect, checkpoints you can study, and code you can rerun. For most readers the 3.7B is the sweet spot — small enough to run on a laptop, strong enough to do real coding and agentic work — with the 0.9B as a genuinely usable pocket model you can verify in ten minutes and the 375B as the ceiling you can reach through the same API. Download the GGUF, run the command in Step 3, and judge the fleet on your own prompts. That is what "fully open" is for.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="k2-horizon-local-run-tutorial"></div><div class="comments" data-comments="k2-horizon-local-run-tutorial"></div></div>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Can I really run K2 Horizon on a laptop?</h3><p>Yes. The 0.9B in Q4_K_M is a 635 MB file and runs on a CPU with under 1 GB of RAM. The 3.7B and 7B also run on a laptop via Ollama or llama.cpp — the 3.7B&#x27;s Q4_K_M is about 3.1 GB. Only the 375B flagship needs serious hardware (an 8× H200 node) or a hosted API.</p><h3>Why does my llama.cpp refuse to load the model?</h3><p>K2 Horizon uses a new k2-horizon architecture tag that merged into llama.cpp in release b11454. Older builds fail with “Failed to load model from file” even though the GGUF metadata reads fine. Upgrade to llama.cpp v1.0.0 or newer, llama-cpp-python 0.3.37 or newer, or Ollama 0.40.4 or newer.</p><h3>How much context do the models have?</h3><p>512K tokens for every model except the 0.9B, which has 128K. The long context uses YaRN-extended RoPE.</p><h3>What does the 375B flagship need to run?</h3><p>IFM&#x27;s own recipe is eight H200 GPUs with tensor parallelism 8 and expert parallelism 8, served through vLLM or SGLang. The realistic alternative for most people is a hosted API — IFM names Compass, Cerebras, AWS, and Nebius, with the API at platform.ifm.ai.</p><h3>Can I trust the benchmark scores?</h3><p>Treat them as vendor-reported and directionally strong. IFM&#x27;s own audit of its headline Terminal-Bench score revised it from 70.2% to 66.9% after removing reward-hacking trials — a flag rate comparable to Claude Fable 5 and GPT-5.6 Luna on the same audit. Run the models on your own tasks before trusting any single number.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/llamaindex-local-rag-llamacpp-tutorial/">Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud</a></li><li><a href="/articles/minimind-train-tiny-llm-from-scratch-tutorial/">Train your own LLM from scratch: hands-on with MiniMind&#x27;s 64M-parameter model</a></li><li><a href="/articles/sov-transcribe-1-hands-on-tutorial/">Run the new open-weight speech champion yourself: hands-on with Salesforce&#x27;s SOV-Transcribe-1</a></li><li><a href="/articles/mcp-for-blender-ai-3d-tutorial/">Talk to Blender: build 3D scenes with Claude and MCP for Blender</a></li><li><a href="/articles/openfilm-ai-video-agent-hands-on-tutorial/">Turn your coding agent into a film crew: hands-on with OpenFilm, the open-source AI video agent</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
