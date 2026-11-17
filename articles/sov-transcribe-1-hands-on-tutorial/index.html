@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run the new open-weight speech champion yourself: hands-on with Salesforce&#x27;s SOV-Transcribe-1 — AI Frontier Post</title>
+<meta name="description" content="Salesforce&#x27;s SOV-Transcribe-1 leads every downloadable transcriber on the Artificial Analysis benchmark at 2.28% word error — and it takes plain-language instructions for how the transcript should read. This tutorial runs it two ways: a one-shot Transformers script and a vLLM server with an OpenAI-compatible endpoint.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/sov-transcribe-1-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run the new open-weight speech champion yourself: hands-on with Salesforce&#x27;s SOV-Transcribe-1">
+<meta property="og:description" content="Salesforce&#x27;s SOV-Transcribe-1 leads every downloadable transcriber on the Artificial Analysis benchmark at 2.28% word error — and it takes plain-language instructions for how the transcript should read. This tutorial runs it two ways: a one-shot Transformers script and a vLLM server with an OpenAI-compatible endpoint.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/sov-transcribe-1-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/sov-transcribe-1-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-17">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run the new open-weight speech champion yourself: hands-on with Salesforce's SOV-Transcribe-1", "description": "Salesforce's SOV-Transcribe-1 leads every downloadable transcriber on the Artificial Analysis benchmark at 2.28% word error — and it takes plain-language instructions for how the transcript should read. This tutorial runs it two ways: a one-shot Transformers script and a vLLM server with an OpenAI-compatible endpoint.", "datePublished": "2026-11-17", "dateModified": "2026-11-17", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/sov-transcribe-1-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/sov-transcribe-1-hands-on-tutorial/cover.webp"}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Run the new open-weight speech champion yourself: hands-on with Salesforce's SOV-Transcribe-1", "description": "Salesforce's SOV-Transcribe-1 leads every downloadable transcriber on the Artificial Analysis benchmark at 2.28% word error — and it takes plain-language instructions for how the transcript should read. This tutorial runs it two ways: a one-shot Transformers script and a vLLM server with an OpenAI-compatible endpoint.", "step": [{"@type": "HowToStep", "name": "Step 1: Download the weights and check the hardware math #", "text": "Install the Hugging Face CLI and pull the repository: hf download salesforce-sovereign-intelligence/SOV-Transcribe-1. The weights are 16 shards totalling about 53 GB in BF16, so check nvidia-smi first: an 80 GB H100-class card is the realistic floor, and Salesforce's own measurements run on a 96 GB RTX PRO 6000 Blackwell."}, {"@type": "HowToStep", "name": "Step 2: Prepare your audio #", "text": "The model expects 16 kHz mono audio. Resample with ffmpeg -i input.mp3 -ar 16000 -ac 1 -c:a pcm_s16le meeting.wav and verify with ffprobe (expect pcm_s16le,16000,1). Split recordings longer than 30 minutes at speech boundaries."}, {"@type": "HowToStep", "name": "Step 3: Prove the pipeline on your CPU first #", "text": "Install transformers 5.22.2 inside the card's pinned range, download only the config files, and run the Whisper feature extractor on your audio. A 30-second clip must give a (128, 3000) mel spectrogram and 375 tokens per window — the exact figures in the model card."}, {"@type": "HowToStep", "name": "Step 4: First transcript with Transformers #", "text": "Load the model with AutoModelForMultimodalLM and trust_remote_code=True, then call processor.apply_transcription_request on a batch of files and generate with max_new_tokens=8192. Decoding is greedy. Environments that forbid remote code can use the card's self-contained transcribe_hf function instead."}, {"@type": "HowToStep", "name": "Step 5: Steer the transcript with plain-language instructions #", "text": "Put the instruction in the user message: verbatim, cleaned-up, digits or words. On the Preference-ASR benchmark the model scores 5.05% preference-aware word error with instructions, second only to IBM's Granite Speech 5.0 2B."}, {"@type": "HowToStep", "name": "Step 6: Fix the names the model keeps missing #", "text": "Supply keywords and a domain label in the prompt to bias the model toward rare terms. On Contextual Earnings-22, keyword F1 on names rises from 71.9 to 96.8 with the clip's keywords, and stays at 94.0 with the full call's keyword list."}, {"@type": "HowToStep", "name": "Step 7: Serve it with vLLM #", "text": "Install the repository's vllm_plugin (it pins vllm==0.32.0), then vllm serve with --max-model-len 32768 and call the OpenAI-compatible /v1/audio/transcriptions endpoint. The endpoint takes up to 600 seconds per request by default; raise VLLM_MAX_AUDIO_DECODE_DURATION_S to 1800 for 30 minutes."}, {"@type": "HowToStep", "name": "Step 8: Make it fast with DFlash speculative decoding #", "text": "The 430M-parameter DFlash draft model proposes 15 tokens at a time for the main model to verify, speeding up single requests about 2-3x. Enable it with speculative_config in the LLM API or --speculative-config on the server, and cap --max-num-seqs at 64 on a 96 GB card."}]}<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a Hugging Face account or an API key?", "acceptedAnswer": {"@type": "Answer", "text": "No. The repository is public and ungated, so hf download works anonymously for public repos, and nothing in this tutorial sends data to any cloud service. The only cost is the GPU you run the model on."}}, {"@type": "Question", "name": "What GPU do I actually need?", "acceptedAnswer": {"@type": "Answer", "text": "The BF16 weights alone are about 53 GB, so the card must hold that plus KV cache and activations. Salesforce benchmarks on a 96 GB RTX PRO 6000 Blackwell, and an 80 GB H100-class card is the realistic floor. Two 24 GB consumer cards will not hold the full BF16 weights."}}, {"@type": "Question", "name": "Can it transcribe live audio or stream captions?", "acceptedAnswer": {"@type": "Answer", "text": "No. SOV-Transcribe-1 is non-streaming by design: it transcribes recorded files up to 30 minutes long. For live captioning or real-time voice agents, use a streaming ASR model instead."}}, {"@type": "Question", "name": "How is it different from Whisper?", "acceptedAnswer": {"@type": "Answer", "text": "Whisper large-v3 is the audio encoder inside SOV-Transcribe-1. The difference is the Gemma 4 26B decoder on top: it follows natural-language instructions about transcript style and uses supplied keywords to fix rare names — and at 2.28% word error on Artificial Analysis it beats every other open-weight transcriber."}}]}
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run the new open-weight speech champion yourself: hands-on with Salesforce's SOV-Transcribe-1</h1>
+<p class="lede">Salesforce&#x27;s SOV-Transcribe-1 leads every downloadable transcriber on the Artificial Analysis benchmark at 2.28% word error — and it takes plain-language instructions for how the transcript should read. This tutorial runs it two ways: a one-shot Transformers script and a vLLM server with an OpenAI-compatible endpoint.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 17, 2026 · 19 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> SOV-Transcribe-1 is the new #1 open-weight speech-to-text model (2.28% word error on Artificial Analysis, November 12, 2026). It pairs a Whisper large-v3 encoder with a Gemma 4 26B MoE decoder, takes natural-language instructions for transcript style, and runs two ways: a Transformers script for one-off batches and a vLLM server with an OpenAI-compatible endpoint. You need a datacenter-class GPU — about 53 GB of BF16 weights — and about 60 GB of disk.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>2.28% word error on Artificial Analysis (AA-WER), #1 open-weight and #7 overall as of November 12, 2026; ahead of Nemotron 3.5 Transcribe (2.81%) and Voxtral Small (2.77%).</li><li>26.6B parameters total, 4.6B active: Whisper large-v3 audio encoder plus Gemma 4 26B A4B MoE decoder; 7 languages; up to 30 minutes per file; Apache 2.0.</li><li>Instruction-controlled style: verbatim by default, and natural-language prompts choose cleaned-up text, number formatting, and punctuation.</li><li>Context biasing works: keyword F1 on earnings-call names jumps from 71.9 to 96.8 when the clip&#x27;s keywords are supplied.</li><li>vLLM plugin (vllm==0.32.0) plus the DFlash draft: a 30-second clip in 0.22 s, up to 1,039 seconds of audio per second on one 96 GB RTX PRO 6000 Blackwell.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/sov-transcribe-1-hands-on-tutorial/cover.webp" alt="A microphone feeding a sound wave that becomes lines of transcript text, on a deep navy background with amber accents"><figcaption>AI-generated cover illustration. Speech in, styled transcript out — SOV-Transcribe-1’s whole job in one picture.</figcaption></figure>
+<div class="article-body"><p>On November 12, 2026, the open-weight speech-to-text leaderboard changed hands. Salesforce released SOV-Transcribe-1, a 26.6-billion-parameter model that now leads every downloadable transcriber on Artificial Analysis at 2.28% word error — ahead of Nvidia's Nemotron 3.5 Transcribe (2.81%) and Mistral's Voxtral Small (2.77%). It is also the first open transcription model that treats the transcript itself as something you can instruct: tell it verbatim or cleaned up, digits or words, and it follows the instruction instead of giving you one fixed style.</p>
+<p>That combination — best-in-class accuracy plus style control plus an Apache 2.0 license — makes it the strongest self-hosted transcriber available right now. This tutorial runs it end to end, two ways: a one-shot Transformers script for batch jobs, and a vLLM server with an OpenAI-compatible endpoint for everything else. The CPU-side checks in Step 3 ran in this tutorial's sandbox against the real model files; the GPU steps are the model card's own commands, cross-checked against the repository itself.</p>
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>A datacenter-class GPU.</strong> The weights are 16 shards totalling about 53 GB in BF16. Salesforce's own measurements run on a 96 GB RTX PRO 6000 Blackwell; an 80 GB H100-class card is the realistic floor. Two 24 GB consumer cards will not hold the full BF16 weights.</li><li><strong>~60 GB of free disk</strong> for the weights, plus room for your audio.</li><li><strong>Python 3.10 or newer</strong> and <code>pip</code>. No Hugging Face account and no API key — the repository is public and ungated.</li><li><strong>Audio files</strong> in any common format (wav, mp3, flac). Each file can be up to 30 minutes long.</li><li><strong><code>ffmpeg</code></strong> for the one audio-preparation step. Any recent build works.</li></ul>
+<p>There is no hosted version to sign up for and no per-minute billing. The cost is the GPU you run it on.</p>
+<h2 id="step-1-download-the-weights-and-check-the-hardware-math">Step 1: Download the weights and check the hardware math<a class="anchor" href="#step-1-download-the-weights-and-check-the-hardware-math" aria-label="Link to section">#</a></h2>
+<p>Install the Hugging Face CLI and pull the repository. The download is roughly 53 GB, so start it first and read the rest of this tutorial while it runs:</p>
+<pre><code>pip install huggingface_hub
+hf download salesforce-sovereign-intelligence/SOV-Transcribe-1</code></pre>
+<p>Before you run anything, confirm the GPU can actually hold the model. The arithmetic that matters: 26.6 billion parameters at 2 bytes each (BF16) is about 53 GB of weights, before any KV cache or activations. Check what you have:</p>
+<pre><code>nvidia-smi --query-gpu=name,memory.total --format=csv</code></pre>
+<p>If the answer is under 80 GB, stop here — the full model will not load. The card's own numbers explain why the 96 GB card is the reference machine: with the DFlash draft model enabled (Step 8), vLLM's default of 1,024 concurrent sequences runs out of memory, and the card's working configuration caps it at 64 sequences to keep start-up profiling inside 96 GB.</p>
+<p>While the download runs, here is what is inside it. SOV-Transcribe-1 is a speech-augmented language model, not a pure transcriber: a Whisper large-v3 audio encoder turns speech into features, a small projector maps those features into the language model's embedding space, and a Gemma 4 26B A4B mixture-of-experts decoder (4.6 billion active parameters) writes the transcript. That decoder is the whole point — it is what lets the model follow instructions about format, and what gives it its edge on names, numbers, and email addresses. It covers seven languages (English, French, German, Spanish, Italian, Portuguese, Dutch) and handles up to 30 minutes of audio per file.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/sov-transcribe-1-hands-on-tutorial/img2.webp" alt="Diagram of the SOV-Transcribe-1 pipeline: 16 kHz audio into a Whisper encoder, then a Gemma 4 decoder, out as a transcript"><figcaption>Diagram: AI Frontier Post. The pipeline: 16 kHz audio into a Whisper large-v3 encoder, a projector into Gemma 4's embedding space, and a 26B MoE decoder that writes the transcript.</figcaption></figure>
+<h2 id="step-2-prepare-your-audio">Step 2: Prepare your audio<a class="anchor" href="#step-2-prepare-your-audio" aria-label="Link to section">#</a></h2>
+<p>The model expects 16 kHz mono audio. Whatever you recorded — a phone memo at 44.1 kHz stereo, a Zoom export, a call recording — resample it first. One command handles every input format <code>ffmpeg</code> understands:</p>
+<pre><code>ffmpeg -i input.mp3 -ar 16000 -ac 1 -c:a pcm_s16le meeting.wav</code></pre>
+<p>Verify the result before you feed it to the model. This is the actual output of that command on a 44.1 kHz stereo test file, checked with <code>ffprobe</code>:</p>
+<pre><code>$ ffprobe -v error -show_entries stream=sample_rate,channels,codec_name -of csv=p=0 meeting.wav
+pcm_s16le,16000,1</code></pre>
+<p>Two rules from the model card's best practices, worth following exactly: prepare 16 kHz mono audio (do not let the model guess at other sample rates), and split recordings longer than 30 minutes at speech boundaries, then transcribe the pieces in order. The 30-minute cap is a hard limit of the model's audio window, not a suggestion.</p>
+<h2 id="step-3-prove-the-pipeline-on-your-cpu-first">Step 3: Prove the pipeline on your CPU first<a class="anchor" href="#step-3-prove-the-pipeline-on-your-cpu-first" aria-label="Link to section">#</a></h2>
+<p>The most common way a 53 GB model run fails is a silent mismatch in the audio path — wrong sample rate, wrong feature shape — discovered only after the weights have loaded. You can catch all of it on a CPU-only machine, without downloading a single weight shard, by running the model's own feature extractor against your prepared audio.</p>
+<p>Install the pinned Transformers release from the model card. The pin matters: the model needs a Transformers version that knows this architecture, and the card specifies the range explicitly:</p>
+<pre><code>pip install "transformers&gt;=5.19,&lt;5.23" huggingface_hub numpy</code></pre>
+<p>In this tutorial's verification run, that resolved to <strong>transformers 5.22.2</strong>. Then download only the small config files — no weights — and run the feature extraction exactly as the model's own code does it:</p>
+<pre><code>from huggingface_hub import snapshot_download
+from transformers.models.whisper.feature_extraction_whisper import WhisperFeatureExtractor
+import math, wave
+import numpy as np
+
+d = snapshot_download("salesforce-sovereign-intelligence/SOV-Transcribe-1",
+    allow_patterns=["config.json", "preprocessor_config.json", "processor_config.json",
+                    "generation_config.json", "model.safetensors.index.json"])
+
+features = WhisperFeatureExtractor.from_pretrained(d)
+with wave.open("meeting.wav", "rb") as w:
+    assert w.getframerate() == 16000 and w.getnchannels() == 1
+    audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+windows = math.ceil(len(audio) / features.n_samples)
+mel = features([audio], sampling_rate=16000, padding="max_length",
+               max_length=windows * features.n_samples, truncation=False,
+               return_tensors="np")["input_features"][0]
+print(mel.shape)
+print("tokens per 30 s window:", features.nb_max_frames // 2 // 4)</code></pre>
+<p>Expected output for a 30-second clip, reproduced from the verification run:</p>
+<pre><code>mel shape (windows, mel_bins, frames): (128, 3000)
+tokens per 30 s window: 375</code></pre>
+<p>128 mel bins by 3,000 frames is the Whisper encoder's input for one 30-second window, and 375 is the number of audio tokens each window becomes after the projector stacks every 4 encoder frames — the exact figure the model card's code comments state. If your numbers match, the audio path is correct and the GPU steps below will work. If they do not, the problem is your audio file, and you have found it in seconds instead of after a 53 GB load.</p>
+<p>While you are here, the config files themselves confirm the architecture: <code>model_type</code> is <code>sovereignai_transcribe</code>, <code>downsample_factor</code> is 4, the text config is <code>gemma4_text</code> with hidden size 2816, the audio config is <code>whisper</code> with d_model 1280, and the generation config has <code>do_sample: false</code> — greedy decoding, as the best practices require.</p>
+<h2 id="step-4-first-transcript-with-transformers">Step 4: First transcript with Transformers<a class="anchor" href="#step-4-first-transcript-with-transformers" aria-label="Link to section">#</a></h2>
+<p>With the audio path proven, the first real run is the model card's own script. Install the full stack — this time including <code>torch</code>, which the model run needs:</p>
+<pre><code>pip install "transformers&gt;=5.19,&lt;5.23" torch librosa accelerate</code></pre>
+<p>Then transcribe a batch of files in one call:</p>
+<pre><code>import librosa
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+model_id = "salesforce-sovereign-intelligence/SOV-Transcribe-1"
+processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+model = AutoModelForMultimodalLM.from_pretrained(model_id, trust_remote_code=True, device_map="auto")
+
+files = ["meeting.wav", "call.mp3"]
+audio = [librosa.load(f, sr=16000, mono=True)[0] for f in files]
+inputs = processor.apply_transcription_request(audio).to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, max_new_tokens=8192)
+transcripts = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(transcripts[0])</code></pre>
+<p>Four details in that script deserve attention, because each one is a silent failure if you get it wrong:</p>
+<ul><li><strong><code>trust_remote_code=True</code> is required.</strong> The repository ships its own modeling and processing code (<code>modeling_sovereignai_transcribe.py</code>, <code>processing_sovereignai_transcribe.py</code>), and Transformers will not load it without the flag. The code is part of the Apache 2.0 release, not an arbitrary download.</li><li><strong><code>device_map="auto"</code></strong> spreads the 53 GB of weights across the available GPU memory. On a single 80–96 GB card it lands in one place; on a multi-GPU machine it shards.</li><li><strong><code>max_new_tokens=8192</code></strong> is the generation cap. A 30-minute recording can produce several thousand transcript tokens; the default cap truncates long transcripts mid-sentence.</li><li><strong>Decoding is greedy.</strong> The generation config sets <code>do_sample: false</code>, and the model card's best practices insist on greedy decoding — <code>temperature=0</code>, <code>top_p=1.0</code>, <code>top_k=0</code>, <code>repetition_penalty=1.0</code>. Sampling makes transcripts non-reproducible for no accuracy gain.</li></ul>
+<p>If your environment forbids remote code entirely, the model card ships a self-contained alternative — a <code>transcribe_hf</code> function that rebuilds the model from the config and weight shards with stock Transformers classes, no remote code involved. Every import and config field it uses was verified against transformers 5.22.2 and the repository's real <code>config.json</code> for this tutorial:</p>
+<pre><code>def transcribe_hf(model, audio_files, prompt="Transcribe the audio verbatim, outputting only spoken words in sequence."):
+    """
+    Transcribe audio files (up to 30 minutes each) with Transformers; returns one transcript
+    per file. model: a local folder or a Hugging Face repo id.
+    """
+    import json
+    import math
+    from pathlib import Path
+    import librosa
+    import torch
+    from huggingface_hub import snapshot_download
+    from safetensors import safe_open
+    from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, WhisperConfig,
+                              WhisperFeatureExtractor)
+    from transformers.models.gemma4.modeling_gemma4 import Gemma4TextRouter
+    from transformers.models.whisper.modeling_whisper import WhisperEncoder
+
+    model = Path(model).expanduser() if Path(model).expanduser().is_dir() else Path(snapshot_download(model))
+
+    config = json.loads((model / "config.json").read_text())
+    tokens = json.loads((model / "processor_config.json").read_text())
+    tokenizer = AutoTokenizer.from_pretrained(model)
+    features = WhisperFeatureExtractor.from_pretrained(model)
+    index = json.loads((model / "model.safetensors.index.json").read_text())["weight_map"]
+
+    def weights(prefix):
+        state = {}
+        for shard in sorted({v for k, v in index.items() if k.startswith(prefix)}):
+            with safe_open(str(model / shard), framework="pt") as f:
+                state.update({k[len(prefix):]: f.get_tensor(k) for k in f.keys() if k.startswith(prefix)})
+        return state
+
+    # Decoder: Gemma 4's text model, built from its config and filled shard by shard, as the
+    # training model builds it. Its MoE router runs in FP32, as in training (router_dtype); the
+    # checkpoint stores the router in FP32, so it is converted before the weights are loaded.
+    text_config = dict(config["text_config"])
+    text_config = AutoConfig.for_model(text_config.pop("model_type"), **text_config)
+    with torch.device("cuda"):
+        decoder = AutoModelForCausalLM.from_config(text_config, dtype=torch.bfloat16)
+
+    # Rotary frequencies computed on the CPU, as in training (on the GPU their last bits differ).
+    decoder.model.rotary_emb = type(decoder.model.rotary_emb)(text_config).to("cuda")
+
+    for router in decoder.modules():
+        if isinstance(router, Gemma4TextRouter):
+            router.float()
+            router.forward = lambda hidden, forward=router.forward: forward(hidden.float())
+
+    for shard in sorted(set(index.values())):
+        with safe_open(str(model / shard), framework="pt") as f:
+            part = {("model." + k[len("model.language_model."):] if k.startswith("model.language_model.") else k):
+                    f.get_tensor(k) for k in f.keys() if k.startswith(("model.language_model.", "lm_head."))}
+        decoder.load_state_dict(part, strict=False)
+
+    decoder.eval()
+
+    # Whisper encoder and projector (stack 4 encoder frames -&gt; Linear -&gt; GELU -&gt; Linear).
+    audio_config = WhisperConfig(**config["audio_config"])
+    audio_config._attn_implementation = "sdpa"
+    encoder = WhisperEncoder(audio_config)
+    encoder.load_state_dict(weights("model.audio_tower."))
+    encoder = encoder.to("cuda", torch.bfloat16).eval()
+
+    factor, width, hidden = config["downsample_factor"], audio_config.d_model, text_config.hidden_size
+    projector = torch.nn.Sequential()
+    projector.add_module("linear_1", torch.nn.Linear(width * factor, hidden, bias=False))
+    projector.add_module("act", torch.nn.GELU())
+    projector.add_module("linear_2", torch.nn.Linear(hidden, hidden, bias=False))
+    projector.load_state_dict(weights("model.embed_audio."))
+    projector = projector.to("cuda", torch.bfloat16).eval()
+
+    tokens_per_window = features.nb_max_frames // 2 // factor  # 375 per 30 s window
+
+    generation = GenerationConfig.from_pretrained(model)  # greedy; the training stop tokens
+    generation.max_new_tokens = 8192
+
+    transcripts = []
+    for path in audio_files:
+        # Pad to whole 30 s windows, extract features over the full waveform, then split by window.
+        audio, _ = librosa.load(path, sr=16000, mono=True)
+        windows = math.ceil(len(audio) / features.n_samples)
+        mel = features([audio], sampling_rate=16000, padding="max_length", max_length=windows * features.n_samples,
+                       truncation=False, return_tensors="pt")["input_features"][0]
+        mel = mel.reshape(mel.shape[0], windows, features.nb_max_frames).permute(1, 0, 2).to("cuda", torch.bfloat16)
+
+        # Chat prompt; its one audio marker becomes begin + 375 audio tokens per window + end.
+        conversation = [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "audio"}]}]
+        text = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True,
+                                             enable_thinking=False)
+        span = tokens["audio_begin_token"] + tokens["audio_token"] * (windows * tokens_per_window) + tokens["audio_end_token"]
+        ids = torch.tensor([tokenizer.encode(text.replace(tokens["audio_token"], span), add_special_tokens=False)],
+                           device="cuda")
+
+        with torch.inference_mode():
+            # Encoder in batches of 8 windows, as the training model ran it.
+            audio_embeds = torch.cat([projector(encoder(part).last_hidden_state.reshape(
+                len(part), -1, width * factor)) for part in mel.split(8)])
+            embeds = decoder.get_input_embeddings()(ids)  # Gemma scales token embeddings itself
+            embeds = embeds.masked_scatter(ids.eq(config["audio_token_id"])[..., None], audio_embeds.reshape(-1))
+            output = decoder.generate(inputs_embeds=embeds, attention_mask=torch.ones_like(ids),
+                                      generation_config=generation)
+
+        transcripts.append(tokenizer.decode(output[0], skip_special_tokens=True).strip())
+
+    return transcripts
+
+
+transcripts = transcribe_hf("salesforce-sovereign-intelligence/SOV-Transcribe-1", ["meeting.wav"])</code></pre>
+<p>Use it exactly as shown: <code>transcribe_hf</code> takes a repo id or a local folder and a list of files, and returns one transcript per file. It is slower to start than the high-level path (it loads every shard by hand), but it runs anywhere stock Transformers runs, with no remote code execution.</p>
+<h2 id="step-5-steer-the-transcript-with-plain-language">Step 5: Steer the transcript with plain-language instructions<a class="anchor" href="#step-5-steer-the-transcript-with-plain-language" aria-label="Link to section">#</a></h2>
+<p>Every other open transcriber gives you one output style. SOV-Transcribe-1 takes the instruction in the user message, so the same recording can produce a verbatim deposition transcript or a cleaned-up dictation depending on what you ask for. The model card's prompt guide covers the four cases you will actually use:</p>
+<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Instruction (the user message)</th></tr></thead><tbody><tr><td>Verbatim transcript</td><td><code>Transcribe the audio verbatim, outputting only spoken words in sequence.</code></td></tr><tr><td>Use keywords</td><td><code>This audio may contain the following words or phrases: {keywords}. Transcribe the audio into text.</code></td></tr><tr><td>Automatic language</td><td><code>Transcribe the audio verbatim in the language's standard writing system, using punctuation and capitalization. Output only the transcript.</code></td></tr><tr><td>Language hint</td><td><code>Transcribe the {language} audio into text, ensuring all punctuation marks are included.</code></td></tr></tbody></table></div>
+<p>In the Transformers script, pass the instruction through <code>apply_transcription_request</code>:</p>
+<pre><code>inputs = processor.apply_transcription_request(
+    audio,
+    prompt="Transcribe the audio verbatim, outputting only spoken words in sequence.",
+).to(model.device, dtype=model.dtype)</code></pre>
+<p>Style steering is not a gimmick on this model — it is measured. On the Preference-ASR benchmark, which scores whether a transcript follows a requested format across numbers, entities, disfluencies, and casing, SOV-Transcribe-1 scores 5.05% preference-aware word error with instructions, second only to IBM's Granite Speech 5.0 2B (4.70%) and ahead of Alibaba's Qwen3-ASR 1.7B (5.96%) and Nvidia's Nemotron 3.5 Transcribe (6.16%). The practical rule from the card's best practices: be explicit about style — say verbatim or cleaned-up, say how numbers should be written, say whether fillers stay or go. Vague instructions get vague transcripts.</p>
+<p>One formatting trap to know about: in rare cases the model falls into a repetition loop, repeating a character or phrase until it hits the token limit. The card's advice is to post-process those loops out (their cleanup is adapted from the Qwen3-ASR toolkit) and to check long outputs for truncation or repetition before trusting them.</p>
+<h2 id="step-6-fix-the-names-the-model-keeps-missing">Step 6: Fix the names the model keeps missing<a class="anchor" href="#step-6-fix-the-names-the-model-keeps-missing" aria-label="Link to section">#</a></h2>
+<p>The words that break transcripts are rarely common ones. They are customer names on a sales call, drug names in a clinical note, product codenames on an earnings call — rare terms the model has little reason to prefer. SOV-Transcribe-1's answer is context biasing: hand it the terms before it listens, and it resolves ambiguous sounds toward the terms that fit.</p>
+<p>The mechanism is the same keyword prompt from Step 5, with a short domain description added when it helps:</p>
+<pre><code>prompt = (
+    "This audio belongs to the cardiology field and may contain the following "
+    "words or phrases: metoprolol, apixaban, Dr. Alvarez, St. Mary's General. "
+    "Transcribe the English audio into text, ensuring all punctuation marks are included."
+)</code></pre>
+<p>The effect is large and measured, not anecdotal. On Contextual Earnings-22 — 15-second clips of real earnings calls, each built around a person's, company's, or product's name — giving the model just the keywords spoken in the clip raises keyword F1, the measure of how accurately those names are transcribed, from 71.9 to 96.8. Give it the full hour-long call's keyword list, most of them distractors that never appear in the clip, and it still scores 94.0 — the highest of any open-weight model. Two practical consequences: keep the list focused on terms that could plausibly appear, and include the domain label ("This audio belongs to the {domain} field") when the vocabulary is specialized — the card's evaluation protocol uses both variants.</p>
+<h2 id="step-7-serve-it-with-vllm">Step 7: Serve it with vLLM<a class="anchor" href="#step-7-serve-it-with-vllm" aria-label="Link to section">#</a></h2>
+<p>The Transformers script is right for batch jobs. For anything other software calls — a meeting-notes service, a dictation backend, a media pipeline — serve the model behind an HTTP endpoint. Native vLLM support is being upstreamed, but until it lands, the repository ships a plugin that adds it to vLLM 0.32.0. The plugin's own <code>pyproject.toml</code> (verified in the repository) pins the dependency and the entry point:</p>
+<pre><code>hf download salesforce-sovereign-intelligence/SOV-Transcribe-1 --include "vllm_plugin/*" --local-dir SOV-Transcribe-1
+pip install ./SOV-Transcribe-1/vllm_plugin</code></pre>
+<p>That installs <code>sov-transcribe-vllm</code> 0.1.0, which depends on exactly <code>vllm==0.32.0</code> and registers the model architecture with stock vLLM. Start the server:</p>
+<pre><code>vllm serve salesforce-sovereign-intelligence/SOV-Transcribe-1 --max-model-len 32768</code></pre>
+<p>Then transcribe with the OpenAI-compatible endpoint — any client that speaks <code>/v1/audio/transcriptions</code> works:</p>
+<pre><code>curl http://localhost:8000/v1/audio/transcriptions \
+  -F model=salesforce-sovereign-intelligence/SOV-Transcribe-1 \
+  -F file=@meeting.wav -F temperature=0</code></pre>
+<p>The endpoint uses the verbatim instruction by default; pass <code>-F prompt="..."</code> with any instruction from Step 5 to change the style. Two limits to know: the endpoint accepts up to 600 seconds of audio per request unless you raise <code>VLLM_MAX_AUDIO_DECODE_DURATION_S</code> (set it to <code>1800</code> for the full 30 minutes), and <code>--max-model-len 32768</code> is not optional — it caps the context the server will build for a request.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/sov-transcribe-1-hands-on-tutorial/img3.webp" alt="A graphics card in a dark server rack with a glowing audio waveform flowing out into transcript pages"><figcaption>AI-generated illustration. The serving numbers below were measured on a single 96 GB RTX PRO 6000 Blackwell: over a thousand seconds of audio transcribed per second with the DFlash draft enabled.</figcaption></figure>
+<p>The throughput is the reason to serve rather than script. On one RTX PRO 6000 Blackwell with the DFlash draft (Step 8), the server transcribes up to 1,039 seconds of audio per second and returns the transcript of a 30-second recording in 0.22 seconds. Even without the draft, a 30-second clip takes 0.44 seconds. That is fast enough to transcribe a backlog of calls faster than real time by three orders of magnitude — the bottleneck becomes disk and network, not the model.</p>
+<h2 id="step-8-make-it-fast-with-dflash-speculative-decoding">Step 8: Make it fast with DFlash speculative decoding<a class="anchor" href="#step-8-make-it-fast-with-dflash-speculative-decoding" aria-label="Link to section">#</a></h2>
+<p>Transcription is autoregressive: the decoder writes one token at a time, and most of the wall-clock time is spent waiting on the big model. Speculative decoding attacks exactly that — a small draft model proposes 15 tokens at a time, and the big model verifies them in one pass, keeping the ones it agrees with. Salesforce ships the draft as its own repository, <code>SOV-Transcribe-1-DFlash</code> (430 million parameters, Apache 2.0), and the model card reports about a 2–3× speedup for one request at a time, with accuracy inside run-to-run variation of decoding without it. The gain is smallest for clips under 10 seconds.</p>
+<p>Mean time per request on the same 96 GB card, with and without the draft:</p>
+<div class="table-wrap"><table><thead><tr><th>Audio length</th><th>Without draft</th><th>With DFlash draft</th></tr></thead><tbody><tr><td>Up to 10 s</td><td>0.16 s</td><td>0.09 s</td></tr><tr><td>10–30 s</td><td>0.44 s</td><td>0.15 s</td></tr><tr><td>30–60 s</td><td>0.88 s</td><td>0.31 s</td></tr><tr><td>1–5 min</td><td>2.78 s</td><td>1.26 s</td></tr></tbody></table></div>
+<p>Enable it in the offline <code>LLM</code> API:</p>
+<pre><code>from vllm import LLM, SamplingParams
+
+llm = LLM(model="salesforce-sovereign-intelligence/SOV-Transcribe-1", max_model_len=32768,
+          limit_mm_per_prompt={"audio": 1},
+          allowed_local_media_path="/path/to/audio", max_num_seqs=64,
+          speculative_config={"method": "dflash",
+                              "model": "salesforce-sovereign-intelligence/SOV-Transcribe-1-DFlash",
+                              "num_speculative_tokens": 15})</code></pre>
+<p>Or on the server:</p>
+<pre><code>vllm serve salesforce-sovereign-intelligence/SOV-Transcribe-1 --max-model-len 32768 --max-num-seqs 64 \
+  --speculative-config '{"method": "dflash", "model": "salesforce-sovereign-intelligence/SOV-Transcribe-1-DFlash", "num_speculative_tokens": 15}'</code></pre>
+<p>Note <code>--max-num-seqs 64</code>: with the draft loaded, vLLM's default of 1,024 concurrent sequences exhausts the 96 GB card during start-up memory profiling, so the card's working configuration caps it. If you are serving many concurrent requests on a smaller card, lower it further rather than raising it.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Situation</th><th>Best method</th></tr></thead><tbody><tr><td>A batch of recordings, once</td><td>Transformers script (Step 4) — simplest, no server to babysit</td></tr><tr><td>Other software calls transcription</td><td>vLLM server (Step 7) — OpenAI-compatible endpoint</td></tr><tr><td>Throughput or latency matters</td><td>vLLM + DFlash draft (Step 8) — ~2–3× faster per request</td></tr><tr><td>Your environment forbids remote code</td><td>The self-contained <code>transcribe_hf</code> function (Step 4)</td></tr><tr><td>No GPU at all</td><td>Not this model — use faster-whisper on CPU instead (see Related articles)</td></tr><tr><td>Live captioning or streaming</td><td>Not this model — SOV-Transcribe-1 is non-streaming by design; use a streaming ASR model</td></tr></tbody></table></div>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>SOV-Transcribe-1 earns its ranking the unglamorous way: it is the most accurate open transcriber you can download, it follows instructions about how the transcript should read, and it fixes its own weakest spot — rare names — when you hand it the vocabulary first. The workflow that gets the most out of it is short:</p>
+<ul>
+<li>Resample everything to 16 kHz mono and prove the audio path on CPU with the feature-extraction check in Step 3 before loading 53 GB of weights.</li>
+<li>Pin <code>transformers&gt;=5.19,&lt;5.23</code>, keep decoding greedy, and leave <code>max_new_tokens</code> at 8192 for long recordings.</li>
+<li>Write the instruction into the user message — verbatim or cleaned-up, digits or words — and supply keywords for every name the model could plausibly mishear.</li>
+<li>Serve behind vLLM when anything else needs to call it, and switch on the DFlash draft when latency matters.</li>
+<li>Remember the two hard limits: 30 minutes per file, and no streaming. Inside those, it is the best free transcriber there is.</li>
+</ul>
+<p>Run the eight steps above and you have a transcription service that costs nothing per minute, keeps every recording on your own hardware, and writes transcripts in the style you asked for — which, for meeting notes, dictation, and call archives, is the difference between a transcript you have to rewrite and one you can file.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul>
+<li><a href="https://huggingface.co/salesforce-sovereign-intelligence/SOV-Transcribe-1" rel="nofollow">SOV-Transcribe-1 model card (Salesforce, Hugging Face)</a></li>
+<li><a href="https://huggingface.co/blog/salesforce-sovereign-intelligence/sov-transcribe-1" rel="nofollow">Introducing Salesforce SOV-Transcribe-1 (Hugging Face blog)</a></li>
+<li><a href="https://huggingface.co/salesforce-sovereign-intelligence/SOV-Transcribe-1-DFlash" rel="nofollow">SOV-Transcribe-1-DFlash draft model (Hugging Face)</a></li>
+<li><a href="https://huggingface.co/salesforce-sovereign-intelligence/SOV-Transcribe-1/tree/main/vllm_plugin" rel="nofollow">vLLM plugin for SOV-Transcribe-1 (repository)</a></li>
+</ul>
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="sov-transcribe-1-hands-on-tutorial"></div><div class="comments" data-comments="sov-transcribe-1-hands-on-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/faster-whisper-local-transcription-tutorial/"><span class="chip">Tutorials</span><h3>Transcribe anything on your own machine: a hands-on guide to faster-whisper</h3><div class="meta">September 28, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/nemotron-35-transcribe-meetings-tutorial/"><span class="chip">Tutorials</span><h3>Turn meeting recordings into speaker-labelled transcripts with Nvidia&#x27;s Nemotron 3.5 Transcribe</h3><div class="meta">October 29, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/openfilm-ai-video-agent-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Turn your coding agent into a film crew: hands-on with OpenFilm, the open-source AI video agent</h3><div class="meta">November 17, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/llamaindex-local-rag-llamacpp-tutorial/"><span class="chip">Tutorials</span><h3>Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud</h3><div class="meta">November 17, 2026 · 27 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a Hugging Face account or an API key?</h3><p>No. The repository is public and ungated, so hf download works anonymously for public repos, and nothing in this tutorial sends data to any cloud service. The only cost is the GPU you run the model on.</p><h3>What GPU do I actually need?</h3><p>The BF16 weights alone are about 53 GB, so the card must hold that plus KV cache and activations. Salesforce benchmarks on a 96 GB RTX PRO 6000 Blackwell, and an 80 GB H100-class card is the realistic floor. Two 24 GB consumer cards will not hold the full BF16 weights.</p><h3>Can it transcribe live audio or stream captions?</h3><p>No. SOV-Transcribe-1 is non-streaming by design: it transcribes recorded files up to 30 minutes long. For live captioning or real-time voice agents, use a streaming ASR model instead.</p><h3>How is it different from Whisper?</h3><p>Whisper large-v3 is the audio encoder inside SOV-Transcribe-1. The difference is the Gemma 4 26B decoder on top: it follows natural-language instructions about transcript style and uses supplied keywords to fix rare names — and at 2.28% word error on Artificial Analysis it beats every other open-weight transcriber.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/salesforce-sov-transcribe-1-open-speech-model/">Salesforce&#x27;s SOV-Transcribe-1 takes the open-weights speech crown at 2.3% word error</a></li><li><a href="/articles/nvidia-nemotron-35-transcribe-open-speech-model/">Nvidia releases Nemotron 3.5 Transcribe, an open speech model that covers 40 languages in a single pass</a></li><li><a href="/articles/mistral-voxtral-3-voice-agent-stack/">Mistral’s Voxtral 3 is a full voice-agent stack: 50+ languages, sub-second turns, and a sovereignty pitch</a></li><li><a href="/articles/hex-local-voice-dictation-hands-on-tutorial/">Hex local voice dictation: hold a key, speak, and it pastes</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
