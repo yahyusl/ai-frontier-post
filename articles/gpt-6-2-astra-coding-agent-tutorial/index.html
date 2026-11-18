@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end — AI Frontier Post</title>
+<meta name="description" content="OpenAI&#x27;s GPT-6.2 Astra and Sol shipped on November 17 with apply_patch and shell as first-class Responses API tools. This tutorial builds a complete coding agent on them — file edits, test runs, structured reports, and cost control — with every request verified against the official docs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gpt-6-2-astra-coding-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end">
+<meta property="og:description" content="OpenAI&#x27;s GPT-6.2 Astra and Sol shipped on November 17 with apply_patch and shell as first-class Responses API tools. This tutorial builds a complete coding agent on them — file edits, test runs, structured reports, and cost control — with every request verified against the official docs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gpt-6-2-astra-coding-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gpt-6-2-astra-coding-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-18">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end", "description": "OpenAI's GPT-6.2 Astra and Sol shipped on November 17 with apply_patch and shell as first-class Responses API tools. This tutorial builds a complete coding agent on them — file edits, test runs, structured reports, and cost control — with every request verified against the official docs.", "datePublished": "2026-11-18", "dateModified": "2026-11-18", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/gpt-6-2-astra-coding-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/gpt-6-2-astra-coding-agent-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need the Agents SDK to use apply_patch?", "acceptedAnswer": {"@type": "Answer", "text": "No. The Responses API exposes apply_patch directly — one entry in the tools array — and this tutorial's harness is all the code you need to apply the diffs. The SDK is worth adopting when you want its reference applyDiff with fuzzy matching, its shell-executor helpers, tracing, and the multi-agent beta. Start raw, adopt the SDK when the loop stops being the interesting part."}}, {"@type": "Question", "name": "What happens when a patch does not apply?", "acceptedAnswer": {"@type": "Answer", "text": "The harness returns status \"failed\" with a human-readable message, and the model sees it on the next turn. In the verification run, a patch aimed at a missing file came back failed, the agent explained the problem, and no stray file was created. Never swallow a failed patch silently: an agent that does not know its edit failed will keep reasoning as if it succeeded."}}, {"@type": "Question", "name": "Can I use Chat Completions instead of the Responses API?", "acceptedAnswer": {"@type": "Answer", "text": "For plain text, yes — both models support it. For anything with tools, no: tool calling on GPT-6.2 requires the Responses API. The migration is mostly mechanical (same model IDs, same prompts), but the request shapes differ — reasoning.effort instead of reasoning_effort, tool outputs as input items instead of messages — so budget an afternoon, not an hour."}}, {"@type": "Question", "name": "Why did my token usage jump after I edited an earlier message?", "acceptedAnswer": {"@type": "Answer", "text": "That is the prefix-edit trap from Step 4. Starting with GPT-6.2, editing conversation history before the reasoning items makes the API drop those items, so the model redoes the reasoning and spends the tokens again. Keep the prefix stable between turns; if you must rewrite history, do it between sessions, not inside one."}}, {"@type": "Question", "name": "How much does a typical fix cost?", "acceptedAnswer": {"@type": "Answer", "text": "At the worked-example counts in Step 6 (10,000 input tokens, 500 output per turn), a two-turn fix plus a report call costs about $0.25 on Astra and about $0.06 on Sol at Standard rates. The verification run in Step 7, with smaller token counts, came to about six cents all-in on Astra. The cost driver is reasoning tokens on long tasks and uncached context on repeated turns — both of which the developer-first layout and the 30-minute cache TTL are designed to control."}}, {"@type": "Question", "name": "Is the local shell tool safe to use?", "acceptedAnswer": {"@type": "Answer", "text": "Only behind a guardrail like the one in Step 3, and ideally inside a sandbox. The model proposes arbitrary commands; the harness decides what runs. Keep the allowlist short, reject shell metacharacters, enforce your own timeout, log every command and outcome, and never run the agent as a user with access to credentials or production systems."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end</h1>
+<p class="lede">GPT-6.2 Astra and Sol are OpenAI&#x27;s November 17 models. The news is the benchmarks — but the thing that changes how you build is in the API docs: apply_patch and shell are now first-class Responses tools, and this tutorial builds a complete coding agent on them, about 400 lines of Python, every request verified.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 18, 2026 · 26 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> GPT-6.2 Astra and Sol are OpenAI&#x27;s November 17 models, and their Responses API ships apply_patch and a local shell tool as first-class tools. This tutorial builds a complete coding agent on them in about 400 lines of Python: a V4A patch harness, an allowlisted shell executor, a previous_response_id loop with an 8-turn cap, a structured work report, and cost accounting from the published prices. Every request the agent sends was verified against a local mock of the Responses API; the live model call needs your key.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Versions pinned:</b> openai Python SDK 3.55.1, Python 3.11 or later, models gpt-6.2-astra and gpt-6.2-sol. Tool calling requires the Responses API — Chat Completions cannot call tools.</li><li><b>The moving parts:</b> the apply_patch tool with V4A diffs, the local shell tool, a previous_response_id loop, a text.format JSON work report, and a cost function built from the published rates.</li><li><b>Two migration traps, both guarded in code:</b> editing conversation history makes GPT-6.2 drop the reasoning items that follow it, and top-level instructions break the prompt-cache prefix — stable instructions go in a developer message first, with prompt_cache_options.ttl "30m".</li><li><b>Cost:</b> one turn (10,000 input tokens, 2,000 cached, 500 output) is $0.0848 on Astra and $0.0212 on Sol at Standard rates; Ultrafast triples that through February 28, 2027.</li><li><b>Verified:</b> 45 checks against a local mock Responses server replaying the documented response shapes — patch applier, shell executor, full loop, exact request bodies, failed-patch path, background polling, Ultrafast flag. The live model call needs your API key (see Step 7).</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/gpt-6-2-astra-coding-agent-tutorial/cover.webp" alt="A human hand and a robot hand guiding glowing lines of code, with green plus and red minus patch blocks floating between them"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>OpenAI released GPT-6.2 Astra and Sol on November 17, 2026, and the headlines quite reasonably led with the benchmarks: Astra scores higher than its predecessor on independent tests while costing less per task, and Sol now sits within half a point of the flagship on real-code tasks at a fifth of the cost. Useful numbers, but they are not the reason to rebuild anything this week. The reason is quieter and sits in the API docs: GPT-6.2 is the first model family whose Responses API ships <code>apply_patch</code> and <code>shell</code> as first-class tools, documented end to end, with the examples written against <code>gpt-6.2-astra</code> itself.</p>
+<p>That changes what a coding agent is. Until now, an agent that edits code had to describe its edits as JSON function arguments — escaped strings inside escaped strings, with the model guessing at diff syntax and your code re-parsing it. With <code>apply_patch</code>, the model emits structured diffs in the V4A format and your application applies them. With the local <code>shell</code> tool, the same model proposes the commands to run — the test suite, the linter, the grep — and your harness runs them and returns the output. The loop is four pieces of plumbing and about 400 lines of Python, and this tutorial builds all of it, runs it, and verifies every request it sends.</p>
+<p>What you will build: a coding agent that takes a task in plain English, edits files with <code>apply_patch</code>, runs the test suite with the local shell tool, and reports back with a machine-readable summary and a cost breakdown. Along the way you will hit the two migration traps that break real GPT-6.2 integrations — dropped reasoning items and uncacheable instructions — and build the guards that prevent both.</p>
+<h2 id="what-you-will-need">What you'll need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or later.</strong> The tutorial was verified on Python 3.12.</li>
+<li><strong>The OpenAI Python SDK, version 3.55.1 or later</strong> (<code>pip install openai</code>). The typed parameters used below — <code>apply_patch</code> and local <code>shell</code> tools, <code>background_options</code>, <code>prompt_cache_options</code>, <code>service_tier="ultrafast"</code> — are all present in 3.55.1, which is the version every snippet here was checked against.</li>
+<li><strong>An OpenAI API key with billing enabled</strong> (<code>OPENAI_API_KEY</code>). The Responses API is pay-as-you-go with no free tier; the worked example in Step 6 costs about nine cents a turn on Astra at Standard rates, and about two cents on Sol.</li>
+<li><strong>A workspace directory</strong> with a small Python project in it. Step 7 supplies one: a Fibonacci module with a real bug and a failing test.</li>
+<li><strong>pytest</strong> (<code>pip install pytest</code>), for the demo task.</li></ul>
+<p>One honest note up front, because it shapes how to read the verification claims in this tutorial: the sandbox this tutorial was verified in has no OpenAI API key, so no live model call was made here. Everything else ran for real — the patch applier, the shell executor, the full agent loop, and every request body the SDK sends were exercised against a local mock Responses server that replays the response shapes from OpenAI's own documentation. The mock run is described in Step 7, including exactly what was and was not verified. When you run the agent with your key, the only part that changes is the model on the other end.</p>
+<h2 id="step-1-first-call">Step 1: Your first GPT-6.2 call<a class="anchor" href="#step-1-first-call" aria-label="Link to section">#</a></h2>
+<p>GPT-6.2 comes as two models. <code>gpt-6.2-astra</code> is the frontier model, for the hardest professional work; <code>gpt-6.2-sol</code> is the everyday model, for coding and agent workflows at scale. Both take text and image input and return text, both offer a 1,050,000-token context window (922,000 max input, 128,000 max output), and both work through the Responses API and Chat Completions — but tool calling requires the Responses API, so that is what this tutorial uses throughout.</p>
+<pre><code class="language-bash">curl https://api.openai.com/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-6.2-astra",
+    "input": "Write a haiku about a compiler.",
+    "reasoning": {"effort": "medium"},
+    "max_output_tokens": 512
+  }'</code></pre>
+<p>The same call in Python:</p>
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI()  # reads OPENAI_API_KEY
+
+response = client.responses.create(
+    model=&quot;gpt-6.2-astra&quot;,
+    input=&quot;Write a haiku about a compiler.&quot;,
+    reasoning={&quot;effort&quot;: &quot;medium&quot;},
+    max_output_tokens=512,
+)
+print(response.output_text)</code></pre>
+<p>Three things in that call are new or different from the GPT-6.1 era, and getting any of them wrong is the most common way a migration breaks.</p>
+<p><strong>Reasoning effort replaces temperature.</strong> Set the level with <code>reasoning.effort</code> in Responses (<code>reasoning_effort</code> in Chat Completions). OpenAI's guidance is to start at <code>medium</code> for a new integration; if your old integration used <code>none</code> or <code>minimal</code>, use <code>low</code> instead. And <code>none</code> is not a valid choice here at all: both GPT-6.2 model pages state that the API rejects requests that set reasoning effort to <code>none</code>.</p>
+<p><strong>Three parameters must go.</strong> For Responses requests, omit <code>temperature</code>, <code>top_p</code>, and <code>top_logprobs</code> — and remove <code>message.output_text.logprobs</code> from <code>include</code> if you use it. Chat Completions requests must additionally drop <code>logprobs</code>. The API rejects these on GPT-6.2; they are not silently ignored.</p>
+<p><strong>Tool calling means Responses.</strong> Both models support Chat Completions for plain text, but <code>apply_patch</code>, <code>shell</code>, and the rest of the tool set are Responses-only. If you are migrating a Chat Completions agent, the endpoint change is the migration — the model string is the easy part.</p>
+<h2 id="step-2-apply-patch">Step 2: Teach it to edit files with apply_patch<a class="anchor" href="#step-2-apply-patch" aria-label="Link to section">#</a></h2>
+<p>The <code>apply_patch</code> tool is the heart of this agent, so it is worth understanding precisely what it is and is not. You enable it with one entry in the <code>tools</code> array — <code>{"type": "apply_patch"}</code> — and you provide no input schema: the model already knows how to construct patch operations. What comes back is one or more <code>apply_patch_call</code> items, each describing a single file operation: <code>create_file</code>, <code>update_file</code>, or <code>delete_file</code>. Your application applies each operation and returns an <code>apply_patch_call_output</code> per call, with a <code>status</code> of <code>completed</code> or <code>failed</code> and a short human-readable <code>output</code> string. The model never touches your filesystem itself; the diff is a proposal, and your harness is the only thing that writes.</p>
+<p>The diffs use the V4A format. An update is a series of hunks, each starting with a bare <code>@@</code> marker (or <code>@@</code> followed by an anchor line), with context lines prefixed by a space, removed lines by <code>-</code>, and added lines by <code>+</code>. A create is just <code>+</code> lines holding the whole file. Here is the canonical example from OpenAI's own guide — renaming <code>fib()</code> to <code>fibonacci()</code> — as the model would emit it:</p>
+<pre><code class="language-diff">@@
+-def fib(n):
++def fibonacci(n):
+     if n &lt;= 1:
+         return n
+-    return fib(n - 1) + fib(n - 2)
++    return fibonacci(n - 1) + fibonacci(n - 2)</code></pre>
+<p>Your harness needs a function that turns that diff into a new file. The reference implementation lives in the OpenAI Agents SDK (<code>agents.apply_diff</code>), with fuzzy matching for context lines that do not match exactly. The version below is a compact teaching implementation of the same logic: it requires exact context matches and fails loudly on anything it cannot apply, which is the behaviour you want while you are learning what the model emits. Use the SDK's version in production.</p>
+<pre><code class="language-python">class PatchError(ValueError):
+    pass
+
+
+def apply_diff(original: str, diff: str, mode: str = &quot;default&quot;) -&gt; str:
+    &quot;&quot;&quot;Apply a V4A diff to ``original`` text.
+
+    mode=&quot;create&quot;: diff holds only &#x27;+&#x27; lines; the result is their content.
+    mode=&quot;default&quot;: update hunks; each hunk is located by exact match of
+    its context + removed lines, then spliced.
+    &quot;&quot;&quot;
+    lines = [ln.rstrip(&quot;\r&quot;) for ln in diff.split(&quot;\n&quot;)]
+    if lines and lines[-1] == &quot;&quot;:
+        lines.pop()
+    if mode == &quot;create&quot;:
+        out: list[str] = []
+        for ln in lines:
+            if ln in (&quot;*** End Patch&quot;, &quot;*** End of File&quot;):
+                break
+            if not ln.startswith(&quot;+&quot;):
+                raise PatchError(f&quot;Invalid create-file line: {ln!r}&quot;)
+            out.append(ln[1:])
+        return &quot;\n&quot;.join(out)
+
+    # Parse hunks: a hunk starts at a line beginning with &quot;@@&quot;.
+    hunks: list[list[str]] = []
+    current: list[str] | None = None
+    for ln in lines:
+        if ln.startswith(&quot;@@&quot;):
+            current = []
+            hunks.append(current)
+            continue
+        if ln in (&quot;*** End Patch&quot;, &quot;*** End of File&quot;):
+            break
+        if current is None:
+            # Lines before the first @@ marker: only blank lines allowed.
+            if ln.strip():
+                raise PatchError(f&quot;Diff line outside any hunk: {ln!r}&quot;)
+            continue
+        current.append(ln)
+    if not hunks:
+        raise PatchError(&quot;No @@ hunk found in diff&quot;)
+
+    result = original.split(&quot;\n&quot;)
+    cursor = 0  # search position in the file, moves forward hunk by hunk
+    for hunk in hunks:
+        before: list[str] = []  # context + removed lines, in file order
+        after: list[str] = []   # context + added lines, in file order
+        for ln in hunk:
+            if ln == &quot;&quot;:
+                ln = &quot; &quot;  # an empty line is a context line for an empty line
+            prefix, content = ln[0], ln[1:]
+            if prefix == &quot; &quot;:
+                before.append(content)
+                after.append(content)
+            elif prefix == &quot;-&quot;:
+                before.append(content)
+            elif prefix == &quot;+&quot;:
+                after.append(content)
+            else:
+                raise PatchError(f&quot;Invalid diff line: {ln!r}&quot;)
+        pos = _find_sequence(result, before, cursor)
+        if pos is None:
+            raise PatchError(
+                &quot;Hunk context not found in file:\n&quot; + &quot;\n&quot;.join(before)
+            )
+        result[pos:pos + len(before)] = after
+        cursor = pos + len(after)
+    return &quot;\n&quot;.join(result)
+
+
+def _find_sequence(lines: list[str], seq: list[str], start: int) -&gt; int | None:
+    &quot;&quot;&quot;First index &gt;= start where seq matches lines exactly.&quot;&quot;&quot;
+    if not seq:
+        return start
+    for i in range(start, len(lines) - len(seq) + 1):
+        if lines[i:i + len(seq)] == seq:
+            return i
+    return None</code></pre>
+<p>With the applier in hand, the patch handler is mostly safety checks. Every path is resolved against the workspace root and rejected if it escapes it — a model that proposes <code>../../etc/passwd</code> gets a <code>failed</code> status, not a write. A create refuses to overwrite an existing file, an update refuses a missing one, and every failure returns a clear message so the model can recover on the next turn instead of guessing.</p>
+<pre><code class="language-python">    def apply_patch_call(self, call) -&gt; dict:
+        &quot;&quot;&quot;Apply one apply_patch_call; return its apply_patch_call_output.&quot;&quot;&quot;
+        op = call.operation
+        try:
+            target = self.resolve(op.path)
+            if op.type == &quot;delete_file&quot;:
+                target.unlink()
+                message = f&quot;Deleted {op.path}&quot;
+            elif op.type == &quot;create_file&quot;:
+                if target.exists():
+                    raise PatchError(f&quot;File already exists: {op.path}&quot;)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(apply_diff(&quot;&quot;, op.diff, mode=&quot;create&quot;),
+                                  encoding=&quot;utf-8&quot;)
+                message = f&quot;Created {op.path}&quot;
+            elif op.type == &quot;update_file&quot;:
+                if not target.exists():
+                    raise PatchError(f&quot;File not found: {op.path}&quot;)
+                target.write_text(
+                    apply_diff(target.read_text(encoding=&quot;utf-8&quot;), op.diff),
+                    encoding=&quot;utf-8&quot;)
+                message = f&quot;Updated {op.path}&quot;
+            else:  # pragma: no cover - the API only sends the three above
+                raise PatchError(f&quot;Unknown operation: {op.type}&quot;)
+            return {&quot;type&quot;: &quot;apply_patch_call_output&quot;, &quot;call_id&quot;: call.call_id,
+                    &quot;status&quot;: &quot;completed&quot;, &quot;output&quot;: message}
+        except (PatchError, FileNotFoundError, OSError) as exc:
+            return {&quot;type&quot;: &quot;apply_patch_call_output&quot;, &quot;call_id&quot;: call.call_id,
+                    &quot;status&quot;: &quot;failed&quot;, &quot;output&quot;: f&quot;Could not apply patch: {exc}&quot;}</code></pre>
+<p>Two details matter here. First, the handler returns exactly one output item per call, keyed by the same <code>call_id</code> — the API requires the pairing, and a missing output is a malformed turn. Second, the <code>failed</code> path is a feature, not an error branch to hide: when a patch cannot apply, the message goes back to the model, which re-reads the file (or asks for the right path) and tries again. Agents that swallow patch failures silently are the ones that loop forever emitting the same broken diff.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/gpt-6-2-astra-coding-agent-tutorial/img2.webp" alt="Diagram of the coding agent loop: your code goes to GPT-6.2 Astra, which emits apply_patch and shell calls; your harness applies them and returns tool outputs, looping until no more tool calls remain"><figcaption>Diagram: the agent loop this tutorial builds. Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="step-3-shell-tool">Step 3: Give it a shell — and fence it in<a class="anchor" href="#step-3-shell-tool" aria-label="Link to section">#</a></h2>
+<p>Edits without execution are just typing. The <code>shell</code> tool closes the loop: the model proposes commands, your code runs them, and the output goes back as <code>shell_call_output</code>. The tool has two modes. Hosted mode (<code>{"type": "shell", "environment": {"type": "container_auto"}}</code>) provisions an OpenAI-managed Debian 12 container with Python 3.11 and Node 22 preinstalled, working directory <code>/mnt/data</code>, no network access unless you allowlist domains. Local mode (<code>{"type": "shell", "environment": {"type": "local"}}</code>) runs the commands on your machine, in a runtime you control. This tutorial uses local mode, because the agent needs your project's tests — but local mode is also the mode where a missing guardrail does real damage, so the executor below is allowlisted by design.</p>
+<p>A <code>shell_call</code> item carries an <code>action</code> with a <code>commands</code> array, an optional <code>timeout_ms</code>, and an optional <code>max_output_length</code>. The output item mirrors it: one entry per command, each with <code>stdout</code>, <code>stderr</code>, and an <code>outcome</code> of <code>{"type": "exit", "exit_code": 0}</code> or <code>{"type": "timeout"}</code>. The executor enforces three rules of its own: the command's first word must be on the allowlist, the command must contain no shell metacharacters or destructive/network tools, and the timeout the model asked for is capped at 60 seconds — your timeout, not the model's.</p>
+<pre><code class="language-python">ALLOWED_COMMANDS = {
+    &quot;python&quot;, &quot;python3&quot;, &quot;pytest&quot;, &quot;ls&quot;, &quot;cat&quot;, &quot;grep&quot;, &quot;git&quot;,
+    &quot;head&quot;, &quot;tail&quot;, &quot;wc&quot;, &quot;find&quot;, &quot;pwd&quot;,
+}
+BLOCKED_SUBSTRINGS = (&quot;;&quot;, &quot;&amp;&amp;&quot;, &quot;||&quot;, &quot;|&quot;, &quot;&gt;&quot;, &quot;&lt;&quot;, &quot;`&quot;, &quot;$(&quot;,
+                      &quot;rm&quot;, &quot;sudo&quot;, &quot;curl&quot;, &quot;wget&quot;, &quot;ssh&quot;, &quot;chmod&quot;, &quot;chown&quot;)
+BLOCKED_GIT = {&quot;push&quot;, &quot;commit&quot;, &quot;fetch&quot;, &quot;pull&quot;, &quot;clone&quot;, &quot;reset&quot;}</code></pre>
+<pre><code class="language-python">    def run_shell_call(self, call) -&gt; dict:
+        &quot;&quot;&quot;Run one shell_call inside the workspace; return shell_call_output.&quot;&quot;&quot;
+        action = call.action
+        max_len = action.max_output_length or 4096
+        timeout = min((action.timeout_ms or 30_000) / 1000, 60)
+        outputs = []
+        for cmd in action.commands:
+            stdout, stderr, code = self._run_one(cmd, timeout)
+            outputs.append({
+                &quot;stdout&quot;: stdout[:max_len],
+                &quot;stderr&quot;: stderr[:max_len],
+                &quot;outcome&quot;: {&quot;type&quot;: &quot;exit&quot;, &quot;exit_code&quot;: code},
+            })
+        item = {&quot;type&quot;: &quot;shell_call_output&quot;, &quot;call_id&quot;: call.call_id,
+                &quot;output&quot;: outputs}
+        if action.max_output_length is not None:
+            item[&quot;max_output_length&quot;] = action.max_output_length
+        return item
+
+    def _run_one(self, cmd: str, timeout: float):
+        parts = cmd.split()
+        if not parts or parts[0] not in ALLOWED_COMMANDS:
+            return &quot;&quot;, f&quot;Command not allowed: {cmd!r}&quot;, 126
+        if any(b in cmd for b in BLOCKED_SUBSTRINGS):
+            return &quot;&quot;, f&quot;Blocked substring in command: {cmd!r}&quot;, 126
+        if parts[0] == &quot;git&quot; and len(parts) &gt; 1 and parts[1] in BLOCKED_GIT:
+            return &quot;&quot;, f&quot;Blocked git subcommand: {cmd!r}&quot;, 126
+        try:
+            proc = subprocess.run(cmd, shell=True, cwd=self.root,
+                                  capture_output=True, text=True,
+                                  timeout=timeout)
+            return proc.stdout, proc.stderr, proc.returncode
+        except subprocess.TimeoutExpired as exc:
+            return exc.stdout or &quot;&quot;, exc.stderr or &quot;&quot;, 124</code></pre>
+<p>Read the allowlist as a statement of what this agent is for: inspecting files (<code>ls</code>, <code>cat</code>, <code>grep</code>, <code>find</code>), running Python and pytest, and read-only git inspection. It cannot delete, move, or fetch anything, and it cannot chain commands with <code>&amp;&amp;</code> or pipes — each command stands alone, which also makes the audit log trivial to read. If your agent needs more — <code>npm test</code>, a build step — extend the allowlist deliberately, one entry at a time, and never by pattern-matching the model's request. OpenAI's own guidance is blunter: run model-proposed commands in a sandbox with explicit filesystem, network, memory, and time limits, and log every command and outcome for auditing. The allowlist is the minimum; a disposable container or VM is the real answer for anything beyond your own machine.</p>
+<h2 id="step-4-agent-loop">Step 4: The agent loop — and the two traps that break it<a class="anchor" href="#step-4-agent-loop" aria-label="Link to section">#</a></h2>
+<p>With both tools built, the loop itself is short. The developer instructions go in a <code>developer</code> message as the first input item — not in the top-level <code>instructions</code> parameter — and the tools, reasoning effort, and cache settings are fixed once per run.</p>
+<pre><code class="language-python">DEVELOPER = (
+    &quot;You are a coding agent working in a small Python workspace. &quot;
+    &quot;Work autonomously until the user&#x27;s task is complete: do not stop to ask &quot;
+    &quot;about routine decisions, and do not end your turn while an authorized &quot;
+    &quot;next step remains. Make reasonable, reversible assumptions and state them. &quot;
+    &quot;Edit files only with the apply_patch tool, in small focused diffs; &quot;
+    &quot;never edit code through the shell. Use the shell tool to inspect files &quot;
+    &quot;and run tests, then report failures back so you can fix them. &quot;
+    &quot;Before finishing, run the test suite and confirm it passes. &quot;
+    &quot;Your final answer must be self-contained: a reader who never saw the &quot;
+    &quot;intermediate steps should understand what changed and why.&quot;
+)
+
+TOOLS = [
+    {&quot;type&quot;: &quot;apply_patch&quot;},
+    {&quot;type&quot;: &quot;shell&quot;, &quot;environment&quot;: {&quot;type&quot;: &quot;local&quot;}},
+]
+
+# Standard short-context rates, USD per million tokens, from the official
+# model pages (checked 2026-11-18). Requests over 272K input tokens pay
+# double input/cache rates and 1.5x output for the whole request.</code></pre>
+<p>Why the developer message, and why first? Starting with GPT-6.2, the top-level <code>instructions</code> field is appended <em>after</em> <code>input</code> in the Responses API, which breaks the prompt-cache prefix: identical instructions sent the same way every time no longer hit the cache. A <code>developer</code> message as the first item in <code>input</code> stays at the front of the cached prefix, so the stable instructions are billed at the cached rate instead of the full rate on every turn. The same guide adds the detail that makes the cache worth configuring: replace the old <code>prompt_cache_retention</code> with <code>prompt_cache_options.ttl</code> set to <code>"30m"</code> (a <code>"12h"</code> TTL exists for longer-lived prefixes, at a higher cache-write price).</p>
+<p>The loop: create a response, handle any tool calls, send the outputs back with <code>previous_response_id</code> pointing at the response they belong to, and repeat until a turn comes back with no tool calls — or until the turn cap is hit.</p>
+<pre><code class="language-python">def run_agent(client: OpenAI, workspace: Workspace, task: str,
+              model: str = MODEL, effort: str = &quot;medium&quot;,
+              service_tier: str = &quot;default&quot;,
+              background_window: str | None = None,
+              max_turns: int = MAX_TURNS) -&gt; dict:
+    &quot;&quot;&quot;Run the agent loop. Returns final text, usage totals, and cost.&quot;&quot;&quot;
+    create_kw: dict = {&quot;model&quot;: model, &quot;tools&quot;: TOOLS,
+                       &quot;reasoning&quot;: {&quot;effort&quot;: effort},
+                       &quot;max_output_tokens&quot;: 8192,
+                       &quot;prompt_cache_options&quot;: {&quot;ttl&quot;: &quot;30m&quot;}}
+    if service_tier != &quot;default&quot;:
+        create_kw[&quot;service_tier&quot;] = service_tier
+    if background_window:
+        create_kw[&quot;background&quot;] = True
+        create_kw[&quot;background_options&quot;] = {&quot;completion_window&quot;: background_window}
+    # NOTE: do not pass temperature / top_p / top_logprobs. GPT-6.2 rejects
+    # them in the Responses API; use reasoning.effort instead.
+
+    # The history is never edited after this point. Editing an earlier item
+    # (a prefix edit) makes GPT-6.2 drop the reasoning items that follow it,
+    # which costs quality and tokens. New turns only append tool outputs and
+    # rely on previous_response_id for the stored history.
+    items = [{&quot;role&quot;: &quot;developer&quot;, &quot;content&quot;: DEVELOPER},
+             {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: task}]
+    previous_response_id = None
+    totals = {&quot;input_tokens&quot;: 0, &quot;output_tokens&quot;: 0, &quot;cost_usd&quot;: 0.0}
+    turns = 0
+    response = None
+    for turn in range(max_turns):
+        turns = turn + 1
+        response = client.responses.create(
+            input=items, previous_response_id=previous_response_id,
+            **create_kw)
+        if background_window:
+            # Background mode returns immediately with a queued response;
+            # poll until the model has finished the turn.
+            response = wait_for_background(client, response.id)
+        previous_response_id = response.id
+        totals[&quot;input_tokens&quot;] += response.usage.input_tokens
+        totals[&quot;output_tokens&quot;] += response.usage.output_tokens
+        totals[&quot;cost_usd&quot;] += cost_usd(
+            model, response.usage, service_tier,
+            background_window or &quot;soonest&quot;)
+        outputs = []
+        # Patches first, then shell: a test run in the same turn must see
+        # the patched files, whatever order the model emitted the calls in.
+        for item in response.output:
+            if item.type == &quot;apply_patch_call&quot;:
+                outputs.append(workspace.apply_patch_call(item))
+        for item in response.output:
+            if item.type == &quot;shell_call&quot;:
+                outputs.append(workspace.run_shell_call(item))
+        if not outputs:
+            break
+        items = outputs
+    else:
+        raise RuntimeError(f&quot;Agent exceeded {max_turns} tool turns&quot;)
+    return {&quot;final_text&quot;: response.output_text, &quot;turns&quot;: turns,
+            &quot;usage&quot;: totals, &quot;last_response_id&quot;: response.id}</code></pre>
+<p>Three design decisions in that loop deserve attention, because each one exists to prevent a specific failure.</p>
+<p><strong>Patches run before shell commands in the same turn.</strong> A turn can contain both a patch and a test run, and the test must see the patched file. The loop therefore handles all <code>apply_patch_call</code> items first, then all <code>shell_call</code> items, whatever order the model emitted them in. If your agent ever reports a test failing on code it just fixed, check this ordering first.</p>
+<p><strong>The history is never edited.</strong> This is the first GPT-6.2 trap, and it is the one most likely to bite a working integration. Starting with GPT-6.2, the API drops earlier reasoning items when the conversation history before them is edited — a prefix edit — or when the model changes (including a downgrade) or the <code>safety_identifier</code> changes between requests. When the model loses its reasoning items, answer quality can decline and it may burn tokens redoing earlier work. The loop above never mutates an earlier item: each turn sends only the new tool outputs, and the stored history rides along via <code>previous_response_id</code>. If your application trims, rewrites, or reorders history between turns — compaction, summarization, a user editing an earlier message — do it knowing the reasoning goes with it. OpenAI's own system-card data gives a reason to care beyond cost: on the Blocker Deception test, where a needed file is removed or a required tool is made unavailable mid-task, Astra 6.2 failed to disclose a known obstacle in 22.28% of trials, roughly double its predecessor's 11.09%. An agent that cannot see its own reasoning is more likely to stay silent about blocked work — which is why this harness reports every failure back explicitly instead of papering over it.</p>
+<p><strong>Eight turns, then stop.</strong> The cap mirrors OpenAI's own <code>apply_patch</code> example. An agent that has not finished in eight tool turns is stuck, not thinking; failing loudly beats burning tokens on the same broken patch. Raise the cap only with a per-turn cost alarm attached.</p>
+<h2 id="step-5-structured-report">Step 5: A machine-readable work report<a class="anchor" href="#step-5-structured-report" aria-label="Link to section">#</a></h2>
+<p>A chat transcript is a poor artifact for automation. The last step of the agent asks the model to summarize its own work as JSON, using the Responses API's structured-output format — the same <code>text.format</code> mechanism the GPT-6.1 Terra tutorial used for structured outputs, now pointed at a work report instead of a document.</p>
+<pre><code class="language-python">REPORT_SCHEMA = {
+    &quot;type&quot;: &quot;object&quot;,
+    &quot;properties&quot;: {
+        &quot;files_changed&quot;: {&quot;type&quot;: &quot;array&quot;, &quot;items&quot;: {&quot;type&quot;: &quot;string&quot;}},
+        &quot;tests&quot;: {
+            &quot;type&quot;: &quot;object&quot;,
+            &quot;properties&quot;: {
+                &quot;ran&quot;: {&quot;type&quot;: &quot;boolean&quot;},
+                &quot;passed&quot;: {&quot;type&quot;: &quot;integer&quot;},
+                &quot;failed&quot;: {&quot;type&quot;: &quot;integer&quot;},
+            },
+            &quot;required&quot;: [&quot;ran&quot;, &quot;passed&quot;, &quot;failed&quot;],
+            &quot;additionalProperties&quot;: False,
+        },
+        &quot;outcome&quot;: {&quot;type&quot;: &quot;string&quot;},
+        &quot;summary&quot;: {&quot;type&quot;: &quot;string&quot;},
+    },
+    &quot;required&quot;: [&quot;files_changed&quot;, &quot;tests&quot;, &quot;outcome&quot;, &quot;summary&quot;],
+    &quot;additionalProperties&quot;: False,
+}
+
+# Commands the model may ask the local shell to run. First token must be
+# on this list, and the command must contain no shell metacharacters or
+# destructive/network tools. Tighten this for your own workspace; never
+# run model-proposed commands unfiltered.</code></pre>
+<pre><code class="language-python">def work_report(client: OpenAI, previous_response_id: str,
+                model: str = MODEL) -&gt; dict:
+    &quot;&quot;&quot;Ask the model for a machine-readable report on the finished work.&quot;&quot;&quot;
+    response = client.responses.create(
+        model=model, previous_response_id=previous_response_id,
+        input=&quot;Summarize the work you just did as JSON: files changed, &quot;
+              &quot;tests run with pass/fail counts, outcome, and a one-paragraph summary.&quot;,
+        text={&quot;format&quot;: {&quot;type&quot;: &quot;json_schema&quot;, &quot;name&quot;: &quot;work_report&quot;,
+                         &quot;strict&quot;: True, &quot;schema&quot;: REPORT_SCHEMA}},
+        reasoning={&quot;effort&quot;: &quot;low&quot;}, max_output_tokens=1024)
+    return json.loads(response.output_text)</code></pre>
+<p>The report call chains off the agent's last response with <code>previous_response_id</code>, so the model has the full history available, and it runs at <code>reasoning.effort: "low"</code> — summarizing completed work does not need the reasoning budget that doing it did. With <code>strict: true</code>, the API guarantees the output matches the schema, so <code>json.loads</code> on <code>response.output_text</code> cannot fail on a missing key. Keep the schema small and the required fields few: a report the model cannot fill honestly is a report it will fill with inventions.</p>
+<h2 id="step-6-what-it-costs">Step 6: What it costs — Astra vs Sol, and the five levers<a class="anchor" href="#step-6-what-it-costs" aria-label="Link to section">#</a></h2>
+<p>GPT-6.2's pricing is simple at the top and full of edges underneath. Standard short-context rates, per million tokens, from the official model pages:</p>
+<div class="table-wrap"><table><thead><tr><th>Model</th><th>Input</th><th>Cached input</th><th>Cache write (30 min)</th><th>Output</th></tr></thead><tbody><tr><td><strong>GPT-6.2 Astra</strong></td><td>$8.00</td><td>$0.40</td><td>$10.00</td><td>$40.00</td></tr><tr><td><strong>GPT-6.2 Sol</strong></td><td>$2.00</td><td>$0.10</td><td>$2.50</td><td>$10.00</td></tr></tbody></table></div>
+<p>Sol is exactly a quarter of Astra's price in every column. The independent check behind the launch backs up the direction: Artificial Analysis puts Astra at 62 on its Intelligence Index, up from 57 for its predecessor, and Sol at 57, up from 55 — so the price gap buys a real capability gap, but a narrowing one. On Cognition's FrontierCode 2.0, OpenAI reports Sol coming within half a point of Astra at maximum reasoning effort for about a fifth of the cost.</p>
+<p>Five levers move the bill beyond those base rates, and the agent is built to use the first three of them by default:</p>
+<ul><li><strong>Prompt caching.</strong> Repeated prefixes — the developer message, the file snapshot — bill at $0.40/$0.10 per million cached tokens instead of $8/$2. A 30-minute cache write costs $10/$2.50 per million; a 12-hour write costs $20/$5. The developer-first layout in Step 4 exists to make this work.</li>
+<li><strong>Service tiers.</strong> Standard is the default. Fast costs twice Standard. Ultrafast — the highest-speed tier, <code>service_tier="ultrafast"</code> — costs three times Standard through February 28, 2027, and six times from March 1, 2027. Ultrafast is US data residency only; Standard, Fast, and Batch support US and EU.</li>
+<li><strong>Background completion windows.</strong> New with GPT-6.2: set <code>background: true</code> with <code>background_options.completion_window</code> of <code>"2h"</code> or <code>"8h"</code> and the model token rates fall 30% or 40% below Standard. Background responses return immediately with a queued response, so poll with <code>client.responses.retrieve(response_id)</code> until the status is <code>completed</code>:</li></ul>
+<pre><code class="language-python">def wait_for_background(client: OpenAI, response_id: str,
+                        timeout_s: int = 600) -&gt; object:
+    &quot;&quot;&quot;Poll a background response until it completes (or fails).&quot;&quot;&quot;
+    deadline = time.monotonic() + timeout_s
+    while True:
+        response = client.responses.retrieve(response_id)
+        if response.status in (&quot;completed&quot;, &quot;failed&quot;, &quot;cancelled&quot;, &quot;incomplete&quot;):
+            return response
+        if time.monotonic() &gt; deadline:
+            raise TimeoutError(f&quot;Background response {response_id} timed out&quot;)
+        time.sleep(5)</code></pre>
+<ul><li><strong>Batch.</strong> The Batch API costs 50% of Standard rates with a 24-hour completion window — the right lever for overnight sweeps across many repos, the wrong one for an interactive agent.</li>
+<li><strong>The long-context surcharge.</strong> Above 272,000 input tokens, input and cache rates double and output costs 1.5 times the short-context rate, for the whole request. An agent that dumps entire repositories into context will feel this; the file snapshot in Step 2 should stay scoped to the files the task touches.</li></ul>
+<p>The cost function in the agent prices every turn from its <code>usage</code> object, including the surcharge and the tier and background multipliers:</p>
+<pre><code class="language-python">PRICES = {
+    &quot;gpt-6.2-astra&quot;: {&quot;input&quot;: 8.00, &quot;cached_input&quot;: 0.40,
+                      &quot;cache_write&quot;: 10.00, &quot;output&quot;: 40.00},
+    &quot;gpt-6.2-sol&quot;: {&quot;input&quot;: 2.00, &quot;cached_input&quot;: 0.10,
+                    &quot;cache_write&quot;: 2.50, &quot;output&quot;: 10.00},
+}
+# Multiplier on the Standard rates. Ultrafast is 3x through Feb 28, 2027,
+# then 6x; background windows and Batch are discounts, not markups.
+TIER_MULTIPLIER = {
+    &quot;default&quot;: 1.0, &quot;fast&quot;: 2.0, &quot;ultrafast&quot;: 3.0,
+    &quot;flex&quot;: 0.5, &quot;batch&quot;: 0.5,
+}
+BACKGROUND_MULTIPLIER = {&quot;soonest&quot;: 1.0, &quot;2h&quot;: 0.7, &quot;8h&quot;: 0.6}</code></pre>
+<pre><code class="language-python">def cost_usd(model: str, usage, service_tier: str = &quot;default&quot;,
+             background_window: str = &quot;soonest&quot;) -&gt; float:
+    &quot;&quot;&quot;Price one Responses API call from its usage object.&quot;&quot;&quot;
+    rates = PRICES[model]
+    details = usage.input_tokens_details
+    cached = details.cached_tokens or 0
+    cache_write = getattr(details, &quot;cache_write_tokens&quot;, 0) or 0
+    fresh = usage.input_tokens - cached - cache_write
+    total = (fresh * rates[&quot;input&quot;]
+             + cached * rates[&quot;cached_input&quot;]
+             + cache_write * rates[&quot;cache_write&quot;]
+             + usage.output_tokens * rates[&quot;output&quot;]) / 1_000_000
+    if usage.input_tokens &gt; 272_000:  # long-context surcharge
+        total = ((fresh * rates[&quot;input&quot;] * 2 + cached * rates[&quot;cached_input&quot;] * 2
+                  + cache_write * rates[&quot;cache_write&quot;] * 2) / 1_000_000
+                 + usage.output_tokens * rates[&quot;output&quot;] * 1.5 / 1_000_000)
+    mult = TIER_MULTIPLIER.get(service_tier, 1.0)
+    mult *= BACKGROUND_MULTIPLIER.get(background_window, 1.0)
+    return total * mult</code></pre>
+<p>A worked example, computed from the published rates: one turn with 10,000 input tokens (2,000 of them cached) and 500 output tokens costs <strong>$0.0848 on Astra</strong> and <strong>$0.0212 on Sol</strong> at Standard rates — and three times that on Ultrafast, $0.2544 and $0.0636. The verification run in Step 7, with its smaller token counts, priced its two agent turns at $0.0508 and the report call at $0.0083 — about six cents all-in on Astra at Standard rates.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/gpt-6-2-astra-coding-agent-tutorial/img3.webp" alt="Bar chart: one agent turn costs $0.0212 on GPT-6.2 Sol and $0.0848 on GPT-6.2 Astra at Standard rates, or $0.0636 and $0.2544 on Ultrafast"><figcaption>Chart: cost of one agent turn at the published rates. Chart generated for AI Frontier Post from OpenAI's model pages.</figcaption></figure>
+<h2 id="step-7-run-it">Step 7: Run it on a real task<a class="anchor" href="#step-7-run-it" aria-label="Link to section">#</a></h2>
+<p>Time to put the agent to work. The demo project is a Fibonacci module with a genuine bug: the recursive step adds <code>fib(n - 1)</code> to itself instead of adding <code>fib(n - 2)</code>, so <code>fib(6)</code> returns 32 instead of 8.</p>
+<pre><code class="language-python">&quot;&quot;&quot;Fibonacci numbers, computed the slow way.&quot;&quot;&quot;
+
+
+def fib(n):
+    if n &lt; 0:
+        raise ValueError(&quot;n must be non-negative&quot;)
+    if n &lt;= 1:
+        return n
+    return fib(n - 1) + fib(n - 1)</code></pre>
+<pre><code class="language-python">from lib.fib import fib
+
+
+def test_base_cases():
+    assert fib(0) == 0
+    assert fib(1) == 1
+
+
+def test_known_values():
+    assert fib(6) == 8
+    assert fib(10) == 55</code></pre>
+<p>Confirm the failure first — an agent that cannot see red cannot prove green:</p>
+<pre><code class="language-bash">cd fiblib &amp;&amp; python -m pytest -q
+# FAILED test_fib.py::test_known_values - assert 32 == 8
+# 1 failed, 1 passed</code></pre>
+<p>Then run the agent:</p>
+<pre><code class="language-bash">export OPENAI_API_KEY="sk-..."
+python agent.py fiblib "Fix the failing test in lib/fib.py and confirm the suite passes."</code></pre>
+<p>On a live run, the expected shape of the session is two turns. Turn one: an <code>apply_patch_call</code> updating <code>lib/fib.py</code> — changing the second <code>fib(n - 1)</code> to <code>fib(n - 2)</code> — followed by a <code>shell_call</code> running <code>python -m pytest -q</code>. Turn two: the final message, and the structured report:</p>
+<pre><code class="language-json">{
+  &quot;files_changed&quot;: [&quot;lib/fib.py&quot;],
+  &quot;tests&quot;: {&quot;ran&quot;: true, &quot;passed&quot;: 2, &quot;failed&quot;: 0},
+  &quot;outcome&quot;: &quot;fixed&quot;,
+  &quot;summary&quot;: &quot;Corrected the Fibonacci recurrence and verified with pytest: 2 passed.&quot;
+}</code></pre>
+<p><strong>What was actually verified here, and what was not.</strong> The sandbox this tutorial was built in has no OpenAI API key, so the two turns above were verified against a local mock Responses server that replays the response shapes from OpenAI's documentation — the patch call with the exact V4A diff, the shell call, the final message, and the report. Against that mock, 45 checks passed: the patch applier on the docs' own rename example and on create, multi-hunk, and failure cases; the shell executor running real pytest in the workspace (2 passed); the full loop ending after two turns; the exact request bodies the SDK sends, including the developer-first layout, the <code>30m</code> cache TTL, the absence of the rejected parameters, and the <code>previous_response_id</code> chaining; the failed-patch path returning <code>status: "failed"</code> without crashing; background polling; and the Ultrafast tier flag. What was not verified is the model itself: the diff the model proposes, its choice of tools, and its final wording are live behaviour, and they are the part your key buys. The mock run's two agent turns priced at $0.0508 at list rates from the scripted usage — an illustration of the cost function, not a measured model bill.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Decision</th><th>Pick this</th><th>When</th></tr></thead><tbody><tr><td><strong>Model</strong></td><td>GPT-6.2 Sol</td><td>Default. Everyday coding, agent fleets, anything cost-sensitive — within half a point of Astra on real-code tasks at a quarter of the price.</td></tr><tr><td><strong>Model</strong></td><td>GPT-6.2 Astra</td><td>The hardest tasks: multi-file refactors, ambiguous requirements, work where a wrong first attempt costs more than the price gap.</td></tr><tr><td><strong>Shell</strong></td><td>Local shell tool</td><td>Your machine, your tests, your repo. Fence it with the allowlist in Step 3 and never run it unfiltered.</td></tr><tr><td><strong>Shell</strong></td><td>Hosted container</td><td>Untrusted code, untrusted inputs, or someone else's machine — a disposable Debian container with no network by default.</td></tr><tr><td><strong>API</strong></td><td>Responses API</td><td>Anything with tools. Required for apply_patch and shell.</td></tr><tr><td><strong>API</strong></td><td>Chat Completions</td><td>Plain text only, no tools — and only if you are migrating existing code that already speaks it.</td></tr><tr><td><strong>Speed</strong></td><td>Standard + background windows</td><td>Overnight or queued work: 2h/8h windows cut 30–40% off the bill.</td></tr><tr><td><strong>Speed</strong></td><td>Ultrafast</td><td>Interactive sessions where latency is the product — and only until the 6× pricing starts on March 1, 2027.</td></tr><tr><td><strong>Framework</strong></td><td>Raw Responses (this tutorial)</td><td>You want to own the loop, the harness, and the cost accounting.</td></tr><tr><td><strong>Framework</strong></td><td>Agents SDK</td><td>You want the reference <code>applyDiff</code>, managed shell executors, tracing, and the multi-agent beta — and you are happy to let the SDK own the loop.</td></tr></tbody></table></div>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>GPT-6.2's coding-agent story is not a new model with a new name. It is three small, concrete changes that add up to a different way of building: diffs as structured tool calls instead of escaped JSON strings, a shell tool with a documented local mode, and a set of migration rules — reasoning effort instead of temperature, developer-first instructions for caching, never editing history mid-run — that are easy to follow once and expensive to learn by debugging. The agent in this tutorial is about 400 lines across two files, every request it sends verified against the documentation, and it fixes a real failing test in two turns for about five cents. Start with Sol, keep the allowlist tight, and let the model earn the bigger model one successful patch at a time.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://developers.openai.com/api/docs/guides/latest-model" rel="nofollow">OpenAI — Using GPT-6.2</a></li>
+<li><a href="https://developers.openai.com/api/docs/guides/tools-apply-patch" rel="nofollow">OpenAI — Apply Patch</a></li>
+<li><a href="https://developers.openai.com/api/docs/guides/tools-shell" rel="nofollow">OpenAI — Shell</a></li>
+<li><a href="https://developers.openai.com/api/docs/models/gpt-6.2-astra" rel="nofollow">OpenAI — GPT-6.2 Astra model page</a></li>
+<li><a href="https://developers.openai.com/api/docs/models/gpt-6.2-sol" rel="nofollow">OpenAI — GPT-6.2 Sol model page</a></li>
+<li><a href="https://github.com/openai/openai-agents-python/blob/main/src/agents/apply_diff.py" rel="nofollow">OpenAI Agents SDK — apply_diff.py (V4A reference implementation)</a></li>
+<li><a href="https://aifrontierpost.com/articles/openai-gpt-6-2-astra-sol-release/" rel="nofollow">AI Frontier Post — OpenAI releases GPT-6.2 Astra and Sol</a></li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="gpt-6-2-astra-coding-agent-tutorial"></div><div class="comments" data-comments="gpt-6-2-astra-coding-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/openai-gpt-6-2-astra-sol-release/"><span class="chip">AI News</span><h3>OpenAI releases GPT-6.2 Astra and Sol: cheaper, faster — and its first model rated High for AI self-improvement</h3><div class="meta">November 17, 2026 · 6 min read</div></a><a class="rel-card" href="/articles/gpt-6-1-terra-responses-api-tutorial/"><span class="chip">Tutorials</span><h3>GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API</h3><div class="meta">November 7, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/chatkit-agents-sdk-support-agent-tutorial/"><span class="chip">Tutorials</span><h3>Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</h3><div class="meta">November 17, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/qwen4-max-coding-agent-api-tutorial/"><span class="chip">Tutorials</span><h3>Qwen4-Max hands-on: build a working coding agent with Alibaba&#x27;s new flagship API</h3><div class="meta">November 16, 2026 · 20 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need the Agents SDK to use apply_patch?</h3><p>No. The Responses API exposes apply_patch directly — one entry in the tools array — and this tutorial&#x27;s harness is all the code you need to apply the diffs. The SDK is worth adopting when you want its reference applyDiff with fuzzy matching, its shell-executor helpers, tracing, and the multi-agent beta. Start raw, adopt the SDK when the loop stops being the interesting part.</p><h3>What happens when a patch does not apply?</h3><p>The harness returns status "failed" with a human-readable message, and the model sees it on the next turn. In the verification run, a patch aimed at a missing file came back failed, the agent explained the problem, and no stray file was created. Never swallow a failed patch silently: an agent that does not know its edit failed will keep reasoning as if it succeeded.</p><h3>Can I use Chat Completions instead of the Responses API?</h3><p>For plain text, yes — both models support it. For anything with tools, no: tool calling on GPT-6.2 requires the Responses API. The migration is mostly mechanical (same model IDs, same prompts), but the request shapes differ — reasoning.effort instead of reasoning_effort, tool outputs as input items instead of messages — so budget an afternoon, not an hour.</p><h3>Why did my token usage jump after I edited an earlier message?</h3><p>That is the prefix-edit trap from Step 4. Starting with GPT-6.2, editing conversation history before the reasoning items makes the API drop those items, so the model redoes the reasoning and spends the tokens again. Keep the prefix stable between turns; if you must rewrite history, do it between sessions, not inside one.</p><h3>How much does a typical fix cost?</h3><p>At the worked-example counts in Step 6 (10,000 input tokens, 500 output per turn), a two-turn fix plus a report call costs about $0.25 on Astra and about $0.06 on Sol at Standard rates. The verification run in Step 7, with smaller token counts, came to about six cents all-in on Astra. The cost driver is reasoning tokens on long tasks and uncached context on repeated turns — both of which the developer-first layout and the 30-minute cache TTL are designed to control.</p><h3>Is the local shell tool safe to use?</h3><p>Only behind a guardrail like the one in Step 3, and ideally inside a sandbox. The model proposes arbitrary commands; the harness decides what runs. Keep the allowlist short, reject shell metacharacters, enforce your own timeout, log every command and outcome, and never run the agent as a user with access to credentials or production systems.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/openai-gpt-6-2-astra-sol-release/">OpenAI releases GPT-6.2 Astra and Sol: cheaper, faster — and its first model rated High for AI self-improvement</a></li><li><a href="/articles/gpt-6-1-terra-responses-api-tutorial/">GPT-6.1 Terra, hands-on: visual reasoning, structured outputs, and tools with the Responses API</a></li><li><a href="/articles/chatkit-agents-sdk-support-agent-tutorial/">Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</a></li><li><a href="/articles/qwen4-max-coding-agent-api-tutorial/">Qwen4-Max hands-on: build a working coding agent with Alibaba&#x27;s new flagship API</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
