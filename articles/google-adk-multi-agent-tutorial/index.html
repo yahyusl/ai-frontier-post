@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end — AI Frontier Post</title>
+<meta name="description" content="Google&#x27;s Agent Development Kit turns multi-agent systems into plain Python: a coordinator, a researcher with Google Search, a writer, a save tool with a guardrail, and an eval that pins the behaviour. This tutorial builds the whole team — every command verified against ADK 2.14.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/google-adk-multi-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end">
+<meta property="og:description" content="Google&#x27;s Agent Development Kit turns multi-agent systems into plain Python: a coordinator, a researcher with Google Search, a writer, a save tool with a guardrail, and an eval that pins the behaviour. This tutorial builds the whole team — every command verified against ADK 2.14.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/google-adk-multi-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/google-adk-multi-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-18">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a multi-agent research team with Google's ADK: researcher, writer, and guardrails, end to end", "description": "Google's Agent Development Kit turns multi-agent systems into plain Python: a coordinator, a researcher with Google Search, a writer, a save tool with a guardrail, and an eval that pins the behaviour. This tutorial builds the whole team — every command verified against ADK 2.14.", "datePublished": "2026-11-18", "dateModified": "2026-11-18", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/google-adk-multi-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/google-adk-multi-agent-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a Google Cloud account to use ADK?", "acceptedAnswer": {"@type": "Answer", "text": "No. A free Gemini API key from Google AI Studio is enough for everything in this tutorial; you only need a Cloud project if you deploy to Agent Engine or use Vertex AI as the model backend."}}, {"@type": "Question", "name": "Why doesn’t google_search show up in my eval trajectory?", "acceptedAnswer": {"@type": "Answer", "text": "Because it is a model built-in tool, not a function the model calls — the search happens inside the model call, so the eval harness never records it as a tool use. The trajectory records the parent’s tool calls — researcher, writer, and save_brief — and that is what the test file in Step 7 pins."}}, {"@type": "Question", "name": "Should I use SequentialAgent for a fixed research-then-write pipeline?", "acceptedAnswer": {"@type": "Answer", "text": "Not for new work. Template workflow agents are deprecated in ADK 2.x in favour of graph-based workflows. For a research-then-write flow, LLM delegation through sub_agents — the pattern in this tutorial — is the supported approach, and the eval in Step 7 catches it when the routing drifts."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</h1>
+<p class="lede">Google&#x27;s Agent Development Kit turns multi-agent systems into plain Python: a coordinator that calls its specialists as tools, a researcher with Google Search, a writer, a save tool with a guardrail, and an eval that pins the behaviour. This tutorial builds the whole team, step by step — every command verified against ADK 2.14.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 18, 2026 · 19 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> ADK is Google&#x27;s open-source, code-first framework for multi-agent systems. This tutorial builds a research-brief team with it: a coordinator calls single-turn specialists — a researcher (Google Search) and a writer — as tools, saves the brief with a custom tool guarded by a before_tool_callback, and pins the behaviour with an adk eval suite. ADK 2.14.1, Python 3.11+, one free Gemini API key.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Versions pinned:</b> google-adk 2.14.1, Python 3.11 or later, model gemini-flash-latest. LiteLLM needs the google-adk[extensions] extra — or <code>pip install litellm</code> directly, which is what ran here.</li><li><b>The moving parts:</b> Agent objects with name, model, description, instruction, and tools; single_turn sub-agents exposed as tools the parent calls; ToolContext for session state; before_tool_callback for guardrails; adk eval for regression tests.</li><li><b>Two things the docs don’t spell out:</b> google_search is a model built-in tool, so it never appears in the eval trajectory — only the researcher, writer, and save_brief tool calls do; and template workflow agents (SequentialAgent) are deprecated in 2.x in favour of graph workflows.</li><li><b>Cost:</b> a free-tier Gemini API key covers the whole tutorial; each brief is a handful of model calls.</li><li><b>Verified:</b> install, scaffolding, CLI help, imports, the single-turn pipeline, tool execution, the guardrail, session state, and the eval file schemas were all exercised in a sandbox; the live model replies need your key (see Step 6).</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/google-adk-multi-agent-tutorial/cover.webp" alt="Three robot agents collaborating: one searching with a magnifying glass, one writing, one filing papers, with a shield guarding the folder"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Most agent tutorials stop at one agent, one tool, one chat turn. That is the easy 10%. The hard part — the part that decides whether an agent system survives contact with real users — is everything around the model: who does what, where state lives, what happens when the model asks a tool to do something it should not, and how you prove the whole thing still works after you change a prompt.</p>
+<p>Google's Agent Development Kit (ADK) is built for exactly that second 90%. It is the open-source, code-first framework Google released for building multi-agent systems on Gemini — and, through LiteLLM, on other providers' models too. Version 2.14 is current as of this writing, and it ships the full loop: agents, tools, delegation, session state, guardrails, a dev UI, an eval harness, and one-command deployment to Google Cloud. This tutorial builds all of it, in one working system: a research-brief team that takes a topic, researches it with Google Search, writes a structured brief, and saves it to disk — with a guardrail that stops the model writing files outside the briefs folder, and an eval that catches regressions. The coordinator runs the team by calling its specialists as tools, so the whole pipeline completes in a single turn with the coordinator in control throughout.</p>
+<p>Every command and code block below was run against ADK 2.14.1. The places where a live model call is required are marked as such; the wiring itself — delegation, tools, state, guardrails — was verified end to end with a scripted stand-in model, so the code you copy is the code that ran.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or later.</strong> ADK 2.14 requires it — check with <code>python3 --version</code>.</li>
+<li><strong>A Gemini API key.</strong> Free from <a href="https://aistudio.google.com/app/apikey" rel="nofollow">Google AI Studio</a>. The tutorial uses <code>gemini-flash-latest</code>, the current fast Gemini model. A free-tier key covers everything here; the only cost is a handful of model calls per brief.</li>
+<li><strong>A terminal and a text editor.</strong> No cloud account, no Docker, no GPU. Everything runs on your machine until the optional deploy step.</li>
+<li><strong>About 45 minutes.</strong> Most of that is reading; the build itself is under 200 lines of Python.</li></ul>
+<h2 id="1-install-adk-and-scaffold-the-project">1. Install ADK and scaffold the project<a class="anchor" href="#1-install-adk-and-scaffold-the-project" aria-label="Link to section">#</a></h2>
+<p>ADK ships as the <code>google-adk</code> package. Always install it in a virtual environment — ADK pulls in a large dependency tree (the Gemini SDK, FastAPI for the dev UI, and more), and you do not want that in your system Python.</p>
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install google-adk
+adk --version</code></pre>
+<p>Expect <code>adk, version 2.14.1</code> (or newer — the commands below are stable across 2.x). Then scaffold the project. The <code>adk create</code> command generates the exact layout ADK's runners expect:</p>
+<pre><code class="language-bash">adk create briefing_agent --model gemini-flash-latest --api_key YOUR_GEMINI_API_KEY</code></pre>
+<p>That creates:</p>
+<pre><code class="language-bash">briefing_agent/
+    agent.py      # main agent code — this is where you will work
+    .env          # API keys and project IDs (never commit this)
+    __init__.py
+    .gitignore</code></pre>
+<p>Two details worth knowing. First, the generated <code>agent.py</code> defines a single <code>root_agent</code> — that name is the only hard requirement in an ADK project; every runner, the CLI, and the dev UI look for it. Second, if you omit <code>--api_key</code>, <code>adk create</code> still scaffolds the project and you add the key to <code>.env</code> yourself:</p>
+<pre><code class="language-bash">GOOGLE_API_KEY=your-key-here
+GOOGLE_GENAI_USE_ENTERPRISE=0</code></pre>
+<p>The second line tells ADK to use the Gemini API directly (AI Studio keys) rather than Vertex AI. If you work on Google Cloud with a project instead, pass <code>--project</code> and <code>--region</code> to <code>adk create</code> and skip the API key.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/google-adk-multi-agent-tutorial/img2.webp" alt="Diagram of the briefing team: a coordinator agent delegating to a researcher and a writer, with a save tool and a guardrail"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="2-your-first-agent-a-researcher-with-google-search">2. Your first agent: a researcher with Google Search<a class="anchor" href="#2-your-first-agent-a-researcher-with-google-search" aria-label="Link to section">#</a></h2>
+<p>Replace the generated <code>agent.py</code> with a researcher. In ADK, an agent is a Python object with five things that matter: a <code>name</code>, a <code>model</code>, a <code>description</code>, an <code>instruction</code>, and a list of <code>tools</code>.</p>
+<pre><code class="language-python">from google.adk.agents import Agent
+from google.adk.tools import google_search
+
+MODEL = "gemini-flash-latest"
+
+researcher = Agent(
+    model=MODEL,
+    name="researcher",
+    description="Researches a topic with Google Search and returns sourced findings.",
+    instruction=(
+        "You research the topic the user names. Use google_search for every "
+        "factual claim, and return your findings as short bullets, each with "
+        "its source. Never invent facts; if search returns nothing useful, say so."
+    ),
+    tools=[google_search],
+    mode="single_turn",
+)</code></pre>
+<p>Three things to notice. <code>google_search</code> is a built-in ADK tool — no API key beyond your Gemini key, no search-API signup — and it only works behind a Gemini model: ADK refuses to run it under any other model, so keep the researcher on Gemini even if you swap the other agents later (step 8). The <code>description</code> is not decoration: when the coordinator later decides which specialist tool to call, it reads these descriptions, so write them as if a colleague were routing work from them. And the instruction's "never invent facts" line is doing real work: it is the cheapest hallucination control you will ever write, and it belongs in the agent, not in a wrapper around it. The <code>mode="single_turn"</code> line is the one that makes the team a pipeline — it is explained in the next step.</p>
+<p>Run it before building anything else. From the folder that contains <code>briefing_agent/</code>:</p>
+<pre><code class="language-bash">adk run briefing_agent "What happened in solid-state batteries this year?"</code></pre>
+<p><code>adk run</code> starts a terminal chat; pass a query and it answers once, omit it and it goes interactive. You will see the model decide to call <code>google_search</code>, the results come back, and a sourced answer print. If that works, the whole stack — key, model, tool — is healthy, and everything after this is structure.</p>
+<h2 id="3-add-the-writer-and-a-coordinator-that-runs-the-team">3. Add the writer and a coordinator that runs the team<a class="anchor" href="#3-add-the-writer-and-a-coordinator-that-runs-the-team" aria-label="Link to section">#</a></h2>
+<p>One agent doing research and writing is a prompt, not a system. Split the jobs: a writer that turns findings into a brief, and a coordinator that runs the two specialists in order. The key decision is <em>how</em> the coordinator invokes them, because ADK sub-agents have two modes and they behave very differently.</p>
+<p>In the default <code>chat</code> mode, a sub-agent is reached with <code>transfer_to_agent</code>: the parent hands the conversation over and the specialist owns the turn. That is the right shape for routing — a support router sending billing questions to a billing agent and technical questions to a technical agent, one per turn. It is the wrong shape for a pipeline: after the first transfer, the researcher owns the turn and the coordinator never gets the findings back to hand to the writer.</p>
+<p><code>single_turn</code> mode is the pipeline shape. A single-turn sub-agent is exposed to the parent as a <em>tool</em> named after the agent, taking one argument — <code>request</code>, the task description. The parent calls it, the specialist runs inline, and the result comes back as a tool result the parent can use in its next step. Add the writer in that mode, and give the researcher the same mode:</p>
+<pre><code class="language-python">writer = Agent(
+    model=MODEL,
+    name="writer",
+    description="Turns research findings into a structured markdown brief.",
+    instruction=(
+        "You turn the researcher's findings into a markdown brief with exactly "
+        "these sections: ## Summary, ## Key facts, ## What to watch. Keep it under "
+        "300 words. Preserve the sources the researcher cited."
+    ),
+    mode="single_turn",
+)</code></pre>
+<p>Then the coordinator, which lists both specialists as <code>sub_agents</code>. Because they are single-turn, ADK adds them to the coordinator's tools automatically — the coordinator sees tools named <code>researcher</code> and <code>writer</code>, each described by the agent's <code>description</code>:</p>
+<pre><code class="language-python">root_agent = Agent(
+    model=MODEL,
+    name="briefing_coordinator",
+    description="Coordinates a research team: researches a topic and writes a brief.",
+    instruction=(
+        "You coordinate a research team. When the user asks for a brief on a topic: "
+        "call the 'researcher' tool with the topic, then call the 'writer' tool "
+        "with the researcher's findings. Report the finished brief when done."
+    ),
+    sub_agents=[researcher, writer],
+)</code></pre>
+<p>Try it now — <code>adk run briefing_agent "Brief me on solid-state batteries."</code> should come back with a researched, structured brief, and the trace will show the coordinator calling the researcher tool, then the writer tool, all inside one turn. The routing is model-driven, so keep the descriptions specific and non-overlapping — "researches with Google Search" versus "turns findings into a markdown brief" — and test it with the eval in step 7 rather than assuming it. If you need a routing decision that is guaranteed rather than probable, that is what ADK 2.0's graph workflows are for; the fixed-order workflow agents (<code>SequentialAgent</code> and friends) still exist in 2.x but are deprecated in favour of graphs, so do not build a new system on them. Steps 4 and 5 add the save tool and the guardrail to this coordinator.</p>
+<h2 id="4-save-the-brief-a-custom-tool-and-session-state">4. Save the brief: a custom tool and session state<a class="anchor" href="#4-save-the-brief-a-custom-tool-and-session-state" aria-label="Link to section">#</a></h2>
+<p>The coordinator needs one tool of its own: <code>save_brief</code>, a plain Python function. In ADK, any function with type hints and a docstring becomes a tool — the docstring is the schema the model sees, so write it for the model, not for a human skimming the file. This one also takes a <code>ToolContext</code>, which ADK injects automatically and hides from the model; it is the bridge to the session's state.</p>
+<pre><code class="language-python">import os
+from google.adk.tools.tool_context import ToolContext
+
+def save_brief(filename: str, markdown: str, tool_context: ToolContext) -> dict:
+    """Saves a markdown brief to the briefs/ folder and records its path in session state.
+
+    Args:
+        filename: File name for the brief, e.g. "fusion-brief.md".
+        markdown: The full markdown text of the brief.
+    """
+    safe = os.path.basename(filename)
+    os.makedirs("briefs", exist_ok=True)
+    path = os.path.join("briefs", safe)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(markdown)
+    tool_context.state["last_brief_path"] = path
+    return {"status": "success", "path": path}</code></pre>
+<p>Two design choices matter here. First, the tool returns a dict with a <code>status</code> key — the <code>{"status": "success", ...}</code> / <code>{"status": "error", ...}</code> shape is the convention across ADK's own examples, and the model learns to branch on it. Second, the tool writes <code>last_brief_path</code> into session state. State is how agents remember things across turns: a later turn can ask "where did you save that brief?" and the coordinator can answer from state instead of re-deriving it. The <code>output_key="last_brief"</code> on the coordinator does the same for the agent's final response — it saves the last answer into state under that key, so the next agent in a chain, or the next turn, can pick it up without the text being re-pasted through the conversation.</p>
+<p>Give the coordinator the tool. Update <code>root_agent</code> in <code>agent.py</code>:</p>
+<pre><code class="language-python">root_agent = Agent(
+    model=MODEL,
+    name="briefing_coordinator",
+    description="Coordinates a research team: researches a topic, writes a brief, saves it.",
+    instruction=(
+        "You coordinate a research team. When the user asks for a brief on a topic: "
+        "1) call the 'researcher' tool with the topic; 2) call the 'writer' tool "
+        "with the researcher's findings; 3) save the finished brief with "
+        "'save_brief', using a short slug filename like '&lt;topic&gt;-brief.md'. "
+        "Report the saved path when done."
+    ),
+    sub_agents=[researcher, writer],
+    tools=[save_brief],
+    output_key="last_brief",
+)</code></pre>
+<p>Session state lives in the session service. The default for local runs is in-memory (<code>InMemorySessionService</code>), which is fine for development; <code>adk run</code> and <code>adk web</code> also accept <code>--session_service_uri sqlite://./sessions.db</code> when you want sessions to survive a restart.</p>
+<h2 id="5-a-guardrail-that-blocks-unsafe-saves">5. A guardrail that blocks unsafe saves<a class="anchor" href="#5-a-guardrail-that-blocks-unsafe-saves" aria-label="Link to section">#</a></h2>
+<p>A tool that writes files is a tool the model can misuse — a filename like <code>../../.ssh/authorized_keys</code> is not a hypothetical. ADK's answer is callbacks: functions that run before the model is called or before a tool executes. A <code>before_tool_callback</code> receives the tool, its arguments, and the tool context, and returns <code>None</code> to allow the call or a dict to block it — the returned dict becomes the tool's result, so the model sees an error in the tool's own format and can recover gracefully.</p>
+<pre><code class="language-python">from typing import Any, Dict, Optional
+from google.adk.tools.base_tool import BaseTool
+
+def block_unsafe_save(
+    tool: BaseTool, args: Dict[str, Any], tool_context: ToolContext
+) -> Optional[Dict]:
+    """Blocks save_brief when the filename tries to escape the briefs/ folder."""
+    if tool.name == "save_brief":
+        name = args.get("filename", "")
+        if name != os.path.basename(name) or name.startswith("."):
+            tool_context.state["guardrail_blocked_save"] = True
+            return {
+                "status": "error",
+                "error_message": (
+                    f"Blocked unsafe filename: {name!r}. Briefs stay in briefs/."
+                ),
+            }
+    return None</code></pre>
+<p>Wire it in by adding one line to the coordinator — <code>before_tool_callback=block_unsafe_save</code> alongside <code>tools=[save_brief]</code>. Note the belt-and-braces design: the callback blocks the traversal, and <code>save_brief</code> itself still applies <code>os.path.basename</code> before writing. A guardrail that exists in only one place is a guardrail you will eventually route around by accident. The callback also sets a state flag, <code>guardrail_blocked_save</code>, so the blocked attempt is visible in the session afterwards — guardrails you cannot observe are guardrails you cannot debug.</p>
+<p>There is a matching <code>before_model_callback</code> for the other side of the loop: it runs before the model is called and can inspect or rewrite the request, or return a response that skips the model entirely. The common use is keyword or policy filtering on the incoming prompt. You rarely need both on day one; add the tool callback first, because tools are where side effects live.</p>
+<h2 id="6-run-it-three-ways">6. Run it three ways<a class="anchor" href="#6-run-it-three-ways" aria-label="Link to section">#</a></h2>
+<p>ADK gives you three ways to run the same agent, and they are not interchangeable — each exists for a different job.</p>
+<p><strong>The terminal:</strong> <code>adk run briefing_agent</code> starts a chat in your terminal. Fastest for smoke-testing a prompt change. Add <code>--save_session</code> to dump the session to JSON on exit, or <code>--replay</code> a saved session file to re-run the same conversation after a change.</p>
+<p><strong>The dev UI:</strong> run <code>adk web</code> from the folder that contains <code>briefing_agent/</code>, open <code>http://localhost:8000</code>, pick the agent in the upper left, and chat. The UI shows every step — model calls, tool calls, transfers between agents — which makes it the fastest way to debug why the coordinator delegated (or didn't). Treat it as a development tool only: Google's own docs warn it is not meant for production, so never expose it to the internet.</p>
+<p><strong>From your own code:</strong> for scripts, tests, and anything you embed in an app, drive the agent with a <code>Runner</code> and a session service directly. This is the same machinery the CLI uses, and it is the version you will actually verify in CI. Save this as <code>run_brief.py</code> next to <code>briefing_agent/</code>:</p>
+<pre><code class="language-python">import asyncio
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
+from briefing_agent.agent import root_agent
+
+APP_NAME = "briefing_app"
+USER_ID = "user_1"
+SESSION_ID = "session_001"
+
+async def main() -> None:
+    session_service = InMemorySessionService()
+    await session_service.create_session(
+        app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
+    )
+    runner = Runner(
+        agent=root_agent, app_name=APP_NAME, session_service=session_service
+    )
+    content = types.Content(
+        role="user",
+        parts=[types.Part(text="Brief me on solid-state batteries.")],
+    )
+    async for event in runner.run_async(
+        user_id=USER_ID, session_id=SESSION_ID, new_message=content
+    ):
+        if event.is_final_response() and event.content and event.content.parts:
+            print(event.content.parts[0].text)
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+<pre><code class="language-bash">python run_brief.py</code></pre>
+<p>The runner yields events — tool call requested, tool result received, transfer to a sub-agent, final response — and <code>event.is_final_response()</code> marks the turn's conclusion. A finished brief lands in <code>briefs/solid-state-batteries-brief.md</code> and looks like this in shape:</p>
+<pre><code class="language-markdown">## Summary
+Solid-state batteries replace the liquid electrolyte ...
+## Key facts
+- ...
+## What to watch
+- ...</code></pre>
+<h2 id="7-eval-it-like-software">7. Eval it like software<a class="anchor" href="#7-eval-it-like-software" aria-label="Link to section">#</a></h2>
+<p>An agent without evals is a demo. ADK ships an eval harness that grades two things separately: the final response (<code>response_match_score</code> — is the answer close enough to the reference?) and the tool trajectory (<code>tool_trajectory_avg_score</code> — did it call the right tools, in the right order, with the right arguments?). You write the expected behaviour as JSON, and the runner replays it against the live agent.</p>
+<p>Create <code>briefing_agent/tests/brief.test.json</code>. One case, one turn: the user asks for a brief, and the expected trajectory is the pipeline itself — call the researcher tool, call the writer tool, save the brief — plus a final response that mentions the saved file.</p>
+<p>Two details in this file are easy to get wrong. First, the single-turn sub-agents appear in the trajectory as ordinary tool calls, named after the agent and taking a <code>request</code> argument — that is how the parent invokes them. Second, <code>google_search</code> does not appear at all: it is a model built-in tool, not a function the model calls, so the eval harness never sees it as a tool use. Third, the <code>save_brief</code> entry lists only the filename: the brief text is model-generated, so no exact argument can be predicted for it. That is why the config below sets <code>ignore_args</code> — the trajectory score checks the sequence of tool names, not their arguments.</p>
+<pre><code class="language-json">{
+  "eval_set_id": "briefing_agent_tests",
+  "name": "Briefing agent smoke tests",
+  "description": "One-turn checks that a brief request researches, saves, and reports the path.",
+  "eval_cases": [
+    {
+      "eval_id": "brief_solid_state_batteries",
+      "conversation": [
+        {
+          "invocation_id": "b7982664-0ab6-47cc-ab13-326656afdf75",
+          "user_content": {
+            "parts": [{"text": "Brief me on solid-state batteries."}],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [{"text": "Saved the brief to briefs/solid-state-batteries-brief.md."}],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"name": "researcher", "args": {"request": "Research solid-state batteries."}},
+              {"name": "writer", "args": {"request": "Draft a brief from the research findings."}},
+              {"name": "save_brief", "args": {"filename": "solid-state-batteries-brief.md"}}
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "briefing_agent",
+        "user_id": "test_user",
+        "state": {}
+      }
+    }
+  ]
+}</code></pre>
+<p>Pair it with <code>briefing_agent/tests/test_config.json</code>, which sets the pass thresholds. Keep the response threshold forgiving — the model's wording will vary — and the trajectory threshold strict, because the trajectory is the behaviour you actually care about. <code>match_type</code> is <code>IN_ORDER</code> so extra tool calls don't fail the case as long as the expected sequence happens in order, and <code>ignore_args</code> is on because the brief text is model-generated:</p>
+<pre><code class="language-json">{
+  "criteria": {
+    "response_match_score": {"threshold": 0.5},
+    "tool_trajectory_avg_score": {
+      "threshold": 0.8,
+      "match_type": "IN_ORDER",
+      "ignore_args": true
+    }
+  }
+}</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">adk eval briefing_agent briefing_agent/tests/brief.test.json \
+  --config_file_path=briefing_agent/tests/test_config.json \
+  --print_detailed_results</code></pre>
+<p>This runs the live model, so it needs your Gemini key and costs a few calls. That is the point: an eval that never touches the model is a syntax check, not an eval. Two habits make the suite useful instead of decorative. First, record eval sets from real sessions in the dev UI — run a conversation in <code>adk web</code>, check it, save it as an <code>.evalset.json</code> — rather than hand-writing every case. Second, run the suite after every prompt change; the trajectory score is the tripwire that tells you a "small wording tweak" silently broke the delegation.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/google-adk-multi-agent-tutorial/img3.webp" alt="A checklist-style illustration of an agent evaluation: test cases, trajectory scores, and a pass threshold gauge"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<h2 id="8-swap-a-model-with-litellm">8. Swap a model with LiteLLM<a class="anchor" href="#8-swap-a-model-with-litellm" aria-label="Link to section">#</a></h2>
+<p>ADK is Gemini-first but not Gemini-only. Through LiteLLM it can run GPT, Claude, and 100+ other models behind the same agent code. LiteLLM is an optional extra, not part of the base install:</p>
+<pre><code class="language-bash">pip install "google-adk[extensions]"</code></pre>
+<p>Then wrap the model identifier in <code>LiteLlm</code>. Give the writer a different brain from the researcher — a reasonable split, since drafting rewards a different model than searching:</p>
+<pre><code class="language-python">from google.adk.models.lite_llm import LiteLlm
+
+writer = Agent(
+    model=LiteLlm(model="openai/gpt-4.1"),
+    name="writer",
+    description="Turns research findings into a structured markdown brief.",
+    instruction=(
+        "You turn the researcher's findings into a markdown brief with exactly "
+        "these sections: ## Summary, ## Key facts, ## What to watch. Keep it under "
+        "300 words. Preserve the sources the researcher cited."
+    ),
+)</code></pre>
+<p>Set the matching API key — <code>OPENAI_API_KEY</code> for GPT models, <code>ANTHROPIC_API_KEY</code> for Claude (for example <code>LiteLlm(model="anthropic/claude-sonnet-4-6")</code>) — and nothing else changes: the same tools, the same delegation, the same evals. That is the practical payoff of a framework over a raw SDK call. Two cautions. First, keep the researcher on Gemini: <code>google_search</code> is a Gemini-only built-in tool and ADK refuses to run it behind any other model, so a LiteLLM researcher breaks at the first search. Second, model identifiers are LiteLLM's, not ADK's, so a name that works today can change when the provider renames a model — check the LiteLLM provider docs for the current list rather than copying a model string from an old tutorial.</p>
+<h2 id="9-ship-it">9. Ship it<a class="anchor" href="#9-ship-it" aria-label="Link to section">#</a></h2>
+<p>Local runs end where production begins. ADK's deploy story is one command to Google Cloud's Agent Runtime (formerly Vertex AI Agent Engine), which gives you a managed API server, authentication, and tracing without changing the agent code:</p>
+<pre><code class="language-bash">adk deploy agent_engine --project YOUR_PROJECT --region us-central1 briefing_agent</code></pre>
+<p>Agent Runtime is a paid service beyond its no-cost tier, so check pricing before load-testing. The alternatives are the same code in a container: ADK agents are plain Python, so the same project runs on Cloud Run or GKE, and <code>adk api_server</code> exposes the agent over HTTP for anything else to call. Whichever you pick, three things change at deploy time and none of them is the agent code: sessions move from in-memory to a persistent service (SQLite or Agent Engine sessions), secrets move from <code>.env</code> to your platform's secret manager, and the dev UI stays behind — it is a debugging tool, not an endpoint.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>ADK is one of several honest answers to "how do I build a multi-agent system." The choice is about what you want to own.</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Best when</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>ADK</strong></td><td>You want Gemini-native agents with delegation, sessions, evals, and Google Cloud deploy in one framework</td><td>Google-centric; the 2.x graph-workflow API is still settling</td></tr><tr><td><strong>LangGraph</strong></td><td>You want explicit state machines and fine-grained control over every transition</td><td>More code for the same system; you build sessions and evals yourself</td></tr><tr><td><strong>CrewAI / OpenAI Agents SDK</strong></td><td>Your stack is already OpenAI-centred, or you want role-based crews out of the box</td><td>Weaker story for Gemini and for Google Cloud deployment</td></tr><tr><td><strong>Raw API calls</strong></td><td>One agent, one tool, a weekend project</td><td>You re-implement sessions, retries, delegation, and evals by hand</td></tr></tbody></table></div>
+<p>The rule of thumb: if the system has more than one agent, or more than one tool with side effects, use a framework — the session, delegation, and eval machinery is where the bugs live, and it is not the part that makes your product different. If it is a single prompt with a single read-only tool, the raw API is less code and the right call.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Build in this order, and do not skip steps: one agent with one tool, run in the terminal; a second specialist and a coordinator that calls them as tools; a tool with a side effect, guarded by a callback and backed by session state; an eval that pins the behaviour; then, and only then, a second model or a deployment target. Each step is small, each is testable on its own, and the system that comes out is the same shape at 3 agents as at 30 — specialists with sharp descriptions, a coordinator that calls its specialists as tools, tools that return <code>status</code> dicts, state that outlives a turn, and a suite that fails loudly when a prompt change breaks the routing. That is the whole job. The model is the least interesting part.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://adk.dev/get-started/python/" rel="nofollow">ADK Python quickstart</a> — install, scaffolding, <code>adk run</code> and <code>adk web</code></li>
+<li><a href="https://adk.dev/tutorials/agent-team/" rel="nofollow">Build your first intelligent agent team</a> — multi-model setup, delegation, session state, callbacks</li>
+<li><a href="https://adk.dev/agents/workflow-agents/sequential-agents/" rel="nofollow">Sequential template workflow agent</a> — the deprecation notice for template workflows in favour of graph-based workflows</li>
+<li><a href="https://google.github.io/adk-docs/evaluate/index.md" rel="nofollow">Why evaluate agents</a> — test files, eval sets, and the <code>adk eval</code> workflow</li>
+<li><a href="https://adk.dev/" rel="nofollow">Agent Development Kit home</a> — framework overview and language support</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="google-adk-multi-agent-tutorial"></div><div class="comments" data-comments="google-adk-multi-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/book-to-skill-pdf-to-agent-skill-tutorial/"><span class="chip">Tutorials</span><h3>Turn a technical book into a Claude Code skill: hands-on with book-to-skill</h3><div class="meta">November 17, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/chatkit-agents-sdk-support-agent-tutorial/"><span class="chip">Tutorials</span><h3>Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</h3><div class="meta">November 17, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/stitch-skills-google-stitch-design-tutorial/"><span class="chip">Tutorials</span><h3>Design in your coding agent: hands-on with Google&#x27;s Stitch skills</h3><div class="meta">November 17, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/paper-orchestra-google-research-paper-writing-tutorial/"><span class="chip">Tutorials</span><h3>Turn lab notes into a submission-ready paper: hands-on with Google Research&#x27;s PaperOrchestra</h3><div class="meta">November 17, 2026 · 22 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a Google Cloud account to use ADK?</h3><p>No. A free Gemini API key from Google AI Studio is enough for everything in this tutorial; you only need a Cloud project if you deploy to Agent Engine or use Vertex AI as the model backend.</p><h3>Why doesn’t google_search show up in my eval trajectory?</h3><p>Because it is a model built-in tool, not a function the model calls — the search happens inside the model call, so the eval harness never records it as a tool use. The trajectory records the parent’s tool calls — researcher, writer, and save_brief — and that is what the test file in Step 7 pins.</p><h3>Should I use SequentialAgent for a fixed research-then-write pipeline?</h3><p>Not for new work. Template workflow agents are deprecated in ADK 2.x in favour of graph-based workflows. For a research-then-write flow, LLM delegation through sub_agents — the pattern in this tutorial — is the supported approach, and the eval in Step 7 catches it when the routing drifts.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/book-to-skill-pdf-to-agent-skill-tutorial/">Turn a technical book into a Claude Code skill: hands-on with book-to-skill</a></li><li><a href="/articles/chatkit-agents-sdk-support-agent-tutorial/">Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</a></li><li><a href="/articles/stitch-skills-google-stitch-design-tutorial/">Design in your coding agent: hands-on with Google&#x27;s Stitch skills</a></li><li><a href="/articles/paper-orchestra-google-research-paper-writing-tutorial/">Turn lab notes into a submission-ready paper: hands-on with Google Research&#x27;s PaperOrchestra</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
