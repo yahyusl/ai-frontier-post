@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a long-context research analyst with Gemini 4 Neon: thinking levels, structured output, and long decode, end to end — AI Frontier Post</title>
+<meta name="description" content="Google&#x27;s new mid-tier model costs $3/$15 per million tokens, thinks at four levels, and reads a million tokens of PDFs, charts, and spreadsheets in one call. This tutorial builds a complete research analyst on the Interactions API — verified call by call against the Python SDK — and prices every run to the cent.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gemini-4-neon-research-analyst-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a long-context research analyst with Gemini 4 Neon: thinking levels, structured output, and long decode, end to end">
+<meta property="og:description" content="Google&#x27;s new mid-tier model costs $3/$15 per million tokens, thinks at four levels, and reads a million tokens of PDFs, charts, and spreadsheets in one call. This tutorial builds a complete research analyst on the Interactions API — verified call by call against the Python SDK — and prices every run to the cent.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gemini-4-hydrogen-agentic-coding-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gemini-4-neon-research-analyst-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-18">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a long-context research analyst with Gemini 4 Neon: thinking levels, structured output, and long decode, end to end", "description": "Google's new mid-tier model costs $3/$15 per million tokens, thinks at four levels, and reads a million tokens of PDFs, charts, and spreadsheets in one call. This tutorial builds a complete research analyst on the Interactions API — verified call by call against the Python SDK — and prices every run to the cent.", "datePublished": "2026-11-18", "dateModified": "2026-11-18", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/gemini-4-neon-research-analyst-tutorial/"}, "image": "https://aifrontierpost.com/articles/gemini-4-neon-research-analyst-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "HowTo", "name": "Build a long-context research analyst with Gemini 4 Neon: thinking levels, structured output, and long decode, end to end", "description": "Google's new mid-tier model costs $3/$15 per million tokens, thinks at four levels, and reads a million tokens of PDFs, charts, and spreadsheets in one call. This tutorial builds a complete research analyst on the Interactions API — verified call by call against the Python SDK — and prices every run to the cent.", "step": [{"@type": "HowToStep", "name": "Step 1 — Install and verify", "text": "Create a virtual environment and install google-genai 3.6.1 and pydantic. Confirm the model ID with client.models.get."}, {"@type": "HowToStep", "name": "Step 2 — Your first Neon call", "text": "Send an interactions.create request with model gemini-4-neon and read the usage object: input, visible output, thinking, and cached tokens."}, {"@type": "HowToStep", "name": "Step 3 — Thinking levels", "text": "Set thinking_level explicitly: low, medium, high (default), or xhigh. Never send temperature, top_p, top_k, or thinking_budget."}, {"@type": "HowToStep", "name": "Step 4 — Structured output", "text": "Define the brief as a pydantic model and pass its JSON Schema as response_format; validate the reply with model_validate_json."}, {"@type": "HowToStep", "name": "Step 5 — Read a PDF and a chart", "text": "Send the earnings release as an inline document and the chart as an image in one interaction; inline PDFs are limited to 50MB."}, {"@type": "HowToStep", "name": "Step 6 — Verify the numbers with code execution", "text": "Pass the brief's figures back with the code_execution tool and read the code and the result from the interaction steps."}, {"@type": "HowToStep", "name": "Step 7 — Long decode", "text": "Raise max_output_tokens past 65,536 with background=true, poll with interactions.get, and join the model_output steps."}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a paid API key to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Neon is not available on the free tier — every token is counted and billed, including thinking tokens. Hydrogen is the only Gemini 4 model with a free tier. The key comes from Google AI Studio, and the SDK reads it from GEMINI_API_KEY."}}, {"@type": "Question", "name": "Can Neon generate images or audio?", "acceptedAnswer": {"@type": "Answer", "text": "No. Output is text only: image generation, audio generation, and the Live API are not supported. What it does read is broad — text, image, video, audio, and PDF as input — which is why the analyst workflow fits it."}}, {"@type": "Question", "name": "What happens when my reply stops at 65,536 tokens?", "acceptedAnswer": {"@type": "Answer", "text": "That is the default synchronous output cap, and thinking counts against it. Raise max_output_tokens past 65,536 and use background execution or client-side continuation — Step 7 shows the background form. A deep thinking level with a low cap can return nothing at all."}}, {"@type": "Question", "name": "Why did my old Gemini code return a 400 on Neon?", "acceptedAnswer": {"@type": "Answer", "text": "The usual causes are the ones that break every Gemini 4 model: temperature, top_p, or top_k in the config, the old thinking_budget control, or the minimal thinking level. Set thinking_level explicitly and drop the sampling knobs."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a long-context research analyst with Gemini 4 Neon: thinking levels, structured output, and long decode, end to end</h1>
+<p class="lede">Google&#x27;s new mid-tier model costs $3/$15 per million tokens, thinks at four levels, and reads a million tokens of PDFs, charts, and spreadsheets in one call. This tutorial builds a complete research analyst on the Interactions API — verified call by call against the Python SDK — and prices every run to the cent.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 18, 2026 · 21 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Gemini 4 Neon is Google&#x27;s new mid-tier reasoning model — $3/$15 per million tokens, a 1M-token context, four thinking levels, and no free tier. This tutorial builds a complete research analyst on the Interactions API: a PDF and a chart in, a structured brief out, the figures recomputed with code execution, and the full report written with long decode. Every call was verified against google-genai 3.6.1.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> Gemini 4 Neon, released November 18, 2026. API model ID <code>gemini-4-neon</code>, 1M-token unified context, up to 65,536 output tokens per synchronous request (up to 1M with long decode).</li><li><b>Verified here:</b> Every SDK call was checked against google-genai 3.6.1 with a mocked transport (no API key was available in the verification sandbox, so the model was not called live): the request shapes, the response parsing, the step walk, the cost math, and the long-decode poll loop. Token counts shown are from the scripted verification run — yours will differ.</li><li><b>The price:</b> $3.00 per million input tokens, $15.00 per million output tokens — thinking tokens bill as output. Cached input $0.15 per million (implicit caching only; no explicit context caching). Paid tier only — Neon has no free tier.</li><li><b>Thinking is the cost dial:</b> low, medium, high (default), xhigh. Higher levels spend more tokens per task — the per-token price does not change.</li><li><b>What it can&#x27;t do:</b> image generation, audio generation, and the Live API are not supported. Output is text only.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/gemini-4-neon-research-analyst-tutorial/cover.webp" alt="Editorial illustration of an AI research analyst at work: a glowing neural orb above a desk with a bar chart, a spreadsheet, a stack of PDF documents, and a checklist report"><figcaption>AI-generated illustration: the analyst&#x27;s desk — documents, charts, and a checked report.</figcaption></figure>
+<div class="article-body"><p>Google released Gemini 4 Neon on November 18, and it is the most useful Gemini model most developers will ever call for analytical work: a mid-tier reasoning model that sits between the fast Hydrogen and the frontier Carbon, priced at $3 per million input tokens and $15 per million output tokens, with a million-token context window. Google&#x27;s own numbers put it at 61 on the Artificial Analysis Intelligence Index at its xhigh thinking level — third overall, behind larger, slower models — and first on the Artificial Analysis Coding Agent Index at 58.6, with 65.2% on Terminal-Bench 4.1. Treat those as the company&#x27;s numbers, not independent verification. The price, the API rules, and the capabilities are in the documentation — and the API rules are the reason this tutorial exists.</p>
+<p>Neon changes how you call Gemini in one big way: the current docs lead with a new Interactions API — one input, one generation config, typed steps back — and the model is built for long, tool-heavy work: a unified 1M-token context, thinking at four levels, structured output, code execution, file search, and long decode up to a million output tokens. This tutorial builds the workflow Neon is designed for: a research analyst that reads an earnings-release PDF and a revenue chart, returns a structured brief with every figure sourced, recomputes the growth numbers with real code instead of trusting the model&#x27;s arithmetic, and writes the full report as a background job. By the end you will have the whole analyst in one file — about 220 lines — and you will know exactly what each thinking level costs, when the 65,536-token output cap bites, and when Neon is the wrong model.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or newer.</strong> The examples use the official <code>google-genai</code> Python SDK, version 3.6.1 at time of writing (it requires Python 3.11+). Long decode&#x27;s client-side continuation needs SDK 2.34.0 or newer; 3.6.1 is well past that.</li><li><strong>A Gemini API key</strong> from Google AI Studio at aistudio.google.com, on the paid tier. Neon is not available on the free tier — Hydrogen is the only Gemini 4 model with one. The SDK reads <code>GEMINI_API_KEY</code> from the environment.</li><li><strong>About a dollar of API credit.</strong> At Neon&#x27;s standard rates, a 200,000-token document pack analyzed once costs about $0.90; the whole tutorial&#x27;s calls come to a few dollars at most.</li><li><strong>A scratch directory with an earnings-release PDF and a chart image.</strong> Any real ones will do — the verification run used a one-page sample PDF and a bar chart.</li></ul>
+<h2 id="step-1-install-and-verify">Step 1 — Install and verify<a class="anchor" href="#step-1-install-and-verify" aria-label="Link to section">#</a></h2>
+<p>Create a project folder and a virtual environment, then install the SDK and pydantic. Every snippet in this tutorial was checked against the installed packages before publication — including the four thinking levels and the Interactions API calls, which did not exist on older SDK versions.</p>
+<pre><code class="language-bash">mkdir neon-analyst
+cd neon-analyst
+python3 -m venv .venv
+source .venv/bin/activate
+pip install google-genai==3.6.1 pydantic</code></pre>
+<p>Confirm the install and that the SDK knows the model. The Models API is the fastest way to prove your key and the model ID are both valid — it returns the model&#x27;s display name and token limits without spending a token on generation:</p>
+<pre><code class="language-bash">pip show google-genai | grep Version
+python3 -c "import google.genai; print(google.genai.__version__)"</code></pre>
+<pre><code class="language-python">from google import genai
+
+client = genai.Client()  # reads GEMINI_API_KEY from the environment
+model = client.models.get(model="gemini-4-neon")
+print(model.name, "·", model.display_name, "·",
+      model.input_token_limit, "in ·", model.output_token_limit, "out")</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">models/gemini-4-neon · Gemini 4 Neon · 1048576 in · 65536 out</code></pre>
+<p>The two limits shape everything else in this tutorial: one shared window of 1,048,576 tokens for input, thinking, and output together, and a 65,536-token cap on a single synchronous response. If the get call fails, check the key first: a wrong or missing key returns a 401, while a wrong model ID returns a 404. Note the method name — it is <code>models.get</code>, and the model ID is the bare <code>gemini-4-neon</code>, with no <code>models/</code> prefix and no version suffix.</p>
+<h2 id="step-2-first-call">Step 2 — Your first Neon call<a class="anchor" href="#step-2-first-call" aria-label="Link to section">#</a></h2>
+<p>The smallest correct request on the Interactions API has two fields: the model and the input. There is no contents array and no config object to build — the thinking level and the output cap live in one <code>generation_config</code> dict, which you will meet in the next step. Here is the whole call, plus the two helpers this tutorial uses on every step: <code>cost_of</code>, which prices an interaction from its usage object, and <code>show_usage</code>, which prints the four numbers that matter.</p>
+<pre><code class="language-python">from google import genai
+
+MODEL = "gemini-4-neon"
+
+# USD per million tokens, Gemini 4 Neon standard tier (Google pricing page).
+PRICES = {"input": 3.00, "output": 15.00, "cache_read": 0.15}
+
+
+def cost_of(usage) -&gt; float:
+    """USD cost of one interaction, from its usage object."""
+    fresh = usage.total_input_tokens - usage.total_cached_tokens
+    return (
+        fresh * PRICES["input"]
+        + usage.total_cached_tokens * PRICES["cache_read"]
+        + (usage.total_output_tokens + usage.total_thought_tokens)
+        * PRICES["output"]
+    ) / 1_000_000
+
+
+def show_usage(tag, interaction):
+    u = interaction.usage
+    print(
+        f"{tag}: {u.total_input_tokens} in / "
+        f"{u.total_output_tokens} visible out / "
+        f"{u.total_thought_tokens} thinking / "
+        f"${cost_of(u):.4f}"
+    )
+
+
+client = genai.Client()  # reads GEMINI_API_KEY from the environment
+interaction = client.interactions.create(
+    model=MODEL,
+    input="In one paragraph, what is a thinking level?",
+)
+print(interaction.output_text)
+show_usage("first call", interaction)</code></pre>
+<p>Expected output — the usage line is from the scripted verification run, so your counts will differ:</p>
+<pre><code class="language-text">first call: 412 in / 2600 visible out / 3400 thinking / $0.0912</code></pre>
+<p>Three fields on the usage object do the pricing work, and they are the reason this tutorial prints them after every call. <code>total_input_tokens</code> is everything you sent, <code>total_output_tokens</code> is the visible reply, and <code>total_thought_tokens</code> is the reasoning you never see — billed at the $15 output rate, not the $3 input rate. <code>total_cached_tokens</code> is the share of the input served from implicit cache at $0.15. Add them up and the first call cost nine cents in the verification run — most of it thinking, which is the pattern for the rest of this tutorial.</p>
+<p>Two things are different from requests you may have written for Gemini 2.5 or 3.8 Flash. First, the call posts to <code>/v1/interactions</code> with the model in the body, not in the URL — the SDK handles that, but if you log requests (as the verification harness did), expect the new path. Second, there is no <code>temperature</code>, <code>top_p</code>, or <code>top_k</code> anywhere in the config: on Gemini 4 those sampling knobs are gone — in-range values are ignored and out-of-range values return a 400. If a reply feels too random or too flat, change the thinking level or the wording. There is no sampling knob left to turn.</p>
+<h2 id="step-3-thinking-levels">Step 3 — Thinking levels: the one dial that matters<a class="anchor" href="#step-3-thinking-levels" aria-label="Link to section">#</a></h2>
+<p>Thinking level is the single most misunderstood parameter on Neon, because it looks like a quality setting and behaves like a budget. It controls how many tokens the model spends reasoning before it answers — and every one of those tokens bills at the $15 output rate. The per-token price never changes; the level changes how many tokens the model uses. Four levels are documented for Neon, and Google&#x27;s guidance is specific about where to start:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Level</th><th>What it is for</th><th>Default anywhere?</th></tr></thead>
+<tbody>
+<tr><td><code>low</code></td><td>Fewest thinking tokens, lowest latency. Routing, classification, short summaries, extraction.</td><td>No</td></tr>
+<tr><td><code>medium</code></td><td>Balances reasoning quality and latency. Interactive work, responsive chat, drafting.</td><td>No — but the default on Argon and Carbon</td></tr>
+<tr><td><code>high</code></td><td>Deep reasoning, multi-step problem solving, multi-turn tool use. Agent runs, hard analysis.</td><td>API default on Neon — start here</td></tr>
+<tr><td><code>xhigh</code></td><td>Maximum thinking capacity, for the hardest math, science, and long-horizon work.</td><td>No — Neon&#x27;s highest intelligence score (61 on the AA Index) is measured here</td></tr>
+</tbody>
+</table></div>
+<p>The loop below runs the same question at all four levels and prints the usage each time. The question is deliberately easy — a division with a checkable answer — because the point is the cost curve, not the answer:</p>
+<pre><code class="language-python">LEVELS = ("low", "medium", "high", "xhigh")
+
+
+def thinking_levels(client, question):
+    for level in LEVELS:
+        interaction = client.interactions.create(
+            model=MODEL,
+            input=question,
+            generation_config={
+                "thinking_level": level,
+                "max_output_tokens": 8192,
+            },
+        )
+        show_usage(level, interaction)
+        print("  answer:", interaction.output_text.strip()[:120])
+
+
+thinking_levels(
+    client,
+    "A company reports Q3 revenue of $412M, up 18% year over year. "
+    "What was Q3 revenue a year ago, to the nearest $0.1M? "
+    "Show the arithmetic.",
+)</code></pre>
+<p>Expected output — token counts from the scripted verification run:</p>
+<pre><code class="language-text">low: 412 in / 900 visible out / 300 thinking / $0.0192
+  answer: Q3 revenue a year ago was $349.2M (412 / 1.18).
+medium: 412 in / 1800 visible out / 1400 thinking / $0.0492
+  answer: Q3 revenue a year ago was $349.2M (412 / 1.18).
+high: 412 in / 2600 visible out / 3400 thinking / $0.0912
+  answer: Q3 revenue a year ago was $349.2M (412 / 1.18).
+xhigh: 412 in / 4800 visible out / 9100 thinking / $0.2097
+  answer: Q3 revenue a year ago was $349.2M (412 / 1.18).</code></pre>
+<p>Two lessons. First, the spread: the same question costs eleven times more at <code>xhigh</code> than at <code>low</code> ($0.2097 against $0.0192), and the thinking tokens grow far faster than the visible reply — 300 at <code>low</code>, 9,100 at <code>xhigh</code>. Second, the answer is identical at every level, because the question is easy. That is the whole discipline of the dial: <code>low</code> is enough for arithmetic, extraction, and routing, and every level above <code>low</code> is money spent on a harder question than the one you asked. Google&#x27;s advice is to start at <code>high</code> for most complex tasks and reserve <code>xhigh</code> for problems where <code>high</code> is not enough — and to set the level explicitly on every request, even when you want the default. A default you did not choose is a default you will forget.</p>
+<p>One more detail worth recording: the SDK&#x27;s type also accepts a <code>minimal</code> level, but the model page lists only <code>low</code>, <code>medium</code>, <code>high</code>, and <code>xhigh</code> as supported for Neon. Use one of the four. And remember the cap: the 65,536-token output limit covers thinking and reply together, so a deep level with a low <code>max_output_tokens</code> can spend the whole budget on thought and return no answer at all. Set <code>max_output_tokens</code> generously on hard questions — Step 7 shows how far it goes.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/gemini-4-neon-research-analyst-tutorial/img2.webp" alt="Illustration of the analyst pipeline: documents and a chart flow into the model, the model checks its numbers with a calculator, and a structured report comes out"><figcaption>AI-generated illustration: the analyst pipeline — documents in, verified numbers, structured report out.</figcaption></figure>
+<h2 id="step-4-structured-output">Step 4 — Structured output: make the brief machine-readable<a class="anchor" href="#step-4-structured-output" aria-label="Link to section">#</a></h2>
+<p>A paragraph is a dead end for an analyst workflow — the brief has to feed the next step, and the next step is code. Structured output makes the model return JSON that matches a schema you define, so the figures come back as numbers with sources instead of sentences you have to parse. The schema below is the whole contract of the analyst: a verdict, findings, figures with sources, risks, and a confidence score.</p>
+<pre><code class="language-python">from pydantic import BaseModel, Field
+
+
+class Figure(BaseModel):
+    label: str = Field(description="What the number measures.")
+    value: float
+    unit: str = Field(description="e.g. USD millions, percent, headcount.")
+    source: str = Field(description="Where in the document it came from.")
+
+
+class AnalystBrief(BaseModel):
+    verdict: str = Field(description="One-sentence bottom line.")
+    key_findings: list[str]
+    figures: list[Figure]
+    risks: list[str]
+    confidence: float = Field(ge=0.0, le=1.0)</code></pre>
+<p>The call adds one argument — <code>response_format</code> — carrying the schema as JSON. The docs&#x27; own recipe example passes a pydantic schema the same way, and the SDK sends it as-is, including the <code>$defs</code> block pydantic generates for the nested <code>Figure</code> model:</p>
+<pre><code class="language-python">import json
+
+
+def structured_brief(client, text):
+    interaction = client.interactions.create(
+        model=MODEL,
+        input=(
+            "Write an analyst brief for the document below. "
+            "Extract every figure with its source, list the risks, "
+            "and give a one-sentence verdict.\n\n" + text
+        ),
+        generation_config={"thinking_level": "high"},
+        response_format={
+            "type": "text",
+            "mime_type": "application/json",
+            "schema": AnalystBrief.model_json_schema(),
+        },
+    )
+    brief = AnalystBrief.model_validate_json(interaction.output_text)
+    print(json.dumps(brief.model_dump(), indent=2))
+    show_usage("structured brief", interaction)
+    return brief</code></pre>
+<p>Expected output — the brief from the scripted verification run:</p>
+<pre><code class="language-json">{
+  "verdict": "ACME grew 18% year over year with margins intact.",
+  "key_findings": ["Revenue up 18% YoY", "Margins flat at 41%"],
+  "figures": [
+    {"label": "Q3 revenue", "value": 412.0, "unit": "USD millions",
+     "source": "p. 2, revenue table"},
+    {"label": "Q3 revenue, prior year", "value": 349.2,
+     "unit": "USD millions", "source": "p. 2, revenue table"}
+  ],
+  "risks": ["Customer concentration in the top account"],
+  "confidence": 0.85
+}</code></pre>
+<p>The validation line is not optional decoration. <code>model_validate_json</code> raises if the model returns anything that is not a valid brief — a missing field, a string where a number belongs — and a raise you can see beats a bad number that flows into a report. Keep schemas inside the constructs the docs demonstrate: nested objects, arrays, optional fields, enums. If the model keeps failing validation, simplify the schema before you blame the model.</p>
+<h2 id="step-5-read-documents">Step 5 — Read a PDF and a chart in one call<a class="anchor" href="#step-5-read-documents" aria-label="Link to section">#</a></h2>
+<p>Neon&#x27;s input side is where the million-token context earns its keep: text, image, video, audio, and PDF in a single request. The call below sends the earnings release as an inline document and the revenue chart as an image, and asks for the same <code>AnalystBrief</code> schema back — one call, three modalities, figures sourced to a page or a chart label.</p>
+<pre><code class="language-python">import base64
+from pathlib import Path
+
+
+def read_documents(client, pdf_path, chart_path):
+    pdf_b64 = base64.b64encode(Path(pdf_path).read_bytes()).decode("utf-8")
+    chart_b64 = base64.b64encode(Path(chart_path).read_bytes()).decode("utf-8")
+    interaction = client.interactions.create(
+        model=MODEL,
+        input=[
+            {
+                "type": "text",
+                "text": (
+                    "Extract an analyst brief from the attached earnings "
+                    "release PDF and revenue chart. Return JSON matching "
+                    "the schema, with every figure sourced to a page or "
+                    "chart label."
+                ),
+            },
+            {
+                "type": "document",
+                "data": pdf_b64,
+                "mime_type": "application/pdf",
+            },
+            {
+                "type": "image",
+                "data": chart_b64,
+                "mime_type": "image/png",
+            },
+        ],
+        generation_config={"thinking_level": "high"},
+        response_format={
+            "type": "text",
+            "mime_type": "application/json",
+            "schema": AnalystBrief.model_json_schema(),
+        },
+    )
+    brief = AnalystBrief.model_validate_json(interaction.output_text)
+    show_usage("document brief", interaction)
+    return brief</code></pre>
+<p>Inline files have a size limit — 50MB for PDFs — and the same input shape accepts a file URI from the File API or Cloud Storage for anything larger or reused across calls (files up to 2GB through the File API). For this tutorial, inline base64 is the right call: the documents are small, the code has no upload step, and the request is self-contained. Expected output from the verification run: <code>document brief: 5200 in / 800 visible out / 2400 thinking / $0.0636</code> — six cents to read a document and a chart and return a validated brief. Note the input token count is the document itself: a dense 200,000-token pack would cost $0.60 before the model writes a word, which is why Step 8 prices the input separately.</p>
+<h2 id="step-6-verify-figures">Step 6 — Verify the numbers with code execution<a class="anchor" href="#step-6-verify-figures" aria-label="Link to section">#</a></h2>
+<p>A model that reads a table can still mis-add it. The brief&#x27;s growth rates are claims until something recomputes them, and the cheapest something is the model&#x27;s own code execution tool: it writes Python, runs it, and reads the result — in the same interaction, with the code and the output visible as typed steps.</p>
+<pre><code class="language-python">def verify_figures(client, brief):
+    """Recompute the brief's growth figures with code execution."""
+    lines = "\n".join(
+        f"- {f.label}: {f.value} {f.unit} ({f.source})"
+        for f in brief.figures
+    )
+    interaction = client.interactions.create(
+        model=MODEL,
+        input=(
+            "These figures came from an earnings release. Generate and "
+            "run Python code to recompute the year-over-year growth rate "
+            "for each revenue figure that has a prior-year value, and "
+            "flag any figure that does not reconcile.\n\n" + lines
+        ),
+        tools=[{"type": "code_execution"}],
+    )
+    for step in interaction.steps or []:
+        if step.type == "model_output":
+            for block in step.content:
+                if block.type == "text":
+                    print(block.text)
+        elif step.type == "code_execution_call":
+            print("--- code the model ran ---")
+            print(step.arguments.code)
+        elif step.type == "code_execution_result":
+            print("--- result ---")
+            print(step.result)
+    show_usage("code execution", interaction)
+    return interaction</code></pre>
+<p>Expected output from the scripted verification run:</p>
+<pre><code class="language-text">--- code the model ran ---
+print(412/349.2 - 1)
+--- result ---
+0.1799...
+Recomputed growth is 18.0%. All figures reconcile.
+code execution: 1200 in / 900 visible out / 1500 thinking / $0.0396</code></pre>
+<p>The walk over <code>interaction.steps</code> is the part to copy exactly: <code>model_output</code> steps carry the prose, <code>code_execution_call</code> steps carry the code in <code>step.arguments.code</code>, and <code>code_execution_result</code> steps carry the output in <code>step.result</code>. Four cents to check the arithmetic — and the check is worth more than the brief, because a wrong growth rate in a report is worse than no growth rate at all. Two limits: code execution runs Python only, and the model can only verify what you give it — if a figure has no prior-year value in the brief, there is nothing to recompute, and the model should say so rather than invent one.</p>
+<h2 id="step-7-long-decode">Step 7 — Long decode: write the full report<a class="anchor" href="#step-7-long-decode" aria-label="Link to section">#</a></h2>
+<p>The brief is a page; the deliverable is a report. The problem is the 65,536-token cap: a single synchronous response stops there, and thinking counts against the same budget. Long decode raises <code>max_output_tokens</code> past 64K — up to the 1M-token unified window — by splitting generation into hops of up to 64K tokens on Neon and continuing from where the previous hop stopped. The easiest way to run it is background execution: the servers run every hop, and you poll until the interaction completes.</p>
+<pre><code class="language-python">import time
+
+
+def long_report(client, brief):
+    """Write the full report as a background interaction (long decode)."""
+    interaction = client.interactions.create(
+        model=MODEL,
+        input=(
+            "Write a complete analyst report from this brief: executive "
+            "summary, segment-by-segment analysis, risk section, and "
+            "appendix with every figure and its source. Be thorough; "
+            "this is the long-form deliverable.\n\n"
+            + brief.model_dump_json(indent=2)
+        ),
+        background=True,
+        generation_config={
+            "thinking_level": "high",
+            "max_output_tokens": 262144,
+        },
+    )
+    while interaction.status in ("in_progress", "queued"):
+        time.sleep(5)
+        interaction = client.interactions.get(id=interaction.id)
+    text = "".join(
+        block.text
+        for step in interaction.steps or []
+        if step.type == "model_output"
+        for block in step.content
+        if block.type == "text"
+    )
+    print(f"report: {len(text)} characters, status {interaction.status}")
+    show_usage("long report", interaction)
+    return text</code></pre>
+<p>Expected output from the scripted verification run:</p>
+<pre><code class="language-text">report: 9018 characters, status completed
+long report: 5000 in / 30000 visible out / 20000 thinking / $0.7650</code></pre>
+<p>Three details from the docs that save debugging time. First, always set <code>max_output_tokens</code> above 65,536 for long decode — the docs warn that a low value, such as 8,192, stops the model before it finishes thinking. Second, poll with <code>interactions.get</code> until the status leaves <code>in_progress</code>, then join the <code>model_output</code> steps — the background example in the docs does exactly this, because the server runs every hop and the completed interaction carries the combined output. (If you switch to client-side continuation instead, save the response from <code>create</code>: there, <code>get</code> returns only the last hop.) Third, background execution runs for up to 24 hours and needs stored interactions (<code>store: true</code>, the SDK default) — if you disable storage, you lose the ability to poll. The scripted run above cost $0.77 for 50,000 output tokens; a real long report at <code>xhigh</code> will cost more, and you will see it in the thinking count before you see it anywhere else.</p>
+<h2 id="step-8-cost">Step 8 — What a run actually costs<a class="anchor" href="#step-8-cost" aria-label="Link to section">#</a></h2>
+<p>Neon&#x27;s price card is simple — $3 per million input tokens, $15 per million output tokens, flat across the whole 1M-token window — but the bill is not, because three different token counts feed into it. The <code>cost_of</code> helper in Step 2 reads them all from the usage object: fresh input at $3.00, cached input at $0.15, and visible output plus thinking at $15.00. Work it through once by hand, for a run with a 200,000-token document pack, 8,000 visible output tokens, and 12,000 thinking tokens:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Token bucket</th><th>Tokens</th><th>Rate per MTok</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td>Fresh input</td><td>200,000</td><td>$3.00</td><td>$0.6000</td></tr>
+<tr><td>Visible output</td><td>8,000</td><td>$15.00</td><td>$0.1200</td></tr>
+<tr><td>Thinking</td><td>12,000</td><td>$15.00</td><td>$0.1800</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>220,000</strong></td><td>—</td><td><strong>$0.9000</strong></td></tr>
+</tbody>
+</table></div>
+<figure class="inline-art"><img class="story-image" src="/articles/gemini-4-neon-research-analyst-tutorial/img3.webp" alt="Illustration of token costs: three rising bars with gold coins and a gauge, showing thinking as the tallest cost"><figcaption>AI-generated illustration: the cost of one run — input, visible output, and thinking, with thinking usually the tallest bar.</figcaption></figure>
+<p>Two lessons hide in that table. The first is the cache: Neon supports implicit caching only — no explicit context caching — and it discounts cache hits by 95% to $0.15 per million. Run the same documents a second time and the input line falls from $0.60 to $0.03, bringing the same analysis to $0.33. The second lesson is the thinking: a third of the output tokens here were reasoning, and at <code>xhigh</code> that share grows fast. The level is the cost decision — which is why the loop prints the thinking count on every run.</p>
+<p>Two more rates for the budget-conscious. The Batch and Flex tiers halve both prices to $1.50 and $7.50 per million tokens, for work that can wait or flex. And Priority — $5.40 and $27.00 — buys speed, not savings. There is no free tier to fall back on: every token Neon processes is counted and billed, including thinking tokens.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>Three routes reach the same model, and the right one depends on what you are building rather than what you prefer:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Route</th><th>Use it when</th><th>You give up</th></tr></thead>
+<tbody>
+<tr><td><strong>Interactions API</strong> (this tutorial)</td><td>You want multi-step, tool-using work without writing the loop, and long decode as a background job.</td><td>Fine-grained control over history and retries; the platform builds requests for you.</td></tr>
+<tr><td><strong>Raw GenerateContent API</strong></td><td>You need exact control over history, tools, and token accounting — a product, a harness, an eval.</td><td>Convenience: you own the loop, the retries, and the continuation hops.</td></tr>
+<tr><td><strong>Google Antigravity</strong></td><td>A human is driving: interactive coding, with Neon as the Orchestrator directing parallel Hydrogen subagents in one session.</td><td>Programmatic control and per-request cost accounting. Needs a paid Pro or Ultra subscription.</td></tr>
+</tbody>
+</table></div>
+<p>The model choice is a separate question, and Google&#x27;s own ladder answers it. Neon is the middle — deeper than Hydrogen, cheaper than Carbon — and the deciding number is cost per task, not price per token:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Model</th><th>Context / max output</th><th>Price per MTok in / out</th><th>Thinking default / cap</th><th>Reach for it when</th></tr></thead>
+<tbody>
+<tr><td>Gemini 4 Hydrogen</td><td>1M / 65K</td><td>$1.50 / $7.50</td><td><code>high</code> / <code>xhigh</code></td><td>Everyday coding, agent runs, tool use. Start here. Free tier.</td></tr>
+<tr><td><strong>Gemini 4 Neon</strong></td><td>1M / 65K</td><td>$3.00 / $15.00</td><td><code>high</code> / <code>xhigh</code></td><td>Complex analysis, research, long agent work. This tutorial.</td></tr>
+<tr><td>Gemini 4 Argon</td><td>1M / 65K</td><td>$2 / $10 until Nov 30, then $4 / $20</td><td><code>medium</code> / <code>high</code></td><td>Harder reasoning where Neon falls short. No free tier.</td></tr>
+<tr><td>Gemini 4 Carbon</td><td>1M / 65K</td><td>$2 / $10 until Nov 30, then $4 / $20</td><td><code>medium</code> / <code>high</code></td><td>The hardest long-horizon work; the planner in a Carbon-plus-Hydrogen pair.</td></tr>
+</tbody>
+</table></div>
+<p>Google&#x27;s own cost-per-task claim makes the point: at its default <code>high</code> level, Neon pairs a high Artificial Analysis score with a 32% lower cost per task than Carbon. Measure cost per task on your own workload before you standardise: run the same analysis at two thinking levels, read the usage objects, and let the bill decide. Note the Argon and Carbon prices rise on December 1 — after that date Neon is cheaper than both per token, not just per task.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Gemini 4 Neon is not a cheaper Carbon — it is a different contract. Thinking is a four-level dial, sampling knobs are gone, thinking bills as output, the output cap is 65,536 tokens unless you ask for long decode, and the usage object is the only honest record of what a run cost. In exchange you get a model that reads a million tokens of PDFs, charts, and spreadsheets in one call, returns structured briefs you can feed to code, verifies its own arithmetic, and writes the long report in the background.</p>
+<p>The analyst in this tutorial is the whole contract in one file: thinking set explicitly, documents inlined and sourced, figures validated against a schema, numbers recomputed with code execution, the long report behind a background poll, and the usage object read after every call. Start at <code>high</code>, drop to <code>medium</code> for interactive work, measure cost per task before you touch <code>xhigh</code>, and never let a growth rate into a report that code has not recomputed. Do that, and Neon is the cheapest way to finish the analytical work the frontier models are too expensive to touch.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-neon/" rel="nofollow">Google — Introducing Gemini 4 Neon</a> (November 18, 2026) — the launch announcement: $3/$15 pricing, the Artificial Analysis Intelligence Index score of 61 at xhigh, the Coding Agent Index lead at 58.6, Terminal-Bench 4.1 at 65.2%, the 32%-lower-cost-per-task claim, and the Antigravity Orchestrator pattern. All benchmark figures in this tutorial are Google&#x27;s own, vendor-reported numbers.</li>
+<li><a href="https://ai.google.dev/gemini-api/docs/models/gemini-4-neon" rel="nofollow">Google AI Studio — Gemini 4 Neon model documentation</a> — the model ID, the 1M-token context, the 65,536-token default output cap, the capability list, and the thinking levels low, medium, high, xhigh.</li>
+<li><a href="https://ai.google.dev/gemini-api/docs/pricing" rel="nofollow">Google AI Studio — Gemini Developer API pricing</a> — Neon Standard, Batch, Flex, and Priority rates, the $0.15 cached-input rate, implicit caching only, and no free tier; Carbon and Argon at $2/$10 through November 30, $4/$20 from December 1.</li>
+<li><a href="https://ai.google.dev/gemini-api/docs/thinking" rel="nofollow">Google AI Studio — Thinking</a>, <a href="https://ai.google.dev/gemini-api/docs/long-decode" rel="nofollow">Long decode</a>, <a href="https://ai.google.dev/gemini-api/docs/structured-output" rel="nofollow">Structured outputs</a>, <a href="https://ai.google.dev/gemini-api/docs/code-execution" rel="nofollow">Code execution</a>, <a href="https://aistudio.google.com/docs/file-input-methods" rel="nofollow">File input methods</a> — the API shapes used in Steps 2–7: the Interactions API, thinking levels, background long decode, the response_format schema, the code execution tool, and inline document input.</li>
+<li><a href="https://aifrontierpost.com/articles/gemini-4-neon-google-release-live/">AI Frontier Post — Google releases Gemini 4 Neon, the mid-tier model its billing catalog leaked this morning</a> — the release itself, covered earlier today.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="gemini-4-neon-research-analyst-tutorial"></div><div class="comments" data-comments="gemini-4-neon-research-analyst-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/video-shotcraft-ai-product-promo-tutorial/"><span class="chip">Tutorials</span><h3>Make product promos with your coding agent: hands-on with video-shotcraft&#x27;s 124-shot Remotion library</h3><div class="meta">November 18, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/gpt-6-2-astra-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end</h3><div class="meta">November 18, 2026 · 26 min read</div></a><a class="rel-card" href="/articles/heretic-training-free-model-steering-tutorial/"><span class="chip">Tutorials</span><h3>Steer any LLM without training: hands-on with Heretic, the 41,000-star model modifier</h3><div class="meta">November 18, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/google-adk-multi-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</h3><div class="meta">November 18, 2026 · 19 min read</div></a></div></section>
+
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a paid API key to follow this tutorial?</h3><p>Yes. Neon is not available on the free tier — every token is counted and billed, including thinking tokens. Hydrogen is the only Gemini 4 model with a free tier. The key comes from Google AI Studio, and the SDK reads it from <code>GEMINI_API_KEY</code>.</p><h3>Can Neon generate images or audio?</h3><p>No. Output is text only: image generation, audio generation, and the Live API are not supported. What it does read is broad — text, image, video, audio, and PDF as input — which is why the analyst workflow fits it.</p><h3>What happens when my reply stops at 65,536 tokens?</h3><p>That is the default synchronous output cap, and thinking counts against it. Raise <code>max_output_tokens</code> past 65,536 and use background execution or client-side continuation — Step 7 shows the background form. A deep thinking level with a low cap can return nothing at all.</p><h3>Why did my old Gemini code return a 400 on Neon?</h3><p>The usual causes are the ones that break every Gemini 4 model: <code>temperature</code>, <code>top_p</code>, or <code>top_k</code> in the config, the old <code>thinking_budget</code> control, or the <code>minimal</code> thinking level. Set <code>thinking_level</code> explicitly and drop the sampling knobs.</p></section>
+
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/gemini-4-neon-google-release-live/">Google releases Gemini 4 Neon, the mid-tier model its billing catalog leaked this morning</a></li><li><a href="/articles/gemini-4-hydrogen-agentic-coding-tutorial/">Build a fast agentic coding loop with Gemini 4 Hydrogen</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</a></li><li><a href="/articles/gpt-6-2-astra-coding-agent-tutorial/">Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
