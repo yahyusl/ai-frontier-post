@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK — AI Frontier Post</title>
+<meta name="description" content="Agent Builder shuts down November 30, 2026. The replacement is a stack you own: ChatKit for the chat UI, the Agents SDK for the brain, and a Python server you run yourself. Build the whole thing — tools, guardrails, and all.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/chatkit-agents-sdk-support-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK">
+<meta property="og:description" content="Agent Builder shuts down November 30, 2026. The replacement is a stack you own: ChatKit for the chat UI, the Agents SDK for the brain, and a Python server you run yourself. Build the whole thing — tools, guardrails, and all.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/chatkit-agents-sdk-support-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/chatkit-agents-sdk-support-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-17">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK", "description": "Agent Builder shuts down November 30, 2026. The replacement is a stack you own: ChatKit for the chat UI, the Agents SDK for the brain, and a Python server you run yourself. Build the whole thing — tools, guardrails, and all.", "datePublished": "2026-11-17", "dateModified": "2026-11-17", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/chatkit-agents-sdk-support-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/chatkit-agents-sdk-support-agent-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is Agent Builder really shutting down?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. OpenAI's documentation states Agent Builder will be shut down on November 30, 2026. ChatKit itself is not deprecated — it remains available, and the documented path for new work is ChatKit with your own server, built with the ChatKit SDK and the Agents SDK."}}, {"@type": "Question", "name": "Do I need a workflow ID from Agent Builder to use ChatKit?", "acceptedAnswer": {"@type": "Answer", "text": "No — not on the custom-server path. Workflow IDs belong to the hosted Agent Builder integration. With a self-hosted ChatKit server, the frontend connects directly to your server's /chatkit endpoint with a domain key, and there is no client secret or session endpoint involved."}}, {"@type": "Question", "name": "Why does this tutorial implement its own MemoryStore?", "acceptedAnswer": {"@type": "Answer", "text": "Because openai-chatkit 1.6.5 ships no MemoryStore class, even though the documentation's simplified example imports one from chatkit.store. The Store base class is abstract, so any ChatKit server needs a concrete store implementation. The in-memory version in this tutorial is about 70 lines and is fine for development; production needs a database-backed store."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</h1>
+<p class="lede">Agent Builder shuts down on November 30, 2026 — thirteen days from now. If you built your support agent on its visual canvas, you need a new home for it. The replacement is a stack you own outright: ChatKit for the chat UI, the Agents SDK for the brain, and a small Python server in the middle. Here is the whole thing, built and verified end to end.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 17, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> OpenAI is shutting down Agent Builder on November 30, 2026, but ChatKit survives. The documented replacement is a self-hosted ChatKit server: your backend subclasses ChatKitServer, wires an Agents SDK agent into respond(), and exposes one POST /chatkit route. The frontend is a React component that points at your server — no workflow ID, no client secret. This tutorial builds a working order-support agent that way, with real tools and a guardrail that keeps card numbers out of the model.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Deadline:</b> Agent Builder and the Evals platform shut down November 30, 2026; ChatKit remains available. The deprecation was announced June 3, 2026.</li><li><b>The surviving stack:</b> ChatKit Python SDK (<code>openai-chatkit</code> 1.6.5) + Agents SDK (<code>openai-agents</code> 0.24.0) + FastAPI, with <code>@openai/chatkit-react</code> 1.6.1 on the frontend.</li><li><b>Two docs traps:</b> the ChatKit docs' example imports a <code>MemoryStore</code> that does not exist in 1.6.5, and calls <code>simple_to_agent_input(thread, item, context)</code> with the wrong signature — both are corrected below.</li><li><b>Cost:</b> no ChatKit platform fee; you pay standard API token rates for the model you choose, plus $0.10/GB-day for ChatKit upload storage (1 GB free).</li><li><b>Verified:</b> every import, signature, and server behavior in this tutorial was exercised in a sandbox; the one thing that needs your key is the live model reply (see Step 6).</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/chatkit-agents-sdk-support-agent-tutorial/cover.webp" alt="A laptop showing an online store with a customer-support chat widget open, a parcel and a checkmark beside it"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>OpenAI's AgentKit launched at DevDay in October 2025 as the friendly way to ship agents: draw the workflow on a canvas in Agent Builder, embed it with ChatKit, measure it with Evals. A year later, two of those three pieces are being switched off. Agent Builder and Evals go read-only, then dark, on November 30, 2026. ChatKit — the embeddable chat UI — survives, and the docs now point new work at "advanced ChatKit integrations": run ChatKit on your own infrastructure, backed by any agent you write with the Agents SDK.</p>
+<p>That is a better deal than it sounds. The hosted path rented you a workflow ID and a session endpoint; the self-hosted path gives you the whole server. Your agent runs in your process, your tools hit your database, your guardrails run before the model ever sees the message, and your API key never leaves your backend. The price is about 200 lines of Python, most of it boilerplate. This tutorial writes those lines, runs them, and tests them — including the two places where the official docs are currently wrong.</p>
+<p>What you will build: a support agent for a small online store, embedded as a chat widget on the store's site. A customer asks "Where is my order 4821?" and the agent looks the order up with a tool and answers. A customer asks about refunds and the agent answers from a policy tool. A customer pastes a credit-card number and the guardrail stops the message before it reaches the model.</p>
+<h2 id="what-you-will-need">What you'll need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>An OpenAI API key</strong> with billing enabled. The agent calls the API on every reply, so the key needs to be live — the sandbox used to verify this tutorial could not complete a model call without one, and neither can you.</li><li><strong>Python 3.11 or newer.</strong> The ChatKit SDK requires 3.10+; the official starter targets 3.11. A virtual environment is strongly recommended.</li><li><strong>Node.js 18+</strong> for the frontend, plus npm.</li><li><strong>About an hour</strong>, most of it reading, not typing.</li></ul>
+<p>On cost: there is no separate ChatKit price. You pay the underlying model's token rates — this tutorial uses <code>gpt-4.1-mini</code>, the model in OpenAI's own ChatKit starter, which keeps a support conversation to fractions of a cent. ChatKit file and image upload storage is $0.10 per GB-day with 1 GB free, which a text-only support widget will never touch.</p>
+<h2 id="step-1-install-the-stack">Step 1: Install the stack<a class="anchor" href="#step-1-install-the-stack" aria-label="Link to section">#</a></h2>
+<p>Create the project and install the backend dependencies. Pin the versions that were verified for this tutorial — the ChatKit SDK moves fast, and its docs lag behind its releases, as you are about to see.</p>
+<pre><code class="language-bash">mkdir support-agent &amp;&amp; cd support-agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install openai-chatkit==1.6.5 openai-agents==0.24.0 fastapi "uvicorn[standard]"</code></pre>
+<p>Verify the install before writing any code. The imports below are the exact ones the server needs, and all of them must resolve:</p>
+<pre><code class="language-bash">python -c "
+from chatkit.server import ChatKitServer
+from chatkit.store import Store
+from chatkit.agents import AgentContext, stream_agent_response, simple_to_agent_input
+from agents import Agent, Runner, function_tool, input_guardrail
+print('all imports OK')
+"</code></pre>
+<p>Note what is <em>not</em> in that list: <code>MemoryStore</code>. The ChatKit docs' example imports it from <code>chatkit.store</code>, but version 1.6.5 ships no such class — the import fails. The <code>Store</code> base class is abstract, and you are expected to implement it. Step 4 does that. This is the first of two docs errors this tutorial corrects; the second is in Step 5.</p>
+<h2 id="step-2-give-the-agent-tools">Step 2: Give the agent tools<a class="anchor" href="#step-2-give-the-agent-tools" aria-label="Link to section">#</a></h2>
+<p>An agent without tools is a chatbot with opinions. This one gets two: an order lookup and a refund policy. The order data is a dict standing in for a database — in production, <code>lookup_order</code> would run a query instead of a dict lookup, and nothing else in the file would change.</p>
+<p>Create <code>server.py</code> and add the tools:</p>
+<pre><code class="language-python">from agents import Agent, function_tool
+
+# Demo data: a tiny order book. In production this would be a database query.
+ORDERS = {
+    "4821": {"status": "shipped", "item": "Aurora headphones", "total": 74.99},
+    "4822": {"status": "processing", "item": "USB-C hub", "total": 39.00},
+    "4823": {"status": "delivered", "item": "Mechanical keyboard", "total": 129.50},
+}
+
+
+@function_tool
+def lookup_order(order_id: str) -> str:
+    """Look up an order by its number and return its status."""
+    order = ORDERS.get(order_id.strip())
+    if order is None:
+        return f"No order found with number {order_id}."
+    return (
+        f"Order {order_id}: {order['item']}, ${order['total']:.2f}, "
+        f"status: {order['status']}."
+    )
+
+
+@function_tool
+def refund_policy() -> str:
+    """Return the store's refund policy."""
+    return (
+        "Refunds are available within 30 days of delivery for unused items. "
+        "Refunds are issued to the original payment method within 5 business days."
+    )</code></pre>
+<p>The <code>@function_tool</code> decorator turns each plain function into a tool the model can call, generating the JSON schema from the type hints. The docstring becomes the tool description the model reads when deciding which tool to use, so write it as an instruction, not a comment. Verified behavior: calling <code>lookup_order</code> with <code>"4821"</code> returns <code>"Order 4821: Aurora headphones, $74.99, status: shipped."</code>, and with an unknown number it returns a clean "No order found" instead of inventing an order.</p>
+<h2 id="step-3-add-a-guardrail-and-assemble-the-agent">Step 3: Add a guardrail and assemble the agent<a class="anchor" href="#step-3-add-a-guardrail-and-assemble-the-agent" aria-label="Link to section">#</a></h2>
+<p>Support chats are where customers paste things they should not paste — most commonly, card numbers. An input guardrail runs before the model sees the message and can halt the run entirely by raising a tripwire. This one is a regex heuristic: demo-grade, not PCI compliance — a production guardrail would add a Luhn check and an allowlist for order numbers. For the tutorial it does the job: it fires on card-shaped digit runs and ignores order numbers and prices.</p>
+<pre><code class="language-python">import re
+
+from agents import (
+    Agent,
+    GuardrailFunctionOutput,
+    RunContextWrapper,
+    input_guardrail,
+)
+
+# Demo-grade heuristic: 13-19 digits with optional spaces or dashes.
+# Production systems should add a Luhn check.
+CARD_RE = re.compile(r"\b(?:\d[ -]?){13,16}\b")
+
+
+@input_guardrail
+async def no_card_numbers(
+    ctx: RunContextWrapper[None], agent: Agent, input: str | list
+) -> GuardrailFunctionOutput:
+    text = input if isinstance(input, str) else str(input)
+    triggered = bool(CARD_RE.search(text))
+    return GuardrailFunctionOutput(
+        output_info={"reason": "possible card number" if triggered else "clean"},
+        tripwire_triggered=triggered,
+    )</code></pre>
+<p>Verified: with the message <code>"my card is 4111 1111 1111 1111 please charge it"</code> the guardrail trips (<code>tripwire_triggered=True</code>); with <code>"Where is my order 4821?"</code> and <code>"What is your refund policy?"</code> it passes. A tripped input guardrail raises <code>InputGuardrailTripwireTriggered</code> and the agent's execution stops before any model call — the card number never reaches OpenAI.</p>
+<p>Now assemble the agent itself:</p>
+<pre><code class="language-python">support_agent = Agent(
+    name="support_agent",
+    model="gpt-4.1-mini",
+    instructions=(
+        "You are a helpful support agent for an online store. "
+        "Use lookup_order to check order status and refund_policy for refund questions. "
+        "Never ask for or repeat payment card numbers. Be concise."
+    ),
+    tools=[lookup_order, refund_policy],
+    input_guardrails=[no_card_numbers],
+)</code></pre>
+<p>Two choices worth noting. The model is <code>gpt-4.1-mini</code> because that is the model in OpenAI's official ChatKit starter — cheap, fast, and more than capable of tool calls and short answers. The docs' custom-server example uses <code>gpt-6.2-astra</code>; swap the string if you want the newer model. And the instructions repeat the card-number rule even though the guardrail enforces it — defense in depth costs nothing, and instructions are what the model falls back on when a guardrail's heuristic misses.</p>
+<h2 id="step-4-implement-the-store">Step 4: Implement the store<a class="anchor" href="#step-4-implement-the-store" aria-label="Link to section">#</a></h2>
+<p>Every ChatKit server needs a store: threads, thread items, and attachments have to live somewhere, and <code>ChatKitServer</code> requires one at construction. The SDK ships only the abstract <code>Store</code> class, so you write the concrete one. Twelve methods, all thin wrappers around dicts. This is demo-grade — data vanishes when the process restarts — and the file says so. A production store would implement the same twelve methods against Postgres or Redis.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/chatkit-agents-sdk-support-agent-tutorial/img2.webp" alt="A browser chat window connected to a server rack connected to a glowing AI brain"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<pre><code class="language-python">from chatkit.store import (
+    Attachment,
+    NotFoundError,
+    Page,
+    Store,
+    ThreadItem,
+    ThreadMetadata,
+)
+
+
+class MemoryStore(Store[dict]):
+    def __init__(self) -&gt; None:
+        self.threads: dict[str, ThreadMetadata] = {}
+        self.items: dict[str, list[ThreadItem]] = {}
+        self.attachments: dict[str, Attachment] = {}
+
+    async def load_thread(self, thread_id: str, context: dict) -&gt; ThreadMetadata:
+        thread = self.threads.get(thread_id)
+        if thread is None:
+            raise NotFoundError(f"thread {thread_id} not found")
+        return thread
+
+    async def save_thread(self, thread: ThreadMetadata, context: dict) -&gt; None:
+        self.threads[thread.id] = thread
+
+    async def load_thread_items(
+        self, thread_id: str, after: str | None, limit: int, order: str, context: dict
+    ) -&gt; Page[ThreadItem]:
+        items = list(self.items.get(thread_id, []))
+        if order == "desc":
+            items = list(reversed(items))
+        return Page[ThreadItem](data=items[:limit], has_more=False, after=None)
+
+    async def load_threads(
+        self, limit: int, after: str | None, order: str, context: dict
+    ) -&gt; Page[ThreadMetadata]:
+        threads = list(self.threads.values())
+        if order == "desc":
+            threads = list(reversed(threads))
+        return Page[ThreadMetadata](data=threads[:limit], has_more=False, after=None)
+
+    async def add_thread_item(
+        self, thread_id: str, item: ThreadItem, context: dict
+    ) -&gt; None:
+        self.items.setdefault(thread_id, []).append(item)
+
+    async def save_item(
+        self, thread_id: str, item: ThreadItem, context: dict
+    ) -&gt; None:
+        items = self.items.setdefault(thread_id, [])
+        for i, existing in enumerate(items):
+            if existing.id == item.id:
+                items[i] = item
+                return
+        items.append(item)
+
+    async def load_item(
+        self, thread_id: str, item_id: str, context: dict
+    ) -&gt; ThreadItem:
+        for item in self.items.get(thread_id, []):
+            if item.id == item_id:
+                return item
+        raise NotFoundError(f"item {item_id} not found")
+
+    async def delete_thread(self, thread_id: str, context: dict) -&gt; None:
+        self.threads.pop(thread_id, None)
+        self.items.pop(thread_id, None)
+
+    async def delete_thread_item(
+        self, thread_id: str, item_id: str, context: dict
+    ) -&gt; None:
+        self.items[thread_id] = [
+            item for item in self.items.get(thread_id, []) if item.id != item_id
+        ]
+
+    async def save_attachment(self, attachment: Attachment, context: dict) -&gt; None:
+        self.attachments[attachment.id] = attachment
+
+    async def load_attachment(
+        self, attachment_id: str, context: dict
+    ) -&gt; Attachment:
+        attachment = self.attachments.get(attachment_id)
+        if attachment is None:
+            raise NotFoundError(f"attachment {attachment_id} not found")
+        return attachment
+
+    async def delete_attachment(self, attachment_id: str, context: dict) -&gt; None:
+        self.attachments.pop(attachment_id, None)</code></pre>
+<p>One detail to get right: the <code>context</code> argument on every method is whatever your route passes to <code>server.process()</code> — here a dict holding the request. The store ignores it, but the signature must accept it. And <code>NotFoundError</code> is the SDK's own exception for missing threads and items; raising anything else turns a missing thread into a 500.</p>
+<h2 id="step-5-wire-up-the-chatkit-server">Step 5: Wire up the ChatKit server<a class="anchor" href="#step-5-wire-up-the-chatkit-server" aria-label="Link to section">#</a></h2>
+<p>This is the heart of the tutorial: a <code>ChatKitServer</code> subclass whose <code>respond()</code> hands the conversation to the Agents SDK, and a single FastAPI route that feeds it requests. Append this to <code>server.py</code>:</p>
+<pre><code class="language-python">from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+
+from chatkit.agents import AgentContext, simple_to_agent_input, stream_agent_response
+from chatkit.server import ChatKitServer, StreamingResult
+from agents import Runner
+
+
+class SupportChatKitServer(ChatKitServer[dict]):
+    def __init__(self) -&gt; None:
+        self.store = MemoryStore()
+        super().__init__(store=self.store)
+
+    async def respond(self, thread, item, context):
+        items = list(
+            reversed(
+                (
+                    await self.store.load_thread_items(
+                        thread.id, after=None, limit=30, order="desc", context=context
+                    )
+                ).data
+            )
+        )
+        agent_input = await simple_to_agent_input(items)
+        agent_context = AgentContext(
+            thread=thread, store=self.store, request_context=context
+        )
+        result = Runner.run_streamed(support_agent, agent_input, context=agent_context)
+        async for event in stream_agent_response(agent_context, result):
+            yield event
+
+
+chatkit_server = SupportChatKitServer()
+app = FastAPI()
+
+
+@app.post("/chatkit")
+async def chatkit_endpoint(request: Request) -&gt; Response:
+    payload = await request.body()
+    result = await chatkit_server.process(payload, {"request": request})
+    if isinstance(result, StreamingResult):
+        return StreamingResponse(result, media_type="text/event-stream")
+    if hasattr(result, "json"):
+        return Response(content=result.json, media_type="application/json")
+    return JSONResponse(result)</code></pre>
+<p>Read <code>respond()</code> carefully, because it contains the second docs error. The official docs' example calls <code>simple_to_agent_input(thread, item, context)</code> — three arguments. In the installed 1.6.5 SDK, that function takes exactly one: a sequence of thread items. The correct pattern is the one in OpenAI's own starter: load the thread's recent items from the store (newest first, so reverse them back into order), convert them with <code>simple_to_agent_input(items)</code>, run the agent with <code>Runner.run_streamed</code>, and yield the converted stream events with <code>stream_agent_response</code>. Pass the three-argument form and you get a <code>TypeError</code> on the first message.</p>
+<p>The route itself is deliberately boring: read the raw body, hand it to <code>server.process()</code>, and return whatever comes back — a streaming result for chat turns, a JSON result for thread management. There is no workflow ID, no client secret, and no call to <code>POST /v1/chatkit/sessions</code> anywhere in this path. Those belong to the hosted Agent Builder integration, and they die with it. Here, the ChatKit client connects directly to your server, and your app's own authentication — a login cookie, a header, whatever you already use — is what protects the endpoint.</p>
+<h2 id="step-6-run-it-and-test-it-with-curl">Step 6: Run it and test it with curl<a class="anchor" href="#step-6-run-it-and-test-it-with-curl" aria-label="Link to section">#</a></h2>
+<p>Start the backend with your key in the environment — never in the code:</p>
+<pre><code class="language-bash">OPENAI_API_KEY=sk-proj-... uvicorn server:app --port 8000</code></pre>
+<p>Before opening a browser, prove the server speaks the ChatKit protocol. List threads — the store starts empty:</p>
+<pre><code class="language-bash">curl -s -X POST http://127.0.0.1:8000/chatkit \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"threads.list","params":{}}'</code></pre>
+<pre><code class="language-json">{"data":[],"has_more":false}</code></pre>
+<p>That empty page is the whole wiring check in miniature: the route parsed the request, the server routed it, the store answered. Next, create a thread with a real user message. The payload shape matters — the SDK validates it strictly, and three fields are required even when empty:</p>
+<pre><code class="language-bash">curl -s -X POST http://127.0.0.1:8000/chatkit \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"threads.create","params":{"input":{
+    "content":[{"type":"input_text","text":"Where is my order 4821?"}],
+    "attachments":[],
+    "inference_options":{}
+  }}}'</code></pre>
+<p>Two things to note. First, <code>input</code> is an object, not a string — send a bare string and validation fails with <code>params.input: Field required</code>. Second, <code>attachments</code> and <code>inference_options</code> are required fields on the message input even though they are empty here; omit either and the request is rejected. Both facts were confirmed against the installed SDK's models, not guessed.</p>
+<p>One honest caveat: the sandbox used to verify this tutorial could exercise everything above — the imports, the protocol validation, the store, the guardrail, the tools — but not the live model reply, because the SDK's network path to the API stalls in that sandbox (a plain <code>curl</code> to the same endpoint answers in under a second). With a real key, the same <code>threads.create</code> streams the agent's reply back as server-sent events: the agent calls <code>lookup_order</code> with <code>"4821"</code> and answers that the Aurora headphones, $74.99, have shipped. If your reply instead says the order was not found, check the order number, not the code — the tool only knows the three orders in the dict.</p>
+<h2 id="step-7-put-the-widget-on-your-site">Step 7: Put the widget on your site<a class="anchor" href="#step-7-put-the-widget-on-your-site" aria-label="Link to section">#</a></h2>
+<p>The backend is done; the widget is a React component. Scaffold a Vite app and install the ChatKit React bindings (version 1.6.1, verified):</p>
+<pre><code class="language-bash">npm create vite@latest store-chat -- --template react-ts
+cd store-chat
+npm install
+npm install @openai/chatkit-react@1.6.1</code></pre>
+<p>Replace <code>src/App.tsx</code> with the widget. The <code>api</code> option points at your server, and <code>domainKey</code> is the development key the SDK uses to verify the integration's domain:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/chatkit-agents-sdk-support-agent-tutorial/img3.webp" alt="Two chat bubbles above a parcel with a shield and a green checkmark"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<pre><code class="language-tsx">import { ChatKit, useChatKit } from "@openai/chatkit-react";
+
+export default function App() {
+  const { control } = useChatKit({
+    api: {
+      url: "/chatkit",
+      domainKey: "domain_pk_localhost_dev",
+    },
+  });
+  return &lt;ChatKit control={control} /&gt;;
+}</code></pre>
+<p>The <code>url</code> is relative on purpose. The ChatKit client calls it with <code>fetch</code>, so a cross-origin URL would need CORS headers on your FastAPI app. A relative URL plus a Vite proxy keeps everything same-origin in development — add this to <code>vite.config.ts</code>:</p>
+<pre><code class="language-ts">import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/chatkit": "http://localhost:8000",
+    },
+  },
+});</code></pre>
+<p>Then run both halves — backend on port 8000 from Step 6, frontend with <code>npm run dev</code> — and open the Vite URL. Type "Where is my order 4821?" and watch the agent look it up. A small naming warning: the docs and the starter's README both give the development domain key as <code>domain_pk_localhost_dev</code>, but the starter's <code>.env.example</code> uses <code>domain_pk_local_dev</code>. If the widget refuses to connect, check the key first — it is the most likely culprit, and it is also the most confusingly documented value in the whole stack.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>ChatKit currently offers two paths, and the choice is now made for you by a calendar date — but the trade-offs are worth stating plainly:</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Best for</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Custom server (this tutorial)</strong></td><td>Anything going to production; you need your own auth, your own data, your own tools</td><td>You own the store, the deployment, and the scaling</td></tr><tr><td><strong>Hosted via Agent Builder</strong></td><td>Prototypes built before the shutdown</td><td>Shuts down November 30, 2026 — do not start new work here</td></tr><tr><td><strong>ChatGPT Workspace Agents</strong></td><td>Internal agents for Business, Enterprise, or Edu workspaces</td><td>Workspace-only; not a public website widget</td></tr></tbody></table></div>
+<p>If you already have an Agent Builder workflow in production, the migration the docs prescribe is exactly what this tutorial builds: export the workflow with Code → Agents SDK, then serve it behind ChatKit yourself. The agent logic survives; only the hosting changes. Budget a day for the export and a second day for the store — the in-memory version here is the one thing you must replace before real traffic, since a restart wipes every conversation.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The Agent Builder shutdown looks like a rug-pull until you build the replacement: the pieces that survive — ChatKit and the Agents SDK — were always the load-bearing ones, and the self-hosted stack is strictly more capable than the canvas was. You get your own tools against your own data, guardrails that run before the model sees anything, and a server you can deploy anywhere. The cost is a store implementation and one route, and the docs' two stale examples — the phantom <code>MemoryStore</code> and the wrong <code>simple_to_agent_input</code> signature — are the only real traps. Build it once, and the widget on your site is yours: no workflow ID to expire, no hosted canvas to be deprecated out from under you.</p>
+<p>Where to go next: replace the dict with a real order lookup, swap the in-memory store for a database-backed one, and add a second agent — an escalation agent that takes over when the support agent's confidence drops — using handoffs. The Agents SDK's handoff primitive is the same one this blog's multi-agent tutorial covers, and it plugs into this server without changing a line of the ChatKit wiring.</p></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="chatkit-agents-sdk-support-agent-tutorial"></div><div class="comments" data-comments="chatkit-agents-sdk-support-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/openai-agents-sdk-multi-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a working multi-agent system with the OpenAI Agents SDK: tools, handoffs, guardrails, and offline tests</h3><div class="meta">October 28, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/agent-evals-tutorial/"><span class="chip">Tutorials</span><h3>Testing agents: task-based evals for tool-using models</h3><div class="meta">September 19, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/build-voice-agent-weekend/"><span class="chip">Tutorials</span><h3>Build a voice agent in a weekend: STT, LLM, TTS</h3><div class="meta">August 24, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/llm-evals-practical-guide/"><span class="chip">Tutorials</span><h3>Write Your First LLM Eval: A Practical Guide</h3><div class="meta">August 2, 2026 · 7 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Is Agent Builder really shutting down?</h3><p>Yes. OpenAI&#x27;s documentation states Agent Builder will be shut down on November 30, 2026. ChatKit itself is not deprecated — it remains available, and the documented path for new work is ChatKit with your own server, built with the ChatKit SDK and the Agents SDK.</p><h3>Do I need a workflow ID from Agent Builder to use ChatKit?</h3><p>No — not on the custom-server path. Workflow IDs belong to the hosted Agent Builder integration. With a self-hosted ChatKit server, the frontend connects directly to your server&#x27;s /chatkit endpoint with a domain key, and there is no client secret or session endpoint involved.</p><h3>Why does this tutorial implement its own MemoryStore?</h3><p>Because openai-chatkit 1.6.5 ships no MemoryStore class, even though the documentation&#x27;s simplified example imports one from chatkit.store. The Store base class is abstract, so any ChatKit server needs a concrete store implementation. The in-memory version in this tutorial is about 70 lines and is fine for development; production needs a database-backed store.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/openai-agents-sdk-multi-agent-tutorial/">Build a working multi-agent system with the OpenAI Agents SDK: tools, handoffs, guardrails, and offline tests</a></li><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li><li><a href="/articles/llm-evals-practical-guide/">Write Your First LLM Eval: A Practical Guide</a></li><li><a href="/articles/build-voice-agent-weekend/">Build a voice agent in a weekend: STT, LLM, TTS</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
