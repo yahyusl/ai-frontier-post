@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>QMD: turn your notes and docs into a local hybrid search engine your coding agent can query — AI Frontier Post</title>
+<meta name="description" content="QMD 2.9.0 is a local search engine for your markdown: BM25, vector search, LLM reranking and query expansion, all on your machine with no API key — plus an MCP server your agent can call. This tutorial installs it, indexes a real docs folder, and measures every search mode.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/qmd-local-search-engine-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="QMD: turn your notes and docs into a local hybrid search engine your coding agent can query">
+<meta property="og:description" content="QMD 2.9.0 is a local search engine for your markdown: BM25, vector search, LLM reranking and query expansion, all on your machine with no API key — plus an MCP server your agent can call. This tutorial installs it, indexes a real docs folder, and measures every search mode.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/qmd-local-search-engine-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/qmd-local-search-engine-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-19">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "QMD: turn your notes and docs into a local hybrid search engine your coding agent can query", "description": "QMD 2.9.0 is a local search engine for your markdown: BM25, vector search, LLM reranking and query expansion, all on your machine with no API key — plus an MCP server your agent can call. This tutorial installs it, indexes a real docs folder, and measures every search mode.", "datePublished": "2026-11-19", "dateModified": "2026-11-19", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/qmd-local-search-engine-tutorial/"}, "image": "https://aifrontierpost.com/articles/qmd-local-search-engine-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How much disk space do QMD's models need?", "acceptedAnswer": {"@type": "Answer", "text": "About 2.25 GB in total: 318 MB for the EmbeddingGemma embedding model, 1.19 GiB for the query-expansion model, and 610 MB for the reranker. Keyword search needs none of them, and typed vector queries need only the embedding model — so you can start with 318 MB and let the other two download on first use."}}, {"@type": "Question", "name": "Does QMD send my notes anywhere?", "acceptedAnswer": {"@type": "Answer", "text": "No. Indexing, embeddings, query expansion, and reranking all run locally — the source contains no telemetry or analytics calls. The only network use is downloading the GGUF model files from Hugging Face the first time a model is needed."}}, {"@type": "Question", "name": "Can I use my own embedding model?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Set the <code>QMD_EMBED_MODEL</code> environment variable or the <code>models.embed</code> key in <code>index.yml</code> (for example, Qwen3-Embedding-0.6B for better multilingual coverage), then re-embed with <code>qmd embed -f</code>. Remote OpenAI-compatible embedding servers are also supported through a URL in the same setting."}}, {"@type": "Question", "name": "What if my notes are not markdown?", "acceptedAnswer": {"@type": "Answer", "text": "QMD indexes markdown files, with AST-aware chunking for code (TypeScript, JavaScript, Python, Go, Rust) via <code>--chunk-strategy auto</code>. PDFs and other formats are not indexed — for PDF corpora, PageIndex is the better tool."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>QMD: turn your notes and docs into a local hybrid search engine your coding agent can query</h1>
+<p class="lede">QMD 2.9.0 is a local search engine for your markdown: BM25, vector search, LLM reranking and query expansion, all on your machine with no API key — plus an MCP server your agent can call. This tutorial installs it, indexes a real docs folder, and measures every search mode.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 19, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> QMD is a local search engine for your markdown: one npm install, one <code>qmd init</code>, and you get BM25 keyword search, vector search, and a hybrid query pipeline with LLM expansion and reranking — plus an MCP server your coding agent can call. Everything runs on your machine with no API key; the three local models total about 2.3 GB on first use.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Three search modes:</b> BM25 keyword search (no models), vector search (embedding model), and hybrid <code>query</code> (expansion + RRF + reranker).</li><li><b>Three local models:</b> EmbeddingGemma 300M, Qwen3-Reranker 0.6B, and QMD's fine-tuned query-expansion 1.7B — about 2.25 GB total, cached in <code>~/.cache/qmd/models/</code>.</li><li><b>Measured on a 2-core CPU VM:</b> BM25 search is instant; a typed vector query took 6.9 s; embedding 6 documents took 3m 10s including the 318 MB model download.</li><li><b>MCP server, 5 tools:</b> <code>query</code>, <code>get</code>, <code>multi_get</code>, <code>status</code>, <code>metadata</code> — over stdio or HTTP, verified with a JSON-RPC client.</li><li><b>v2.9.0 (November 18):</b> adds metadata filtering, document processors, and remote model support.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/qmd-local-search-engine-tutorial/cover.webp" alt="A magnifying glass over document cards rising from a stack of papers beside a terminal window"></figure>
+<div class="article-body"><p>Your notes are only useful if you can find the right one in seconds — the runbook paragraph, the decision from last month's meeting, the incident review that already solved today's outage. Grep finds keywords. What it cannot do is find the document that <em>means</em> the same thing in different words, rank a dozen near-matches, or hand a clean answer to your coding agent.</p>
+<p>QMD does all three, on your machine, with no API key. It is a local search engine for markdown: BM25 keyword search, vector search over local embeddings, and a hybrid mode that expands your query with a small local model, fuses the results, and reranks them. Version 2.9.0, released November 18, adds metadata filtering, document processors, and remote-model support — and it is currently trending on GitHub, with 31,248 stars and 1,970 forks at the time of writing. This tutorial installs it, indexes a real folder of docs and notes, and measures every search mode end to end. The project is <a href="https://github.com/tobi/qmd" rel="nofollow">tobi/qmd</a> on GitHub, MIT licensed.</p>
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Node.js 22 or newer.</strong> QMD is published as the npm package <a href="https://www.npmjs.com/package/@tobilu/qmd" rel="nofollow"><code>@tobilu/qmd</code></a>; Bun 1.0+ also works. The tutorial was verified with Node v24.22.1 and npm 10.9.4 on Linux. macOS needs Homebrew SQLite (<code>brew install sqlite</code>) for extension support; Linux needs nothing extra.</li>
+<li><strong>About 2.3 GB of disk for models, on first use.</strong> QMD auto-downloads three GGUF models from Hugging Face: <a href="https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF" rel="nofollow">EmbeddingGemma 300M</a> (~318 MB) for embeddings, a fine-tuned <a href="https://huggingface.co/tobil/qmd-query-expansion-1.7B-gguf" rel="nofollow">Qwen3 1.7B</a> (~1.19 GiB) for query expansion, and <a href="https://huggingface.co/ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF" rel="nofollow">Qwen3-Reranker 0.6B</a> (~610 MB) for reranking. They are cached in <code>~/.cache/qmd/models/</code>. Keyword search needs none of them.</li>
+<li><strong>No API key, no account, no GPU.</strong> Everything runs locally. On a CPU-only machine the small models are slow — budget minutes, not seconds, for the first embedding pass — but they work. This tutorial was verified on a 2-core VM with no GPU.</li>
+<li><strong>A folder of markdown.</strong> Notes, docs, meeting transcripts, a wiki — anything <code>*.md</code>. The tutorial uses a six-document sample (deploy runbook, API auth notes, billing migration plan, onboarding checklist, meeting notes, incident review) so every result below is reproducible.</li></ul>
+<h2 id="step-1-install-qmd">Step 1 — Install QMD<a class="anchor" href="#step-1-install-qmd" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">npm install -g @tobilu/qmd
+qmd --version</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">qmd 2.9.0 (aa247d0)</code></pre>
+<p>The version string includes the git commit the release was built from; <code>aa247d0</code> is the current tip of <code>tobi/qmd</code>. If you prefer not to install globally, <code>npx @tobilu/qmd</code> runs it directly. <code>qmd --help</code> lists the three search modes up front: <code>search</code> (BM25 only), <code>vsearch</code> (vector only), and <code>query</code> (hybrid — the recommended default).</p>
+<h2 id="step-2-create-a-project-index">Step 2 — Create a project index and add collections<a class="anchor" href="#step-2-create-a-project-index" aria-label="Link to section">#</a></h2>
+<p>QMD keeps its configuration in a single YAML file and its index in SQLite. A project-local index keeps both inside the project:</p>
+<pre><code class="language-bash">cd ~/my-docs
+qmd init
+qmd collection add ./docs --name docs
+qmd collection add ./notes --name notes
+qmd collection list</code></pre>
+<p><code>qmd init</code> prints <code>ready to go with new local index</code> and writes <code>.qmd/index.yml</code>, pre-filled with the three default model URIs, plus an empty <code>index.sqlite</code> (about 220 KB before any documents are indexed). Each <code>collection add</code> indexes its folder immediately — four documents from <code>docs/</code>, two from <code>notes/</code> in the sample — and reports how many chunks still need vectors:</p>
+<pre><code class="language-text">Indexed: 4 new, 0 updated, 0 unchanged, 0 removed
+
+Run 'qmd embed' to update embeddings (4 unique hashes need vectors)</code></pre>
+<p>A collection is a folder plus a glob (default <code>**/*.md</code>). You can scope later searches with <code>-c docs</code> or <code>-c notes -c docs</code>, exclude a collection from default searches with <code>qmd collection exclude</code>, and attach a shell hook that runs before every re-index with <code>qmd collection update-cmd notes 'git pull --rebase'</code>. Re-indexing after edits is <code>qmd update</code>; it reported <code>0 new, 0 updated, 4 unchanged</code> on an unchanged folder. <code>qmd status</code> summarizes the whole index: document count, how many still need embedding, collections, and the model URLs.</p>
+<h2 id="step-3-first-search-bm25">Step 3 — First search: BM25, no models required<a class="anchor" href="#step-3-first-search-bm25" aria-label="Link to section">#</a></h2>
+<p>Before any model downloads, keyword search already works. QMD's <code>search</code> is BM25 full-text search over the SQLite FTS index:</p>
+<pre><code class="language-bash">qmd search "deploy freeze Friday"</code></pre>
+<pre><code class="language-text">qmd://docs/deploy-runbook.md:3 #000713
+Title: Deploy runbook
+Score:  58%
+
+@@ -2,4 @@ (1 before, 3 after)
+
+The production deploy freezes every Friday at 17:00 UTC; no deploys land after the freeze until Monday 09:00 UTC.
+
+To roll back a bad deploy, run `deploy rollback --to &lt;sha&gt;` from the repo root. The rollback replays the previous healthy release and takes about 90 seconds.</code></pre>
+<p>The correct document is first at 58%, ahead of the meeting notes at 54% (which mention the freeze as an open question). A scoped search is sharper still — <code>qmd search "Postgres 16 migration" -c docs</code> returns the billing migration plan at 73%. Scores are normalized to a 0–100% scale; the README's own guide reads 0.8–1.0 as highly relevant, 0.5–0.8 as relevant, 0.2–0.5 as somewhat relevant.</p>
+<p>For agents and scripts, <code>--json</code> emits structured results with docid, score, file, line, title, and snippet. <code>qmd search "checkout 500 error rate" --json</code> returned the incident review at 0.79. <code>qmd get</code> then retrieves a full document by path or docid, line-numbered — <code>qmd get "#000713"</code> prints the deploy runbook with its folder context attached.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/qmd-local-search-engine-tutorial/img2.webp" alt="Terminal output of a real qmd search: the deploy runbook ranks first at 58 percent, followed by meeting notes at 54 percent"><figcaption>Real output from this tutorial’s test corpus: qmd search ranks the deploy runbook first at 58%. Terminal render of a verified run.</figcaption></figure>
+<h2 id="step-4-embeddings-and-vector-search">Step 4 — Embeddings and vector search<a class="anchor" href="#step-4-embeddings-and-vector-search" aria-label="Link to section">#</a></h2>
+<p>Vector search needs embeddings. <code>qmd embed</code> downloads the EmbeddingGemma model on first use and embeds every indexed chunk:</p>
+<pre><code class="language-bash">qmd embed</code></pre>
+<pre><code class="language-text">Model: embeddinggemma-300M-Q8_0.gguf
+✓ Done! Embedded 6 chunks from 6 documents in 3m 10s</code></pre>
+<p>The 3m 10s includes the ~318 MB model download; embedding six short documents is seconds of that. An incremental run after adding one document took 7 seconds. Embeddings are 768-dimensional vectors stored in sqlite-vec; re-running <code>qmd embed</code> only processes changed chunks.</p>
+<p>One behavior worth knowing before you run <code>vsearch</code>: it does more than embed your query. QMD expands the query with the 1.7B expansion model first, then runs the original plus the expanded variants through vector search. So the first <code>vsearch</code> also downloads the ~1.19 GiB expansion model. That is the single biggest first-run cost in QMD, and it is not obvious from the command name — budget for it.</p>
+<pre><code class="language-bash">qmd vsearch "how do I roll back a bad release"</code></pre>
+<p>The expansion model rewrote the question into four vector queries — two paraphrases and one hypothetical passage (HyDE) — and searched them in parallel. The runbook still came first, but the scores are raw cosine similarity, so the gap between first and fourth is narrow:</p>
+<pre><code>$ qmd vsearch "how do I roll back a bad release"
+├─ how do I roll back a bad release
+├─ vec: steps for rolling back software releases
+├─ vec: best practices for rollback management
+└─ hyde: To roll back a bad release, start by reviewing the requirements and d...
+Searching 4 vector queries...
+
+qmd://docs/deploy-runbook.md:5 #000713 — Deploy runbook — 54%
+qmd://notes/adr-2026-11-15.md:13 #ff3e50 — ADR: freeze deploys on Fridays — 39%
+qmd://notes/incident-2026-11-10.md:3 #b9bf56 — Incident review — 2026-11-10 — 34%
+qmd://docs/billing-migration.md:5 #8b613b — Billing migration plan — 32%
+</code></pre>
+<p>Total time: 33.3 seconds on this 2-core CPU VM, most of it loading the 1.7B expansion model. The paraphrase test also shows the small model's limits — asked <code>"are we allowed to ship code over Christmas"</code>, it expanded to <code>"how do i navigate christmas celebrations with work schedules?"</code> and returned a single hit, the Friday-freeze ADR at 30%, just above the 0.3 cutoff, in 21.9 seconds.</p>
+<p>Paraphrase is where vector search earns its keep: the query shares almost no keywords with the runbook ("roll back" vs "rollback", "bad release" vs "bad deploy"), yet the semantic match still surfaces the right paragraph first. BM25 alone would have ranked it lower or missed it.</p>
+<p>If you want vector search without the expansion step, use a typed query document with <code>--no-rerank</code> (see Step 5). The typed form skips expansion entirely and, at 6.9 seconds end to end on this VM, is the fastest semantic path QMD offers.</p>
+<h2 id="step-5-the-full-pipeline-qmd-query">Step 5 — The full pipeline: <code>qmd query</code><a class="anchor" href="#step-5-the-full-pipeline-qmd-query" aria-label="Link to section">#</a></h2>
+<p><code>qmd query</code> is the mode the README recommends, and it runs all four stages: the expansion model rewrites your question into typed <code>lex:</code>, <code>vec:</code>, and <code>hyde:</code> sub-queries; BM25 and vector search run in parallel; reciprocal rank fusion merges the lists; the Qwen3 reranker scores the top candidates. The first run downloads the reranker (~610 MB) on top of the other two models.</p>
+<pre><code class="language-bash">qmd query "how do I roll back a bad release"</code></pre>
+<p>The full pipeline expands the same question into six sub-queries — the original, two <code>lex:</code> keyword queries, two <code>vec:</code> paraphrases, and one HyDE passage — runs BM25 and vector search in parallel, fuses the results with RRF, and reranks the top chunks:</p>
+<pre><code>$ qmd query "how do I roll back a bad release"
+Expanding query... (0ms)
+├─ how do I roll back a bad release
+├─ lex: steps for rolling
+├─ lex: best practices for rollback
+├─ vec: steps for rolling back software releases
+├─ vec: best practices for rollback management
+└─ hyde: To roll back a bad release, start by reviewing the requirements and d...
+Searching 6 queries...
+ (4.4s)
+Reranking 7 chunks... (28.2s)
+
+qmd://docs/deploy-runbook.md:5 #000713 — Deploy runbook — 100%
+qmd://notes/adr-2026-11-15.md:13 #ff3e50 — ADR: freeze deploys on Fridays — 40%
+qmd://notes/incident-2026-11-10.md:3 #b9bf56 — Incident review — 2026-11-10 — 25%
+qmd://docs/billing-migration.md:5 #8b613b — Billing migration plan — 15%
+qmd://docs/onboarding.md:7 #c0df37 — Onboarding checklist — 12%
+</code></pre>
+<p>Total time: 33.1 seconds, of which 28.2 seconds was reranking. The reranker is what makes the result usable: the runbook jumps to 100% while the next result drops to 40% — compare with raw vector search, where the spread was 54% to 39% and the ranking was far less decisive.</p>
+<p>The pipeline is slower than either mode alone — three model loads on CPU — but it is also the most forgiving of vague questions, because expansion adds the vocabulary your documents actually use. Two flags control the cost: <code>--no-rerank</code> skips the reranker and returns RRF scores (faster on CPU), and <code>-C</code> / <code>--candidate-limit</code> caps how many candidates reach the reranker (default 40).</p>
+<p>You can also write the query document yourself, which is what agents should do. A typed query skips the expansion model entirely:</p>
+<pre><code class="language-bash">qmd query $'vec: rolling back a failed deployment' --no-rerank</code></pre>
+<pre><code class="language-text">Structured search: 1 queries (vec)
+├─ vec: rolling back a failed deployment
+└─ Searching...
+ (6.5s)
+qmd://docs/deploy-runbook.md:5 #000713
+Title: Deploy runbook
+Score: 100%
+
+@@ -4,4 @@ (3 before, 1 after)
+
+To roll back a bad deploy, run `deploy rollback --to &lt;sha&gt;` from the repo root. The rollback replays the previous healthy release and takes about 90 seconds.</code></pre>
+<p>The runbook is first at 100%, followed by the incident review at 50% and the billing migration at 33% — the ranking a human would produce. The same typed form is what the MCP server accepts, so the CLI and the agent path behave identically.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/qmd-local-search-engine-tutorial/img3.webp" alt="Diagram of the qmd query pipeline: question, query expansion, parallel BM25 and vector retrieval, reciprocal rank fusion, reranking, ranked results"><figcaption>The qmd query pipeline: expansion, parallel retrieval, RRF fusion, reranking. Diagram by AI Frontier Post.</figcaption></figure>
+<h2 id="step-6-context-and-metadata-filters">Step 6 — Context and metadata filters<a class="anchor" href="#step-6-context-and-metadata-filters" aria-label="Link to section">#</a></h2>
+<p>Two v2.9.0 features make a large index manageable. First, <strong>context</strong>: short human-written descriptions attached to a collection or a path, returned with every result so an agent knows what it is looking at.</p>
+<pre><code class="language-bash">qmd context add qmd://docs "Engineering runbooks: deploys, auth, billing migration"
+qmd context add qmd://notes "Team meeting notes and incident reviews"
+qmd context list</code></pre>
+<p>Second, <strong>metadata filtering</strong>. Documents opt in with a namespaced frontmatter block — the frontmatter stays searchable content, it just also becomes filterable data:</p>
+<pre><code class="language-markdown">---
+qmd:
+  metadata:
+    topics:
+      - deployment
+      - reliability
+    status: published
+    priority: 4
+---
+
+# ADR: freeze deploys on Fridays</code></pre>
+<p>After <code>qmd update</code> and <code>qmd embed</code> (one new chunk, 7 seconds), <code>qmd collection metadata notes</code> reports every key with types and value counts — <code>priority number, 1 of 3 documents</code>, <code>status string, published 1</code>, <code>topics string[], deployment 1, reliability 1</code>. Filters are a JSON AST and work on every search surface:</p>
+<pre><code class="language-bash">qmd search "deploy freeze" --filter '{"field":"status","operator":"eq","value":"published"}'
+qmd search "deploy freeze" --filter '{"field":"status","operator":"eq","value":"draft"}'</code></pre>
+<p>The first returns only the ADR (32%); the second returns <code>No results found.</code> Filters compose with <code>and</code> / <code>or</code> / <code>not</code>, comparisons (<code>eq</code>, <code>gte</code>, <code>lt</code>), membership (<code>in</code>, <code>all</code>), and text operators (<code>contains</code>, <code>prefix</code>). Every returned result satisfies the filter before fusion and reranking, so a filter cannot be outvoted by a high score.</p>
+<h2 id="step-7-hand-it-to-your-agent-the-mcp-server">Step 7 — Hand it to your agent: the MCP server<a class="anchor" href="#step-7-hand-it-to-your-agent-the-mcp-server" aria-label="Link to section">#</a></h2>
+<p>The point of indexing your notes is that your agent can read them. QMD exposes an MCP server with five tools — <code>query</code>, <code>get</code>, <code>multi_get</code>, <code>status</code>, and <code>metadata</code> — over stdio or HTTP:</p>
+<pre><code class="language-bash">qmd mcp                    # stdio transport, for Claude Code / Claude Desktop
+qmd mcp --http               # localhost:8181, shared long-lived server
+qmd mcp --http --daemon      # background daemon; qmd mcp stop to end it</code></pre>
+<p>For Claude Code there is a plugin (<code>claude plugin marketplace add tobi/qmd</code>, then <code>claude plugin install qmd@qmd</code>); other clients take the manual <code>mcpServers</code> block from the README. The HTTP server binds loopback by default and rejects non-loopback <code>Origin</code> headers, which blocks DNS-rebinding reads from a web page.</p>
+<p>Verified end to end with a small JSON-RPC client over stdio: <code>initialize</code> returns server <code>qmd 2.9.0</code> with the instruction <code>QMD is your local search engine over 7 markdown documents</code>; <code>tools/list</code> returns exactly the five documented tools; <code>status</code> reports 7 documents, 0 needing embedding, vector index present; <code>metadata</code> returns the three keys with counts; and a typed <code>query</code> call (<code>vec: rolling back a failed deployment</code>, rerank off, limit 3) returns the runbook at 100%, the ADR at 50%, and the incident review at 33% — the same ranking as the CLI. The MCP <code>query</code> tool accepts the same typed search documents, so an agent that generates its own expansions never pays the 1.7B-model cost.</p>
+<p>QMD also ships a bundled agent skill (<code>qmd skills list</code>, <code>qmd skill show</code>): a SKILL.md that teaches an agent the search-then-retrieve workflow — search for candidates, fetch the full source with <code>qmd get</code>, and answer from retrieved text rather than from snippets.</p>
+<h2 id="step-8-measure-it-qmd-bench">Step 8 — Measure it: <code>qmd bench</code><a class="anchor" href="#step-8-measure-it-qmd-bench" aria-label="Link to section">#</a></h2>
+<p>QMD ships a benchmark runner so you can measure retrieval quality on your own corpus instead of trusting it. A fixture is a JSON file of queries with expected files and a top-k requirement:</p>
+<pre><code class="language-json">{
+  "description": "Retrieval checks for the tutorial corpus",
+  "version": 1,
+  "queries": [
+    {"id": "exact-rollback", "query": "deploy rollback --to", "type": "exact",
+     "expected_files": ["deploy-runbook.md"], "expected_in_top_k": 1},
+    {"id": "semantic-rollback", "query": "how do I undo a bad release", "type": "semantic",
+     "expected_files": ["deploy-runbook.md"], "expected_in_top_k": 1},
+    {"id": "exact-postgres", "query": "Postgres 16 migration", "type": "exact",
+     "expected_files": ["billing-migration.md"], "expected_in_top_k": 1},
+    {"id": "semantic-auth", "query": "how long do login tokens last", "type": "semantic",
+     "expected_files": ["api-auth.md"], "expected_in_top_k": 3}
+  ]
+}</code></pre>
+<p>Five queries, four backends each, 3 minutes 20 seconds total. The summary:</p>
+<pre><code>Backend   P@k    R@1    R@3    R@5    MRR    F1     Avg
+bm25      0.200  0.200  0.200  0.200  0.200  0.200  12ms
+vector    1.000  1.000  1.000  1.000  1.000  1.000  939ms
+hybrid    1.000  1.000  1.000  1.000  1.000  1.000  14,232ms
+full      1.000  1.000  1.000  1.000  1.000  1.000  24,861ms
+</code></pre>
+<p>BM25 scored 1 of 5. It missed the exact rollback query because the query string contains <code>--to</code>: <code>qmd search "deploy rollback --to"</code> returns "No results found", while <code>qmd search "deploy rollback"</code> finds the runbook at 66% — the flag-like token kills the keyword match. Vector, hybrid, and full all scored a perfect 1.00 on every query and every metric. The cost is time: BM25 answers in about 12 ms, vector in about 1 s, hybrid in about 14 s, and the full reranked pipeline in about 25 s on this 2-core CPU VM. On a machine with a GPU the full pipeline is much faster — but on CPU, the reranker dominates the latency.</p>
+<h2 id="when-to-use-qmd-vs-alternatives">When to use QMD vs the alternatives<a class="anchor" href="#when-to-use-qmd-vs-alternatives" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>Best when</th><th>Retrieval</th><th>Agent access</th></tr></thead><tbody>
+<tr><td><strong>QMD</strong></td><td>Your knowledge lives in markdown and you want hybrid search + reranking, fully local</td><td>BM25 + vectors + LLM expansion + reranker</td><td>MCP server (5 tools) + agent skill</td></tr>
+<tr><td><strong>XERJ</strong></td><td>The corpus is a codebase and the agent needs an Elasticsearch-compatible API</td><td>Full-text over code, reference coding</td><td>MCP + Elasticsearch API</td></tr>
+<tr><td><strong>Kensaku</strong></td><td>You need desktop-wide file search with OCR over PDFs and images</td><td>Local file search + OCR</td><td>MCP</td></tr>
+<tr><td><strong>sqlite-vec</strong></td><td>You are building your own retrieval into an app and want a library, not a CLI</td><td>Vector search in SQLite</td><td>Your code</td></tr>
+<tr><td><strong>PageIndex</strong></td><td>Your documents are PDFs and you want reasoning-based retrieval without embeddings</td><td>Tree index + keyword search + reranking</td><td>Python API</td></tr>
+<tr><td><strong>ripgrep</strong></td><td>You know the exact string and want the fastest possible answer</td><td>Exact match only</td><td>Shell</td></tr>
+</tbody></table></div>
+<p>The honest summary: if the corpus is code, XERJ's Elasticsearch-compatible API fits an agent's existing tooling better; if the corpus is PDFs, PageIndex's tree index is the stronger choice; if you are building retrieval into your own application, sqlite-vec is the component to use. QMD wins when the corpus is markdown notes and docs, you want all four retrieval stages without running a server or paying an API, and you want the same search available to your agent over MCP.</p>
+<h2 id="limitations-and-honest-caveats">Limitations and honest caveats<a class="anchor" href="#limitations-and-honest-caveats" aria-label="Link to section">#</a></h2>
+<ul><li><strong>First-run downloads are the price of admission.</strong> The full pipeline needs ~2.25 GB of models. Keyword search works with none of them, and the typed-query form needs only the 318 MB embedding model — but the first <code>vsearch</code> or default <code>query</code> pulls the 1.7B expansion model, and the first default <code>query</code> also pulls the reranker. Tell readers that upfront.</li>
+<li><strong>CPU-only is slow.</strong> Embedding six short documents took minutes only because of the download; the 1.7B expansion model is the slow part on CPU, and every default <code>query</code> loads it. On a laptop with a GPU (Metal, CUDA, or Vulkan) it is faster; <code>qmd doctor</code> reports the device mode and warns when it is CPU-only.</li>
+<li><strong>Scores are relative, not absolute.</strong> A 58% BM25 score and a 100% vector score come from different normalizations; compare scores within one mode, not across modes. The <code>--min-score</code> default for <code>vsearch</code> is 0.3, which hides weak matches — raise <code>-n</code> or lower the threshold if a search comes back thin.</li>
+<li><strong>Metadata requires the frontmatter convention.</strong> Only documents with a <code>qmd.metadata</code> block are filterable; everything else indexes normally but cannot be filtered. <code>qmd collection metadata</code> shows what is actually indexed before you write a filter.</li>
+<li><strong>Model downloads show a progress bar but no timeout.</strong> During verification, a stalled download (the sandbox's disk quota interrupted writes) left the command waiting with no further output until it was killed and the download re-run. If a first-run download appears stuck, check <code>~/.cache/qmd/models/</code> and run <code>qmd pull</code> again.</li>
+<li><strong><code>qmd doctor</code> checks presence, not integrity.</strong> It counts a model as cached when the file exists; a partial download can pass the check. Verify sizes against the README table (318 MB / 1.19 GiB / 610 MB) if a model-backed command misbehaves.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>QMD is the smallest honest answer to "my agent should be able to search my notes": one npm install, one <code>qmd init</code>, three search modes that go from instant keyword search to a full expand–fuse–rerank pipeline, and an MCP server that gives your agent the same retrieval you have in the terminal. The costs are explicit — ~2.25 GB of local models and CPU time on the first run — and the payoff is a search layer that works offline, keeps your notes on your machine, and returns the right paragraph first. Index your docs folder tonight; the next time your agent asks where the runbook is, it will already know.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="qmd-local-search-engine-tutorial"></div><div class="comments" data-comments="qmd-local-search-engine-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/xerj-local-search-engine-coding-agents/"><span class="chip">Tutorials</span><h3>Stop burning tokens on grep: give your coding agent a local search engine with XERJ</h3><div class="meta">October 21, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/kensaku-local-file-search-ocr-mcp-tutorial/"><span class="chip">Tutorials</span><h3>Find the file you only half-remember: hands-on with Kensaku, local search with OCR and MCP</h3><div class="meta">November 1, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/sqlite-vec-semantic-search-tutorial/"><span class="chip">Tutorials</span><h3>Semantic search in a single SQLite file: build a local document search engine with sqlite-vec</h3><div class="meta">November 10, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/pageindex-vectorless-rag-tutorial/"><span class="chip">Tutorials</span><h3>PageIndex: vectorless, reasoning-based RAG you can run on your own models — hands-on</h3><div class="meta">September 29, 2026 · 11 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>How much disk space do QMD&#x27;s models need?</h3><p>About 2.25 GB in total: 318 MB for the EmbeddingGemma embedding model, 1.19 GiB for the query-expansion model, and 610 MB for the reranker. Keyword search needs none of them, and typed vector queries need only the embedding model — so you can start with 318 MB and let the other two download on first use.</p><h3>Does QMD send my notes anywhere?</h3><p>No. Indexing, embeddings, query expansion, and reranking all run locally — the source contains no telemetry or analytics calls. The only network use is downloading the GGUF model files from Hugging Face the first time a model is needed.</p><h3>Can I use my own embedding model?</h3><p>Yes. Set the <code>QMD_EMBED_MODEL</code> environment variable or the <code>models.embed</code> key in <code>index.yml</code> (for example, Qwen3-Embedding-0.6B for better multilingual coverage), then re-embed with <code>qmd embed -f</code>. Remote OpenAI-compatible embedding servers are also supported through a URL in the same setting.</p><h3>What if my notes are not markdown?</h3><p>QMD indexes markdown files, with AST-aware chunking for code (TypeScript, JavaScript, Python, Go, Rust) via <code>--chunk-strategy auto</code>. PDFs and other formats are not indexed — for PDF corpora, PageIndex is the better tool.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/letta-stateful-agent-memory-tutorial/">Build an agent that remembers you: hands-on with Letta&#x27;s Agent SDK</a></li><li><a href="/articles/hindsight-local-agent-memory-tutorial/">Give your AI agent a real memory: hands-on with Hindsight, the local-first memory layer</a></li><li><a href="/articles/okf-agent-memory-git-native-project-memory/">OKF Agent Memory: give your coding agents a git-native memory that survives every session</a></li><li><a href="/articles/rustxng-self-hosted-search-ai-agents-hands-on-tutorial/">RustXNG: give your AI agent its own private web search — hands-on with v0.27.1</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
