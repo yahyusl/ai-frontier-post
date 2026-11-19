@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Coral hands-on: give your coding agent a gateway that writes its own tools — AI Frontier Post</title>
+<meta name="description" content="Coral 1.10.0 is a self-hosted MCP gateway where agents write short TypeScript programs that call your providers — each one sandboxed, policy-checked, and saveable as a reusable tool. This tutorial installs it, wires up a local ticket API with no tokens, and ends with a custom tool your agent can call by name.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/coral-agent-gateway-custom-tools-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Coral hands-on: give your coding agent a gateway that writes its own tools">
+<meta property="og:description" content="Coral 1.10.0 is a self-hosted MCP gateway where agents write short TypeScript programs that call your providers — each one sandboxed, policy-checked, and saveable as a reusable tool. This tutorial installs it, wires up a local ticket API with no tokens, and ends with a custom tool your agent can call by name.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/coral-agent-gateway-custom-tools-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/coral-agent-gateway-custom-tools-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-19">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Coral hands-on: give your coding agent a gateway that writes its own tools", "description": "Coral 1.10.0 is a self-hosted MCP gateway where agents write short TypeScript programs that call your providers — each one sandboxed, policy-checked, and saveable as a reusable tool. This tutorial installs it, wires up a local ticket API with no tokens, and ends with a custom tool your agent can call by name.", "datePublished": "2026-11-19", "dateModified": "2026-11-19", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/coral-agent-gateway-custom-tools-tutorial/"}, "image": "https://aifrontierpost.com/articles/coral-agent-gateway-custom-tools-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does Coral replace my MCP servers?", "acceptedAnswer": {"@type": "Answer", "text": "No. Coral sits in front of them: a provider can be an MCP server, an OpenAPI document, or a catalog entry. Coral adds the program layer, the policy checks, and the saved custom tools on top of the tools those servers already expose."}}, {"@type": "Question", "name": "Do my agents' programs see my API keys?", "acceptedAnswer": {"@type": "Answer", "text": "No. Programs run in a fresh V8 isolate with no network access and no credentials. Coral checks each provider call against the workspace policy and injects credentials server-side only when the call is allowed."}}, {"@type": "Question", "name": "Which agents can connect to Coral?", "acceptedAnswer": {"@type": "Answer", "text": "Any MCP client that speaks Streamable HTTP using the workspace's MCP URL. Claude Code and Codex are the documented ones: claude mcp add --scope user --transport http coral <url> and codex mcp add coral --url <url>."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Coral hands-on: give your coding agent a gateway that writes its own tools</h1>
+<p class="lede">Coral puts a gateway between your coding agent and your services: the agent writes short TypeScript programs, each one runs sandboxed and policy-checked, and the good ones become reusable tools. Here is the whole loop, hands-on, against a local API that needs no accounts or tokens.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 19, 2026 · 13 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Coral is a self-hosted MCP gateway where agents write short TypeScript programs against your providers instead of making one tool call at a time. This tutorial installs Coral 1.10.0, connects it to a local ticket API with no accounts or tokens, runs a program that lists open tickets, and saves it as a reusable custom tool.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What Coral is:</b> a self-hosted MCP gateway (“execution rails for agents”), Apache-2.0, written in Rust. Agents write TypeScript programs; each runs in a fresh V8 isolate with no network and no credentials; every provider call is checked against an Allow, Ask, or Block policy; Coral injects credentials server-side.</li><li><b>The numbers:</b> 5,020 stars, 228 forks, 1,632 commits; version 1.10.0 shipped November 19, 2026; front page of Hacker News on November 16, 2026.</li><li><b>The loop:</b> add a provider from the catalog or an OpenAPI document or MCP server → connect the agent once per workspace → run a program with <code>exec</code> → save it as <code>coral.private.&lt;name&gt;</code>.</li><li><b>Verified hands-on:</b> the ticket program returned the two open tickets; the saved tool called back with the same result. <code>listTickets()</code> takes no arguments — passing <code>{}</code> draws a non-fatal type diagnostic.</li><li><b>Policy defaults:</b> tools that read data run without approval; everything else needs approval. Only workspace owners can add providers or change the policy.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/coral-agent-gateway-custom-tools-tutorial/cover.webp" alt="An illustration of a coding agent connected through a branching coral gateway hub to code hosting, chat, and issue-tracking services"></figure>
+<div class="article-body"><p>Your coding agent can already call tools. The problem is what happens next: every MCP server hands it a different set of raw tools, every call burns a full round trip of tokens, and the same three-step sequence gets re-invented — and re-paid for — in every conversation. Coral, an open-source gateway from <a href="https://github.com/withcoral/coral" rel="nofollow">withcoral/coral</a>, moves that logic out of the conversation and into the gateway. Agents write short TypeScript programs against your providers, Coral runs each one in a fresh sandbox, checks every call against a policy, and lets you save the good programs as tools your agents can call by name.</p>
+<p>It is having a moment. The project passed 5,000 stars this week, shipped version 1.10.0 on November 19, and hit the Hacker News front page on November 16 with the pitch "the open-source gateway where agents write their own tools." This tutorial installs Coral 1.10.0, connects it to a small ticket API that runs on your own machine — no accounts, no tokens — and ends with a custom tool your agent can reuse in one call.</p>
+<h2 id="why-coral-is-getting-attention-now">Why Coral is getting attention now<a class="anchor" href="#why-coral-is-getting-attention-now" aria-label="Link to section">#</a></h2>
+<p>The standard way to give an agent access to a service is an MCP server: the agent sees a list of tools, picks one, and calls it. That works, but it has three costs that grow with use. First, every tool call is a model decision, so a job that needs five calls costs five rounds of reasoning. Second, the agent sees your credentials' blast radius — a tool that can close a ticket can close any ticket. Third, nothing is reusable: the agent re-derives the same sequence tomorrow and pays for it again.</p>
+<p>Coral changes the unit of work from a tool call to a program. The agent writes a short TypeScript function that calls your providers — GitHub, Slack, Linear, Datadog, or anything with an OpenAPI document or MCP server, from a catalog Coral puts at more than 5,000. Coral runs the program in a fresh V8 isolate with no network access and no credentials, checks each provider call against an Allow, Ask, or Block policy, and injects credentials server-side only when a call is approved. The program's return value is the answer; the agent never sees the intermediate calls.</p>
+<p>The payoff Coral reports from its own testing: 37% fewer tokens, 31% lower cost, and 29% faster task completion across 34 tasks on GitHub, Linear, and Slack with Opus 5.5. Those are the project's numbers, not an independent benchmark — treat them as a claim about the mechanism (fewer round trips, smaller context) rather than a guarantee. The mechanism itself is easy to verify, and that is what this tutorial does.</p>
+<p>The project is Apache-2.0 licensed, written in Rust, and has 5,020 stars, 228 forks, and 1,632 commits as of this writing. The desktop app is the personal-use path; a shared server for teams runs on Docker Compose or Kubernetes and needs an OIDC identity provider, a reverse proxy, and SQLite or Postgres. A separate <code>ee/</code> directory in the repo carries the Enterprise licence — a plain build compiles only the open-source code.</p>
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>A Mac (Apple silicon), Windows, or Linux machine.</strong> Coral ships as a desktop app; the macOS build is Apple silicon only.</li><li><strong>Claude Code or Codex</strong> (or any MCP client that speaks Streamable HTTP). You connect it once per workspace.</li><li><strong>Python 3</strong> for the mock ticket API in Step 2. No accounts, no API keys, no cloud services anywhere in this tutorial.</li><li><strong>About 30 minutes.</strong> Most of that is reading; the install takes a few minutes.</li></ul>
+<h2 id="step-1-install-the-desktop-app">Step 1: Install the desktop app<a class="anchor" href="#step-1-install-the-desktop-app" aria-label="Link to section">#</a></h2>
+<p>Download Coral from <a href="https://withcoral.com/download" rel="nofollow">withcoral.com/download</a> or the <a href="https://github.com/withcoral/coral-releases/releases" rel="nofollow">releases page</a> — note that the release assets live in the <code>coral-releases</code> repository, not the main repo. Pick the file for your platform: a <code>.dmg</code> on macOS (drag Coral into Applications), an installer on Windows, or the AppImage on Linux. This tutorial was tested with version 1.10.0, released November 19, 2026; the Linux AppImage is roughly 206 MB and the embedded server reports itself as <code>coral 1.10.0+bea7621</code>.</p>
+<p>On Linux, make it executable and run it:</p>
+<pre><code class="language-bash">chmod +x coral-app-linux-x86_64.AppImage
+./coral-app-linux-x86_64.AppImage</code></pre>
+<p>If your system lacks FUSE, the AppImage will fail with a <code>libfuse.so.2</code> error. Extract it instead and run the binary inside:</p>
+<pre><code class="language-bash">./coral-app-linux-x86_64.AppImage --appimage-extract
+./squashfs-root/coral-app --no-sandbox</code></pre>
+<p>Launch Coral and create a workspace — the home screen offers a <strong>Create workspace</strong> button. A workspace is the boundary for everything that follows: providers, policies, and custom tools all belong to one workspace, and agents only see the providers in the workspace they connect to. Coral keeps running in the background after you close the window, so your agents can still reach it, and the app updates itself in the background.</p>
+<h2 id="step-2-add-a-provider-your-own-ticket-api">Step 2: Add a provider — your own ticket API<a class="anchor" href="#step-2-add-a-provider-your-own-ticket-api" aria-label="Link to section">#</a></h2>
+<p>A provider gives your agents access to a service. Coral's catalog covers the usual suspects, but the instructive path is adding your own from an OpenAPI document — it shows exactly how Coral discovers tools, and it needs no credentials. The service is a tiny ticket API on your own machine: three tickets, two open, one closed.</p>
+<p>Save this as <code>mock_api.py</code> and run it with <code>python3 mock_api.py</code>. It serves the API on port 8899 and the OpenAPI document at <code>/openapi.json</code>.</p>
+<pre><code class="language-python">import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+TICKETS = [
+    {"id": 1, "title": "Checkout returns 500 after deploy", "status": "open"},
+    {"id": 2, "title": "Flaky login test on main", "status": "open"},
+    {"id": 3, "title": "Invoice PDF missing logo", "status": "closed"},
+]
+
+class H(BaseHTTPRequestHandler):
+    def _send(self, obj, code=200):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def do_GET(self):
+        if self.path == "/tickets":
+            self._send(TICKETS)
+        elif self.path.startswith("/tickets/"):
+            tid = int(self.path.rsplit("/", 1)[-1])
+            for t in TICKETS:
+                if t["id"] == tid:
+                    return self._send(t)
+            return self._send({"error": "not found"}, 404)
+        elif self.path == "/openapi.json":
+            self._send(json.load(open("openapi.json")))
+        else:
+            self._send({"error": "not found"}, 404)
+
+ThreadingHTTPServer(("127.0.0.1", 8899), H).serve_forever()</code></pre>
+<p>And the OpenAPI document, saved as <code>openapi.json</code> in the same directory:</p>
+<pre><code class="language-json">{
+  "openapi": "3.0.3",
+  "info": {"title": "Ticket API", "version": "1.0.0"},
+  "servers": [{"url": "http://127.0.0.1:8899"}],
+  "paths": {
+    "/tickets": {
+      "get": {
+        "operationId": "listTickets",
+        "summary": "List open support tickets",
+        "responses": {"200": {"description": "A list of tickets"}}
+      }
+    },
+    "/tickets/{id}": {
+      "get": {
+        "operationId": "getTicket",
+        "summary": "Get one ticket",
+        "parameters": [{"name": "id", "in": "path", "required": true,
+                        "schema": {"type": "integer"}}],
+        "responses": {"200": {"description": "One ticket"}}
+      }
+    }
+  }
+}</code></pre>
+<p>Check it responds before going further:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8899/tickets</code></pre>
+<p>You should see the three tickets as JSON. Now add it as a provider in the Coral UI: open your workspace, choose <strong>Add provider</strong>, and supply the OpenAPI document — from a file, a URL, or pasted text. Coral discovers the operations and shows a configuration review: the server URL it found, the authentication method (here: none), and the tools it will expose. Confirm the configuration and publish the provider. Only workspace owners can add providers.</p>
+<p>What Coral discovered from this document is two tools under the namespace you choose at publish time — call it <code>tickets</code>:</p>
+<ul><li><code>coral.providers.tickets.listTickets</code> — list the tickets.</li><li><code>coral.providers.tickets.getTicket</code> — fetch one ticket by id.</li></ul>
+<p>The naming is the whole addressing scheme: <code>coral.providers.&lt;namespace&gt;.&lt;operation&gt;</code>. Your agent will call exactly those paths, spelled out in full, in its programs.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/coral-agent-gateway-custom-tools-tutorial/img2.webp" alt="Diagram of a coding agent passing through a Coral policy checkpoint to reach three provider services"><figcaption>Illustration: the agent's calls pass through Coral's policy checkpoint before reaching any provider. Image generated for this article.</figcaption></figure>
+<h2 id="step-3-connect-your-agent">Step 3: Connect your agent<a class="anchor" href="#step-3-connect-your-agent" aria-label="Link to section">#</a></h2>
+<p>Connect your agent to Coral once, and it can use every provider in the workspace. Copy the setup from the Coral UI — it already contains your workspace's URL. Each workspace has its own MCP endpoint, of the form <code>http://127.0.0.1:&lt;port&gt;/workspaces/&lt;workspace-id&gt;/mcp</code>; the port is assigned when the app starts, so copy it rather than guessing it.</p>
+<p>For Claude Code:</p>
+<pre><code class="language-bash">claude mcp add --scope user --transport http coral &lt;your-mcp-url&gt;</code></pre>
+<p>For Codex:</p>
+<pre><code class="language-bash">codex mcp add coral --url &lt;your-mcp-url&gt;</code></pre>
+<p>Coral speaks Streamable HTTP MCP, and in desktop mode the workspace endpoint needs no separate sign-in. Once connected, the agent sees four tools: <code>exec</code>, <code>wait</code>, <code>cancel</code>, and <code>end_task</code>. Everything else — every provider tool, every custom tool — is reached from inside a program, not from the MCP tool list. That is the design: the agent's job is to write programs, and Coral's job is to run them.</p>
+<h2 id="step-4-run-your-first-program">Step 4: Run your first program<a class="anchor" href="#step-4-run-your-first-program" aria-label="Link to section">#</a></h2>
+<p>Ask your agent for the open tickets. Behind the scenes it sends one <code>exec</code> call with a goal and a TypeScript program. You can reproduce the same call directly against the workspace MCP endpoint; the program is short enough to read in full:</p>
+<pre><code class="language-typescript">const { data: tickets } = await coral.providers.tickets.listTickets();
+const open = tickets.filter((t) => t.status === "open");
+return open.map((t) => `#${t.id} ${t.title}`);</code></pre>
+<p>The run succeeds and returns the filtered list — the two open tickets, with the closed one dropped:</p>
+<pre><code class="language-json">["#1 Checkout returns 500 after deploy", "#2 Flaky login test on main"]</code></pre>
+<p>Three details matter here. First, the program is the complete unit of work: one <code>exec</code> call, one run, one result. The agent does not make a tool call per ticket; the filtering happens inside the isolate, where it costs no tokens. Second, the call path is literal — <code>coral.providers.tickets.listTickets()</code>, exactly as Coral's discovery reported it. Programs cannot hide paths in variables, and only provider tools reach the network: <code>fetch</code>, <code>setTimeout</code>, and other ambient APIs are absent inside the isolate. Third, the program takes no arguments: <code>listTickets</code> has no parameters, so call it with no arguments. Passing an empty object still runs, but Coral reports a non-fatal type diagnostic (<code>Expected 0 arguments, but got 1</code>) — a useful signal that the generated signature disagrees with your call.</p>
+<p>The run lifecycle is worth knowing because you will see it in agent transcripts. <code>exec</code> starts a run and returns a <code>run_id</code> and a <code>task_id</code>; while the run is still going, the agent calls <code>wait</code> with the same <code>run_id</code> and the latest cursor until the state reads <code>succeeded</code>; when the work is done it calls <code>end_task</code> once with the outcome. Long programs can publish interim output with <code>await coral.emit(value)</code>; the program's return value is the final value. If a run needs a person — an approval, an OAuth sign-in — it reports <code>required_actions</code> and waits instead of failing.</p>
+<h2 id="step-5-save-it-as-a-custom-tool">Step 5: Save it as a custom tool<a class="anchor" href="#step-5-save-it-as-a-custom-tool" aria-label="Link to section">#</a></h2>
+<p>Listing open tickets is a two-line program, but it is also a job you will ask for again. Coral lets the agent save a working program as a private tool with <code>coral.addCustomTool</code>, so the next run calls it by name instead of re-deriving it. The same program, wrapped as a named function:</p>
+<pre><code class="language-typescript">async function openTickets() {
+  const { data: tickets } = await coral.providers.tickets.listTickets();
+  return tickets.filter((t) => t.status === "open").map((t) => `#${t.id} ${t.title}`);
+}
+const saved = await coral.addCustomTool({
+  description: "List the titles of open support tickets",
+  path: "openTickets",
+  source: openTickets,
+});
+return saved;</code></pre>
+<p>Coral saves it as <code>coral.private.openTickets</code> and returns its declaration — <code>declare function openTickets(): Promise&lt;string[]&gt;;</code> — at revision 1. A fresh run can now call it directly:</p>
+<pre><code class="language-typescript">return await coral.private.openTickets();</code></pre>
+<p>It returns the same two tickets. That round trip — write, save, call back by name — is the feature the Show HN thread is about. A program that composes three providers, joins the results, and formats a report becomes one tool; the agent's next request for the same report is one call, not a fresh reasoning chain. Tools can be shared with the workspace as <code>coral.shared.&lt;name&gt;</code>, replaced with <code>coral.updateCustomTool</code>, and removed with <code>coral.removeCustomTool</code>. The rule of thumb from Coral's own guidance: save work that will be reused — many calls, paging, joins, filters — and skip one-off writes and exploration.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/coral-agent-gateway-custom-tools-tutorial/img3.webp" alt="Diagram of a program moving from a code editor into a locked sandbox and then onto a shelf as a reusable tool"><figcaption>Illustration: write a program, run it in the sandbox, keep it as a reusable tool. Image generated for this article.</figcaption></figure>
+<h2 id="step-6-set-the-policy">Step 6: Set the policy<a class="anchor" href="#step-6-set-the-policy" aria-label="Link to section">#</a></h2>
+<p>None of this is useful if the gateway cannot say no. Every provider starts with a default policy: tools that read data run without approval, and everything else needs approval. Workspace owners can change the policy per tool to <code>enabled</code>, <code>approval_required</code>, or <code>disabled</code> — and per-tool policy is also the <code>policy</code> argument when a program saves a custom tool.</p>
+<p>The policy is what makes the README's showcase example safe to hand to an agent. In Coral's own example, a program lists open GitHub pull requests with no requested reviewers and posts them to Slack:</p>
+<pre><code class="language-typescript">const { data: pulls } = await coral.providers.github.pulls.list({
+  owner: "withcoral",
+  repo: "coral",
+  state: "open",
+});
+const unreviewed = pulls.filter((pull) => pull.requested_reviewers.length === 0);
+await coral.providers.slack.chat.postMessage({
+  channel: "#engineering",
+  text: `Unreviewed PRs: ${unreviewed.map((pull) => `#${pull.number}`).join(", ")}`,
+});</code></pre>
+<p>Read that program with the policy in mind: the GitHub list is a read, so it runs; the Slack post is a write, so it asks first. A second example in the README, <code>closeStaleTicket</code>, changes one field and only on tickets with no activity for 30 days — the same shape, a narrow write behind an approval. The pattern to copy is small programs, narrow writes, and a policy that makes the dangerous call the one that asks.</p>
+<h2 id="when-to-use-coral-vs-the-alternatives">When to use Coral vs the alternatives<a class="anchor" href="#when-to-use-coral-vs-the-alternatives" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Use it when</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Coral</strong></td><td>Your agent repeats multi-step work across providers, and you want programs, policy checks, and reusable tools in one place.</td><td>Young project (v1.10.0); the shared server needs OIDC and a reverse proxy.</td></tr><tr><td><strong>Plain MCP servers</strong></td><td>One service, simple calls, no shared logic worth saving.</td><td>Every call is a model decision; no policy layer beyond the tool itself.</td></tr><tr><td><strong>Agent SDKs with code execution</strong></td><td>You are building a product around one agent framework.</td><td>The code runs with the agent's credentials and network; you build the sandboxing and audit trail yourself.</td></tr><tr><td><strong>Workflow automation (n8n, Zapier)</strong></td><td>The flow is fixed and trigger-based, not decided by an agent at run time.</td><td>Not built for agents writing new logic per request.</td></tr></tbody></table></div>
+<p>Coral's niche is the middle: agents that need to do real multi-step work against real services, where the work is worth writing down once and reusing. If your agent only ever makes one call to one service, a plain MCP server is simpler. If the flow never changes, a workflow tool is simpler. Coral earns its place when the same agent, against the same providers, keeps solving variations of the same job.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Coral's idea is small and well aimed: stop paying the model to re-derive the same sequence of tool calls, and stop giving it raw credentials to do it. Programs run sandboxed, calls are policy-checked, credentials stay server-side, and the good programs become tools. The tutorial above is the smallest honest version of that loop — a local API, one program, one saved tool — and it runs without a single account or API key. From here, the next step is the obvious one: point Coral at a provider you actually use, write the program you keep asking your agent for, and save it.</p>
+<p><em>How this tutorial was tested: every program in it ran end to end against Coral 1.10.0 on Linux — the desktop app's runtime, the local ticket API on port 8899, the MCP loop (<code>exec</code> → <code>wait</code> → <code>end_task</code>), and the custom-tool save and call-back. The workspace and provider setup steps follow Coral's own quickstart; the equivalent setup in the test run was performed through Coral's management API. Vendor performance figures are Coral's own, not independently verified.</em></p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="coral-agent-gateway-custom-tools-tutorial"></div><div class="comments" data-comments="coral-agent-gateway-custom-tools-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/build-mcp-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build your first MCP-powered agent: tools, servers, and safety rails</h3><div class="meta">August 24, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/firecrawl-ai-agent-web-access-tutorial/"><span class="chip">Tutorials</span><h3>Give your AI agent the live web: search, scrape, and crawl with Firecrawl — hands-on</h3><div class="meta">November 19, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/letta-stateful-agent-memory-tutorial/"><span class="chip">Tutorials</span><h3>Build an agent that remembers you: hands-on with Letta’s Agent SDK</h3><div class="meta">November 19, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/transformers-js-in-browser-ai-tutorial/"><span class="chip">Tutorials</span><h3>Run AI in the browser: build a private semantic search app with Transformers.js</h3><div class="meta">November 19, 2026 · 18 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Does Coral replace my MCP servers?</h3><p>No. Coral sits in front of them: a provider can be an MCP server, an OpenAPI document, or a catalog entry. Coral adds the program layer, the policy checks, and the saved custom tools on top of the tools those servers already expose.</p><h3>Do my agents&#x27; programs see my API keys?</h3><p>No. Programs run in a fresh V8 isolate with no network access and no credentials. Coral checks each provider call against the workspace policy and injects credentials server-side only when the call is allowed.</p><h3>Which agents can connect to Coral?</h3><p>Any MCP client that speaks Streamable HTTP using the workspace&#x27;s MCP URL. Claude Code and Codex are the documented ones: claude mcp add --scope user --transport http coral &lt;url&gt; and codex mcp add coral --url &lt;url&gt;.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/build-mcp-agent-tutorial/">Build your first MCP-powered agent: tools, servers, and safety rails</a></li><li><a href="/articles/letta-stateful-agent-memory-tutorial/">Build an agent that remembers you: hands-on with Letta’s Agent SDK</a></li><li><a href="/articles/firecrawl-ai-agent-web-access-tutorial/">Give your AI agent the live web: search, scrape, and crawl with Firecrawl — hands-on</a></li><li><a href="/articles/reverse-engineer-marketing-competitor-teardown-tutorial/">Reverse-engineer any company’s marketing machine: hands-on with REM</a></li><li><a href="/articles/transformers-js-in-browser-ai-tutorial/">Run AI in the browser: build a private semantic search app with Transformers.js</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
