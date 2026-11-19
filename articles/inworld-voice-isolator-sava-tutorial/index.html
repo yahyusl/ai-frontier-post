@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Strip the noise, keep the voice: hands-on with Inworld&#x27;s Voice Isolator and SAVA — AI Frontier Post</title>
+<meta name="description" content="Inworld open-sourced the voice-isolation and turn-taking models behind its realtime voice products. I installed both, ran them on the repo&#x27;s own noisy sample, and measured it: silent gaps cut by ~50 dB, speech kept within a decibel, and a realtime twin that matches the offline model to 0.999 correlation.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/inworld-voice-isolator-sava-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Strip the noise, keep the voice: hands-on with Inworld&#x27;s Voice Isolator and SAVA">
+<meta property="og:description" content="Inworld open-sourced the voice-isolation and turn-taking models behind its realtime voice products. I installed both, ran them on the repo&#x27;s own noisy sample, and measured it: silent gaps cut by ~50 dB, speech kept within a decibel, and a realtime twin that matches the offline model to 0.999 correlation.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/inworld-voice-isolator-sava-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/inworld-voice-isolator-sava-tutorial/cover.webp">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="900">
+<meta property="article:published_time" content="2026-11-19">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Strip the noise, keep the voice: hands-on with Inworld's Voice Isolator and SAVA","description":"Inworld open-sourced the voice-isolation and turn-taking models behind its realtime voice products. I installed both, ran them on the repo's own noisy sample, and measured it: silent gaps cut by ~50 dB, speech kept within a decibel, and a realtime twin that matches the offline model to 0.999 correlation.","datePublished":"2026-11-19","dateModified":"2026-11-19","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/inworld-voice-isolator-sava-tutorial/"},"image":"https://aifrontierpost.com/articles/inworld-voice-isolator-sava-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a GPU to run Voice Isolator?","acceptedAnswer":{"@type":"Answer","text":"No. The models run on CPU, Apple silicon, or CUDA. On a CPU-only machine, install CPU-only PyTorch and torchaudio from PyTorch's CPU index before the Inworld packages \u2014 the default pip install pulls the CUDA build, whose audio library fails to load without Nvidia's runtime libraries. The sandbox used for this tutorial ran the full 10.77-second sample on a 2-core VM: about 5 minutes and 2.2 GB of peak memory with 2-second chunks in bf16."}},{"@type":"Question","name":"Can it separate two people talking at once?","acceptedAnswer":{"@type":"Answer","text":"Not as a speaker selector. It isolates the foreground voice: when two people speak at once, the louder voice is kept and one a few decibels quieter is removed, while voices at similar levels are usually both kept."}},{"@type":"Question","name":"Does it fix bad audio or restore missing quality?","acceptedAnswer":{"@type":"Answer","text":"No. Version 1 is denoising only \u2014 it removes what surrounds the voice and restores nothing the recording lost, such as missing bandwidth. Restoration is planned for version 2."}},{"@type":"Question","name":"What does SAVA do that a silence timer doesn't?","acceptedAnswer":{"@type":"Answer","text":"It reads sentence completeness, so it can tell a mid-sentence pause from a finished turn. On real meeting audio it called 85.5% of turn ends within 200 ms, against 30.8% for pipecat's smart-turn v3.2. Its speech verdict lags its frame by 120 ms, and it is deliberately sensitive to quiet, distant speech \u2014 which is why Inworld suggests isolating the voice first."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Strip the noise, keep the voice: hands-on with Inworld's Voice Isolator and SAVA</h1>
+<p class="lede">Inworld open-sourced the voice-isolation and turn-taking models behind its realtime voice products. I installed both, ran them on the repo&#x27;s own noisy sample, and measured what actually came out: silent gaps cut by about 50 dB, speech kept within a decibel, and a realtime twin that matches the offline model almost exactly.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 19, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Inworld open-sourced Voice Isolator (64M-parameter offline and 58M-parameter realtime models) and SAVA (a 25.5M-parameter turn detector) on November 17-18, all Apache-2.0 and CPU-runnable. I installed both, ran them on the repo's own noisy sample, and measured the result: silent gaps cut by ~50 dB, speech kept within a decibel, and a realtime twin that matches the offline model to 0.999 correlation.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The release:</b> Voice Isolator v1 plus SAVA, November 17-18, 2026. Code and weights are Apache-2.0; the voice-isolator repo was created November 16 and had 57 stars and 5 forks when read for this tutorial.</li><li><b>The models:</b> an offline isolator (64M parameters, 8-second chunks), a realtime twin (58M, 20 ms of look-ahead, 63 ms algorithmic latency), and SAVA (25.5M, one speech and one turn probability per 40 ms frame). The isolator runs at 48 kHz, SAVA at 16 kHz.</li><li><b>Measured on the repo sample:</b> silent gaps cut by 43-53 dB, speech kept within about 1 dB, and voice plus background reconstructs the input exactly.</li><li><b>Streaming matches offline:</b> on a 3-second excerpt the realtime model's output correlates 0.9992 with the offline model's, with a mean absolute difference of 0.0020.</li><li><b>SAVA found 3 turns</b> in the 10.8-second cleaned clip. On 5,043 real turn ends in the AMI meeting corpus it called 85.5% within 200 ms, against 30.8% for pipecat's smart-turn (vendor-run benchmark).</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/inworld-voice-isolator-sava-tutorial/cover.webp" alt="A glowing amber voice waveform rising out of a chaotic teal soundscape of spectrogram bands and static"><figcaption>AI-generated illustration. The measurements in this tutorial come from the repo sample.</figcaption></figure>
+<div class="article-body"><p>On November 17, Inworld — the voice-AI lab behind the TTS-2 voice models — open-sourced two pieces of the stack its own realtime voice products run on: Voice Isolator, a 48&nbsp;kHz denoiser that strips background noise while keeping the speaker's laughs and breaths, and SAVA, a turn-taking model that tells a voice agent when the caller has actually finished speaking. A demo clip on r/LocalLLaMA drew 377 upvotes and 53 comments, and the release is three days old. This tutorial installs both, runs them on the repo's own noisy sample, and measures what actually comes out — no trust required.</p>
+<p>The result is worth your time because the models are small and the setup is honest: a 64M-parameter offline isolator, a 58M-parameter realtime twin, and a 25.5M-parameter turn detector, all Apache-2.0, all runnable on a CPU with no account and no API key. By the end you will have cleaned a recording, measured the cleanup frame by frame, streamed the realtime model, and cut the result into turns a voice agent can act on.</p>
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<p>Python 3.10 or later and pip. That is the whole list: no GPU, no account, no API key, no Docker. The install pulls PyTorch (CPU build, about 210&nbsp;MB), the two Inworld packages, and three weight files on first use — roughly 250&nbsp;MB for the offline isolator, 230&nbsp;MB for the realtime twin, and 51&nbsp;MB for SAVA. Budget about 1&nbsp;GB of disk and ten minutes for the downloads.</p>
+<p>Two things to know before you start. First, the offline model is hungry: on the 2-core sandbox used for this tutorial it peaked at 2.2&nbsp;GB of RAM while isolating a 10.77-second clip. A normal laptop with 16&nbsp;GB will not notice; a small VM will, and Step 2 gives you the flags that keep it under control. Second, everything below was run on CPU with one thread, so the timings are pessimistic — a machine with more cores will be several times faster.</p>
+<h2 id="step-1-install-it-without-the-cuda-trap">Step 1 — Install it without the CUDA trap<a class="anchor" href="#step-1-install-it-without-the-cuda-trap" aria-label="Link to section">#</a></h2>
+<p>The obvious install fails on a CPU-only machine, and the failure is confusing, so get this right first. A plain <code>pip install inworld-voice-isolation</code> pulls PyTorch's CUDA build, and its audio library then refuses to load:</p>
+<pre><code class="language-text">OSError: libcudart.so.13: cannot open shared object file: No such file or directory</code></pre>
+<p>The CUDA build of torchaudio needs Nvidia's runtime libraries, which a CPU-only machine does not have. The fix is to install CPU-only PyTorch and torchaudio from PyTorch's own CPU index <em>before</em> the Inworld packages, so pip sees them as already satisfied and does not fetch the CUDA builds:</p>
+<pre><code class="language-bash">python3 -m venv voice-lab
+source voice-lab/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install inworld-voice-isolation inworld-sava</code></pre>
+<p>Verified versions in this run: <code>inworld-voice-isolation 1.0.0</code>, <code>inworld-sava 1.0.0</code>, <code>torch 2.15.0+cpu</code>, <code>torchaudio 2.11.1+cpu</code>, Python 3.12. If you <em>do</em> have an Nvidia GPU, skip the CPU index lines — the plain install is the right one for you, and the CUDA kernels are an optional extra (<code>pip install "inworld-voice-isolation[fast]"</code>).</p>
+<p>Confirm the install with the bundled doctor command, which reports versions, device, and whether the weights are downloaded yet:</p>
+<pre><code class="language-bash">voice-isolate-doctor</code></pre>
+<pre><code class="language-text">INFO  package: inworld-voice-isolation 1.0.0
+INFO  python: Python 3.12.3 on Linux-7.0.0-44-generic-x86_64-with-glibc2.39
+INFO  torch: torch 2.15.0+cpu, torchaudio 2.11.1+cpu
+INFO  device: inference runs on cpu
+INFO  kernels: optional CUDA kernels not installed (CUDA only, not needed)
+INFO  voice-isolator-v1: not downloaded yet; run with --full
+INFO  voice-isolator-v1-realtime: not downloaded yet; run with --full</code></pre>
+<p>The weights download from Hugging Face on first use and are checksum-verified. Nothing else is needed: no sign-in, no key.</p>
+<h2 id="step-2-isolate-your-first-file">Step 2 — Isolate your first file<a class="anchor" href="#step-2-isolate-your-first-file" aria-label="Link to section">#</a></h2>
+<p>Grab the repo's own noisy sample — a 10.77-second, 48&nbsp;kHz mono recording — and run the offline model on it. The documented quickstart is:</p>
+<pre><code class="language-bash">curl -LO https://raw.githubusercontent.com/inworld-ai/voice-isolator/main/demo/examples/sample_14.wav
+voice-isolate sample_14.wav sample_14_clean.wav</code></pre>
+<p>On a memory-constrained machine, add the two flags used for every measurement in this tutorial. They shrink the processing window from the default 8 seconds to 2 seconds and compute in bf16, which held peak memory to 2.2&nbsp;GB on the sandbox:</p>
+<pre><code class="language-bash">voice-isolate sample_14.wav sample_14_clean.wav --chunk-seconds 2 --precision bf16</code></pre>
+<p>Expected output, with the weights already downloaded:</p>
+<pre><code class="language-text">1 file(s), 1 to do
+DONE 1/1  (78s)</code></pre>
+<p>That 78 seconds was for a 3-second excerpt on a single CPU thread; the full 10.77-second file took about 5 minutes the same way. Two files appear next to the input: <code>sample_14_clean.wav</code> (the isolated voice) and <code>sample_14_clean_background.wav</code> (everything the model removed). Both are float32 WAVs at 48&nbsp;kHz with their original levels preserved — and, as Step 3 shows, the two sum back to the input exactly.</p>
+<p>The same call works on a directory of files, and <code>--no-background</code> saves only the voice. If your input is not 48&nbsp;kHz mono, the tool resamples and mixes it down on the way in; <code>--output-sr 0</code> keeps the input rate instead of the default 48&nbsp;kHz.</p>
+<h2 id="step-3-measure-what-actually-happened">Step 3 — Measure what actually happened<a class="anchor" href="#step-3-measure-what-actually-happened" aria-label="Link to section">#</a></h2>
+<p>Listening is not measuring. The script below loads the three files, checks that voice plus background reconstructs the input, and prints the RMS level of every 100&nbsp;ms frame for the input and the isolated voice:</p>
+<pre><code class="language-python">import numpy as np, soundfile as sf
+
+inp, sr = sf.read("sample_14.wav", dtype="float32")
+out, _ = sf.read("sample_14_clean.wav", dtype="float32")
+bg, _ = sf.read("sample_14_clean_background.wav", dtype="float32")
+
+print("recon max abs err %.6f" % np.abs((out + bg) - inp).max())
+F = sr // 10
+for i in range(len(inp) // F):
+    ei = np.sqrt((inp[i*F:(i+1)*F]**2).mean())
+    eo = np.sqrt((out[i*F:(i+1)*F]**2).mean())
+    print("t=%4.1fs in=%.4f out=%.4f out/in=%+.1fdB" % (
+        i * 0.1, ei, eo, 20 * np.log10(eo / ei)))</code></pre>
+<p>Here is what the full sample measured, and what it means:</p>
+<ul><li><strong>Reconstruction is exact.</strong> Voice plus background equals the input to within floating-point rounding (max absolute error 0.000000). Nothing is invented and nothing is lost; the model only redistributes energy between the two tracks.</li><li><strong>The noise is a steady bed.</strong> The removed background sits at RMS ≈ 0.039–0.040 in <em>every</em> frame — the sample's noise is constant, not bursty. That is consistent with the demo's noise being synthetic, which the release coverage already flagged: treat this as a clean-room test, not a field trial.</li><li><strong>Silent gaps are cut by about 50&nbsp;dB.</strong> Where nobody is speaking — the first 0.3&nbsp;s, the 5.1–5.4&nbsp;s pause, the 8.5–8.9&nbsp;s gap, the final 0.4&nbsp;s — the output falls to RMS ≈ 0.0001 against an input of 0.040. In decibels: −43 to −53&nbsp;dB.</li><li><strong>Speech is kept within about a decibel.</strong> In frames where someone is talking, the isolated voice sits 0.1–1.5&nbsp;dB below the noisy input — the difference is almost entirely the removed noise floor, not the voice. Overall the voice RMS is 0.0798 against the input's 0.0895.</li></ul>
+<figure class="inline-art"><img class="story-image" src="/articles/inworld-voice-isolator-sava-tutorial/img2.webp" alt="Chart of per-frame RMS level over the 10.77 second sample: the noisy input holds a steady 0.04 noise floor while the isolated voice tracks it during speech and drops about 50 dB in the silent gaps"><figcaption>Measured on the repo sample: per-100 ms frame RMS of the noisy input versus the isolated voice. The amber line tracks the blue line while someone speaks and plunges in the shaded silent gaps. Chart: AI Frontier Post, from the measured WAV files.</figcaption></figure>
+<p>One honest limit: this sample's noise is steady and synthetic. A café, a car, or a second talker are harder, and the first independent tester in the demo thread found a rival model better on genuinely messy recordings. Use the measurement script above on your own audio before trusting the model with anything important — it takes a minute and it is the only claim that matters.</p>
+<h2 id="step-4-run-it-live-the-realtime-model">Step 4 — Run it live: the realtime model<a class="anchor" href="#step-4-run-it-live-the-realtime-model" aria-label="Link to section">#</a></h2>
+<p>Voice Isolator ships as two checkpoints that share one architecture: the 64M-parameter offline model you just ran, and a 58M-parameter realtime twin that streams with 20&nbsp;ms of look-ahead (63&nbsp;ms algorithmic latency). Switch models with one flag:</p>
+<pre><code class="language-bash">voice-isolate sample_14.wav sample_14_streamed.wav --mode streaming --lookahead 2</code></pre>
+<p>The realtime checkpoint (about 230&nbsp;MB) downloads on first use. On the sandbox the 3-second excerpt finished in 45 seconds and produced a 48&nbsp;kHz PCM_16 file. The interesting question is how much quality the causal model gives up, so compare the two outputs directly:</p>
+<pre><code class="language-python">import numpy as np, soundfile as sf
+
+off, sr = sf.read("cli_3s_clean.wav", dtype="float32")
+stm, _ = sf.read("cli_3s_streamed.wav", dtype="float32")
+print("correlation %.4f" % np.corrcoef(off, stm)[0, 1])
+print("mean abs diff %.4f" % np.abs(off - stm).mean())
+print("streamed silent 0.4 s RMS %.5f (input %.4f)" % (
+    np.sqrt((stm[:int(0.4 * sr)]**2).mean()), 0.0401))</code></pre>
+<pre><code class="language-text">correlation 0.9992
+mean abs diff 0.0020
+streamed silent 0.4 s RMS 0.00093 (input 0.0401)</code></pre>
+<p>The realtime model agrees with the offline model to a correlation of 0.9992, and it cuts the silent opening by a factor of 40 in level. For a live pipeline that is the right trade: the causal model sees only the past plus 20&nbsp;ms, and on this sample it gives up almost nothing.</p>
+<p>The Python streaming API follows the same shape — feed it 20&nbsp;ms pieces as a microphone would deliver them, and play back whatever comes out as final:</p>
+<pre><code class="language-python">import torch
+from inworld import voice_isolation
+
+live = voice_isolation.VoiceIsolator("inworld/voice-isolator",
+                                     mode="streaming", lookahead_frames=2)
+session = live.stream()  # 48 kHz mono, in pieces of any size
+wav, sample_rate = voice_isolation.load_audio("sample_14.wav")
+voice = []
+for start in range(0, len(wav), 960):  # 20 ms at a time
+    voice.append(session.push(wav[start:start + 960]))
+voice.append(session.flush())
+voice_isolation.save_audio("sample_14_streamed.wav", torch.cat(voice), sample_rate)</code></pre>
+<p>Two operational notes from the docs: the realtime model is causal, so a clip processed as a stream will differ slightly from the offline pass on the same audio, and live use needs a device that processes audio faster than it arrives — on this 2-core VM it ran about 15× slower than realtime with one thread, so treat the sandbox numbers as a correctness check, not a latency benchmark.</p>
+<h2 id="step-5-cut-the-clean-voice-into-turns-with-sava">Step 5 — Cut the clean voice into turns with SAVA<a class="anchor" href="#step-5-cut-the-clean-voice-into-turns-with-sava" aria-label="Link to section">#</a></h2>
+<p>Clean audio is only half a voice agent. The agent also has to know <em>when</em> the caller has finished — and a pause mid-sentence is not an ending, while a breath before the next sentence is not a beginning. SAVA, released alongside Voice Isolator, is a 25.5M-parameter model that returns two probabilities for every 40&nbsp;ms frame: P(speech) and P(the turn has ended). It runs on a single CPU thread, takes 16&nbsp;kHz mono, and its weights are 51&nbsp;MB.</p>
+<p>Run it on the cleaned file with the CLI:</p>
+<pre><code class="language-bash">sava run sample_14_clean.wav --curves curves.json --turns_dir turns</code></pre>
+<pre><code class="language-text">    0.00     5.32  speech  4920 ms  closed by turn    kept
+    4.60     8.68  speech  3120 ms  closed by turn    kept
+    8.16    10.80  speech  1480 ms  closed by end     kept
+3 turns, 3 kept, 10.8 s of audio</code></pre>
+<p>The whole command took 12.8 seconds including the weight download. It wrote <code>curves.json</code> (270 frames at 0.04&nbsp;s per frame, with <code>speech</code> and <code>turn</code> probability arrays) and one 16&nbsp;kHz WAV per turn in <code>turns/</code>.</p>
+<p>Notice the turns overlap: the first ends at 5.32&nbsp;s and the second starts at 4.60&nbsp;s. That is the reference policy working as documented — a turn opens on the first frame judged speech and starts 800&nbsp;ms earlier, so a turn's reported start reaches back into the previous turn's tail. A turn closes when the end-of-turn probability crosses 0.9 after the speaker goes quiet, or after 1.6&nbsp;s of silence whatever the model says; turns shorter than 400&nbsp;ms of speech are dropped. The policy's defaults are inspectable and tunable:</p>
+<pre><code class="language-python">from inworld import sava
+
+model = sava.load("inworld/sava")  # downloads the weights on first use
+curves = sava.run(model, sava.load_audio("sample_14_clean.wav"))
+turns = sava.segment(curves, sava.Policy(), model.lookahead_frames)
+for t in turns:
+    print(round(t.start * 0.04, 2), round(t.end * 0.04, 2),
+          t.speech_ms, t.reason, t.kept)</code></pre>
+<p><code>Turn.start</code> and <code>Turn.end</code> are frame indices — multiply by 0.04 for seconds. The defaults are <code>speech_threshold 0.5</code>, <code>turn_threshold 0.9</code>, <code>pre_roll_ms 800</code>, <code>max_silence_ms 1600</code>, <code>min_speech_ms 400</code>. Two limits from the docs are worth knowing before you integrate: the speech verdict lags its frame by 120&nbsp;ms, and the model is deliberately sensitive to quiet, distant speech, so a television in the next room can trigger it — which is exactly why Inworld suggests running Voice Isolator first.</p>
+<p>How good is it? Inworld's own benchmarks, scored on public datasets against Silero VAD 6.2.1 for speech detection and pipecat's smart-turn v3.2 for turn detection: on 5,043 real turn ends in the AMI meeting corpus, SAVA detected 85.5% within 200&nbsp;ms against smart-turn's 30.8%, with a median delay of 71&nbsp;ms against 210&nbsp;ms. It is weaker on Easy Turn (0.51 accuracy against 0.83), which Inworld attributes to that set's synthesized clips — read the benchmark README in the repo before quoting any of these numbers as your own.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/inworld-voice-isolator-sava-tutorial/img3.webp" alt="Diagram of the two-model pipeline: a noisy recording goes through Voice Isolator into a clean voice track and a background track, then SAVA cuts the clean voice into turns; a microphone can instead feed the realtime isolator for a live clean stream"><figcaption>The pipeline in this tutorial: isolate first, then segment. The realtime model swaps in for live audio. Diagram: AI Frontier Post.</figcaption></figure>
+<h2 id="step-6-wire-it-together-a-two-model-intake-script">Step 6 — Wire it together: a two-model intake script<a class="anchor" href="#step-6-wire-it-together-a-two-model-intake-script" aria-label="Link to section">#</a></h2>
+<p>The two tools compose into a small intake pipeline: isolate a noisy recording, then hand the clean voice to SAVA and get back turn-sized clips ready for transcription or a voice agent. This is the same pair of calls from Steps 2 and 5, back to back:</p>
+<pre><code class="language-python">import torch
+from inworld import voice_isolation, sava
+
+torch.set_num_threads(1)  # raise this on a real machine
+
+wav, sr = voice_isolation.load_audio("noisy.wav")
+cleaner = voice_isolation.VoiceIsolator("inworld/voice-isolator",
+                                        precision="bf16")
+voice = cleaner.isolate(wav, sr, chunk_seconds=2.0, overlap_seconds=0.5)
+voice_isolation.save_audio("clean.wav", voice, sr, subtype="FLOAT")
+
+turn_model = sava.load("inworld/sava")
+curves = sava.run(turn_model, sava.load_audio("clean.wav"))
+turns = sava.segment(curves, sava.Policy(), turn_model.lookahead_frames)
+for i, t in enumerate(turns):
+    print(f"turn {i}: {t.start * 0.04:.2f}s - {t.end * 0.04:.2f}s, "
+          f"{t.speech_ms} ms of speech, {t.reason}, kept={t.kept}")</code></pre>
+<p>Run on the 3-second excerpt of the sample, this prints one turn — <code>0.00s - 3.00s, 2760 ms of speech, end, kept=True</code> — because the excerpt has no 1.6-second silence for the policy to close on. On the full 10.77-second file the CLI found the three turns from Step 5. Peak memory for the combined run was 2.2&nbsp;GB, dominated by the isolator; SAVA adds almost nothing.</p>
+<p>From here the obvious next steps are all small: send each turn to a transcriber (the blog's faster-whisper tutorial runs locally), feed the turns to a voice agent's dialogue policy instead of a fixed silence timer, or use the background track as a noise profile for your own evaluation set. The demo in the repo (<code>python demo/app.py</code> after <code>pip install -e ".[demo]"</code>) gives you a Gradio page with an offline tab and a live microphone tab if you want to try your own voice before wiring anything up.</p>
+<h2 id="when-to-use-this-vs-the-alternatives">When to use this vs the alternatives<a class="anchor" href="#when-to-use-this-vs-the-alternatives" aria-label="Link to section">#</a></h2>
+<p>Voice isolation is a crowded shelf, and this model is not the answer to every recording. The honest comparison:</p>
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>Best for</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Inworld Voice Isolator</strong></td><td>Cleaning speech for playback, datasets, or a voice pipeline; keeping laughs, breaths, and level intact; live calls via the realtime twin</td><td>Denoising only — no restoration of lost bandwidth (planned for v2); not a speaker selector; 3 days old, thin track record</td></tr><tr><td><strong>DeepFilterNet3</strong></td><td>Battle-tested realtime noise suppression; streaming-first design</td><td>Lower score on Inworld's VIBE board (0.510 vs 0.768); 48&nbsp;kHz support varies by build</td></tr><tr><td><strong>ClearerVoice MossFormer2</strong></td><td>Strong offline separation quality, including music</td><td>Heavier setup; the VIBE gap to Voice Isolator is small (0.695 vs 0.768) and vendor-measured</td></tr><tr><td><strong>Silero VAD + smart-turn</strong></td><td>Speech detection and turn-taking without isolation; tiny and fast</td><td>Two separate models to wire together; SAVA beat smart-turn on real AMI turn ends (85.5% vs 30.8% within 200&nbsp;ms) but trails it on Easy Turn</td></tr><tr><td><strong>resemble-enhance</strong></td><td>Full enhancement including restoration</td><td>Generative — it can invent detail the recording never had, which is exactly what you do not want before transcription or training</td></tr></tbody></table></div>
+<p>The VIBE scores in that table are Inworld's own, run on an internal evaluation set that is not distributed — treat them as the vendor's claim, not an independent result. The independent evidence so far is thin: one demo thread and the measurements in this tutorial. What is independently verifiable today is the part that matters most for a tutorial: the install works, the models run on a CPU, the outputs are measurable, and the code is Apache-2.0.</p>
+<p>Choose Voice Isolator when the voice itself must survive untouched — dataset curation, voice-agent input, interview cleanup. Choose a generative enhancer when the recording is damaged and you need restoration, and accept that it will invent. Choose DeepFilterNet when you need the most proven realtime path and can live with its quality ceiling.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Inworld's release is notable less for any single number than for the shape of it: a production voice stack — isolation plus turn-taking — open-sourced together, small enough to run on a laptop CPU, with the code, weights, benchmarks, and eval scripts in the open. The two models do one job each and compose cleanly, which is rarer than it should be.</p>
+<p>What to do with it: install the CPU torch build first, isolate a file, and run the measurement script on your own audio. If the silent gaps in your recording drop by tens of decibels while the speech stays within a decibel, you have a denoiser worth keeping. If they don't, you have learned that in a minute, with numbers, instead of from a demo video. And if you build a voice agent, let SAVA — not a silence timer — decide when the caller is done: on real meeting audio it called 85.5% of turn ends within 200&nbsp;ms, against 30.8% for the incumbent.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="inworld-voice-isolator-sava-tutorial"></div><div class="comments" data-comments="inworld-voice-isolator-sava-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/arize-phoenix-agent-observability-tutorial/"><span class="chip">Tutorials</span><h3>See what your AI agent actually did: hands-on with Arize Phoenix observability</h3><div class="meta">November 19, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/pyrit-ai-red-teaming-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your own chatbot: hands-on with Microsoft&#x27;s PyRIT</h3><div class="meta">November 18, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/gemini-4-neon-research-analyst-tutorial/"><span class="chip">Tutorials</span><h3>Build a long-context research analyst with Gemini 4 Neon: thinking levels, structured output, and long decode, end to end</h3><div class="meta">November 18, 2026 · 21 min read</div></a><a class="rel-card" href="/articles/video-shotcraft-ai-product-promo-tutorial/"><span class="chip">Tutorials</span><h3>Make product promos with your coding agent: hands-on with video-shotcraft&#x27;s 124-shot Remotion library</h3><div class="meta">November 18, 2026 · 15 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run Voice Isolator?</h3><p>No. The models run on CPU, Apple silicon, or CUDA. On a CPU-only machine, install CPU-only PyTorch and torchaudio from PyTorch's CPU index before the Inworld packages — the default pip install pulls the CUDA build, whose audio library fails to load without Nvidia's runtime libraries. The sandbox used for this tutorial ran the full 10.77-second sample on a 2-core VM: about 5 minutes and 2.2 GB of peak memory with 2-second chunks in bf16.</p><h3>Can it separate two people talking at once?</h3><p>Not as a speaker selector. It isolates the foreground voice: when two people speak at once, the louder voice is kept and one a few decibels quieter is removed, while voices at similar levels are usually both kept.</p><h3>Does it fix bad audio or restore missing quality?</h3><p>No. Version 1 is denoising only — it removes what surrounds the voice and restores nothing the recording lost, such as missing bandwidth. Restoration is planned for version 2.</p><h3>What does SAVA do that a silence timer doesn&#x27;t?</h3><p>It reads sentence completeness, so it can tell a mid-sentence pause from a finished turn. On real meeting audio it called 85.5% of turn ends within 200 ms, against 30.8% for pipecat's smart-turn v3.2. Its speech verdict lags its frame by 120 ms, and it is deliberately sensitive to quiet, distant speech — which is why Inworld suggests isolating the voice first.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/inworld-voice-isolator-open-weight/">Inworld open-sources a voice isolator that pulls clean speech out of noisy recordings — live, in 20 milliseconds</a></li><li><a href="/articles/faster-whisper-local-transcription-tutorial/">Transcribe anything on your own machine: a hands-on guide to faster-whisper</a></li><li><a href="/articles/nvidia-nemotron-35-transcribe-open-speech-model/">Nvidia releases Nemotron 3.5 Transcribe, an open speech model that covers 40 languages in a single pass</a></li><li><a href="/articles/elevenlabs-eleven-v4-turbo-voice-launch/">ElevenLabs launches Eleven v4: a voice model that performs instead of reading — and a 100ms Turbo for agents</a></li><li><a href="/articles/salesforce-sov-transcribe-1-open-speech-model/">Salesforce&#x27;s SOV-Transcribe-1 takes the open-weights speech crown at 2.3% word error</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
