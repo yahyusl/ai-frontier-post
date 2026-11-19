@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build your own browser agent with Gemini Computer Use: the complete hands-on tutorial — AI Frontier Post</title>
+<meta name="description" content="Google's Computer Use tool went GA on October 30: Gemini sees your screen and returns clicks, keystrokes, and scrolls, and your code runs them. This tutorial builds a working browser agent with the Interactions API and Playwright — the full loop, the safety gates, and the pricing — with every call verified against Google's docs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gemini-computer-use-api-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="QMD: turn your notes and docs into a local hybrid search engine your coding agent can query">
+<meta property="og:description" content="Google's Computer Use tool went GA on October 30: Gemini sees your screen and returns clicks, keystrokes, and scrolls, and your code runs them. This tutorial builds a working browser agent with the Interactions API and Playwright — the full loop, the safety gates, and the pricing — with every call verified against Google's docs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gemini-computer-use-api-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gemini-computer-use-api-tutorial/cover.webp">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="900">
+<meta property="article:published_time" content="2026-11-19">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "QMD: turn your notes and docs into a local hybrid search engine your coding agent can query", "description": "Google's Computer Use tool went GA on October 30: Gemini sees your screen and returns clicks, keystrokes, and scrolls, and your code runs them. This tutorial builds a working browser agent with the Interactions API and Playwright — the full loop, the safety gates, and the pricing — with every call verified against Google's docs.", "datePublished": "2026-11-19", "dateModified": "2026-11-19", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/gemini-computer-use-api-tutorial/"}, "image": "https://aifrontierpost.com/articles/gemini-computer-use-api-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does Computer Use work on the Gemini API free tier?", "acceptedAnswer": {"@type": "Answer", "text": "No. Google's pricing page lists the Computer Use tool as not available on the free tier. You need a paid-tier API key with billing enabled; usage is then charged as regular tokens at the model's normal rates — $1.50 per million input tokens and $7.50 per million output tokens for Gemini 4 Hydrogen."}}, {"@type": "Question", "name": "Which model should I use for Computer Use?", "acceptedAnswer": {"@type": "Answer", "text": "Gemini 4 Hydrogen is the default in this tutorial and in Google's own examples. Gemini 3.8 Flash costs half as much through December 31, 2026 ($0.75 in / $3.75 out per million tokens) but doubles to Hydrogen's price on January 1, 2027. Gemini 4 Argon and Carbon cost more and suit complex multi-step workflows."}}, {"@type": "Question", "name": "Can the agent click anything on my computer?", "acceptedAnswer": {"@type": "Answer", "text": "No. The model only returns suggested actions; your code decides what to execute. In the browser environment it can only act inside the Playwright browser window. The desktop environment needs a separate action handler you write yourself. Run the agent in a fresh browser with no saved logins, ideally in a sandboxed VM or container."}}, {"@type": "Question", "name": "What happens when the model wants to do something risky?", "acceptedAnswer": {"@type": "Answer", "text": "The model can attach a safety_decision to an action: require_confirmation pauses the loop until you approve, and blocked skips the action entirely. Seven policy categories (payments, sensitive data, messaging, account creation, data modification, consent banners, legal terms) control when confirmation is required, and prompt-injection detection scans screenshots for hidden instructions."}}, {"@type": "Question", "name": "How much does a task cost?", "acceptedAnswer": {"@type": "Answer", "text": "Screenshots dominate the bill: every turn sends a full-screen PNG as input tokens. A short task of a handful of turns on Gemini 4 Hydrogen costs on the order of a few cents. Keep the viewport small (1440x900 or 1280x720) and the turn limit tight to keep costs down."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build your own browser agent with Gemini Computer Use: the complete hands-on tutorial</h1>
+<p class="lede">Google's Computer Use tool went GA on October 30: Gemini sees your screen and returns clicks, keystrokes, and scrolls, and your code runs them. This tutorial builds a working browser agent with the Interactions API and Playwright — the full loop, the safety gates, and the pricing — with every call verified against Google's docs.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 19, 2026 · 22 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Google's Computer Use tool is GA: Gemini looks at a screenshot and returns clicks, keystrokes, and scrolls as function calls, and your code executes them with Playwright. This tutorial builds the full loop in about 200 lines of Python — the first API call, the action executor, the screenshot feedback, and the safety gates — and verifies the code offline against a real headless Chromium. You need a paid-tier API key: Computer Use is not on the free tier.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The loop is four steps:</b> screenshot to the model, function call back, execute with Playwright, screenshot the result — chained with <code>previous_interaction_id</code>.</li><li><b>Coordinates are normalized 0–1000:</b> scale them to pixels with <code>int(x / 1000 * width)</code>, and keep the viewport size in one place.</li><li><b>Safety is built in, not bolted on:</b> <code>safety_decision</code> (require_confirmation / blocked), seven policy categories, and opt-in prompt-injection detection.</li><li><b>Verified offline:</b> the executor was run against headless Chromium with a mocked model response — type, click, scroll, keys, navigate, and both safety paths all passed, and the run caught one real bug in Google's published <code>wheel()</code> example.</li><li><b>Costs real money:</b> Computer Use is paid-tier only; Gemini 4 Hydrogen is $1.50 in / $7.50 out per million tokens, and screenshots dominate the bill.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/gemini-computer-use-api-tutorial/cover.webp" alt="A robotic hand clicks a button in a browser window beneath a glowing multicolored Gemini star"></figure>
+<div class="article-body"><p>Until recently, giving an AI model control of your computer meant one of two things: a demo that only worked on the presenter's machine, or a research prototype with no stable API. That changed on October 30, 2026, when Google moved its Computer Use tool to general availability in the Gemini API. Gemini can now look at a screenshot, decide what to click, type, or scroll, and hand your code a precise action to execute — in a real browser, on a real page, through a documented API that Google commits to supporting. The same week, the Gemini app for Mac shipped computer use to consumers, which means the capability is no longer a lab curiosity: it is a shipping product surface with an API behind it.</p>
+<p>This tutorial builds a working browser agent on top of it. You will write a small Python program — about 200 lines — that opens Chromium with Playwright, sends the model a screenshot and a goal in plain English, executes the clicks and keystrokes it returns, and screenshots the result back until the job is done. Every call, parameter, and default in this tutorial was checked against Google's own <a href="https://ai.google.dev/gemini-api/docs/computer-use" rel="nofollow">Computer Use documentation</a> and <a href="https://ai.google.dev/gemini-api/docs/pricing" rel="nofollow">Gemini API pricing page</a> on the day of publication, and the code was run in a sandbox against a real headless Chromium with a mocked model response, so the executor, the coordinate math, and the safety gates are verified — not assumed. The one thing you cannot verify without your own key is the live model call itself: Computer Use is not available on the free tier, so you will need a paid-tier API key. The limitations section at the end is explicit about what was and was not run live.</p>
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> The tutorial was verified with Python 3.12 on Linux. macOS and Windows work the same way; the only platform-specific note is in Step 4, where the "select all" shortcut differs.</li>
+<li><strong>A Gemini API key with billing enabled.</strong> Get one at <a href="https://aistudio.google.com/api-keys" rel="nofollow">Google AI Studio</a>. This is the one hard requirement that costs money: the Computer Use tool is <strong>not available on the free tier</strong> — Google's pricing page lists it as "Not available" for free and "Charged as regular tokens per model pricing" on the paid tier. There is no separate per-action fee; you pay the model's normal token rates, and every screenshot you send back is billed as input tokens.</li>
+<li><strong>The Python SDK and Playwright.</strong> Google's docs require <code>google-genai</code> version 2.7.0 or higher; this tutorial was verified against 3.6.1. Playwright drives the browser. Install both in Step 2.</li>
+<li><strong>A few dollars of API credit for testing.</strong> With the recommended model in this tutorial, Gemini 4 Hydrogen, paid-tier pricing is $1.50 per million input tokens and $7.50 per million output tokens. A five-turn task that sends a 1440×900 screenshot each turn costs on the order of a few cents. The cheaper option, Gemini 3.8 Flash, is $0.75 in / $3.75 out per million tokens through December 31, 2026 — and doubles to $1.50 / $7.50 on January 1, 2027. Model choice is covered in Step 8.</li>
+<li><strong>A disposable browser profile, not your daily one.</strong> The agent will click and type wherever the model tells it to. Run it in a fresh Playwright browser with no saved logins, no cookies, and no access to your real accounts. Google's own docs say the same thing: run the agent in a sandboxed VM or container.</li></ul>
+<h2 id="how-computer-use-works">How Computer Use works<a class="anchor" href="#how-computer-use-works" aria-label="Link to section">#</a></h2>
+<p>The most important thing to understand is what the model does <em>not</em> do: it never touches your computer. Computer Use is a perception-and-decision tool, not a remote desktop. Your code owns the loop, and the model only ever returns a suggestion. Each turn looks like this:</p>
+<ol><li><strong>Your app sends a request</strong> with the Computer Use tool enabled, the task in plain text, and a screenshot of the current screen.</li>
+<li><strong>The model replies with a function call</strong> — an action such as <code>click</code> with coordinates, plus an <code>intent</code> field explaining its reasoning. It may also attach a <code>safety_decision</code> that marks the action as allowed, <code>require_confirmation</code>, or blocked.</li>
+<li><strong>Your code executes the action</strong> in the browser with Playwright, scaling the model's normalized 0–1000 coordinates to real pixels.</li>
+<li><strong>Your code screenshots the new state</strong> and sends it back as a <code>function_result</code>, and the loop repeats until the model returns a text answer instead of an action.</li></ol>
+<figure class="inline-art"><img class="story-image" src="/articles/gemini-computer-use-api-tutorial/img2.webp" alt="Diagram of the Computer Use agent loop: browser screenshot to Gemini model, model outputs a click action, Playwright executes it in the browser, and a new screenshot feeds back to the model"><figcaption>The Computer Use loop: observe, think, act, execute, observe. Diagram by AI Frontier Post.</figcaption></figure>
+<p>Two details in that loop are easy to get wrong. First, coordinates are normalized to a 0–1000 grid, not pixels: a click at <code>x: 450, y: 120</code> means 45% across and 12% down the viewport, and your code must scale it to the actual window size. Second, the conversation is stateful through <code>previous_interaction_id</code>: each turn you pass the ID of the previous interaction, so the model remembers the task and the history of actions. If you start a fresh interaction every turn, the model forgets what it already did and repeats itself.</p>
+<p>The API behind all of this is the <strong>Interactions API</strong> — <code>client.interactions.create()</code> in the Python SDK, <code>POST https://generativelanguage.googleapis.com/v1/interactions</code> over REST. Google also supports Computer Use through the older GenerateContent API, but every example in the current documentation uses Interactions, and this tutorial follows the docs.</p>
+<h2 id="step-1-get-a-paid-tier-api-key">Step 1 — Get a paid-tier API key<a class="anchor" href="#step-1-get-a-paid-tier-api-key" aria-label="Link to section">#</a></h2>
+<p>Open <a href="https://aistudio.google.com/api-keys" rel="nofollow">Google AI Studio</a>, create an API key, and enable billing on the Google Cloud project it belongs to. A key without billing will not work for Computer Use: the tool is gated to the paid tier even though the underlying models (Gemini 4 Hydrogen, Gemini 3.8 Flash) have free tiers for ordinary text calls. If you send a Computer Use request on a free-tier key, the API rejects it — the model itself is free, the tool is not.</p>
+<p>Export the key in your shell and keep it out of your code and your shell history file:</p>
+<pre><code class="language-bash">export GEMINI_API_KEY="AIza..."</code></pre>
+<p>The Python SDK reads <code>GEMINI_API_KEY</code> from the environment automatically, so <code>genai.Client()</code> with no arguments is all the setup you need. Never paste the key into the script itself; the full program at the end of this tutorial reads it from the environment and nothing else.</p>
+<h2 id="step-2-install-the-sdk-and-playwright">Step 2 — Install the SDK and Playwright<a class="anchor" href="#step-2-install-the-sdk-and-playwright" aria-label="Link to section">#</a></h2>
+<p>Google's docs require <code>google-genai</code> 2.7.0 or higher — earlier versions predate the Interactions API. Install it alongside Playwright:</p>
+<pre><code class="language-bash">pip install "google-genai>=2.7.0" playwright
+playwright install chromium</code></pre>
+<p>Verify the install before going further. This tutorial was verified with <code>google-genai</code> 3.6.1:</p>
+<pre><code class="language-bash">python -c "import google.genai as g; print(g.__version__)"
+python -c "from google import genai; c = genai.Client(api_key='test'); print(hasattr(c, 'interactions'))"</code></pre>
+<p>The first command should print a version number of 2.7.0 or higher. The second should print <code>True</code> — it constructs a client with a dummy key and confirms the <code>interactions</code> namespace exists. No network call is made; the key is never sent. If the second command fails with <code>ModuleNotFoundError</code>, you are in the wrong virtual environment; if it prints <code>False</code>, your SDK is too old.</p>
+<p>The <code>playwright install chromium</code> step downloads roughly 200 MB of browser binaries. If it fails with <code>ENOSPC: no space left on device</code>, the download is staging through your system's <code>/tmp</code>, which on many machines is a small tmpfs — point it at a roomier directory with <code>TMPDIR=$HOME/tmp playwright install chromium</code>. That exact failure happened while preparing this tutorial, and the <code>TMPDIR</code> workaround fixed it.</p>
+<h2 id="step-3-your-first-interaction">Step 3 — Your first interaction: one API call, no browser yet<a class="anchor" href="#step-3-your-first-interaction" aria-label="Link to section">#</a></h2>
+<p>Before building the loop, send a single Computer Use request and look at what comes back. This is the smallest possible program that uses the tool, taken from Google's documentation:</p>
+<pre><code class="language-python">from google import genai
+
+client = genai.Client()
+
+interaction = client.interactions.create(
+    model="gemini-4-hydrogen",
+    input="Search for 'Gemini API' on Google.",
+    tools=[{"type": "computer_use", "environment": "browser"}]
+)
+
+print(interaction)</code></pre>
+<p>Three things to notice. The model is <code>gemini-4-hydrogen</code> — the model Google uses in every example on the Computer Use docs page. The tool is declared as a dict with <code>"type": "computer_use"</code> and an <code>"environment"</code> of <code>"browser"</code>; the other environments are <code>"mobile"</code> (Android-optimized) and <code>"desktop"</code>. And there is no screenshot in this first call — the model will still answer, because the Interactions API can start a task from text alone and ask for a screenshot when it needs one. In the full agent you will always include a screenshot, because a model that cannot see the screen guesses coordinates.</p>
+<p>The response is an <code>Interaction</code> object whose <code>steps</code> list holds the model's reply. A click looks like this (from Google's docs):</p>
+<pre><code class="language-json">{
+  "steps": [
+    {
+      "type": "function_call",
+      "name": "click",
+      "arguments": {
+        "x": 450,
+        "y": 120,
+        "intent": "Click the search box to type the destination."
+      }
+    }
+  ]
+}</code></pre>
+<p>The <code>intent</code> field is the model's own explanation of the step, and it is present on Gemini 4 and Gemini 3.x models. It is the single most useful debugging signal in the whole system: when the agent does something odd, the intent tells you what it thought it was doing. Log it on every turn, as the full program does.</p>
+<p>If you run the snippet above, expect it to cost a fraction of a cent and return within a few seconds. If it fails with an authentication error, your key is wrong or billing is not enabled — the two most common failures at this step. The equivalent raw HTTP call, for reference, is <code>POST https://generativelanguage.googleapis.com/v1/interactions</code> with the API key in the <code>x-goog-api-key</code> header.</p>
+<h2 id="step-4-build-the-action-executor">Step 4 — Build the action executor<a class="anchor" href="#step-4-build-the-action-executor" aria-label="Link to section">#</a></h2>
+<p>The executor is the half of the agent Google does not write for you. Its job is narrow: take a function call, turn normalized coordinates into pixels, and perform the action in Playwright. Save the code below as <code>computer_use_agent.py</code> — the later steps add the loop around it.</p>
+<pre><code class="language-python">import base64
+import json
+import time
+
+from google import genai
+from playwright.sync_api import sync_playwright
+
+MODEL = "gemini-4-hydrogen"
+SCREEN_WIDTH = 1440
+SCREEN_HEIGHT = 900
+MAX_TURNS = 25
+
+COMPUTER_USE_TOOL = {
+    "type": "computer_use",
+    "environment": "browser",
+    "enable_prompt_injection_detection": True,
+}
+
+# Playwright key names are case-sensitive ("Enter", not "enter").
+_KEY_ALIASES = {
+    "enter": "Enter", "return": "Enter", "esc": "Escape", "escape": "Escape",
+    "tab": "Tab", "space": "Space", "backspace": "Backspace",
+    "delete": "Delete", "del": "Delete", "up": "ArrowUp", "down": "ArrowDown",
+    "left": "ArrowLeft", "right": "ArrowRight", "pageup": "PageUp",
+    "pagedown": "PageDown", "home": "Home", "end": "End",
+    "meta": "Meta", "cmd": "Meta", "command": "Meta",
+    "ctrl": "Control", "control": "Control", "alt": "Alt", "shift": "Shift",
+}
+
+
+def denormalize_x(x):
+    """Model coordinates are normalized to 0-1000; scale to real pixels."""
+    return int(x / 1000 * SCREEN_WIDTH)
+
+
+def denormalize_y(y):
+    return int(y / 1000 * SCREEN_HEIGHT)
+
+
+def _key(name):
+    return _KEY_ALIASES.get(str(name).lower(), name)</code></pre>
+<p>The coordinate conversion is the exact formula from Google's docs — <code>int(x / 1000 * screen_width)</code> — and the viewport size must match the browser window you launch, or every click lands in the wrong place. Keep both constants in one place and pass the same numbers to Playwright's <code>new_page(viewport=...)</code>.</p>
+<p>Next, the executor itself. The browser environment exposes a fixed action vocabulary: <code>click</code>, <code>double_click</code>, <code>triple_click</code>, <code>middle_click</code>, <code>right_click</code>, <code>mouse_down</code>, <code>mouse_up</code>, <code>move</code>, <code>type</code>, <code>drag_and_drop</code>, <code>wait</code>, <code>press_key</code>, <code>key_down</code>, <code>key_up</code>, <code>hotkey</code>, <code>take_screenshot</code>, <code>scroll</code>, <code>go_back</code>, <code>navigate</code>, and <code>go_forward</code>. The mobile environment adds <code>open_app</code> and <code>list_apps</code> and drops the desktop-only mouse actions. Your executor should handle the full browser list and warn on anything else, so a model that invents an action name fails loudly instead of silently doing nothing:</p>
+<pre><code class="language-python">def execute_function_calls(interaction, page):
+    """Run every function_call step the model returned."""
+    results = []
+    calls = [s for s in interaction.steps if s.type == "function_call"]
+    for call in calls:
+        fname, args = call.name, call.arguments
+        result = {}
+        print(f"  -&gt; {fname} (intent: {args.get('intent', 'N/A')})")
+
+        # Safety gate, explained in Step 7.
+        sd = args.get("safety_decision") or {}
+        decision = sd.get("decision")
+        if decision == "blocked":
+            print(f"     BLOCKED by safety policy: {sd.get('explanation', '')}")
+            results.append((fname, call.id, {"error": "blocked by safety policy"}))
+            continue
+        if decision == "require_confirmation":
+            print(f"     Safety confirmation required: {sd.get('explanation', '')}")
+            ok = input("     Approve this action? [y/N] ").strip().lower() == "y"
+            if not ok:
+                results.append((fname, call.id, {"error": "user declined confirmation"}))
+                continue
+            result["safety_acknowledgement"] = True
+
+        try:
+            if fname in ("click", "double_click", "triple_click", "middle_click",
+                         "right_click", "move", "long_press", "mouse_down", "mouse_up"):
+                x, y = denormalize_x(args["x"]), denormalize_y(args["y"])
+                if fname == "click":
+                    page.mouse.click(x, y)
+                elif fname == "double_click":
+                    page.mouse.dblclick(x, y)
+                elif fname == "triple_click":
+                    page.mouse.click(x, y, click_count=3)
+                elif fname == "middle_click":
+                    page.mouse.click(x, y, button="middle")
+                elif fname == "right_click":
+                    page.mouse.click(x, y, button="right")
+                elif fname == "move":
+                    page.mouse.move(x, y)
+                elif fname == "long_press":
+                    page.mouse.move(x, y)
+                    page.mouse.down()
+                    time.sleep(args.get("seconds", 2))
+                    page.mouse.up()
+                elif fname == "mouse_down":
+                    page.mouse.move(x, y)
+                    page.mouse.down()
+                elif fname == "mouse_up":
+                    page.mouse.move(x, y)
+                    page.mouse.up()
+            elif fname == "type":
+                if "x" in args and "y" in args:
+                    page.mouse.click(denormalize_x(args["x"]), denormalize_y(args["y"]))
+                page.keyboard.press("ControlOrMeta+A")
+                page.keyboard.press("Backspace")
+                page.keyboard.type(args["text"])
+                if args.get("press_enter", False):
+                    page.keyboard.press("Enter")
+            elif fname == "drag_and_drop":
+                page.mouse.move(denormalize_x(args["start_x"]), denormalize_y(args["start_y"]))
+                page.mouse.down()
+                page.mouse.move(denormalize_x(args["end_x"]), denormalize_y(args["end_y"]), steps=10)
+                page.mouse.up()
+            elif fname == "scroll":
+                # Playwright's wheel() scrolls at the current cursor position,
+                # so move there first, then scroll by the delta.
+                page.mouse.move(denormalize_x(args["x"]), denormalize_y(args["y"]))
+                mag = args.get("magnitude_in_pixels", 300)
+                dx, dy = 0, 0
+                if args["direction"] == "down":
+                    dy = mag
+                elif args["direction"] == "up":
+                    dy = -mag
+                elif args["direction"] == "right":
+                    dx = mag
+                elif args["direction"] == "left":
+                    dx = -mag
+                page.mouse.wheel(dx, dy)
+            elif fname == "press_key":
+                page.keyboard.press(_key(args["key"]))
+            elif fname == "key_down":
+                page.keyboard.down(_key(args["key"]))
+            elif fname == "key_up":
+                page.keyboard.up(_key(args["key"]))
+            elif fname == "hotkey":
+                page.keyboard.press("+".join(_key(k) for k in args["keys"]))
+            elif fname == "navigate":
+                page.goto(args["url"])
+            elif fname == "go_back":
+                page.go_back()
+            elif fname == "go_forward":
+                page.go_forward()
+            elif fname == "wait":
+                time.sleep(args.get("seconds", 1))
+            elif fname in ("take_screenshot", "open_app"):
+                pass  # Nothing to do: the loop screenshots after every turn anyway.
+            else:
+                print(f"     Warning: unhandled function {fname}")
+            page.wait_for_load_state(timeout=5000)
+            time.sleep(1)
+        except Exception as e:
+            print(f"     Error executing {fname}: {e}")
+            result = {"error": str(e)}
+        results.append((fname, call.id, result))
+    return results</code></pre>
+<p>Three implementation choices deserve a note. First, <code>type</code> clears the field before typing — <code>ControlOrMeta+A</code> then Backspace — because the model often types into a field that already has text, and appending to a search box produces garbage queries. Google's own example does the same, with <code>Meta+A</code>; <code>ControlOrMeta+A</code> is Playwright's cross-platform spelling, so the same code works on macOS and Linux. Second, <code>scroll</code> is the one place Google's published example and Playwright's API disagree: the docs' sample calls <code>page.mouse.wheel(x, y, dx, dy)</code>, but Playwright's Python <code>wheel()</code> takes only <code>(delta_x, delta_y)</code> and scrolls wherever the cursor already is. The version above moves the cursor first, then scrolls — and this was the one bug the offline verification caught: the docs' form raises <code>TypeError: Mouse.wheel() takes 3 positional arguments but 5 were given</code>. Third, every action is wrapped in try/except and the error is returned to the model in the next turn instead of crashing the program. A failed click is information the model can act on; a crashed agent is not.</p>
+<p>The key-name table exists because the model returns keys as plain strings — <code>"enter"</code>, <code>"esc"</code>, <code>"ctrl"</code> — and Playwright expects <code>"Enter"</code>, <code>"Escape"</code>, <code>"Control"</code>. Without the alias map, <code>press_key</code> with <code>"enter"</code> throws an "unknown key" error on the first form submission.</p>
+<h2 id="step-5-close-the-loop">Step 5 — Close the loop: screenshots back as function results<a class="anchor" href="#step-5-close-the-loop" aria-label="Link to section">#</a></h2>
+<p>After the executor runs, the model is blind until you show it the new screen. The <code>function_result</code> for each executed call carries two things: a JSON text part with the current URL (plus any error or safety acknowledgement) and a fresh PNG screenshot, base64-encoded. One result per call — if the model issued three calls in one turn, you send three results, each with its own <code>call_id</code>:</p>
+<pre><code class="language-python">def get_function_responses(page, results):
+    """Screenshot the new state and package one function_result per call."""
+    screenshot = base64.b64encode(page.screenshot(type="png")).decode("utf-8")
+    return [
+        {
+            "type": "function_result",
+            "name": name,
+            "call_id": call_id,
+            "result": [
+                {"type": "text", "text": json.dumps({"url": page.url, **result})},
+                {"type": "image", "data": screenshot, "mime_type": "image/png"},
+            ],
+        }
+        for name, call_id, result in results
+    ]</code></pre>
+<p>Note that all results in a turn share one screenshot, taken after the last action — that matches Google's own example. It also means screenshots dominate your token bill: a 1440×900 PNG is a large image input on every turn, so keep <code>MAX_TURNS</code> small and the viewport no bigger than the model needs. A 1280×720 viewport is a reasonable cheaper alternative; just keep the constants and the Playwright viewport in sync.</p>
+<p>Now the loop itself. It opens the browser, takes the first screenshot, sends the task, and then alternates between executing actions and asking for the next step — chaining turns with <code>previous_interaction_id</code> — until the model answers in text instead of calling a function, or the turn limit is hit:</p>
+<pre><code class="language-python">def run_agent(task):
+    client = genai.Client()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page(viewport={"width": SCREEN_WIDTH, "height": SCREEN_HEIGHT})
+        try:
+            page.goto("https://www.google.com")
+            first_shot = page.screenshot(type="png")
+            print(f"Goal: {task}")
+            interaction = client.interactions.create(
+                model=MODEL,
+                input=[
+                    {"type": "text", "text": task},
+                    {"type": "image", "data": base64.b64encode(first_shot).decode("utf-8"),
+                     "mime_type": "image/png"},
+                ],
+                tools=[COMPUTER_USE_TOOL],
+            )
+            for turn in range(1, MAX_TURNS + 1):
+                print(f"
+--- Turn {turn} ---")
+                calls = [s for s in interaction.steps if s.type == "function_call"]
+                if not calls:
+                    text = " ".join(
+                        block.text
+                        for s in interaction.steps if s.type == "model_output"
+                        for block in s.content if block.type == "text"
+                    )
+                    print(f"Agent finished: {text}")
+                    return text
+                results = execute_function_calls(interaction, page)
+                responses = get_function_responses(page, results)
+                interaction = client.interactions.create(
+                    model=MODEL,
+                    previous_interaction_id=interaction.id,
+                    input=responses,
+                    tools=[COMPUTER_USE_TOOL],
+                )
+            print("Turn limit reached without a final answer.")
+            return None
+        finally:
+            browser.close()
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) &lt; 2:
+        print("Usage: python computer_use_agent.py \"&lt;task in plain English&gt;\"")
+        sys.exit(1)
+    run_agent(" ".join(sys.argv[1:]))</code></pre>
+<p><code>headless=False</code> is deliberate: watch the first few runs with your own eyes. The model will misclick — clicking the wrong search result, typing into the address bar instead of the page's search box, scrolling past the element it wanted. Watching the window is how you learn whether a failure is a bad prompt, a bad coordinate, or a page that changed layout. Once a task works reliably, flip it to <code>headless=True</code> and run it unattended.</p>
+<h2 id="step-6-run-it">Step 6 — Run it: a real task, end to end<a class="anchor" href="#step-6-run-it" aria-label="Link to section">#</a></h2>
+<p>With the three pieces in one file, run the agent on the same task Google uses in its own docs example — searching the AI Studio documentation for pricing:</p>
+<pre><code class="language-bash">python computer_use_agent.py "Go to aistudio.google.com/docs and search for pricing."</code></pre>
+<p>What you should see: a Chromium window opens at google.com, and the console prints one turn at a time. Each turn lists the actions the model chose with its stated intent — a <code>navigate</code> to the docs site, a <code>click</code> on the search box, a <code>type</code> of "pricing" with <code>press_enter</code> — followed by a fresh screenshot going back to the model. When the model has what it needs, the loop ends with <code>Agent finished:</code> and a short summary of what it found.</p>
+<p>Expect the run to take a handful of turns. The exact sequence varies run to run: the model may navigate directly to the docs URL, or search from the homepage and click through. That variance is normal for a vision model working from screenshots, and it is why the turn limit exists — if the agent loops (clicking the same link, scrolling up and down), <code>MAX_TURNS</code> stops it after 25 turns instead of burning tokens indefinitely.</p>
+<p>Two tasks that make good second runs, because they exercise different actions: "Open the Gemini API pricing page and find the price of Gemini 3.8 Flash" (tests <code>scroll</code> and reading a dense page) and "Go to example.com and click the 'More information' link" (tests <code>navigate</code> plus a precise click on a small target). Keep the first dozen tasks read-only — searching, navigating, summarizing. Do not point the agent at anything logged in, anything with a checkout, or anything that sends a message until you have read Step 7.</p>
+<h2 id="step-7-safety-gates">Step 7 — Safety: the confirmation gate and the policy knobs<a class="anchor" href="#step-7-safety-gates" aria-label="Link to section">#</a></h2>
+<p>A browser agent is a program that clicks things on your behalf, on pages it does not fully understand, including pages that may contain text written by someone trying to mislead it. Google builds three layers of protection into Computer Use, and the executor in Step 4 already wires in the first. This step explains all three.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/gemini-computer-use-api-tutorial/img3.webp" alt="Diagram of the human checkpoint: the AI model proposes an action, the flow pauses for human review and approval, and only then does the browser execute it"><figcaption>The human checkpoint: a require_confirmation decision pauses the loop until you approve. Diagram by AI Frontier Post.</figcaption></figure>
+<p><strong>Layer 1: the safety decision on every action.</strong> The model can attach a <code>safety_decision</code> to any function call, with a <code>decision</code> of <code>require_confirmation</code> or <code>blocked</code> and an <code>explanation</code> in plain text. The executor checks this before doing anything: a blocked action is skipped and the block is reported back to the model, and a <code>require_confirmation</code> action pauses for your typed approval. If you approve, the executor sets <code>safety_acknowledgement: True</code> in that call's result, which is how the model knows a human signed off. Never delete this check to make a demo smoother — it is the only thing standing between the model and an irreversible click.</p>
+<p><strong>Layer 2: configurable safety policies.</strong> Gemini 4 and Gemini 3.x models carry built-in policy categories that decide when confirmation is required:</p>
+<table>
+<thead><tr><th>Policy category</th><th>What it guards</th></tr></thead>
+<tbody>
+<tr><td><code>FINANCIAL_TRANSACTIONS</code></td><td>Payments, retail checkout, regulated goods</td></tr>
+<tr><td><code>SENSITIVE_DATA_MODIFICATION</code></td><td>Health, financial, or government records</td></tr>
+<tr><td><code>COMMUNICATION_TOOL</code></td><td>Sending emails, chat messages, or drafts</td></tr>
+<tr><td><code>ACCOUNT_CREATION</code></td><td>Registering new accounts on websites</td></tr>
+<tr><td><code>DATA_MODIFICATION</code></td><td>File-system changes, data sharing, storage deletion</td></tr>
+<tr><td><code>USER_CONSENT_MANAGEMENT</code></td><td>Cookie banners and privacy prompts</td></tr>
+<tr><td><code>LEGAL_TERMS_AND_AGREEMENTS</code></td><td>Accepting terms of service or other contracts</td></tr>
+</tbody>
+</table>
+<p>You can relax a category with <code>disabled_safety_policies</code> in the tool config — Google's example disables <code>data_modification</code> for a desktop cleanup task — but the docs warn that the model may still return <code>require_confirmation</code> even with an override, so the Layer 1 handling must stay in place regardless. Do not disable <code>FINANCIAL_TRANSACTIONS</code> or <code>LEGAL_TERMS_AND_AGREEMENTS</code> for a browser agent you leave unattended.</p>
+<p><strong>Layer 3: prompt-injection detection.</strong> The tool config in this tutorial already sets <code>enable_prompt_injection_detection: True</code>. When enabled, the model scans screenshots for hidden adversarial instructions — text on a page saying "ignore previous commands", for example — and blocks execution when it finds them. It is opt-in, defaults to <code>false</code>, and is supported on Gemini 3.5 Flash-Lite and later models. There is no reason to leave it off: it costs nothing extra and it is the only defense that operates on what the model actually sees.</p>
+<p>On top of Google's three layers, add your own: a system instruction that draws the line in plain language. Google's docs publish a long example that boils down to two rules — ask for confirmation before any consequential action (purchases, sending messages, accepting terms, solving CAPTCHAs, logging in, touching sensitive data) and otherwise keep acting until the task is done. Pass it as <code>system_instruction</code> in <code>interactions.create()</code>. And keep the agent in a sandboxed browser with no access to your real accounts: the strongest safety control is the one where the damage cannot happen in the first place.</p>
+<h2 id="step-8-make-it-yours">Step 8 — Make it yours: models, environments, and custom tools<a class="anchor" href="#step-8-make-it-yours" aria-label="Link to section">#</a></h2>
+<p>The program now works. The remaining choices are which model to run, which environment to target, and how far to extend the action vocabulary.</p>
+<p><strong>Model choice.</strong> Seven models support Computer Use, per Google's documentation. The practical choice is between the two below; the others are for heavier reasoning or lower cost.</p>
+<table>
+<thead><tr><th>Model</th><th>Paid-tier price per 1M tokens (in / out)</th><th>When to use it</th></tr></thead>
+<tbody>
+<tr><td><code>gemini-4-hydrogen</code></td><td>$1.50 / $7.50</td><td>The default in this tutorial and in Google's examples. Fast, current-generation, and the one whose behavior the docs describe.</td></tr>
+<tr><td><code>gemini-3.8-flash</code></td><td>$0.75 / $3.75 through Dec 31, 2026; $1.50 / $7.50 from Jan 1, 2027</td><td>High-volume or background runs. Half the price of Hydrogen until the January increase — after which the two cost the same, and Hydrogen is the better pick.</td></tr>
+<tr><td><code>gemini-4-argon</code> / <code>gemini-4-carbon</code></td><td>$2.00 / $10.00 through Nov 30, 2026; $4.00 / $20.00 from Dec 1, 2026</td><td>Complex multi-step workflows where the cheaper models stall or loop. Argon is the efficient frontier model; Carbon is the most capable reasoning model.</td></tr>
+<tr><td><code>gemini-4-neon</code></td><td>See the pricing page</td><td>Frontier-level tasks in software engineering and knowledge work; the newest Gemini 4 model, released November 18.</td></tr>
+<tr><td><code>gemini-3.5-flash-lite</code> / <code>gemini-3-flash-preview</code></td><td>See the pricing page</td><td>Low-latency, low-cost runs; Flash-Lite is the cheapest model that supports prompt-injection detection.</td></tr>
+</tbody>
+</table>
+<p>Swap models by changing one string: <code>MODEL = "gemini-3.8-flash"</code>. Prices are from Google's pricing page as read on November 19, 2026 — check the page before budgeting a big run, because the November and December increases above are already scheduled.</p>
+<p><strong>Environment choice.</strong> Change <code>"environment": "browser"</code> to <code>"desktop"</code> and the same loop drives a whole desktop — but then <em>you</em> must implement the desktop action handler (screenshots via OS APIs, clicks via a tool like <code>pyautogui</code>), because Playwright only knows browsers. Change it to <code>"mobile"</code> and the model gains <code>open_app</code> and <code>list_apps</code> for Android. For a first agent, browser is the right call: the handler is a solved problem, the blast radius is one browser window, and every site you care about is a web page anyway.</p>
+<p><strong>Custom tools.</strong> You can extend the action vocabulary with your own function declarations and remove predefined actions you do not want the model to have. Google's example registers a <code>yield_to_user</code> tool — "yields control back to the user for assistance when an automated action is unsafe or ambiguous" — and excludes the predefined <code>click</code> in the same call, using <code>excluded_predefined_functions: ["click"]</code>. Your executor receives the custom call like any other, so add a branch for it: print the model's <code>reason</code>, wait for your input, and return the answer as the result. This is the cleanest way to build a "ask me when stuck" agent without prompt hacks.</p>
+<p><strong>Ready-made alternatives.</strong> If you want a starting point with the sandbox included instead of building the loop yourself, Google publishes a <a href="https://github.com/google/computer-use-preview" rel="nofollow">reference implementation</a> with a Docker-based sandbox, and there is a hosted demo at <a href="http://gemini.browserbase.com" rel="nofollow">gemini.browserbase.com</a> where you can watch the tool work without writing code. Both are linked from Google's docs. They are good for learning the shape of the loop; the program in this tutorial is better for understanding it, because every line is yours.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Build the loop yourself (this tutorial)</strong> when you want to understand the system, customize the safety gates, or embed the agent in a larger program. About 200 lines, no framework, and you own every decision.</li>
+<li><strong>Google's reference implementation</strong> when you want a sandbox included and do not mind reading someone else's code to find the knobs. Best for a first deployment where isolation matters more than understanding.</li>
+<li><strong>The Browserbase demo</strong> when you want to see Computer Use work before spending anything. It is a demo environment, not a place to run real tasks.</li>
+<li><strong>The Gemini app on Mac</strong> when you want a computer-use agent, not a project. Google shipped it in the consumer app on November 19 — the same capability, no code — but you give up the safety gates, the logging, and the control over where it can click.</li>
+<li><strong>The GenerateContent API instead of Interactions</strong> only if you are integrating Computer Use into an existing GenerateContent-based codebase. The Interactions API is the documented path for new agents, and its <code>previous_interaction_id</code> chaining is simpler than managing conversation history by hand.</li></ul>
+<h2 id="limitations-and-honest-caveats">Limitations and honest caveats<a class="anchor" href="#limitations-and-honest-caveats" aria-label="Link to section">#</a></h2>
+<ul><li><strong>The live model call was not run for this tutorial.</strong> The executor, the coordinate math, the screenshot packaging, and the safety gates were verified offline against a real headless Chromium with a mocked model response — type, click, scroll, keyboard, hotkey, navigate, go-back, and both safety paths all behaved as documented, and the run caught one real bug (the <code>wheel()</code> call in Google's example). The first API call's shape was verified against the installed SDK (google-genai 3.6.1, <code>interactions.create</code>), but a live end-to-end run needs a paid-tier key, and none was available in the sandbox. Treat the console output in Step 6 as the expected shape, not a transcript.</li>
+<li><strong>The model will misclick.</strong> Vision models misread dense pages, click the wrong result, and get stuck in loops on pages with cookie banners and login walls. The turn limit, the intent logging, and the confirmation gate are not optional extras — they are how you find out what went wrong.</li>
+<li><strong>Screenshots are the main cost.</strong> Every turn sends a full-screen PNG as input tokens. A 25-turn run at 1440×900 costs noticeably more than the same task at 1280×720, and far more than a text-only agent. Keep the viewport small and the turn limit tight.</li>
+<li><strong>Google's docs are the source of truth, and they move.</strong> Computer Use went GA on October 30, 2026; the model list and the pricing on this page were read on November 19, 2026. The January 1, 2027 price increase for Gemini 3.8 Flash is already on the pricing page — re-check it before you build a budget around the current rates.</li>
+<li><strong>Do not run this against anything that matters.</strong> No logged-in accounts, no purchases, no messages, no file downloads, and no CAPTCHAs — Google's own docs forbid using the tool for critical decisions or sensitive data, and the safety policies exist because the model can be fooled by text on a screen.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Computer Use is a small idea with a large consequence: the model sees and decides, your code executes. That split is what makes it buildable in an afternoon — you never write a planner, a parser, or a screen-understanding model, because Gemini is the planner and the screenshot is the interface. The work is the loop around it: normalized coordinates scaled to pixels, screenshots fed back as function results, a turn limit, and a confirmation gate that never gets deleted for convenience. Build that loop once, with the code in this tutorial, and you have a browser agent you can point at any read-only task on the web. Then decide, deliberately, which tasks deserve a human in the loop — because the agent will do exactly what the screen tells it to, and the screen is not always on your side.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="gemini-computer-use-api-tutorial"></div><div class="comments" data-comments="gemini-computer-use-api-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/qmd-local-search-engine-tutorial/"><span class="chip">Tutorials</span><h3>QMD: turn your notes and docs into a local hybrid search engine your coding agent can query</h3><div class="meta">November 19, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/coral-agent-gateway-custom-tools-tutorial/"><span class="chip">Tutorials</span><h3>Coral hands-on: give your coding agent a gateway that writes its own tools</h3><div class="meta">November 19, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/transformers-js-in-browser-ai-tutorial/"><span class="chip">Tutorials</span><h3>Run AI in the browser: build a private semantic search app with Transformers.js</h3><div class="meta">November 19, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/reverse-engineer-marketing-competitor-teardown-tutorial/"><span class="chip">Tutorials</span><h3>Reverse-engineer any company’s marketing machine: hands-on with REM</h3><div class="meta">November 19, 2026 · 17 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Does Computer Use work on the Gemini API free tier?</h3><p>No. Google's pricing page lists the Computer Use tool as not available on the free tier. You need a paid-tier API key with billing enabled; usage is then charged as regular tokens at the model's normal rates — $1.50 per million input tokens and $7.50 per million output tokens for Gemini 4 Hydrogen.</p><h3>Which model should I use for Computer Use?</h3><p>Gemini 4 Hydrogen is the default in this tutorial and in Google's own examples. Gemini 3.8 Flash costs half as much through December 31, 2026 ($0.75 in / $3.75 out per million tokens) but doubles to Hydrogen's price on January 1, 2027. Gemini 4 Argon and Carbon cost more and suit complex multi-step workflows.</p><h3>Can the agent click anything on my computer?</h3><p>No. The model only returns suggested actions; your code decides what to execute. In the browser environment it can only act inside the Playwright browser window. The desktop environment needs a separate action handler you write yourself. Run the agent in a fresh browser with no saved logins, ideally in a sandboxed VM or container.</p><h3>What happens when the model wants to do something risky?</h3><p>The model can attach a safety_decision to an action: require_confirmation pauses the loop until you approve, and blocked skips the action entirely. Seven policy categories (payments, sensitive data, messaging, account creation, data modification, consent banners, legal terms) control when confirmation is required, and prompt-injection detection scans screenshots for hidden instructions.</p><h3>How much does a task cost?</h3><p>Screenshots dominate the bill: every turn sends a full-screen PNG as input tokens. A short task of a handful of turns on Gemini 4 Hydrogen costs on the order of a few cents. Keep the viewport small (1440x900 or 1280x720) and the turn limit tight to keep costs down.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/agent-desktop-accessibility-tree-computer-use-tutorial/">Let your coding agent click real apps — without screenshots: hands-on with agent-desktop</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google's ADK: researcher, writer, and guardrails, end to end</a></li><li><a href="/articles/chatkit-agents-sdk-support-agent-tutorial/">Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</a></li><li><a href="/articles/firecrawl-ai-agent-web-access-tutorial/">Give your AI agent the live web: search, scrape, and crawl with Firecrawl — hands-on</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
