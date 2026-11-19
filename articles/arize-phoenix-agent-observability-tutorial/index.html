@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>See what your AI agent actually did: hands-on with Arize Phoenix observability — AI Frontier Post</title>
+<meta name="description" content="Three frontier agent models shipped in 48 hours. The question isn&#x27;t whether you can build an agent — it&#x27;s whether you can see what it did. This tutorial wires a local agent to Arize Phoenix, traces every call, and turns the results into evals and experiments — no API key, no cloud, no cost.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/arize-phoenix-agent-observability-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="See what your AI agent actually did: hands-on with Arize Phoenix observability">
+<meta property="og:description" content="Three frontier agent models shipped in 48 hours. The question isn&#x27;t whether you can build an agent — it&#x27;s whether you can see what it did. This tutorial wires a local agent to Arize Phoenix, traces every call, and turns the results into evals and experiments — no API key, no cloud, no cost.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/arize-phoenix-agent-observability-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/arize-phoenix-agent-observability-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-19">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"See what your AI agent actually did: hands-on with Arize Phoenix observability","description":"Three frontier agent models shipped in 48 hours. The question isn't whether you can build an agent — it's whether you can see what it did. This tutorial wires a local agent to Arize Phoenix, traces every call, and turns the results into evals and experiments — no API key, no cloud, no cost.","datePublished":"2026-11-19","dateModified":"2026-11-19","author":{"@type":"Person","name":"Marcus Doyle","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/arize-phoenix-agent-observability-tutorial/"},"image":"https://aifrontierpost.com/articles/arize-phoenix-agent-observability-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need an API key to run this tutorial?","acceptedAnswer":{"@type":"Answer","text":"No. Phoenix runs on your machine and the model runs on your machine through Ollama, so there is no key, no account, and no cost. The LLM judge in Step 4 also runs on the local model — the LLM wrapper just needs the Ollama endpoint as its base_url."}},{"@type":"Question","name":"Why did the baseline experiment return empty answers?","acceptedAnswer":{"@type":"Answer","text":"The 0.6B model is a thinking model: it reasons before it answers, and the reasoning counts against the 256-token limit. Without policy context it spent the whole budget thinking and hit the length limit (finish_reason “length”) before writing anything — the span shows 256 completion tokens and an empty answer. With the policy in the prompt, the reasoning is short and the answer fits. Raise max_tokens or use a larger model if you need longer answers from a bare prompt."}},{"@type":"Question","name":"Can I use Phoenix with a hosted model instead of Ollama?","acceptedAnswer":{"@type":"Answer","text":"Yes. The instrumentation is the same: register() with auto_instrument=True traces any OpenAI-compatible call, including calls to a hosted API. Point PHOENIX_COLLECTOR_ENDPOINT at a remote Phoenix if the server is not local, and give the judge LLM() the hosted model's base_url and key."}},{"@type":"Question","name":"What do I do when the judge and the code check disagree?","acceptedAnswer":{"@type":"Answer","text":"Trust the code check and go read the trace. The code check tests one exact fact; the judge tests open-ended quality. When they disagree, either the judge was generous with a wrong answer or the code check missed a valid paraphrase — both are findings, and the trace shows which."}},{"@type":"Question","name":"Where do the experiment traces go?","acceptedAnswer":{"@type":"Answer","text":"run_experiment traces each task run into its own auto-named project in the Phoenix UI (Experiment-…), separate from your app's project. The dataset's experiments page lists every run with its scores, and the compare view puts two experiments side by side."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>See what your AI agent actually did: hands-on with Arize Phoenix observability</h1>
+<p class="lede">Three frontier agent models shipped in 48 hours. The question isn&#x27;t whether you can build an agent — it&#x27;s whether you can see what it did. This tutorial wires a local agent to Arize Phoenix, traces every call, and turns the results into evals and experiments — no API key, no cloud, no cost.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 19, 2026 · 18 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Install Phoenix, point it at your app with two lines of instrumentation, and every agent run becomes a trace you can inspect. Add an LLM judge and a code check, put your questions in a dataset, and run the same task under two prompts as an experiment — the scores tell you whether the change helped. The whole loop works with a local 0.6B model and costs nothing.</div>
+
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Phoenix 21.0.0</b> serves its UI and OTLP HTTP endpoint on port 6006, OTLP gRPC on 4317. <b>Two lines</b> — <code>register()</code> plus auto-instrumentation — trace every OpenAI-compatible call.</li><li><b>Traces are span trees:</b> an agent span contains retriever and tool spans and LLM spans; each LLM span carries the prompt, the response, the token counts, and the latency.</li><li><b>Failed calls are traced too:</b> a model call that dies mid-generation shows up as an ERROR span with its duration — the trace is where you find out, not the logs.</li><li><b>Evals are two kinds:</b> an LLM-as-judge classifier for open-ended quality, and a deterministic code check for facts you can test exactly. Run both; trust the code check when they disagree.</li><li><b>Experiments settle arguments:</b> the same dataset under two prompts, scored the same way. In this tutorial the with-policy prompt beats the bare prompt on every example by the fact check (4/4 vs 0/4); the tiny local judge agreed on three and misread the fourth.</li></ul>
+
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/arize-phoenix-agent-observability-tutorial/cover.webp" alt="Editorial illustration: a magnifying glass over a glowing waterfall of agent trace spans, in teal and amber"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Three frontier agent models shipped in 48 hours — GPT-6.2 Astra on November 17, Gemini 4 Neon on November 18, Claude Fable 5.2 in the same window. Everyone is building agents now. Almost nobody can see what theirs actually did.</p>
+<p>That is the gap Arize Phoenix fills. Phoenix is the open-source observability platform for AI applications: it records every LLM call, tool execution, and retrieval as a trace, scores outputs with evaluators, and turns repeated runs into datasets and experiments you can compare. It is built on OpenTelemetry and OpenInference, so the instrumentation is a standard, not a vendor lock-in.</p>
+<p>This tutorial wires a small support agent to Phoenix and takes it through the full loop: first trace, reading the trace, scoring it, and proving a prompt change with an experiment. Everything runs locally — Phoenix on your machine, the model on your machine via Ollama — so there is no API key, no cloud account, and no bill. Every command and every number below was verified by running it.</p>
+<h2 id="what-you-will-need">What you&rsquo;ll need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.12</strong> and <code>pip</code> (or <code>uv</code>).</li><li><strong>Ollama</strong> with a small local model — this tutorial uses <code>qwen3:0.6b</code>, a 0.6B-parameter model that runs on CPU. Any model Ollama serves works; the code talks to Ollama&rsquo;s OpenAI-compatible endpoint at <code>http://localhost:11434/v1</code>, so you can swap in a larger model later without changing the instrumentation.</li><li><strong>No API key, no account, no cost.</strong> Phoenix runs on your machine and stores its data in a local SQLite database.</li><li>About 30 minutes, most of it waiting on the small local model.</li></ul>
+<p>Two honest caveats up front. First, the model here is tiny — a 0.6B model thinks out loud and answers slowly on a shared CPU (the generations in this tutorial took 36 to 103 seconds each). The observability patterns are identical with a frontier model; only the latency and the answer quality change. Second, this tutorial was verified in a sandbox with several other jobs running, where Ollama&rsquo;s model runner was occasionally killed mid-generation. The agent code below retries a failed call up to three times, which is good practice for any local setup.</p>
+<h2 id="step-1-start-phoenix">Step 1: Start Phoenix<a class="anchor" href="#step-1-start-phoenix" aria-label="Link to section">#</a></h2>
+<p>Phoenix is a Python package. Install it together with the OpenTelemetry registration helper, the OpenAI SDK, and the OpenInference instrumentation for OpenAI:</p>
+<pre><code class="language-bash">pip install arize-phoenix arize-phoenix-otel openai openinference-instrumentation-openai</code></pre>
+<p>Versions verified for this tutorial: <code>arize-phoenix 21.0.0</code>, <code>arize-phoenix-otel 0.17.3</code>, <code>arize-phoenix-evals 3.10.0</code>, <code>arize-phoenix-client 3.7.0</code>, <code>openai 3.55.1</code>, <code>openinference-instrumentation-openai 0.1.74</code>, on Python 3.12.3. (If you use <code>uv</code>, the same package list works with <code>uv pip install</code>.)</p>
+<p>Start the server and leave it running:</p>
+<pre><code class="language-bash">phoenix serve</code></pre>
+<p>Open <code>http://localhost:6006</code> — you should see the Phoenix UI, an empty project list. Verify from the terminal too:</p>
+<pre><code class="language-bash">curl -s -o /dev/null -w "%{http_code}\n" http://localhost:6006/
+# 200</code></pre>
+<p>Phoenix serves the UI and the OTLP HTTP trace endpoint on the same port, 6006 (traces arrive at <code>/v1/traces</code>); OTLP gRPC listens on 4317. On first start it creates a SQLite database (by default at <code>~/.phoenix/phoenix.db</code>) and runs Alembic migrations. If a first start fails during migration — it did twice in this tutorial&rsquo;s sandbox, with an <code>Event loop is closed</code> error while the machine was heavily loaded — just run <code>phoenix serve</code> again: the migrations are idempotent, and the second start picks up where the first left off.</p>
+<h2 id="step-2-trace-your-first-agent-call">Step 2: Trace your first agent call<a class="anchor" href="#step-2-trace-your-first-agent-call" aria-label="Link to section">#</a></h2>
+<p>The fastest way to see a trace is the documented quickstart, pointed at Ollama instead of OpenAI. Two lines register Phoenix as the trace destination and switch on auto-instrumentation; every OpenAI SDK call after that produces a trace:</p>
+<pre><code class="language-python">from phoenix.otel import register
+
+register(
+    project_name="phoenix-tutorial",
+    protocol="http/protobuf",
+    auto_instrument=True,
+)
+
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+resp = client.chat.completions.create(
+    model="qwen3:0.6b",
+    messages=[{"role": "user", "content": "Why did my invoice change?"}],
+    max_tokens=512,
+    temperature=0,
+)
+print(resp.choices[0].message.content)
+print(resp.usage)</code></pre>
+<p>Two details matter. First, <code>base_url</code> is the whole trick: the OpenAI SDK talks to any OpenAI-compatible endpoint, and the OpenInference instrumentor traces the SDK calls, so it cannot tell — or care — that the model is a local Ollama model. Second, <code>max_tokens=512</code>: <code>qwen3:0.6b</code> is a thinking model that spends tokens reasoning before it answers, so a small cap can end the reply before the answer starts. (At <code>max_tokens=128</code> the first run returned an empty answer; at 512 it answered in full.)</p>
+<p>Verified output: the call returned a 310-token completion (16 prompt tokens, 326 total) and the trace appeared in Phoenix as a single <code>ChatCompletion</code> span of kind LLM, status OK, model <code>qwen3:0.6b</code>. You can read the same data back in code with the Phoenix client:</p>
+<pre><code class="language-python">from phoenix.client import Client
+
+px = Client()  # reads PHOENIX_ENDPOINT, default http://localhost:6006
+df = px.spans.get_spans_dataframe(project_name="phoenix-tutorial", limit=10)
+print(df[["name", "span_kind", "status_code",
+          "attributes.llm.token_count.total",
+          "attributes.llm.model_name"]].to_string())</code></pre>
+<p>Now the agent itself. The demo is a small support agent with three jobs: answer order questions by calling a <code>lookup_order</code> tool, answer policy questions from a tiny in-memory policy document, and write the final reply with the model. The router is deliberately deterministic — if the question contains an order number it takes the tool path, otherwise the retrieval path — so the demo is reproducible; the model still decides whether to call the tool and still writes every answer.</p>
+<pre><code class="language-python">import json
+import re
+from phoenix.otel import register
+
+register(project_name="phoenix-tutorial",
+         protocol="http/protobuf", auto_instrument=True)
+
+from openai import OpenAI
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+MODEL = "qwen3:0.6b"
+
+POLICY_DOCS = {
+    "basic-fare": (
+        "Basic fares can be cancelled for a full refund within 48 hours of booking. "
+        "Basic fares can be changed once for a 40 dollar fee, plus any price difference. "
+        "Basic fares include one checked bag. A second bag is 45 dollars."
+    ),
+    "shipping": "Orders ship within 2 business days. Express shipping arrives in 1-2 days, "
+                "standard shipping in 3-5 days.",
+    "returns": "Returns are accepted within 30 days of delivery. "
+               "Refunds go to the original payment method within 5 business days.",
+}
+ORDERS = {
+    "7310": {"order_id": "7310", "status": "shipped", "total": 74.99,
+             "carrier": "UPS", "eta": "Nov 21"},
+    "9024": {"order_id": "9024", "status": "processing", "total": 129.50,
+             "carrier": "FedEx", "eta": "Nov 24"},
+    "1156": {"order_id": "1156", "status": "delivered", "total": 32.00,
+             "carrier": "USPS", "eta": "Nov 15"},
+}</code></pre>
+<p>The traced functions use the decorators that <code>register()</code> enables. After registration, <code>trace.get_tracer(__name__)</code> returns an OpenInference tracer with <code>.agent</code>, <code>.chain</code>, <code>.retriever</code>, and <code>.tool</code> decorators — each one creates a span of the matching kind and records the function&rsquo;s input and output as span attributes:</p>
+<pre><code class="language-python">@tracer.retriever
+def retrieve_policy(question: str) -> str:
+    """Keyword retrieval over the tiny policy KB. Returns the best doc."""
+    words = set(re.findall(r"[a-z]+", question.lower()))
+    best, best_score = "", -1
+    for name, doc in POLICY_DOCS.items():
+        score = len(words &amp; set(re.findall(r"[a-z]+", doc.lower())))
+        if score &gt; best_score:
+            best, best_score = doc, score
+    return best
+
+
+@tracer.tool
+def lookup_order(order_id: str) -&gt; dict:
+    """Order lookup against the demo order table."""
+    return ORDERS.get(order_id, {"error": f"order {order_id} not found"})
+
+
+def _chat(messages, tools=None):
+    import time
+    from openai import InternalServerError
+    last = None
+    for attempt in range(3):
+        try:
+            return client.chat.completions.create(
+                model=MODEL, messages=messages, tools=tools,
+                max_tokens=256, temperature=0,
+            )
+        except InternalServerError as e:
+            last = e
+            print(f"[retry {attempt + 1}/3] Ollama 500: {e}", flush=True)
+            time.sleep(15)
+    raise last</code></pre>
+<p>The agent itself is one function under <code>@tracer.agent</code>. On the order path it hands the model the <code>lookup_order</code> tool definition, executes any tool call the model emits, and sends the result back for a final answer. On the policy path it injects the retrieved document into the system prompt:</p>
+<pre><code class="language-python">TOOLS = [{
+    "type": "function",
+    "function": {
+        "name": "lookup_order",
+        "description": "Look up an order by its ID and return its status, total, carrier and ETA.",
+        "parameters": {
+            "type": "object",
+            "properties": {"order_id": {"type": "string"}},
+            "required": ["order_id"],
+        },
+    },
+}]
+
+
+@tracer.agent
+def support_agent(question: str) -&gt; str:
+    system = (
+        "You are a support agent. Answer using ONLY the context provided. "
+        "If the context does not contain the answer, say you do not know."
+    )
+    order_match = re.search(r"\border\s+(\d{4})\b", question, re.IGNORECASE)
+    if order_match:
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": question},
+        ]
+        resp = _chat(messages, tools=TOOLS)
+        msg = resp.choices[0].message
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                args = json.loads(tc.function.arguments)
+                result = lookup_order(**args)
+                messages.append(msg)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result),
+                })
+            resp = _chat(messages)
+            return resp.choices[0].message.content or "(empty reply)"
+        return msg.content or "(empty reply)"
+    context = retrieve_policy(question)
+    resp = _chat([
+        {"role": "system", "content": system + f"\n\nContext:\n{context}"},
+        {"role": "user", "content": question},
+    ])
+    return resp.choices[0].message.content or "(empty reply)"</code></pre>
+<p>Run it on three questions:</p>
+<pre><code class="language-python">for q in [
+    "Where is order 7310?",
+    "How long do I have to cancel a Basic fare for a full refund?",
+    "What does a second checked bag cost on a Basic fare?",
+]:
+    print("Q:", q)
+    print("A:", support_agent(q))</code></pre>
+<p>Verified answers, all correct against the fixtures: order 7310 is shipped via UPS with delivery November 21; a Basic fare can be cancelled for a full refund within 48 hours of booking; a second checked bag costs 45 dollars. The order question took the tool path — the model emitted a <code>lookup_order</code> call with <code>{"order_id": "7310"}</code> and then wrote its answer from the result. The two policy questions took the retrieval path.</p>
+<h2 id="step-3-read-the-trace">Step 3: Read the trace<a class="anchor" href="#step-3-read-the-trace" aria-label="Link to section">#</a></h2>
+<p>Open the <code>phoenix-tutorial</code> project in the UI and click a trace. What you get is a span tree, not a log line. Here is the order question&rsquo;s trace, as Phoenix recorded it (latencies measured on the sandbox&rsquo;s shared CPU, so treat them as shape, not benchmarks):</p>
+<figure class="inline-art"><img class="story-image" src="/articles/arize-phoenix-agent-observability-tutorial/img2.webp" alt="Waterfall chart of the order-7310 trace: the agent span lasts 109 seconds, containing a 36-second model call that emits the tool call, an instant order lookup, and a 73-second model call that writes the final answer"><figcaption>Real trace, measured in this tutorial: the order question&rsquo;s span tree. The tool call is instant; the two model calls are the whole cost. Chart: AI Frontier Post, from Phoenix span data.</figcaption></figure>
+<p>Four spans, and each one answers a different question:</p>
+<div class="table-wrap"><table><thead><tr><th>Span</th><th>Kind</th><th>Duration</th><th>What it tells you</th></tr></thead><tbody><tr><td><code>support_agent</code></td><td>AGENT</td><td>109.0 s</td><td>The whole request, end to end</td></tr><tr><td><code>ChatCompletion</code></td><td>LLM</td><td>36.1 s · 340 tokens</td><td>The model&rsquo;s first call — the one that emitted the tool call</td></tr><tr><td><code>lookup_order</code></td><td>TOOL</td><td>&lt; 0.001 s</td><td>The tool itself: instant, so it is never the bottleneck</td></tr><tr><td><code>ChatCompletion</code></td><td>LLM</td><td>72.6 s · 468 tokens</td><td>The final answer, written from the tool result</td></tr></tbody></table></div>
+<p>Three things to notice. First, the shape is the diagnosis: if an agent is slow, the waterfall shows whether the time went to the model, the tools, or the retrieval — here it is all model time, and the tool is free. Second, each LLM span carries its full input and output: click it and you see the exact system prompt, the tool definition, the tool call&rsquo;s arguments, and the raw response, including the model&rsquo;s <code>reasoning</code> field — the thinking trace is preserved in the span, which is how you catch a model that reasoned correctly and then answered wrong. Third, the trace total (109.0 s) is the sum of its parts; there is no hidden overhead. On a quiet machine with a larger model these numbers shrink dramatically — the point is the shape, and the shape is what you debug.</p>
+<p>The policy questions&rsquo; traces are simpler — agent, instant retriever, one LLM call — but the second one carries the most useful span in the whole tutorial. Its first model call died: the local model runner was killed mid-generation, and Phoenix recorded it as an ERROR span lasting 181.0 s with no tokens and no output. The retry then succeeded in 102.7 s with 275 tokens. Without the trace, that failure looks like &ldquo;the agent was slow&rdquo;; with it, you can see it was a dead model call, how long it burned, and that the retry is what saved the request. Traces are how you tell a slow model from a broken one.</p>
+<p>Across the whole session Phoenix recorded 19 spans in 7 traces, including two from the bare quickstart call (144 and 326 tokens). The full inventory is in the verification notes; the pattern to remember is that every call — good, slow, or failed — leaves a span.</p>
+<h2 id="step-4-score-it">Step 4: Score it — the judge and the code check<a class="anchor" href="#step-4-score-it" aria-label="Link to section">#</a></h2>
+<p>A trace shows what happened. It does not say whether the answer was any good. That is what evaluators are for, and Phoenix runs two kinds side by side: an LLM-as-judge classifier for open-ended quality, and a deterministic code check for facts you can test exactly.</p>
+<p>The judge follows the Evaluate quickstart. You describe the scoring rule in plain language, give it the labels it may return, and point it at a model — here the same local model, via the OpenAI-compatible endpoint. The <code>LLM</code> wrapper forwards extra keyword arguments to the SDK client constructors, so <code>base_url</code> and <code>api_key</code> route the judge to Ollama exactly like the agent&rsquo;s calls:</p>
+<pre><code class="language-python">from phoenix.evals import LLM, bind_evaluator, create_classifier
+
+judge = create_classifier(
+    name="correctness",
+    llm=LLM(
+        provider="openai",
+        model="qwen3:0.6b",
+        base_url="http://localhost:11434/v1",
+        api_key="ollama",
+    ),
+    prompt_template="""Compare the provided answer to the reference answer.
+Label true if it states the same policy: same time windows, fees, and quantities, in any wording.
+Label false if it contradicts the reference, hedges, or leaves out a fee, limit, or condition.
+
+Reference answer: {{reference}}
+Provided answer: {{output}}""",
+    choices={"true": 1.0, "false": 0.0},
+)
+
+correctness = bind_evaluator(
+    evaluator=judge, input_mapping={"reference": "reference.expected_answer"}
+)</code></pre>
+<p>The code check is a plain function turned into an evaluator with <code>create_evaluator</code>. It answers one question — does the reply contain the fact the example requires? — and it cannot be fooled by fluent wording:</p>
+<pre><code class="language-python">from phoenix.evals import create_evaluator
+
+@create_evaluator(name="contains_fact")
+def contains_fact(output, expected) -&gt; bool:
+    """Deterministic check: does the answer contain the example's key fact?"""
+    fact = (expected or {}).get("key_fact", "")
+    return fact.lower() in str(output).lower()</code></pre>
+<p>Run both on every result. The judge catches paraphrase and partial credit that a substring check misses; the code check catches the judge being generous or confused. When they disagree, trust the code check and go read the trace — that disagreement is itself a finding.</p>
+<h2 id="step-5-datasets-and-experiments">Step 5: Datasets and experiments — prove the fix<a class="anchor" href="#step-5-datasets-and-experiments" aria-label="Link to section">#</a></h2>
+<p>One scored answer is an anecdote. A dataset turns it into evidence. Create a dataset of the questions your agent must get right, each with the reference answer and the key fact:</p>
+<pre><code class="language-python">from phoenix.client import Client
+
+phoenix = Client()
+
+dataset = phoenix.datasets.create_dataset(
+    name="support-policy",
+    examples=[
+        {"input": {"question": "How long do I have to cancel a Basic fare for a full refund?"},
+         "output": {"expected_answer": "Basic fares can be cancelled for a full refund within 48 hours of booking.",
+                    "key_fact": "48 hours"}},
+        {"input": {"question": "Can I change the date on a Basic fare, and what does it cost?"},
+         "output": {"expected_answer": "Basic fares can be changed once for a 40 dollar fee, plus any price difference.",
+                    "key_fact": "40 dollar"}},
+        {"input": {"question": "How many checked bags come with a Basic fare, and what does a second bag cost?"},
+         "output": {"expected_answer": "Basic fares include one checked bag. A second bag is 45 dollars.",
+                    "key_fact": "45 dollars"}},
+        {"input": {"question": "How long do returns take to refund?"},
+         "output": {"expected_answer": "Refunds go to the original payment method within 5 business days.",
+                    "key_fact": "5 business days"}},
+    ],
+)</code></pre>
+<p>Then run the same task under two prompts as experiments. The baseline answers with no policy context; the second retrieves the policy document first — the same two prompts from Step 2, now measured instead of argued about:</p>
+<pre><code class="language-python">def make_task(with_policy: bool):
+    def task(input):
+        question = input["question"]
+        if with_policy:
+            context = retrieve_policy(question)
+            system = ("You are a support agent. Answer using ONLY the context provided. "
+                      "If the context does not contain the answer, say you do not know."
+                      f"\n\nContext:\n{context}")
+        else:
+            system = "You are a support agent. Answer the customer's question."
+        resp = _chat([
+            {"role": "system", "content": system},
+            {"role": "user", "content": question},
+        ])
+        return resp.choices[0].message.content or ""
+    return task
+
+base = phoenix.experiments.run_experiment(
+    dataset=dataset, task=make_task(False),
+    evaluators=[correctness, contains_fact],
+    experiment_name="baseline", timeout=600,
+)
+pol = phoenix.experiments.run_experiment(
+    dataset=dataset, task=make_task(True),
+    evaluators=[correctness, contains_fact],
+    experiment_name="with-policy", timeout=600,
+)</code></pre>
+<p>Two practical notes. First, the <code>timeout</code>: the default is 60 seconds per task, and a local 0.6B model on a shared CPU needs more — 600 seconds keeps slow generations from being re-queued as timeouts. Second, each experiment gets a compare view in the UI (<code>/datasets/&lt;id&gt;/compare?experimentId=…</code>), so the two runs sit side by side with their scores.</p>
+<p>Measured results, four examples each:</p>
+<div class="table-wrap"><table><thead><tr><th>Question</th><th>Baseline (judge / fact)</th><th>With policy (judge / fact)</th></tr></thead><tbody><tr><td>Cancel Basic fare — full refund window?</td><td>0.0 / 0.0</td><td>1.0 / 1.0</td></tr><tr><td>Change Basic fare — cost?</td><td>0.0 / 0.0</td><td>1.0 / 1.0</td></tr><tr><td>Second checked bag — cost?</td><td>0.0 / 0.0</td><td>1.0 / 1.0</td></tr><tr><td>Returns — refund time?</td><td>0.0 / 0.0</td><td>0.0 / 1.0</td></tr></tbody></table></div>
+<p>Retrieval changed everything — and the judge nearly missed it. The baseline scored 0 out of 4 on both evaluators: three answers came back empty (the thinking model spent its 256-token budget thinking and hit the length limit before writing anything) and the fourth hallucinated a returns policy. With the policy document in the prompt, the fact check went to 4 out of 4 — every answer stated the right fee, window, or quantity. The judge agreed on three of the four, but called the refunds answer false: it confused the 30-day returns window with the 5-business-day refund window, even though both are correct and both come straight from the policy. Two of the judge's calls also died outright when the local model runner was killed mid-generation (unexpected EOF) and had to be re-run. That is the point of running two evaluators: the code check is the ground truth for facts, and the judge is a second opinion you verify, not a verdict you trust blindly.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/arize-phoenix-agent-observability-tutorial/img3.webp" alt="Grouped bar chart of experiment scores: baseline scores 0 on all four examples under both evaluators; with-policy scores 1 on all four under the fact check and 1 on three of four under the judge"><figcaption>Measured experiment scores, four examples, two evaluators. Baseline: 0/4 on both. With policy: 4/4 on the fact check, 3/4 on the judge — the one judge miss is a misread of a correct answer, and two judge calls had to be re-run after the model runner died. Chart: AI Frontier Post, from Phoenix experiment data.</figcaption></figure>
+<p>The lesson is not that retrieval is magic — it is that the experiment makes the claim checkable. The baseline&rsquo;s failures are visible in the traces: the model guessing a policy it was never given. The with-policy run&rsquo;s traces show the retrieved document in the system prompt and the answer quoting it. If you change the prompt, the retriever, or the model, you re-run the same dataset and the numbers tell you whether you helped or hurt — that is the whole point of the loop.</p>
+<h2 id="step-6-make-it-a-habit">Step 6: Make it a habit<a class="anchor" href="#step-6-make-it-a-habit" aria-label="Link to section">#</a></h2>
+<p>Three things turn this from a demo into practice.</p>
+<p><strong>Trace in production the same way.</strong> The instrumentation does not change between local and deployed: <code>register()</code> points at whatever Phoenix you run, via the <code>PHOENIX_COLLECTOR_ENDPOINT</code> environment variable, and <code>auto_instrument=True</code> picks up every installed OpenInference package. For a deployed service, switch the span processor: <code>register()</code> uses a SimpleSpanProcessor by default and warns you to use a BatchSpanProcessor in production, which buffers spans instead of exporting each one synchronously.</p>
+<p><strong>Group turns into sessions.</strong> Real users have conversations, and a per-turn trace cannot show whether the agent remembered the order ID from three turns ago. Phoenix groups turns into sessions; annotate the session with the outcome (resolved, escalated, abandoned) and you can measure whole conversations, not just single answers.</p>
+<p><strong>Annotate what the evals miss.</strong> The UI lets you attach human feedback directly to a trace — a thumbs up or down, a corrected answer, a note. Those annotations become the next dataset: the failures you found in production, turned into regression tests. That is the loop the tracing tutorial&rsquo;s second chapter is built around, and it is the cheapest eval data you will ever collect.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>Phoenix is not the only observability option. Pick by where your app lives and how much you want to operate:</p>
+<div class="table-wrap"><table><thead><tr><th>Option</th><th>Best for</th><th>Cost</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Arize Phoenix (local)</strong></td><td>Local development, self-hosted teams, anyone who wants traces without an account</td><td>Free, open source</td><td>You operate the server and its SQLite/Postgres store</td></tr><tr><td><strong>Arize AX</strong></td><td>Teams that want Phoenix&rsquo;s workflow as a managed platform</td><td>Paid, managed</td><td>Same open standards underneath, so traces port over</td></tr><tr><td><strong>Langfuse / LangSmith</strong></td><td>Teams already invested in those ecosystems, or who want hosted evals and prompt management first</td><td>Free tiers, then paid</td><td>Different data models — pick one observability home, not three</td></tr><tr><td><strong>Plain logging</strong></td><td>Throwaway scripts</td><td>Free</td><td>No span trees, no token accounting, no evals — you will rebuild Phoenix badly</td></tr></tbody></table></div>
+<p>The deciding factor is the standard underneath. Phoenix is built on OpenTelemetry and OpenInference, and the auto-instrumentation covers OpenAI, Anthropic, Bedrock, LangChain, LlamaIndex, DSPy, Mastra, and the Vercel AI SDK. If you ever switch providers or frameworks, the traces keep working — the instrumentation is not tied to one vendor&rsquo;s SDK.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<ol><li><strong>Start Phoenix first, then build the agent.</strong> <code>phoenix serve</code> takes a minute; the traces it captures will save you hours of guessing.</li><li><strong>Two lines instrument everything.</strong> <code>register()</code> with <code>auto_instrument=True</code> traces every OpenAI-compatible call, local or hosted.</li><li><strong>Wrap your own code with the OpenInference decorators.</strong> <code>@tracer.agent</code>, <code>.retriever</code>, and <code>.tool</code> turn your functions into spans with inputs and outputs attached.</li><li><strong>Read the waterfall before you optimize.</strong> The span tree shows whether the time went to the model, the tools, or the retrieval — and failed calls show up as ERROR spans with their durations.</li><li><strong>Score with two evaluators.</strong> An LLM judge for quality, a code check for facts. Trust the code check when they disagree.</li><li><strong>Prove changes with experiments.</strong> Same dataset, two prompts, one scoreboard. Re-run it every time you touch the prompt, the retriever, or the model.</li></ol>
+<p>Agents fail in ways that logs cannot see: a wrong retrieval, a tool call with a hallucinated argument, a correct line of reasoning followed by a wrong answer. A trace shows all three in one place, an eval scores them, and an experiment proves the fix. That loop — trace, measure, improve — is the difference between shipping an agent and operating one.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://docs.arize.com/phoenix" rel="nofollow">Arize Phoenix — What is Phoenix?</a></li><li><a href="https://arize.com/docs/phoenix/get-started" rel="nofollow">Arize Phoenix — Start Phoenix</a></li><li><a href="https://arize.com/docs/phoenix/get-started/get-started-tracing" rel="nofollow">Arize Phoenix — Observe (tracing quickstart)</a></li><li><a href="https://arize.com/docs/phoenix/get-started/get-started-evaluations" rel="nofollow">Arize Phoenix — Evaluate (datasets and experiments quickstart)</a></li><li><a href="https://arize.com/docs/phoenix/tracing/tutorial" rel="nofollow">Arize Phoenix — Tracing Tutorial</a></li><li><a href="https://github.com/Arize-ai/phoenix" rel="nofollow">Arize Phoenix on GitHub</a></li><li><a href="https://github.com/Arize-ai/openinference" rel="nofollow">OpenInference on GitHub</a></li><li><a href="https://ollama.com/" rel="nofollow">Ollama</a></li><li><a href="https://aifrontierpost.com/articles/agent-evals-tutorial/" rel="nofollow">AI Frontier Post — Testing agents: task-based evals for tool-using models</a></li></ul>
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="arize-phoenix-agent-observability-tutorial"></div><div class="comments" data-comments="arize-phoenix-agent-observability-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/agent-evals-tutorial/"><span class="chip">Tutorials</span><h3>Testing agents: task-based evals for tool-using models</h3><div class="meta">September 19, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/gpt-6-2-astra-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end</h3><div class="meta">November 18, 2026 · 26 min read</div></a><a class="rel-card" href="/articles/chatkit-agents-sdk-support-agent-tutorial/"><span class="chip">Tutorials</span><h3>Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</h3><div class="meta">November 17, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/google-adk-multi-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</h3><div class="meta">November 18, 2026 · 19 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to run this tutorial?</h3><p>No. Phoenix runs on your machine and the model runs on your machine through Ollama, so there is no key, no account, and no cost. The LLM judge in Step 4 also runs on the local model — the LLM wrapper just needs the Ollama endpoint as its base_url.</p><h3>Why did the baseline experiment return empty answers?</h3><p>The 0.6B model is a thinking model: it reasons before it answers, and the reasoning counts against the 256-token limit. Without policy context it spent the whole budget thinking and hit the length limit (finish_reason “length”) before writing anything — the span shows 256 completion tokens and an empty answer. With the policy in the prompt, the reasoning is short and the answer fits. Raise max_tokens or use a larger model if you need longer answers from a bare prompt.</p><h3>Can I use Phoenix with a hosted model instead of Ollama?</h3><p>Yes. The instrumentation is the same: register() with auto_instrument=True traces any OpenAI-compatible call, including calls to a hosted API. Point PHOENIX_COLLECTOR_ENDPOINT at a remote Phoenix if the server is not local, and give the judge LLM() the hosted model&#x27;s base_url and key.</p><h3>What do I do when the judge and the code check disagree?</h3><p>Trust the code check and go read the trace. The code check tests one exact fact; the judge tests open-ended quality. When they disagree, either the judge was generous with a wrong answer or the code check missed a valid paraphrase — both are findings, and the trace shows which.</p><h3>Where do the experiment traces go?</h3><p>run_experiment traces each task run into its own auto-named project in the Phoenix UI (Experiment-…), separate from your app&#x27;s project. The dataset&#x27;s experiments page lists every run with its scores, and the compare view puts two experiments side by side.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/tracely-agent-failures-to-regression-tests-hands-on-tutorial/">Turn your agent&#x27;s production failures into regression tests: a hands-on guide to Tracely</a></li><li><a href="/articles/llm-evals-practical-guide/">Write Your First LLM Eval: A Practical Guide</a></li><li><a href="/articles/chatbot-memory-tutorial/">Give your chatbot a memory: session state that actually works</a></li><li><a href="/articles/openai-gpt-6-2-astra-sol-release/">OpenAI releases GPT-6.2 Astra and Sol: cheaper, faster — and its first model rated High for AI self-improvement</a></li></ul></section>
+</article>
+</div></main>
+</body>
+</html>
