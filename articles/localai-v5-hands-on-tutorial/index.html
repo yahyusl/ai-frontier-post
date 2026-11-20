@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>LocalAI 5.0 hands-on: your own ChatGPT-style server with projects, files, and a Python sandbox — AI Frontier Post</title>
+<meta name="description" content="LocalAI 5.0 turns the self-hosted inference server into a workspace: server-side chats, Projects, a Files page, and a Python sandbox. This tutorial installs v5.0.0, runs a small model on a CPU-only machine, and proves the chat loop end to end — including the two things that did not work.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/localai-v5-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="LocalAI 5.0 hands-on: your own ChatGPT-style server with projects, files, and a Python sandbox">
+<meta property="og:description" content="LocalAI 5.0 turns the self-hosted inference server into a workspace: server-side chats, Projects, a Files page, and a Python sandbox. This tutorial installs v5.0.0, runs a small model on a CPU-only machine, and proves the chat loop end to end — including the two things that did not work.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/localai-v5-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/localai-v5-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"LocalAI 5.0 hands-on: your own ChatGPT-style server with projects, files, and a Python sandbox","description":"LocalAI 5.0 turns the self-hosted inference server into a workspace: server-side chats, Projects, a Files page, and a Python sandbox. This tutorial installs v5.0.0, runs a small model on a CPU-only machine, and proves the chat loop end to end — including the two things that did not work.","datePublished":"2026-11-20","dateModified":"2026-11-20","author":{"@type":"Person","name":"Priya Nair","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/localai-v5-hands-on-tutorial/"},"image":"https://aifrontierpost.com/articles/localai-v5-hands-on-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need an API key to use LocalAI?","acceptedAnswer":{"@type":"Answer","text":"No. Everything in this tutorial runs locally with no account and no key. Authentication is off by default, so add LOCALAI_API_KEY or turn on LOCALAI_AUTH=true before you expose port 8080 beyond your own machine."}},{"@type":"Question","name":"How much disk does the install need?","acceptedAnswer":{"@type":"Answer","text":"About 850 MB all-in for the path in this tutorial: a 206 MB binary, a 469 MB model, and a 172 MB backend image that LocalAI downloads on first use, plus a few MB of server data. The first-run card's recommended model is 4.3 GB — you do not need it."}},{"@type":"Question","name":"Why did a long reply hang?","acceptedAnswer":{"@type":"Answer","text":"The first unbounded table prompt ran 10 minutes 16 seconds without returning, while the backend burned 12.5 CPU-minutes, and a second chat sent meanwhile came back HTTP 500. A small model with no output limit can generate thousands of tokens without stopping. Always set max_tokens on a CPU-served model, and send one chat at a time."}},{"@type":"Question","name":"Can I use a bigger model?","acceptedAnswer":{"@type":"Answer","text":"Yes — same command, different name. The gallery holds 2,325 entries, and the first-run card recommends one sized to your hardware. The quickstart's default is gemma-4-e2b-it-qat-q4_0 at 4.3 GB; it also reads images, which the 0.5B Qwen in this tutorial cannot."}},{"@type":"Question","name":"What is the desktop app?","acceptedAnswer":{"@type":"Answer","text":"An Electron app for macOS (Apple Silicon) and Linux, new in 5.0. It installs, updates, starts, and stops the server and shows the web interface in its own window. It reads the same ~/.localai folder as the binary, so you can switch between the two without reinstalling models."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>LocalAI 5.0 hands-on: your own ChatGPT-style server with projects, files, and a Python sandbox</h1>
+<p class="lede">LocalAI has been the quiet workhorse of self-hosted AI since 2023: a single program that serves open models behind an OpenAI-compatible API, no GPU required. Version 5.0, released November 18, stops being just an inference server and becomes a workspace — server-side chats, Projects, a Files page, and a Python sandbox. This tutorial installs v5.0.0, runs a small model on a CPU-only machine, and proves the chat loop end to end.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 20, 2026 · 19 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> LocalAI 5.0 (mudler/LocalAI, MIT, 50,473 stars) adds a desktop app, Projects, a Files page, a Python sandbox, and an add-on library on top of its OpenAI-compatible API. Verified here: the v5.0.0 binary starts, the server lists the model, the web UI serves, and a chat completion returns HTTP 200 in 4.91 s — but the 0.5B model wrongly called LocalAI “cloud-based”, and an unbounded table prompt ran 10 minutes without returning. Always set max_tokens on a small CPU-served model.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> mudler/LocalAI, 50,473 stars, 4,628 forks, MIT, created March 2023. Version 5.0.0 released November 18, 2026 — 130 merged pull requests, 1,432 commits since v4.12.1, model library up from 2,212 to 2,325 entries.</li><li><b>The idea:</b> one program that is an inference server, a chat workspace, and a file worker: an OpenAI-compatible API plus server-side chats, Projects grouped around folders, a Files page with undoable history, and a Sandbox add-on that runs Python on your files.</li><li><b>Verified here:</b> v5.0.0 binary runs (<code>./local-ai --help</code> prints the version); <code>/v1/models</code> lists the model; the web UI serves at <code>/app</code>; a chat completion returns HTTP 200 in 4.91 s; the UI bundle ships the Projects, Files, Agents, and Sandbox navigation; <code>/api/chats</code> reports persistent, file-aware conversations.</li><li><b>The honest limits:</b> the 0.5B model confabulated — it called LocalAI “cloud-based”; an unbounded table prompt ran 10 min 16 s without returning and a concurrent chat got HTTP 500; the Sandbox bash tool refuses to run as root; the add-on library catalog failed to refresh at startup here; the desktop app was not run (no GUI in this sandbox).</li><li><b>The cost:</b> free and open source. No account, no API key, no GPU. About 850 MB of disk for the path in this tutorial; the recommended first model is 4.3 GB.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/localai-v5-hands-on-tutorial/cover.webp" alt="A small home server glowing on a desk, connected to a laptop showing a chat window, a phone, and a small robot assistant"><figcaption>AI-generated illustration. The star counts and verification results in this tutorial are the author’s own measurements or the project’s own figures, not marketing copy.</figcaption></figure>
+<div class="article-body"><p>LocalAI has been the quiet workhorse of self-hosted AI since 2023: a single program that serves open models behind an OpenAI-compatible API, no GPU required. Version 5.0, released November 18, is the biggest change in its history — it stops being just an inference server and becomes a workspace. Chats now run on the server and survive a closed tab, Projects group chats around a folder of your files, a Files page tracks every change the model makes, a Sandbox add-on lets a chat run Python on your files, and a desktop app wraps the whole thing for macOS and Linux. This tutorial installs v5.0.0 from the release binary, runs a small model on a CPU-only machine, and proves the chat loop end to end through the API — with the measured numbers, and with the two things that did not work in this sandbox stated plainly.</p>
+
+<p>The project is <code>mudler/LocalAI</code>: 50,473 stars and 4,628 forks, MIT-licensed, in active development — the release notes count 130 merged pull requests and 1,432 commits since v4.12.1, and the model library grew from 2,212 to 2,325 entries. The 5.0 release is the reason to install it now rather than last month: before 5.0 there was no desktop app, no Projects, no Files page, and no add-on library. The old chat page and agent runtime are gone — the old <code>/api/agents</code> routes now answer 404, and Studio and Talk moved to add-ons that an administrator installs.</p>
+
+<p>You will install the v5.0.0 binary, start it with a 469&nbsp;MB model, send a chat completion through the same API your apps already speak, and see what Projects, Files, and the Sandbox add — including the two limits this sandbox hit: the Sandbox's bash tool refuses to run as root, and the add-on library catalog failed to refresh at startup here. Both are in the verification section with the exact log lines.</p>
+
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Linux (x86-64 or ARM64) or macOS on Apple Silicon.</b> This tutorial ran on a CPU-only Linux VM with 2 cores and 6&nbsp;GB of RAM. Windows users should use the PowerShell installer or Docker instead.</li>
+<li><b>About 850&nbsp;MB of free disk</b> for the path this tutorial takes: a 206&nbsp;MB binary, a 469&nbsp;MB model, and a 172&nbsp;MB backend image LocalAI downloads on first use. The first-run card's recommended model is 4.3&nbsp;GB — you do not need it.</li>
+<li><b>No GPU, no account, no API key.</b> Everything here runs locally; the only network use is downloading the binary and the model.</li>
+<li><b>About 15 minutes wall-clock</b> on a normal connection — most of it the model download. In this sandbox the download ran at roughly 1.3&nbsp;MB/s through the egress proxy, so it took about seven minutes; yours will likely be faster.</li>
+<li><b><code>curl</code> and a shell.</b> The Python client in Step 4 needs the <code>openai</code> package, installed there.</li>
+</ul>
+
+<h2 id="step-1-install-it">Step 1 — Install it<a class="anchor" href="#step-1-install-it" aria-label="Link to section">#</a></h2>
+
+<p>The official quickstart installs with a script, <code>curl -sSL https://localai.io/install.sh | sh</code>, then starts the server with <code>local-ai</code>. That script downloads the same binary this tutorial fetches directly from the release page — the direct download is the same file, and it keeps the install visible instead of piping a remote script into your shell. Either path lands on v5.0.0.</p>
+
+<pre><code class="language-bash">mkdir -p ~/localai && cd ~/localai
+curl -sL -o local-ai \
+  https://github.com/mudler/LocalAI/releases/download/v5.0.0/local-ai-v5.0.0-linux-amd64
+chmod +x local-ai
+./local-ai --help | head -5</code></pre>
+
+<p>On macOS on Apple Silicon the asset is <code>local-ai-v5.0.0-darwin-arm64</code> (199.6&nbsp;MB); on Linux ARM64 it is <code>local-ai-v5.0.0-linux-arm64</code> (192.3&nbsp;MB). The desktop app is a separate download from the same release page — an Electron app for macOS and Linux that installs, updates, starts, and stops the server for you and shows the web interface in its own window. It reads the same <code>~/.localai</code> folder as the binary, so switching between the two later costs nothing.</p>
+
+<p>Verify the install. The binary is statically linked Go, so there are no library dependencies to chase:</p>
+
+<pre><code class="language-bash">./local-ai --help</code></pre>
+
+<p>Expected output, exactly as measured here:</p>
+
+<pre><code>Usage: local-ai &lt;command&gt; [flags]
+
+LocalAI is a drop-in replacement OpenAI API for running LLM, GPT and genAI
+models locally on CPU, GPUs with consumer grade hardware.
+
+Version: v5.0.0 (1d08354ea0b8a7fa70e563ddff4109e4765af904)</code></pre>
+
+<p>Docker users can skip the binary entirely: <code>docker run -p 8080:8080 --name local-ai -ti localai/localai:latest</code> gives the same 5.0.0. GPU images exist per vendor (CUDA 12/13, ROCm, Intel, Vulkan) — the quickstart lists them. This tutorial uses the binary because it is the smallest moving part on a bare machine.</p>
+
+<h2 id="step-2-pick-a-model">Step 2 — Pick a model and start the server<a class="anchor" href="#step-2-pick-a-model" aria-label="Link to section">#</a></h2>
+
+<p>LocalAI's first-run card recommends <code>gemma-4-e2b-it-qat-q4_0</code>, a small Google Gemma 4 model that runs on a CPU and reads images. It is a good default — but it is a 4.3&nbsp;GB download (3.35&nbsp;GB for the model, 0.99&nbsp;GB for the image projector). On a small machine, or a slow connection, that is the wrong first model. This tutorial uses Qwen2.5-0.5B-Instruct instead: a 469&nbsp;MB GGUF file, small enough to load in seconds and to answer real questions, and fetched straight from Hugging Face with the <code>huggingface://</code> form the quickstart documents.</p>
+
+<pre><code class="language-bash">./local-ai run "huggingface://Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf" \
+  --address 127.0.0.1:8080</code></pre>
+
+<p><code>local-ai run &lt;model&gt;</code> downloads the model first, then starts the API server. Gallery names work the same way — <code>local-ai run gemma-4-e2b-it-qat-q4_0</code> or <code>local-ai run llama-3.2-1b-instruct:q4_k_m</code> — as do <code>ollama://</code> and <code>oci://</code> references. To install a model without starting the server, use <code>local-ai models install &lt;name&gt;</code>, and <code>local-ai models list</code> shows the gallery. The server listens on port 8080 by default; <code>--address 127.0.0.1:8080</code> binds it to loopback only, which is the safe choice until you have authentication on (Step 6).</p>
+
+<p>What you should see in the log while it starts:</p>
+
+<pre><code>INFO Starting LocalAI threads=4 modelsPath="/var/tmp/localai/models"
+INFO LocalAI version version="v5.0.0 (1d08354ea0b8a7fa70e563ddff4109e4765af904)"
+INFO Downloading url="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"</code></pre>
+
+<p>Two log lines deserve a note. First, <code>Could not refresh the add-on libraries at startup</code> appeared here — the add-on catalog did not refresh in this sandbox, so the add-on library was empty at first start. On a normal network it populates; if yours is empty, that line is the first thing to check. Second, <code>Chats: the built-in bash cannot run commands on this machine</code> — LocalAI refuses to run shell commands as root, which matters for the Sandbox in Step 5. Both are covered in the verification section.</p>
+
+<p>Once the download finishes, the model loads and the server starts serving. Check it:</p>
+
+<pre><code class="language-bash">curl -s http://127.0.0.1:8080/v1/models</code></pre>
+
+<p>Expected output, exactly as measured here:</p>
+
+<pre><code class="language-json">{"object":"list","data":[{"id":"qwen2.5-0.5b-instruct-q4_k_m.gguf","object":"model"}]}</code></pre>
+
+<p>And the web interface, which is where the 5.0 features live:</p>
+
+<pre><code class="language-bash">curl -s -o /dev/null -w "%{http_code}
+" http://127.0.0.1:8080/</code></pre>
+
+<p>That should print <code>200</code>. Open the same address in a browser and you get the new Home page, with the model the first-run card recommends and the sidebar: Chats, Agents, Projects, Files, Models, and the add-on library.</p>
+
+<h2 id="step-3-first-chat">Step 3 — First chat, through the API<a class="anchor" href="#step-3-first-chat" aria-label="Link to section">#</a></h2>
+
+<p>The point of LocalAI is that the API is the OpenAI one, so every client you already have works by changing the base URL. Send a chat completion:</p>
+
+<pre><code class="language-bash">curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    "messages": [{"role": "user", "content": "In one sentence, what is LocalAI?"}]
+  }'</code></pre>
+
+<p>Measured here, first reply — and it is worth quoting in full, because it is wrong:</p>
+
+<pre><code>"LocalAI is a cloud-based AI platform that provides machine learning services, including training and deployment of AI models, data management, and operations."</code></pre>
+
+<p>LocalAI is not cloud-based; it is the self-hosted server you just started. The 0.5&nbsp;B model confabulated a plausible-sounding description, which is exactly what tiny models do. The reply is still proof the loop works — HTTP 200, <code>finish_reason: stop</code>, 38 prompt tokens in, 29 tokens out, 67 total, in 4.91 seconds wall-clock including loading the model backend on first use — but it is also the reason this tutorial keeps saying the 0.5&nbsp;B model is a smoke test, not a colleague. The text of the reply is in <code>choices[0].message.content</code>, exactly as with OpenAI. LocalAI also speaks the Anthropic Messages API and the Open Responses API on the same server, so clients written for those work too — the quickstart links examples for each.</p>
+
+<p>In the web interface the same thing is Chats in the sidebar: pick the model from the model list, type, send. In 5.0 chats run on the server, so a chat keeps working when you close the tab — you can steer it while it works, hand work to sub-agents, set a <code>/goal</code>, or talk hands-free with Live voice. On a CPU the first reply takes longer because the model has to load; after that it is prompt-bound, not load-bound.</p>
+
+<figure><img class="story-image" src="/articles/localai-v5-hands-on-tutorial/img2.webp" alt="Diagram: you, the LocalAI server on port 8080, and the model backend, with Projects, Files, the Sandbox add-on, and add-ons below"><figcaption>LocalAI 5.0 in one picture: a single binary serves the API, the web UI, and the workspace features behind port 8080. Diagram by the author from the verified setup.</figcaption></figure>
+
+<h2 id="step-4-a-real-task">Step 4 — Give it a real task: summarise notes, extract the facts<a class="anchor" href="#step-4-a-real-task" aria-label="Link to section">#</a></h2>
+
+<p>A one-sentence answer proves the pipe works; it does not prove the model is useful. Give it a small piece of real work — three meeting notes, and ask for a table with owners and dates. Two parameters matter here, and the first version of this step is the reason why: <code>max_tokens</code> caps the reply, and <code>temperature</code> keeps the small model on task.</p>
+
+<pre><code class="language-bash">curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    "messages": [{"role": "user", "content": "Turn these fictional meeting notes into a table with columns Owner, Task, Due. Mark anything missing as unconfirmed. Alex will organize the requirements by Friday. Sam will check the quotation. Priya owns the launch checklist, due next Tuesday."}],
+    "max_tokens": 250,
+    "temperature": 0.2
+  }'</code></pre>
+
+<p>Measured here — HTTP 200 in 12.50 seconds, 77 prompt tokens in, 97 out, 174 total, about 7.8 tokens a second on this 2-core box:</p>
+
+<pre><code>Sure, I can help you turn the meeting notes into a table with columns for Owner, Task, and Due. Here's the table:
+
+| Owner | Task | Due |
+|--------|-------|-----|
+| Alex   | Organize requirements | 5th |
+| Sam    | Check quotation | 1st  |
+| Priya  | Launch checklist | 2nd  |
+
+Please confirm if there are any missing columns or if the table needs to be adjusted.</code></pre>
+
+<p>The table structure is right — all three owners, all three tasks — but look at the Due column: &ldquo;Friday&rdquo; became &ldquo;5th&rdquo;, the missing date became &ldquo;1st&rdquo;, and &ldquo;next Tuesday&rdquo; became &ldquo;2nd&rdquo;. Nothing was marked unconfirmed, as asked. The 0.5&nbsp;B model built the table and then invented the dates. That is the honest limit of the smoke-test model: the format works, the facts need a bigger model or a human check.</p>
+
+<p>Why the cap: the first attempt at this step ran the same prompt <em>without</em> <code>max_tokens</code>, and it never finished. The request ran for 10 minutes 16 seconds before it was killed; in that time the llama.cpp backend burned 12.5 CPU-minutes at 123% and never returned a token, and a second chat sent while it was running came back HTTP 500 after 60 seconds. A 0.5&nbsp;B model with no output limit can generate thousands of tokens without emitting a stop — and on a 2-core box that blocks the single backend for everything else. The bounded retry is the fix, and it is the rule for this setup: always set <code>max_tokens</code> on a small CPU-served model, and do not send a second chat while one is still generating.</p>
+
+<p>A 0.5&nbsp;B model is a plumbing test, not a colleague — it will garble a hard task, and this tutorial does not pretend otherwise. What this proves is the loop: prompt in, structured answer out, through an API your existing code already speaks. For real work, install a larger model from the same gallery — the command does not change, only the name. The gallery holds 2,325 entries, and the first-run card picks one sized to your hardware.</p>
+
+<p>The same call from Python, using the OpenAI SDK pointed at your own server:</p>
+
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key="not-needed")
+reply = client.chat.completions.create(
+    model="qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    messages=[{"role": "user", "content": "In one sentence, what is LocalAI?"}],
+    max_tokens=60,
+    temperature=0.2,
+)
+print(reply.choices[0].message.content)</code></pre>
+
+<p>Run it and you get the same one-sentence answer back through the SDK instead of curl — in this run, 1.45 seconds, 29 completion tokens, with the same &ldquo;cloud-based&rdquo; confabulation as the curl call. The <code>api_key</code> value is ignored while authentication is off — any non-empty string works. That is the whole integration: change <code>base_url</code>, keep the rest of your code.</p>
+
+<h2 id="step-5-projects-files-sandbox">Step 5 — What 5.0 adds: Projects, Files, and the Sandbox<a class="anchor" href="#step-5-projects-files-sandbox" aria-label="Link to section">#</a></h2>
+
+<p>Steps 1–4 are the inference server LocalAI has always been. Step 5 is why 5.0 matters, and it is the part that lives in the web interface rather than the API — so this section is verified as far as a headless machine allows, and flagged where it is not.</p>
+
+<p><b>Projects.</b> A project groups chats around one folder in your own files. The folder holds the material and a <code>memory/</code> folder of notes that the project's chats read. The model can propose a note, and you confirm it before it is saved. A project can set defaults for new chats — skills, add-ons, MCP servers, connections, Knowledge — and you can make an agent from a project, or share the folder with a teammate as read-only or read-and-write. One honest limit, from the docs: a project organises chats, it does not restrict access — a chat outside the project can still open these files from your home folder. Verified here as far as a headless machine allows: the shipped web UI bundle contains the Projects navigation, and the server answers <code>/api/chats</code> with persistent, file-aware conversations. Creating a project and confirming a memory note were not clicked through here — those steps are the docs’ own, and the project-is-not-an-access-boundary limit is from the release post.</p>
+
+<p><b>Files.</b> The Files page uploads files and folders, previews documents, searches inside them, extracts archives, and keeps a Trash and a History tab that undoes any change — yours or the model's. A chat uses the same files: attach one to a message, or ask the model to read and write files in your folders. The concrete example from the release post: ask for a one-page summary of the notes in a folder, and the chat reads them and saves a Word file in your Files. Verified here: <code>/api/chats</code> returns <code>{"conversations":[],"persistent":true,"files":true}</code>, and the UI bundle ships the Files navigation. Uploading a file and asking the model to summarise it into a Word document were not run headlessly — that flow is the release post’s own example, via the Simple Office add-on.</p>
+
+<p><b>The Sandbox add-on.</b> The Sandbox gives a chat a <code>bash</code> tool that runs in an isolated runtime — KVM or gVisor — with your files mounted. Ask for "a bar chart of the numbers in sales.csv as a PNG", and the model reads the file, runs a Python script, and saves the image in Files. It has no network by default, so <code>pip install</code> fails until an administrator allows package registries or public sites. Answers are cut at 64&nbsp;KiB and a command stops after 120 seconds by default. It is Linux-only in this release; the macOS package for Apple Silicon is built but not released yet. Not run live here, and the log says why: <code>Chats: the built-in bash cannot run commands on this machine</code> — LocalAI refuses to run shell commands as root, and this sandbox runs as root. On a normal user account the Sandbox install is an add-on-library install away; the limits above (no network, 64&nbsp;KiB answers, 120-second commands, Linux-only) are from the docs.</p>
+
+<p><b>Add-ons and agents.</b> An add-on is a separate program that gives LocalAI new tools. An administrator installs it from the library — Office (11 tools: read, edit, and create for Word, Excel, and PowerPoint, and read and create for PDF), Sandbox, Tables, and chat apps for Slack and Discord, plus Mail, Google Drive, GitHub, and Home Assistant — and its tools show up in the chat's Tools menu, where you can switch them off per chat. An add-on runs as the operating system user that runs LocalAI, so install only add-ons you trust. An agent is a chat with fixed instructions and a fixed set of tools and files; it needs a model that supports tool calling, and the gallery entry for the recommended Gemma model turns on automatic tool-call parsing. Not verified live here: the add-on library catalog failed to refresh at startup in this sandbox (<code>Could not refresh the add-on libraries at startup</code>), so no add-on was installed. The library contents and the Office tool counts are from the release notes and docs.</p>
+
+<figure><img class="story-image" src="/articles/localai-v5-hands-on-tutorial/img3.webp" alt="Bar chart of measured times: model download, first chat, and bounded table chat on a 2-core CPU machine"><figcaption>Measured in this run on a 2-core CPU-only VM. The unbounded table attempt ran 10 minutes 16 seconds without returning and is shown cut off at the chart edge.</figcaption></figure>
+
+<h2 id="step-6-lock-it-down">Step 6 — Lock it down before you expose it<a class="anchor" href="#step-6-lock-it-down" aria-label="Link to section">#</a></h2>
+
+<p><em>Note: this step is documented from the official quickstart, not run live here — this sandbox never exposes its port beyond loopback, so there was nothing to protect. The commands are the project's own.</em></p>
+
+<p>LocalAI listens on port 8080 on all interfaces by default, and authentication is off. That is fine on your own machine and a hole the moment the port is reachable from anywhere else. Before you expose it:</p>
+
+<pre><code class="language-bash">LOCALAI_API_KEY=your-secret-key ./local-ai run qwen2.5-0.5b-instruct-q4_k_m.gguf
+LOCALAI_AUTH=true ./local-ai run qwen2.5-0.5b-instruct-q4_k_m.gguf</code></pre>
+
+<p>The first turns on API-key authentication — clients add <code>-H "Authorization: Bearer &lt;your-key&gt;"</code>. The second turns on user authentication, with admin and user roles, OAuth login, per-user API keys, and usage tracking. The tutorial's <code>--address 127.0.0.1:8080</code> already binds loopback only; keep it that way unless you have one of the two above in place. Also note the startup warning: with sign-in off, add-on host grants are locked, because anyone who can reach the port could change them.</p>
+
+<h2 id="when-to-use">When to use LocalAI vs the alternatives<a class="anchor" href="#when-to-use" aria-label="Link to section">#</a></h2>
+
+<table>
+<tr><th>Tool</th><th>Use it when</th><th>Watch out for</th></tr>
+<tr><td><b>LocalAI 5.0</b></td><td>You want one server that is an API, a chat workspace, and a file worker — projects, documents, and a sandbox in the same place.</td><td>The 5.0 chat/agent APIs are new; the old <code>/api/agents</code> routes are gone, so older integrations break.</td></tr>
+<tr><td><b>Ollama</b></td><td>You want the simplest possible local model runner and a huge model library, and you do not need the workspace layer.</td><td>No built-in projects, files, or sandbox; you add those with other tools.</td></tr>
+<tr><td><b>llama.cpp server</b></td><td>You want the fastest CPU inference and full control over sampling and context flags.</td><td>It is an inference server only — no UI, no agents, no file layer.</td></tr>
+<tr><td><b>Open WebUI</b></td><td>You want the richest chat UI on top of a model server you already run.</td><td>It is a frontend; it does not run models itself.</td></tr>
+</table>
+
+<p>LocalAI's edge is that the workspace is part of the server: the same process that serves <code>/v1/chat/completions</code> also holds your projects, files, and agents, and the desktop app makes the whole thing a double-click. Its cost is scope — a bigger surface to keep updated, and a 5.0 that is two days old, so expect rough edges in the newest features.</p>
+
+<h2 id="verification">Verification: what was actually run<a class="anchor" href="#verification" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Binary:</b> <code>local-ai-v5.0.0-linux-amd64</code>, 206,037,154 bytes, downloaded from the v5.0.0 GitHub release. <code>./local-ai --help</code> prints <code>Version: v5.0.0 (1d08354ea0b8a7fa70e563ddff4109e4765af904)</code>.</li>
+<li><b>Model:</b> <code>huggingface://Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf</code>, 468.6&nbsp;MiB, downloaded by <code>local-ai run</code> itself. Download took about 6.5 minutes at roughly 1.2&nbsp;MB/s through this sandbox’s egress proxy; on a normal connection it is faster. The file is 491,400,032 bytes. On first use LocalAI also downloads the CPU llama.cpp backend as an OCI image from quay.io (50.4&nbsp;MB download, 171.5&nbsp;MB extracted) — the log notes it installs “without signature verification”.</li>
+<li><b>Chat:</b> two <code>/v1/chat/completions</code> calls against the running server, replies quoted verbatim above. First chat: HTTP 200 in 4.91 s, 38 prompt tokens, 29 completion tokens; the reply is quoted verbatim in Step 3 — the model wrongly called LocalAI “cloud-based”. Second chat (the table task): the unbounded first attempt ran 10 min 16 s without returning and was killed; the backend had burned 12.5 CPU-minutes, and a concurrent chat returned HTTP 500 after 60 s. The bounded retry (max_tokens 250, temperature 0.2) is quoted in Step 4.</li>
+<li><b>Web UI:</b> <code>/</code> 301-redirects to <code>/app</code>, which returns HTTP 200; the shipped JavaScript bundle (1,024,529 bytes) contains the Projects, Files, Agents, Chats, Models, Sandbox, Memory, and Live labels. <code>/api/tags</code> returns the model with format gguf, family llama-cpp, parameter size 0.5B, quantization Q4_K_M, and capability completion.</li>
+<li><b>Python client:</b> the OpenAI SDK (openai 3.57.0) pointed at <code>http://127.0.0.1:8080/v1</code> returned the same answer in 1.45 seconds, 29 completion tokens.</li>
+<li><b>Not run live:</b> the desktop app (no GUI in this sandbox); the Sandbox bash tool — the server log says <code>Chats: the built-in bash cannot run commands on this machine</code> because LocalAI runs as root here, and commands must not run on the server as root; the add-on library catalog, which failed to refresh at startup (<code>Could not refresh the add-on libraries at startup</code>); the Office add-on's Word/Excel output; and the auth flags in Step 6. Those sections are documented from the official quickstart and release notes and marked as such.</li>
+<li><b>Disk:</b> Binary 206,037,154 bytes; model 491,400,032 bytes; backend image 171.5&nbsp;MB extracted — about 850&nbsp;MB all-in, plus a few MB of server data.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+
+<p>LocalAI 5.0 is the version where the project stops asking you to choose between an API server and a chat app. Install the binary, point it at a model, and you get both — plus a file layer that remembers what the model did and lets you undo it. The 0.5&nbsp;B model in this tutorial is a smoke test, not a workhorse: swap in a larger model from the same gallery with the same command and the workspace around it does not change. Start with the loopback bind, turn on an API key before you expose the port, and treat the Sandbox as Linux-only for now.</p>
+
+
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://github.com/mudler/LocalAI" rel="nofollow">mudler — LocalAI (GitHub)</a> — the README, the v5.0.0 release notes, the star and fork counts, and the install commands.</li><li><a href="https://localai.io/docs/start/quickstart/" rel="nofollow">LocalAI — Quickstart (docs)</a> — the install script, the first-run card, the chat API example, the model gallery commands, the agent walkthrough, and the auth flags.</li><li><a href="https://localai.io/blog/localai-5-0/" rel="nofollow">LocalAI — LocalAI 5.0 (blog)</a> — Projects, the desktop app, Office documents from a chat, the Files page, the Sandbox, and add-ons.</li><li><a href="https://github.com/mudler/LocalAI/releases/tag/v5.0.0" rel="nofollow">LocalAI — v5.0.0 release notes (GitHub)</a> — the 130 merged pull requests, 1,432 commits, 7,310 files changed, and the model library growth from 2,212 to 2,325 entries.</li></ul></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="localai-v5-hands-on-tutorial"></div><div class="comments" data-comments="localai-v5-hands-on-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/hermes-agent-self-improving-tutorial/"><span class="chip">Tutorials</span><h3>Hermes Agent hands-on: install the self-improving agent that remembers you and runs your schedule</h3><div class="meta">Tutorials & Reviews Lead · November 20, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/tamserve-live-object-tracking-tutorial/"><span class="chip">Tutorials</span><h3>Track anything on live video with tamserve: hands-on with the SAM 2 serving engine</h3><div class="meta">Research Editor · November 20, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/instagram-agent-skill-claude-reels-tutorial/"><span class="chip">Tutorials</span><h3>Run an Instagram account with Claude Code: hands-on with instagram-agent-skill</h3><div class="meta">Tutorials & Reviews Lead · November 20, 2026 · 25 min read</div></a><a class="rel-card" href="/articles/minimax-m31-flash-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill</h3><div class="meta">Senior Technology Writer · November 20, 2026 · 17 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to use LocalAI?</h3><p>No. Everything in this tutorial runs locally with no account and no key. Authentication is off by default, so add LOCALAI_API_KEY or turn on LOCALAI_AUTH=true before you expose port 8080 beyond your own machine.</p><h3>How much disk does the install need?</h3><p>About 850 MB all-in for the path in this tutorial: a 206 MB binary, a 469 MB model, and a 172 MB backend image that LocalAI downloads on first use, plus a few MB of server data. The first-run card's recommended model is 4.3 GB — you do not need it.</p><h3>Why did a long reply hang?</h3><p>The first unbounded table prompt ran 10 minutes 16 seconds without returning, while the backend burned 12.5 CPU-minutes, and a second chat sent meanwhile came back HTTP 500. A small model with no output limit can generate thousands of tokens without stopping. Always set max_tokens on a CPU-served model, and send one chat at a time.</p><h3>Can I use a bigger model?</h3><p>Yes — same command, different name. The gallery holds 2,325 entries, and the first-run card recommends one sized to your hardware. The quickstart's default is gemma-4-e2b-it-qat-q4_0 at 4.3 GB; it also reads images, which the 0.5B Qwen in this tutorial cannot.</p><h3>What is the desktop app?</h3><p>An Electron app for macOS (Apple Silicon) and Linux, new in 5.0. It installs, updates, starts, and stops the server and shows the web interface in its own window. It reads the same ~/.localai folder as the binary, so you can switch between the two without reinstalling models.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/openwebui-013-local-ai-workspace-tutorial/">Your own ChatGPT, with a computer attached: hands-on with Open WebUI 0.13</a></li><li><a href="/articles/llamaindex-local-rag-llamacpp-tutorial/">Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud</a></li><li><a href="/articles/k2-horizon-local-run-tutorial/">Run MBZUAI&#x27;s K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B</a></li><li><a href="/articles/qwen3-8-27b-local-setup/">Qwen3.8-27B on your own hardware: the complete local setup guide</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
