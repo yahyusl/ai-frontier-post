@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill — AI Frontier Post</title>
+<meta name="description" content="MiniMax’s M3.1 Flash went GA on October 19 with open weights, a million-token window, and always-on reasoning tuned by five effort levels. This tutorial builds a working coding agent on it — first call, tool loop, vision input, and the self-host recipe — with every client call verified against a local mock of the documented API.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/minimax-m31-flash-coding-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill">
+<meta property="og:description" content="MiniMax’s M3.1 Flash went GA on October 19 with open weights, a million-token window, and always-on reasoning tuned by five effort levels. This tutorial builds a working coding agent on it — first call, tool loop, vision input, and the self-host recipe — with every client call verified against a local mock of the documented API.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/minimax-m31-flash-coding-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/minimax-m31-flash-coding-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill", "description": "MiniMax’s M3.1 Flash went GA on October 19 with open weights, a million-token window, and always-on reasoning tuned by five effort levels. This tutorial builds a working coding agent on it — first call, tool loop, vision input, and the self-host recipe — with every client call verified against a local mock of the documented API.", "datePublished": "2026-11-20", "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/minimax-m31-flash-coding-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/minimax-m31-flash-coding-agent-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Can I run M3.1 Flash on a single consumer GPU?", "acceptedAnswer": {"@type": "Answer", "text": "No. The checkpoint is about 252 GB of weights, and community write-ups of the release put the floor at four Blackwell or MI355X GPUs, or a full eight-GPU Hopper node with reduced context and features. The API is the practical way to use the model without server hardware: $0.15 per million input tokens and $0.60 per million output tokens on MiniMax’s platform."}}, {"@type": "Question", "name": "What is the difference between M3.1 Flash and M3?", "acceptedAnswer": {"@type": "Answer", "text": "M3.1 Flash is the efficiency tier: half the price ($0.15/$0.60 against M3’s $0.30/$1.20 up to 512K input tokens), always-on thinking with five effort levels where M3 lets you skip thinking, and the same 1M-token context. If the job is routine agent work, use Flash; if it is the hardest reasoning you have, try M3 first and measure whether the quality gap is worth twice the price."}}, {"@type": "Question", "name": "Why is my bill higher than the per-token price suggests?", "acceptedAnswer": {"@type": "Answer", "text": "Thinking tokens are output tokens at $0.60 per million, and omitting reasoning_effort defaults to max. A coding agent that never sets the field pays for maximum thinking on every call, including the trivial ones — reading a file, confirming a test passed. Set low for routine calls and reserve high or max for the calls that actually need reasoning."}}, {"@type": "Question", "name": "Is M3.1 Flash really open source?", "acceptedAnswer": {"@type": "Answer", "text": "No — it is open weights under the MiniMax Community License. Non-commercial use is free; commercial use carries attribution and notice conditions, and some deployments need MiniMax’s written agreement. Read the license file in the Hugging Face repository before you ship anything built on the weights."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill</h1>
+<p class="lede">MiniMax’s M3.1 Flash went GA on October 19 with open weights, a million-token window, and always-on reasoning tuned by five effort levels. This tutorial builds a working coding agent on it — first call, tool loop, vision input, and the self-host recipe — with every client call verified against a local mock of the documented API.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 20, 2026 · 17 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MiniMax’s M3.1 Flash went GA on October 19, 2026, with open weights, a 1M-token context, and always-on reasoning you tune with five effort levels. This tutorial builds a working coding agent on it: the first call, the effort levels and what they cost, a sandboxed tool-calling loop, vision input from a screenshot, the official MiniMax Code CLI, and the self-host recipe — with every client call verified against a local mock of the documented API.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>428B total, 23B active.</b> M3.1 Flash carries about 428 billion parameters and activates roughly 23 billion per token. It takes text, image, and video in, returns text, and supports a 1,048,576-token context window.</li><li><b>Thinking is always on, with five effort levels: low, medium, high, xhigh, max.</b> The OpenAI-compatible field is <code>reasoning_effort</code>; the Anthropic-compatible field is <code>output_config.effort</code>. Omitting it defaults to <code>max</code>; trying to disable thinking returns HTTP 400.</li><li><b>Cost: $0.15 in / $0.60 out per million tokens.</b> A 500K-input, 100K-output agent session costs $0.14, against $8 on Claude Fable 5.2 and $10 on GPT-6.2 Astra at listed OpenRouter rates.</li><li><b>Recommended sampling is <code>temperature=1.0</code>, <code>top_p=0.95</code></b> — from the model card, not the OpenAI defaults.</li><li><b>Open weights, not open source.</b> The 252&nbsp;GB checkpoint ships under the MiniMax Community License; non-commercial use is free, commercial use carries conditions. Serve it with SGLang, vLLM, or TokenSpeed.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/minimax-m31-flash-coding-agent-tutorial/cover.webp" alt="A developer's desk at dusk: a laptop showing a coding agent at work, a glowing ribbon of code flowing out of the screen, and a small robot of light arranging code blocks"><figcaption>AI-generated illustration.</figcaption></figure>
+<div class="article-body"><p>On October 19, MiniMax put M3.1 Flash on its API. Four days later it published the weights. The model is a 428-billion-parameter mixture-of-experts with only 23 billion parameters active per token, a million-token context window, and text, image, and video input. It costs $0.15 per million input tokens and $0.60 per million output tokens on MiniMax's own platform — and it always reasons before it answers, with five effort levels to tune how hard it thinks.</p>
+<p>That combination is what makes it worth your time as a coding-agent model. The vendor-reported numbers put it close to the frontier on agent work: 73.7 on DeepSWE v1.1, 61.7 on OSWorld 2.0, 38.1 on Terminal-Bench 4.0. In the same table on the model card, DeepSeek V4.1 Flash-1017 scores 77.0 on DeepSWE, GPT-5.6 Sol scores 73.0, and Opus 5 scores 74.0. M3.1 Flash is not the top scorer. It is the cheapest way to get near-top agent scores with weights you can download — and MiniMax confirmed that Space Bunny, the anonymous model that topped OpenRouter's usage charts in late September, was an early version of this model.</p>
+<p>This tutorial builds a working coding agent on M3.1 Flash end to end: the first API call, the five effort levels and what each one costs, a tool-calling loop with a real sandbox, vision input from a screenshot, the official MiniMax Code CLI for when you don't want to write the loop yourself, and the self-hosting recipe. Every client call here was run against a local mock of the documented API contract before publication, so the request shapes, parameter names, and response handling are proven; the live calls need your key — the mock cannot spend your money for you.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> The examples use the official <code>openai</code> Python SDK, version 3.57.0 at time of writing. The SDK is the only dependency for the API path.</li><li><strong>A MiniMax API key.</strong> Create an account at platform.minimax.io and generate a key, then export it as <code>MINIMAX_API_KEY</code>. Pay-as-you-go billing applies; the calls in this tutorial cost a few cents at most at listed prices.</li><li><strong>A small demo project</strong> for Step 3 — two files, provided below, with one deliberate bug and four tests. The technique is the same on a real repository.</li><li><strong>Optional: Node.js 18 or newer</strong> for Step 5, the MiniMax Code CLI. The installer bundles its own Node runtime if you prefer not to install one.</li><li><strong>Optional: four to eight data-center GPUs</strong> for Step 6, the self-hosted deployment. The weights are a 252&nbsp;GB download. If you do not have that hardware, skip Step 6 — the API path teaches everything else.</li></ul>
+<p>One thing to settle before you start: M3.1 Flash is open <em>weights</em>, not open source. It ships under the MiniMax Community License. Non-commercial use is free; commercial use carries conditions. The details are in the license section near the end; the short version is to read the license file in the repository before you ship anything built on the weights.</p>
+<h2 id="step-1-first-call">Step 1 — Your first call<a class="anchor" href="#step-1-first-call" aria-label="Link to section">#</a></h2>
+<p>M3.1 Flash speaks the OpenAI chat completions protocol, so the client setup is three lines. The two things that are easy to get wrong are the model ID and the sampling parameters: the ID is <code>MiniMax-M3.1-Flash</code>, and MiniMax recommends <code>temperature=1.0</code> with <code>top_p=0.95</code> — not the OpenAI defaults. The recommended values come from the model card itself, and every call in this tutorial uses them.</p>
+<pre><code class="language-bash">pip install openai
+export MINIMAX_API_KEY=&lt;redacted&gt;</code></pre>
+<pre><code class="language-python">import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.minimax.io/v1",  # OpenAI-compatible endpoint
+    api_key=os.environ["MINIMAX_API_KEY"],
+)
+
+response = client.chat.completions.create(
+    model="MiniMax-M3.1-Flash",
+    messages=[{"role": "user", "content": "Explain what a mixture-of-experts model is, in two sentences."}],
+    reasoning_effort="low",   # low | medium | high | xhigh | max
+    temperature=1.0,          # MiniMax's recommended sampling
+    top_p=0.95,
+    max_tokens=8000,
+)
+
+message = response.choices[0].message
+print("THINKING:", message.reasoning_content)
+print("ANSWER:", message.content)
+print("USAGE:", response.usage.model_dump())</code></pre>
+<p>Two details in that response deserve attention. First, the thinking arrives separately from the answer: on the OpenAI-compatible protocol it comes back on <code>reasoning_content</code>, while <code>content</code> holds only the final answer. You never have to parse thinking out of <code>&lt;think&gt;</code> tags. Second, the usage block is your billing source of truth — input tokens at $0.15 per million, output tokens at $0.60 per million, and thinking tokens count as output. A short <code>low</code>-effort call like this one costs a fraction of a cent; the cost math in Step 2 shows where the money actually goes.</p>
+<p>MiniMax also documents an Anthropic-compatible endpoint at <code>https://api.minimax.io/anthropic</code>, which it recommends — that is how tools such as Claude Code connect to the model. The model ID and the pricing are the same; only the effort field changes name, to <code>output_config.effort</code>, and thinking comes back as a <code>thinking</code> content block instead of <code>reasoning_content</code>. The rest of this tutorial uses the OpenAI-compatible endpoint because it needs no new SDK, but everything in it translates one-to-one.</p>
+<h2 id="step-2-effort">Step 2 — The five effort levels, and what each one costs<a class="anchor" href="#step-2-effort" aria-label="Link to section">#</a></h2>
+<p>M3.1 Flash always thinks. That is the biggest behavioural difference from its predecessor M3, which lets you skip thinking. The effort parameter is the only control you get, and it is the main cost lever on the model: higher levels think more thoroughly and produce more output tokens at higher latency.</p>
+<table><thead><tr><th>Effort</th><th>Use it for</th><th>What you pay</th></tr></thead><tbody><tr><td><code>low</code></td><td>Classification, extraction, short answers, quick tool calls</td><td>Least thinking, fastest, cheapest</td></tr><tr><td><code>medium</code></td><td>Routine code edits, single-file fixes, summarising</td><td>A short reasoning pass</td></tr><tr><td><code>high</code></td><td>Multi-file refactors, debugging with a real traceback</td><td>Deeper reasoning, more output tokens</td></tr><tr><td><code>xhigh</code></td><td>Hard bugs, ambiguous specs, long-horizon agent runs</td><td>Substantially more thinking</td></tr><tr><td><code>max</code></td><td>The hardest reasoning you have; also the default if you omit the field</td><td>Most thinking, slowest, most expensive</td></tr></tbody></table>
+<p>The default matters more than it looks: omitting <code>reasoning_effort</code> defaults to <code>max</code>. A coding agent that never sets the field pays for maximum thinking on every call, including the trivial ones — reading a file, confirming a test passed. Set <code>low</code> for the calls that do not need reasoning and reserve <code>high</code> or <code>max</code> for the calls that do. That one habit is worth more than any other optimisation in this tutorial.</p>
+<p>The trap to avoid: you cannot turn thinking off. Sending <code>thinking: {"type": "disabled"}</code> on the Anthropic-compatible endpoint, or <code>effort: "none"</code> anywhere, returns HTTP 400. If a call is too slow or too expensive, lower the effort level — do not try to disable thinking. The field name differs per protocol, so check yours: <code>reasoning_effort</code> on the OpenAI-compatible endpoint, <code>output_config.effort</code> on the Anthropic-compatible endpoint, <code>reasoning.effort</code> on the OpenAI Responses API.</p>
+<pre><code class="language-python"># Same call as Step 1, with effort set explicitly for a hard debugging job.
+response = client.chat.completions.create(
+    model="MiniMax-M3.1-Flash",
+    messages=[{"role": "user", "content": "Find the race condition in this 400-line module."}],
+    reasoning_effort="high",
+    temperature=1.0,
+    top_p=0.95,
+    max_tokens=8000,
+)</code></pre>
+<h2 id="step-3-agent-loop">Step 3 — Build the agent loop: read, edit, run, repeat<a class="anchor" href="#step-3-agent-loop" aria-label="Link to section">#</a></h2>
+<p>A coding agent is a loop around the chat API. The model decides what to do next by emitting tool calls; your code executes them and returns the results as <code>tool</code> messages; the loop repeats until the model answers with no more tool calls, or you hit a step limit. The loop must not run forever — cap it. Everything else is tooling around that loop.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/minimax-m31-flash-coding-agent-tutorial/img2.webp" alt="Flow diagram of the coding-agent loop: your task goes to M3.1-Flash, which emits a tool call, your code runs it sandboxed to the project, the result returns as a tool message, and the loop repeats until the model gives a final answer"><figcaption>Diagram: AI Frontier Post.</figcaption></figure>
+<p>The agent below is the whole thing: three tools, a sandbox, and the loop. It is the exact code verified for this tutorial — run end to end against a local mock of the documented API contract, with the request payloads asserted. Paste it into <code>agent.py</code>.</p>
+<pre><code class="language-python">&quot;&quot;&quot;Minimal coding agent on MiniMax M3.1-Flash (OpenAI-compatible API).
+
+Point MINIMAX_BASE_URL at the real API (https://api.minimax.io/v1) with a
+real MINIMAX_API_KEY, or at the local mock server used for verification.
+Model id: MiniMax-M3.1-Flash. Effort: low | medium | high | xhigh | max
+(defaults to max on the API when omitted; thinking can never be disabled).
+&quot;&quot;&quot;
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from openai import OpenAI
+
+MODEL = &quot;MiniMax-M3.1-Flash&quot;
+MAX_STEPS = 12
+# Prices from MiniMax&#x27;s pricing page, USD per 1M tokens (Nov 2026).
+PRICE_IN, PRICE_OUT = 0.15, 0.60
+
+TOOLS = [
+    {
+        &quot;type&quot;: &quot;function&quot;,
+        &quot;function&quot;: {
+            &quot;name&quot;: &quot;read_file&quot;,
+            &quot;description&quot;: &quot;Read a file inside the project directory and return its contents.&quot;,
+            &quot;parameters&quot;: {
+                &quot;type&quot;: &quot;object&quot;,
+                &quot;properties&quot;: {&quot;path&quot;: {&quot;type&quot;: &quot;string&quot;}},
+                &quot;required&quot;: [&quot;path&quot;],
+            },
+        },
+    },
+    {
+        &quot;type&quot;: &quot;function&quot;,
+        &quot;function&quot;: {
+            &quot;name&quot;: &quot;edit_file&quot;,
+            &quot;description&quot;: &quot;Replace one exact block of text in a file. Fails unless it matches exactly once.&quot;,
+            &quot;parameters&quot;: {
+                &quot;type&quot;: &quot;object&quot;,
+                &quot;properties&quot;: {
+                    &quot;path&quot;: {&quot;type&quot;: &quot;string&quot;},
+                    &quot;old&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;description&quot;: &quot;Exact text to replace.&quot;},
+                    &quot;new&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;description&quot;: &quot;Replacement text.&quot;},
+                },
+                &quot;required&quot;: [&quot;path&quot;, &quot;old&quot;, &quot;new&quot;],
+            },
+        },
+    },
+    {
+        &quot;type&quot;: &quot;function&quot;,
+        &quot;function&quot;: {
+            &quot;name&quot;: &quot;run_shell&quot;,
+            &quot;description&quot;: &quot;Run a test or lint command inside the project directory. No pipes, redirects, or chaining.&quot;,
+            &quot;parameters&quot;: {
+                &quot;type&quot;: &quot;object&quot;,
+                &quot;properties&quot;: {&quot;command&quot;: {&quot;type&quot;: &quot;string&quot;}},
+                &quot;required&quot;: [&quot;command&quot;],
+            },
+        },
+    },
+]
+
+
+class Project:
+    &quot;&quot;&quot;Tools are sandboxed to one directory; nothing escapes it.&quot;&quot;&quot;
+
+    def __init__(self, root):
+        self.root = Path(root).resolve()
+
+    def _inside(self, path):
+        p = (self.root / path).resolve()
+        if self.root not in p.parents and p != self.root:
+            raise ValueError(f&quot;refused: {path} is outside the project&quot;)
+        return p
+
+    def read_file(self, path):
+        return self._inside(path).read_text()
+
+    def edit_file(self, path, old, new):
+        p = self._inside(path)
+        text = p.read_text()
+        if text.count(old) != 1:
+            return f&quot;edit_file failed: pattern matched {text.count(old)} times, need exactly 1&quot;
+        p.write_text(text.replace(old, new))
+        return f&quot;edited {path}&quot;
+
+    def run_shell(self, command):
+        banned = [&quot;;&quot;, &quot;&amp;&amp;&quot;, &quot;||&quot;, &quot;|&quot;, &quot;&gt;&quot;, &quot;&lt;&quot;, &quot;`&quot;, &quot;$(&quot;, &quot;\n&quot;]
+        if any(b in command for b in banned):
+            return &quot;run_shell refused: chaining, pipes and redirects are not allowed&quot;
+        parts = command.split()
+        if parts[:2] not in ([&quot;python3&quot;, &quot;-m&quot;], [&quot;python3&quot;]) or parts[0] != &quot;python3&quot;:
+            return &quot;run_shell refused: only python3 commands are allowed&quot;
+        done = subprocess.run(parts, cwd=self.root, capture_output=True,
+                              text=True, timeout=120)
+        return (done.stdout + done.stderr)[-4000:] or &quot;(no output)&quot;</code></pre>
+<p>Three sandbox rules do the safety work, and each one was tested. <code>edit_file</code> replaces text only when the pattern matches exactly once — a pattern that matches zero times or four times fails loudly instead of editing the wrong thing. <code>run_shell</code> refuses chaining, pipes, and redirects, and only allows <code>python3</code> commands, so a model cannot smuggle <code>rm -rf /</code> into a test command. And every path is resolved against the project root: <code>../agent.py</code> is refused. The model is powerful; the sandbox is what makes it safe to let it act.</p>
+<pre><code class="language-python">def cost(usage):
+    &quot;&quot;&quot;USD for one call from the usage block MiniMax returns.&quot;&quot;&quot;
+    if usage is None:
+        return 0.0
+    return (usage.prompt_tokens * PRICE_IN + usage.completion_tokens * PRICE_OUT) / 1_000_000
+
+
+def run_agent(task, project, client, effort):
+    messages = [
+        {&quot;role&quot;: &quot;system&quot;,
+         &quot;content&quot;: (&quot;You are a careful coding agent. Work in small steps: read the &quot;
+                     &quot;code first, reproduce the problem, make the smallest fix that &quot;
+                     &quot;passes the tests, then run the tests. Never invent file contents.&quot;)},
+        {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: task},
+    ]
+    total_cost, steps = 0.0, 0
+    for step in range(1, MAX_STEPS + 1):
+        steps = step
+        resp = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            tools=TOOLS,
+            reasoning_effort=effort,   # low | medium | high | xhigh | max
+            temperature=1.0,           # MiniMax&#x27;s recommended sampling
+            top_p=0.95,
+            max_tokens=8000,
+        )
+        total_cost += cost(resp.usage)
+        msg = resp.choices[0].message
+        # M3.1-Flash always thinks; reasoning arrives separately from the answer.
+        if getattr(msg, &quot;reasoning_content&quot;, None):
+            print(f&quot;[step {step} thinking] {msg.reasoning_content[:200]}&quot;)
+        messages.append(msg.model_dump(exclude_none=True))
+        if not msg.tool_calls:
+            print(f&quot;\n[final] {msg.content}&quot;)
+            break
+        for call in msg.tool_calls:
+            name = call.function.name
+            args = json.loads(call.function.arguments)
+            print(f&quot;[step {step}] {name}({json.dumps(args)[:120]})&quot;)
+            fn = {&quot;read_file&quot;: project.read_file,
+                  &quot;edit_file&quot;: project.edit_file,
+                  &quot;run_shell&quot;: project.run_shell}[name]
+            try:
+                result = fn(**args)
+            except Exception as exc:  # tool errors go back to the model as text
+                result = f&quot;{name} failed: {exc}&quot;
+            messages.append({&quot;role&quot;: &quot;tool&quot;, &quot;tool_call_id&quot;: call.id,
+                             &quot;content&quot;: str(result)[:8000]})
+    else:
+        print(f&quot;\n[stopped] hit the {MAX_STEPS}-step limit&quot;)
+    print(f&quot;\n[steps: {steps}] [cost: ${total_cost:.6f} at MiniMax list prices]&quot;)
+    return total_cost
+
+
+if __name__ == &quot;__main__&quot;:
+    ap = argparse.ArgumentParser()
+    ap.add_argument(&quot;--project&quot;, default=&quot;.&quot;)
+    ap.add_argument(&quot;--effort&quot;, default=&quot;max&quot;,
+                    choices=[&quot;low&quot;, &quot;medium&quot;, &quot;high&quot;, &quot;xhigh&quot;, &quot;max&quot;])
+    ap.add_argument(&quot;task&quot;)
+    args = ap.parse_args()
+    client = OpenAI(
+        base_url=os.environ.get(&quot;MINIMAX_BASE_URL&quot;, &quot;https://api.minimax.io/v1&quot;),
+        api_key=os.environ.get(&quot;MINIMAX_API_KEY&quot;, &quot;not-needed-for-mock&quot;),
+    )
+    run_agent(args.task, Project(args.project), client, args.effort)</code></pre>
+<p>Now give it something to fix. Create a demo project with two files:</p>
+<pre><code class="language-python"># calc.py — tiny stats helpers with one deliberate bug.
+"""Tiny stats helpers used by the demo in the tutorial."""
+
+
+def average(values):
+    """Return the mean of a list of numbers."""
+    total = sum(values)
+    return total / len(values)
+
+
+def median(values):
+    """Return the median of a list of numbers."""
+    ordered = sorted(values)
+    n = len(ordered)
+    mid = n // 2
+    if n % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2</code></pre>
+<pre><code class="language-python"># test_calc.py
+from calc import average, median
+
+
+def test_average_basic():
+    assert average([1, 2, 3, 4]) == 2.5
+
+
+def test_average_empty():
+    assert average([]) == 0.0
+
+
+def test_median_odd():
+    assert median([3, 1, 2]) == 2
+
+
+def test_median_even():
+    assert median([4, 1, 3, 2]) == 2.5</code></pre>
+<p>Run the tests first to see the failure, then run the agent:</p>
+<pre><code class="language-bash">python3 -m pytest test_calc.py -q
+# 1 failed, 3 passed — test_average_empty: ZeroDivisionError
+
+MINIMAX_BASE_URL=http://127.0.0.1:8765/v1 python3 agent.py --project demo --effort low \
+  "Fix the failing test in this project: average([]) should return 0.0 instead of crashing."</code></pre>
+<p>The run above points at the local mock server used for verification — swap in the real API by exporting <code>MINIMAX_API_KEY</code> and dropping the <code>MINIMAX_BASE_URL</code> override, and the same code calls the real model. Against the mock, the verified run took four steps: <code>read_file</code> on <code>calc.py</code>, <code>edit_file</code> adding the empty-list guard, <code>run_shell</code> running pytest, then a final answer. The fix it produced is the obvious one — return <code>0.0</code> when the list is empty — and all four tests passed afterwards. The recorded request payloads were asserted: model <code>MiniMax-M3.1-Flash</code>, <code>reasoning_effort: low</code>, <code>temperature: 1.0</code>, <code>top_p: 0.95</code>, and every <code>tool</code> message carrying the <code>tool_call_id</code> of the call it answers. Cost for the four calls, at MiniMax list prices on the mock's usage figures: $0.002640.</p>
+<p>Two honest limits on that verification. The mock returns scripted tool calls, so it proves the loop, the dispatch, the sandbox, and the request shapes — not the model's judgement on a real bug. And the mock's usage figures are placeholders, so the $0.002640 is arithmetic on list prices, not a real bill. What you get from following this tutorial is a loop you can trust and a bill you can predict; the model's own decisions are the part your API key buys.</p>
+<h2 id="step-4-vision">Step 4 — Vision: hand the agent a screenshot<a class="anchor" href="#step-4-vision" aria-label="Link to section">#</a></h2>
+<p>M3.1 Flash takes images and video as input, not just text. For a coding agent the most useful image is a screenshot of the failure: a traceback in the terminal, a broken layout in the browser, a chart that renders wrong. Send it as an <code>image_url</code> content part alongside the question, and the model reads it in the same call.</p>
+<pre><code class="language-python">import base64
+
+with open("traceback.png", "rb") as f:
+    png = base64.b64encode(f.read()).decode()
+
+response = client.chat.completions.create(
+    model="MiniMax-M3.1-Flash",
+    messages=[{"role": "user", "content": [
+        {"type": "text", "text": "What error does this screenshot show, and which file should I open first?"},
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{png}"}},
+    ]}],
+    reasoning_effort="low",
+    max_tokens=2000,
+)
+print(response.choices[0].message.reasoning_content)
+print(response.choices[0].message.content)</code></pre>
+<p>The message shape above was verified against the mock: the <code>image_url</code> part arrives intact, and the thinking still comes back separately in <code>reasoning_content</code>. In the verified run the screenshot showed a <code>ZeroDivisionError</code> in <code>average()</code> — the same bug from Step 3 — and the answer named the file and the line. The practical workflow is to let the screenshot identify the fault, then hand the file to the agent loop from Step 3 to fix it. Video input works the same way, for screen recordings of a bug you can only reproduce by interacting with the app; keep clips short, since every frame is tokens.</p>
+<h2 id="step-5-mcode">Step 5 — The fast path: MiniMax Code, the official CLI<a class="anchor" href="#step-5-mcode" aria-label="Link to section">#</a></h2>
+<p>If you do not want to maintain your own loop, MiniMax ships one: MiniMax Code, the <code>mcode</code> terminal agent. It runs M3.1 Flash by default, works in an interactive TUI or headless, and takes the same effort control as the API. The install below was run for this tutorial — version 0.7.9, installed from the official installer, <code>--version</code> and <code>--help</code> verified.</p>
+<pre><code class="language-bash"># macOS / Linux / WSL — installs into ~/.minimax-code, no sudo needed.
+curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash
+
+# Or with npm, if you already have Node.js 22.19+ / 24.2+ / 25 / 26:
+npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ \
+  --ignore-scripts=false --include=optional \
+  --allow-scripts=@minimax-ai/code,better-sqlite3
+
+mcode --version   # 0.7.9
+mcode login --region global   # sign in with a Global account</code></pre>
+<p>Once signed in, the two commands that matter are <code>init</code> and <code>exec</code>. <code>mcode init .</code> analyses the codebase and writes project guidance into <code>AGENTS.md</code> — the same file many agent tools read. <code>mcode exec</code> runs one prompt without starting the TUI, which is what you want in scripts and CI:</p>
+<pre><code class="language-bash">cd /path/to/your/project
+mcode init .
+mcode exec --effort low --cwd . "Fix the failing test in calc.py: average([]) should return 0.0"
+mcode exec --model minimax/m3.1-flash --effort high "Refactor the stats helpers into a package"</code></pre>
+<p>The <code>--effort</code> flag overrides reasoning effort for that run only, and <code>--model</code> overrides the model — both verified in the CLI's own help output. <code>mcode exec</code> also takes <code>--file</code> to attach files and <code>--prompt-mode coding</code> for coding tasks. The trade-off against Step 3 is control: <code>mcode</code> is faster to start and maintained by MiniMax, but its sandbox, tool set, and prompts are theirs, not yours. If you need custom tools, an allowlist your security team signed off on, or cost tracking per call, keep your own loop.</p>
+<h2 id="step-6-self-host">Step 6 — Self-host with vLLM or SGLang<a class="anchor" href="#step-6-self-host" aria-label="Link to section">#</a></h2>
+<p>The weights are on Hugging Face, and the model card names three serving frameworks: SGLang, vLLM, and TokenSpeed. The download is the easy part:</p>
+<pre><code class="language-bash">hf download MiniMaxAI/MiniMax-M3.1-Flash --local-dir MiniMax-M3.1-Flash</code></pre>
+<p>That pulls about 252&nbsp;GB. The hardware question is the real one: community write-ups of the release put the floor at four Blackwell or MI355X GPUs, or a full eight-GPU Hopper node with reduced context and features. The vLLM recipe caps context at 262,144 tokens — a key-value-cache decision, not a model limit; the model itself supports 1,048,576, and the API serves the full window. The card also notes the checkpoint ships a DSpark speculative-decoding draft head, so compatible serving engines can run speculative decoding without a separate draft model.</p>
+<p>This step was not run for this tutorial: there is no 252&nbsp;GB download and no multi-GPU node in the verification setup. Treat the commands above as MiniMax's own, copied from the official model card — the download command is verbatim — and the serving frameworks as the card's recommendations. Self-host only when the documents cannot leave your network or the volume makes the API bill larger than the hardware; for learning the model, the API path in Steps 1–4 is faster and cheaper.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/minimax-m31-flash-coding-agent-tutorial/img3.webp" alt="Bar chart on a log scale of the cost of one agent session using 500K input and 100K output tokens: DeepSeek V4.1 Flash $0.05, MiniMax M3.1 Flash $0.14, MiniMax M3 $0.27, Claude Fable 5.2 $8, GPT-6.2 Astra $10"><figcaption>Cost of one agent session at list prices, November 20, 2026. Chart: AI Frontier Post.</figcaption></figure>
+<p>The decision tree is short. If you want a coding agent today with the least setup, install <code>mcode</code> and sign in — ten minutes, MiniMax maintains the loop. If you need custom tools, a sandbox your team approved, or per-call cost tracking, build the loop from Step 3; it is about 200 lines and you own every decision it makes. Self-host only when data cannot leave your network or your volume makes the API bill larger than the hardware.</p>
+<table><thead><tr><th>Model</th><th>Input / output per 1M</th><th>Context</th><th>DeepSWE v1.1*</th><th>Weights</th></tr></thead><tbody><tr><td><strong>MiniMax M3.1 Flash</strong></td><td>$0.15 / $0.60</td><td>1M</td><td>73.7</td><td>Yes, 252&nbsp;GB</td></tr><tr><td>MiniMax M3</td><td>$0.30 / $1.20 (≤512K in)</td><td>1M</td><td>—</td><td>Yes</td></tr><tr><td>DeepSeek V4.1 Flash</td><td>$0.0507 / $0.2028†</td><td>1M</td><td>77.0 (1017 snapshot)</td><td>Yes</td></tr><tr><td>Claude Fable 5.2</td><td>$8 / $40†</td><td>—</td><td>—</td><td>No</td></tr><tr><td>GPT-6.2 Astra</td><td>$10 / $50†</td><td>—</td><td>—</td><td>No</td></tr></tbody></table>
+<p>* Vendor-reported scores from the M3.1 Flash model card. † OpenRouter cheapest-provider rates, November 20, 2026. The price table is the argument for M3.1 Flash in one picture: a 500K-input, 100K-output agent session costs $0.14 on M3.1 Flash, $0.05 on DeepSeek V4.1 Flash, $0.27 on M3, $8 on Fable 5.2, and $10 on GPT-6.2 Astra. DeepSeek is cheaper per token and scores higher on DeepSWE; M3.1 Flash answers with a full multimodal input set, the five effort levels, and downloadable weights. If the job is a long-horizon coding agent and a failure costs a day, the frontier closed models are the cost of the insurance. If the job is bulk agent work where the bill is the constraint, the open-weight pair is the whole game.</p>
+<h2 id="license">The license clause to read before you ship<a class="anchor" href="#license" aria-label="Link to section">#</a></h2>
+<p>M3.1 Flash is released under the MiniMax Community License. It is not an OSI-approved open-source license, and the distinction matters the moment you serve the model to other people. Non-commercial use — personal projects, internal company use, research, fine-tuning — is free. Commercial use carries conditions, including attribution and notice terms, and some commercial deployments need MiniMax's written agreement. The exact terms live in the license file in the Hugging Face repository; read it before you build a product on the weights, not after. Open weights are not open source, and this license is explicit about where the line is.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>M3.1 Flash is the cheapest way to run a serious coding agent with a million-token context window and weights you can download. The model is not the best agent on every benchmark — DeepSeek's V4.1 Flash-1017 outscores it on DeepSWE and costs a third as much per token — but it is the only open-weight model in this price band that combines 1M context, image and video input, always-on reasoning with five effort levels, and an official CLI that runs it out of the box.</p>
+<p>The two habits that matter most are the ones this tutorial drilled: set the effort level on every call, because the default is <code>max</code> and you will pay for thinking you did not need; and put the model behind a sandbox you control, because a coding agent that can edit files and run shell commands is only as safe as the allowlist in front of it. Get those two right and the rest — the loop, the vision input, the self-host recipe — is detail.</p>
+<h2 id="how-verified">How this was verified<a class="anchor" href="#how-verified" aria-label="Link to section">#</a></h2>
+<p>Every client call in Steps 1–4 was run against a local mock of the OpenAI-compatible endpoint, using the <code>openai</code> Python SDK version 3.57.0, and the recorded request payloads were asserted: model ID <code>MiniMax-M3.1-Flash</code>, <code>reasoning_effort</code> values, <code>temperature=1.0</code>, <code>top_p=0.95</code>, the base64 image content part, and the full four-step tool-calling exchange with <code>tool_call_id</code> round-tripping. The agent loop fixed the demo bug end to end: 1 failed test before, 4 passed after, at $0.002640 for four calls on the mock's usage figures at MiniMax list prices. The sandbox guards were tested directly: a non-matching edit fails, a multi-match edit fails, shell chaining and pipes are refused, and paths outside the project are refused. MiniMax Code 0.7.9 was installed from the official installer and its <code>--version</code>, <code>--help</code>, and <code>exec --help</code> output verified. Model facts, prices, effort levels, and benchmark scores were read from the Hugging Face model card and MiniMax's own API and pricing documentation on November 20, 2026; DeepSeek, Fable 5.2, and Astra prices are OpenRouter listed rates from the same day. The live model calls were not run — they need your key — and the 252&nbsp;GB self-hosted deployment was not run either.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://huggingface.co/MiniMaxAI/MiniMax-M3.1-Flash" rel="nofollow">MiniMax — MiniMax-M3.1-Flash model card (Hugging Face)</a> — 428B total parameters, 23B active, 1M-token context, the benchmark table, recommended sampling, the download command, and the SGLang / vLLM / TokenSpeed deployment recommendations.</li><li><a href="https://platform.minimax.io/docs/guides/text-generation" rel="nofollow">MiniMax — Model Invocation, text generation (API docs)</a> — the OpenAI-compatible and Anthropic-compatible base URLs, the five effort levels, the default of max, the <code>reasoning_content</code> field, and the HTTP 400 on disabled thinking.</li><li><a href="https://platform.minimax.io/docs/pricing/overview" rel="nofollow">MiniMax — Pricing overview (API docs)</a> — M3.1 Flash at $0.15 / $0.60 / $0.015 cached per million tokens; M3 at $0.30 / $1.20 up to 512K input tokens.</li><li><a href="https://github.com/MiniMax-AI/minimax-code" rel="nofollow">MiniMax-AI — minimax-code (GitHub)</a> — the official MiniMax Code CLI: the installer, <code>mcode login --region global</code>, <code>mcode init</code>, and headless <code>mcode exec</code> with <code>--effort</code> and <code>--model</code>.</li><li><a href="https://openrouter.ai/deepseek/deepseek-v4.1-flash-20260910" rel="nofollow">OpenRouter — DeepSeek V4.1 Flash pricing</a> — $0.0507 / $0.2028 per million input/output tokens, 1M-token context.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="minimax-m31-flash-coding-agent-tutorial"></div><div class="comments" data-comments="minimax-m31-flash-coding-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/gpt-6-2-astra-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a coding agent with GPT-6.2 Astra: apply_patch, shell, and the migration traps, end to end</h3><div class="meta">Priya Nair · November 18, 2026 · 26 min read</div></a><a class="rel-card" href="/articles/qwen4-max-coding-agent-api-tutorial/"><span class="chip">Tutorials</span><h3>Qwen4-Max hands-on: build a working coding agent with Alibaba&#x27;s new flagship API</h3><div class="meta">Sofia Almeida · November 16, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/claude-fable-5-2-api-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort, prompt caching, and fast mode</h3><div class="meta">Sofia Almeida · November 12, 2026 · 24 min read</div></a><a class="rel-card" href="/articles/hy4-flash-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Tencent Hy4 Flash: 1M-token context, reasoning modes, and the open-weights deployment</h3><div class="meta">Sofia Almeida · November 20, 2026 · 18 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Can I run M3.1 Flash on a single consumer GPU?</h3><p>No. The checkpoint is about 252 GB of weights, and community write-ups of the release put the floor at four Blackwell or MI355X GPUs, or a full eight-GPU Hopper node with reduced context and features. The API is the practical way to use the model without server hardware: $0.15 per million input tokens and $0.60 per million output tokens on MiniMax’s platform.</p><h3>What is the difference between M3.1 Flash and M3?</h3><p>M3.1 Flash is the efficiency tier: half the price ($0.15/$0.60 against M3’s $0.30/$1.20 up to 512K input tokens), always-on thinking with five effort levels where M3 lets you skip thinking, and the same 1M-token context. If the job is routine agent work, use Flash; if it is the hardest reasoning you have, try M3 first and measure whether the quality gap is worth twice the price.</p><h3>Why is my bill higher than the per-token price suggests?</h3><p>Thinking tokens are output tokens at $0.60 per million, and omitting reasoning_effort defaults to max. A coding agent that never sets the field pays for maximum thinking on every call, including the trivial ones — reading a file, confirming a test passed. Set low for routine calls and reserve high or max for the calls that actually need reasoning.</p><h3>Is M3.1 Flash really open source?</h3><p>No — it is open weights under the MiniMax Community License. Non-commercial use is free; commercial use carries attribution and notice conditions, and some deployments need MiniMax’s written agreement. Read the license file in the Hugging Face repository before you ship anything built on the weights.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/minimax-m3-1-flash-open-weights-release/">MiniMax open-sources M3.1 Flash: the 428B &quot;Space Bunny&quot; agent model lands on Hugging Face</a></li><li><a href="/articles/minimax-h3-hailuo-video-api-tutorial/">Generate video with sound from one API call: hands-on with MiniMax H3 (Hailuo)</a></li><li><a href="/articles/kimi-k3-1-pro-coding-agent-tutorial/">Agentic coding with Kimi K3.1 Pro: build your own repo-aware coding agent</a></li><li><a href="/articles/inference-optimisation-skill-local-llm-speed-tutorial/">Speed up your local LLM server: hands-on with inference-optimisation-skill</a></li><li><a href="/articles/openai-agents-sdk-multi-agent-tutorial/">Build a working multi-agent system with the OpenAI Agents SDK: tools, handoffs, guardrails, and offline tests</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
