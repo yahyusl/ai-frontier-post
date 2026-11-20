@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Port your TypeScript to Rust and prove it still works: hands-on with rust-anything — AI Frontier Post</title>
+<meta name="description" content="rust-anything records what your TypeScript does, then checks every piece of the Rust rewrite against the recording. This tutorial ports a fuzzy scorer, replays 449 recorded cases, passes the 14-point gate — and finds single calls 5x slower until the batch class earns the win.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/rust-anything-port-typescript-to-rust-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Port your TypeScript to Rust and prove it still works: hands-on with rust-anything">
+<meta property="og:description" content="rust-anything records what your TypeScript does, then checks every piece of the Rust rewrite against the recording. This tutorial ports a fuzzy scorer, replays 449 recorded cases, passes the 14-point gate — and finds single calls 5x slower until the batch class earns the win.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/rust-anything-port-typescript-to-rust-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/rust-anything-port-typescript-to-rust-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Port your TypeScript to Rust and prove it still works: hands-on with rust-anything","description":"rust-anything records what your TypeScript does, then checks every piece of the Rust rewrite against the recording. This tutorial ports a fuzzy scorer, replays 449 recorded cases, passes the 14-point gate \u2014 and finds single calls 5x slower until the batch class earns the win.","datePublished":"2026-11-20","dateModified":"2026-11-20","author":{"@type":"Person","name":"Priya Nair","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/rust-anything-port-typescript-to-rust-tutorial/"},"image":"https://aifrontierpost.com/articles/rust-anything-port-typescript-to-rust-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a coding agent or an API key to use rust-anything?","acceptedAnswer":{"@type":"Answer","text":"No. Every command in this tutorial was run by hand in a terminal; no account and no API key are needed at any point. A coding agent (Claude Code, Codex, Cursor, Gemini CLI, or OpenCode) is optional: `rust-anything setup` registers the tool's MCP server and workflow skill with it, and the agent then writes the Rust port while the tool verifies it."}},{"@type":"Question","name":"Which languages can I port from?","acceptedAnswer":{"@type":"Answer","text":"TypeScript/JavaScript, Python, C, Go, Ruby, Java, and Kotlin get full per-unit ports with napi or wasm bridges. PHP and C# work whole-app only: `app record`, `app replay`, and the front door for CLIs and servers. Kotlin and Java also get an Android JNI build path into `jniLibs/`."}},{"@type":"Question","name":"Why was the Rust port slower on single calls?","acceptedAnswer":{"@type":"Answer","text":"The function itself takes about 140 nanoseconds in TypeScript, and crossing from JavaScript into the native module costs more than the work. The tool's own bench verdict says the same: do not ship that unit for speed. The fix is the batch class, which keeps thousands of items in Rust and scores them in parallel across cores, or porting a bigger unit \u2014 the function together with its callers \u2014 so one call does more work."}},{"@type":"Question","name":"Does rust-anything write the Rust code for me?","acceptedAnswer":{"@type":"Answer","text":"No. You or your coding agent write the Rust in `src/port.rs`; the tool supplies what an agent cannot guess reliably \u2014 where the time goes, what to port first, the bridge so callers keep the original API, the exact behavior the port must match, and the gate that says when it is done. It does generate the crate scaffold, the bindings, and the batch classes."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Port your TypeScript to Rust and prove it still works: hands-on with rust-anything</h1>
+<p class="lede">rust-anything went from zero to 5,614 stars in four days by solving the part of a Rust rewrite nobody wants to do by hand: proving the new code behaves exactly like the old code. This tutorial runs the whole loop — profile, bridge, record 449 cases, port, diff, bench, gate — and reports the honest numbers, including the ones where Rust loses.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 20, 2026 · 21 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> rust-anything (erkamyaman/rust-anything, MIT) is #15 on GitHub's weekly trending list with 5,614 stars after four days. It records what your TypeScript, Python, Go, or Java code does, scaffolds the Rust crate and its napi or wasm bindings, and replays the recording against your hand-written port. Verified here on a fuzzy scorer: 449 recorded cases, 449 matched, 100% line coverage, gate passed 14/14 — but single calls ran at 0.19x the TypeScript speed, and only the parallel batch class pulled ahead at scale. No API key, no account, free and local.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> erkamyaman/rust-anything, 5,614 stars, 451 forks, 287 commits, MIT, created November 16, 2026 — about 3,900 stars gained in week 47, 15th on GitHub's weekly trending list. Version 2.1.0.</li><li><b>The loop:</b> analyze → bridge → record → build → diff → gate, plus shadow for side-by-side production rollout. Works with TypeScript, Python, C, Go, Ruby, Java, and Kotlin; PHP and C# whole-app only.</li><li><b>Verified here:</b> 449 recorded cases (231 fuzzyScore, 218 bestMatch), 100% line coverage, 449/449 matched on diff, gate passed 14/14. A deliberate one-point scoring change was caught by diff and reverted.</li><li><b>The honest bench:</b> single calls ran at 0.19x (fuzzyScore) and 0.15x (bestMatch) — the tool itself says not to ship that for speed. Batch medians: 1.24x at 10,000 items, 0.40x at 100,000, 1.72x at 500,000, totals identical at every size.</li><li><b>The cost:</b> free, MIT, no API key, no account, no GPU. Needs Node.js 22.18+ and a Rust toolchain with the rustfmt and clippy components installed.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/rust-anything-port-typescript-to-rust-tutorial/cover.webp" alt="A dark code editor showing blue TypeScript code on the left and an orange-glowing Rust gear assembly on the right, with a magnifying glass and green checkmark bridging them"><figcaption>AI-generated illustration. The measurements in this tutorial come from the author’s own runs of the tool, not from the project’s marketing.</figcaption></figure>
+<div class="article-body"><p>Every team with a slow TypeScript service has had the same conversation: rewrite the hot path in Rust, keep everything else. The rewrite itself is not the hard part. The hard part is proving the new code does exactly what the old code did — on every input, not just the ones in the test suite. That is the job rust-anything takes on, and it is why the project went from zero to the GitHub weekly trending list in four days.</p>
+
+<p>rust-anything (<a href="https://github.com/erkamyaman/rust-anything">erkamyaman/rust-anything</a>) was created on November 16, 2026. By November 20 it had 5,614 stars and 451 forks, had gained about 3,900 stars in a single week — 15th on GitHub's weekly trending list — and shipped version 2.1.0. It is MIT-licensed, works with TypeScript, Python, C, Go, Ruby, Java, and Kotlin, and it does not translate code for you. It records what your code does, scaffolds the Rust crate and its bindings, and then checks every piece of your hand-written Rust against the recording. Nothing ships until the recording agrees.</p>
+
+<p>This tutorial runs the whole loop on a real example and reports what actually happened — including the parts where Rust lost. You will install rust-anything, profile a small TypeScript project, port a function to Rust, record 449 test cases from the original, replay them all against the port, benchmark both, and pass the project's own definition-of-done gate. No API key, no account, no cloud, no GPU.</p>
+
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Node.js 22.18 or newer.</b> This tutorial was run with Node v24.22.1. Node needs to run TypeScript sources directly — version 22.6 and up strips types natively, so no build step is required for the demo.</li>
+<li><b>A Rust toolchain.</b> rustc 1.99.1 and cargo 1.99.1 were used here. Install from <a href="https://rustup.rs/">rustup.rs</a> if you do not have one. You will also need the <code>rustfmt</code> and <code>clippy</code> components for the final gate: <code>rustup component add rustfmt clippy</code>.</li>
+<li><b>A C compiler</b> (<code>cc</code>) for linking the native module. Present by default on most Linux and macOS machines.</li>
+<li><b>About 15 minutes and roughly 300 MB of disk</b> for the toolchain components and the npm package. The demo itself is two files.</li>
+<li><b>No account and no API key.</b> Everything runs locally. A coding agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode) is optional: the tool can register itself with one, but every command in this tutorial is run by hand.</li>
+</ul>
+
+<p>The demo project is a fuzzy-match scorer — the kind of small string function that sits in the hot path of a search box, a command palette, or a file finder. It is small enough to port by hand in one sitting and real enough that the verification has something to check. The same loop applies unchanged to a whole CLI or server; the demo is the unit, not the limit.</p>
+
+<h2 id="step-1-install-it">Step 1 — Install it<a class="anchor" href="#step-1-install-it" aria-label="Link to section">#</a></h2>
+
+<p>Install the prebuilt binary from npm. This avoids compiling the tool itself from source — <code>cargo install rust-anything</code> also exists, but the npm package ships the same binary and finishes in seconds:</p>
+
+<pre><code class="language-bash">npm install -g rust-anything
+rust-anything --version</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code class="language-text">added 1 package in 4s
+rust-anything 2.1.0</code></pre>
+
+<p>Then check your environment. <code>doctor</code> lists every runtime the tool can use, what is missing, and the exact command that fixes each gap:</p>
+
+<pre><code class="language-bash">rust-anything doctor</code></pre>
+
+<pre><code class="language-text">ok        cargo                   cargo 1.99.1
+ok        node                    v24.22.1
+ok        python3                 Python 3.12.3
+ok        cc                      cc (Ubuntu 13.3.0)
+missing   go                      `go` not found (optional)
+missing   ruby                    `ruby` not found (optional)
+missing   java                    `java` not found (optional)
+ok        mcp server              `rust-anything mcp` answered with 16 tools</code></pre>
+
+<p>Go, Ruby, Java, and the rest are optional: each language is only needed if you port code written in it. For this TypeScript tutorial, cargo, Node, and <code>cc</code> are the whole requirement. Note the last line: the tool also serves all of its steps as 16 MCP tools over stdio, which is how a coding agent drives it — but you will not need that here.</p>
+
+<h2 id="step-2-profile-first">Step 2 — Profile first: find what is actually hot<a class="anchor" href="#step-2-profile-first" aria-label="Link to section">#</a></h2>
+
+<p>Never pick the port target by feel. Set up the demo project first. Create a directory with two files. The scorer is a case-insensitive subsequence match: +10 per query character matched in order, +5 per consecutive run, +8 when a match lands on a word boundary, −1 per skipped character, +15 if the whole query matched consecutively, 0 when the query is not a subsequence at all.</p>
+
+<pre><code class="language-typescript">/**
+ * fuzzyScore: case-insensitive subsequence match score.
+ * +10 per query char matched in order, +5 per consecutive run,
+ * +8 when a match lands on a word boundary, -1 per skipped char.
+ * Returns an integer; 0 means the query is not a subsequence.
+ */
+export function fuzzyScore(query: string, text: string): number {
+  const q = query.toLowerCase();
+  const c = text.toLowerCase();
+  if (q.length === 0) return 0;
+  let score = 0;
+  let ci = 0;
+  let run = 0;
+  for (let qi = 0; qi &lt; q.length; qi++) {
+    let found = -1;
+    for (let j = ci; j &lt; c.length; j++) {
+      if (c[j] === q[qi]) { found = j; break; }
+    }
+    if (found === -1) return 0;
+    score += 10;
+    if (found === ci) {
+      run += 1;
+      score += 5;
+    } else {
+      run = 0;
+      score -= (found - ci);
+    }
+    if (found === 0 || c[found - 1] === ' ' || c[found - 1] === '-' || c[found - 1] === '_') {
+      score += 8;
+    }
+    ci = found + 1;
+  }
+  if (run === q.length) score += 15;
+  return score;
+}
+
+export function bestMatch(query: string, texts: string[]): string {
+  let best = '';
+  let bestScore = -1;
+  for (const cand of texts) {
+    const s = fuzzyScore(query, cand);
+    if (s &gt; bestScore) { bestScore = s; best = cand; }
+  }
+  return best;
+}</code></pre>
+
+<p>Save that as <code>src/fuzzy.ts</code>, then add a workload that exercises it — <code>bench.mjs</code> in the project root:</p>
+
+<pre><code class="language-javascript">import { fuzzyScore } from './src/fuzzy.ts';
+const words = ['fuzzy-search', 'file-manager', 'fast-render', 'filter-list',
+  'find-replace', 'format-code', 'fetch-data', 'frame-buffer',
+  'function-call', 'feature-flag'];
+let total = 0;
+const t0 = Date.now();
+for (let i = 0; i &lt; 20000; i++) {
+  for (const w of words) total += fuzzyScore('fz', w) + fuzzyScore('fmt', w) + fuzzyScore('file', w);
+}
+console.log('total', total, 'ms', Date.now() - t0);</code></pre>
+
+<p>Check the demo runs before you touch the tool — 600,000 calls, and the total must be 5,340,000:</p>
+
+<pre><code class="language-bash">node bench.mjs</code></pre>
+
+<pre><code class="language-text">total 5340000 ms 66</code></pre>
+
+<p>Now profile it. <code>profile</code> runs a real workload under the language's profiler and tells you what to port:</p>
+
+<pre><code class="language-bash">rust-anything profile . -- node bench.mjs</code></pre>
+
+<pre><code class="language-text">224 ms in all; 28% of it in the repository's own code.
+
+| Function | File | Total | Self | Calls | Unit |
+| --- | --- | --- | ---: | ---: | --- |
+| `(anonymous):1` | `bench.mjs:1` | 29% (64 ms) | 49 ms | - | `bench.mjs` |
+| `fuzzyScore` | `src/fuzzy.ts:7` | 6% (14 ms) | 14 ms | - | `src/fuzzy.ts` |
+
+## What to port
+
+- **`fuzzyScore`** (6%): Hot and exported by `src/fuzzy.ts`: port it
+  (`rust-anything bridge /var/tmp/ra-verify/demo src/fuzzy.ts`),
+  then check `rust-anything bench`.</code></pre>
+
+<p>Two things matter here. First, the profiler names the function and the exact next command — you do not have to guess. Second, 6% is small: this demo is a teaching example, not a production bottleneck. In a real codebase you would run <code>profile</code> against your actual workload and port whatever it ranks first. There is also a bigger starting point, <code>rust-anything analyze</code>, which maps the whole repository into a ranked migration plan; it ranked this file first with priority 68 and readiness 97 out of 100, and noted that the napi bridge "runs with what Node already has". That note decides Step 3.</p>
+
+<h2 id="step-3-bridge-the-crate">Step 3 — Bridge: scaffold the Rust crate<a class="anchor" href="#step-3-bridge-the-crate" aria-label="Link to section">#</a></h2>
+
+<p><code>bridge</code> generates the Rust crate, the JavaScript bindings, and the manifest that ties the port to the original. Two choices matter, and the wrong defaults cost you a toolchain install:</p>
+
+<ul>
+<li><b>Bridge kind.</b> The default is <code>wasm</code> (wasm-bindgen), which needs the <code>wasm32-unknown-unknown</code> target and the <code>wasm-bindgen-cli</code> binary. Pass <code>--kind napi</code> instead and the crate builds with plain cargo into a <code>.node</code> module Node loads directly. Choose wasm if the port must also run in a browser; choose napi for a Node service or CLI.</li>
+<li><b>Batching.</b> <code>--batch fuzzyScore:text</code> adds a batch class that keeps many <code>text</code> values inside Rust and scores them all in one call, in parallel across cores. It is the difference between Step 7's two benchmark panels, so include it.</li>
+</ul>
+
+<pre><code class="language-bash">rust-anything bridge . src/fuzzy.ts --kind napi --batch fuzzyScore:text</code></pre>
+
+<pre><code class="language-text">Created /var/tmp/ra-verify/demo/rust/fuzzy-rs (Napi) for fuzzyScore, bestMatch
+  Cargo.toml
+  src/lib.rs
+  src/port.rs
+  index.cjs
+  .gitignore
+  README.md
+  rust-anything.json
+  build.rs
+  src/wire.rs</code></pre>
+
+<p>One gotcha, verified twice: pass the crate directory as an <b>absolute path</b> to the later commands (<code>record</code>, <code>build</code>, <code>diff</code>, <code>gate</code>). With a relative path, <code>rust-anything build rust/fuzzy-rs</code> fails with <code>manifest path 'rust/fuzzy-rs/Cargo.toml' does not exist</code> even though the file is there. The absolute path works every time.</p>
+
+<p>Open the scaffold. <code>Cargo.toml</code> pulls in <code>napi</code> 3, <code>rayon</code> for the parallel batch, and <code>mimalloc</code> as the global allocator. <code>src/port.rs</code> holds two <code>unimplemented!()</code> stubs — that file is yours to write. <code>src/lib.rs</code> and <code>index.cjs</code> are generated bindings; you do not edit them. <code>rust-anything.json</code> records the mapping between the TypeScript exports and the crate, including the batch declaration.</p>
+
+<h2 id="step-4-write-the-port">Step 4 — Write the port<a class="anchor" href="#step-4-write-the-port" aria-label="Link to section">#</a></h2>
+
+<p>rust-anything does not translate code: you — or your coding agent — write the Rust. What the tool gives you is everything an agent cannot guess reliably: where the time goes, what to port first, the bridge so callers keep the original API, the exact behavior the port must match, and the gate that says when it is done. Your job in this step is a faithful translation of the TypeScript, nothing more.</p>
+
+<p>There is one subtlety that decides whether the port passes. JavaScript indexes strings by UTF-16 code unit: <code>c[j]</code> and <code>q.length</code> count 16-bit units, so an emoji is two positions. Rust's <code>chars()</code> counts Unicode code points, so an emoji is one. If you port the loop over <code>chars()</code>, ASCII inputs will match and non-ASCII inputs will silently diverge. Work on UTF-16 units instead — <code>encode_utf16</code> after lowercasing — and the two implementations agree on every input. This is the complete port, exactly as verified:</p>
+
+<pre><code class="language-rust">//! The Rust port of `src/fuzzy.ts`.
+//!
+//! The TypeScript indexes strings by UTF-16 code unit (`c[j]`, `q.length`),
+//! so this port works on UTF-16 units too — `encode_utf16` after lowercasing —
+//! which keeps scores identical for non-ASCII input as well as ASCII.
+
+#![forbid(unsafe_code)]
+
+/// Port of `fuzzyScore` (`src/fuzzy.ts:7`).
+pub fn fuzzy_score(query: String, text: String) -&gt; Result&lt;f64, String&gt; {
+    let q: Vec&lt;u16&gt; = query.to_lowercase().encode_utf16().collect();
+    let c: Vec&lt;u16&gt; = text.to_lowercase().encode_utf16().collect();
+    if q.is_empty() {
+        return Ok(0.0);
+    }
+    let mut score: i64 = 0;
+    let mut ci: usize = 0;
+    let mut run: usize = 0;
+    for &amp;qc in &amp;q {
+        let mut found: Option&lt;usize&gt; = None;
+        for (j, &amp;cc) in c.iter().enumerate().skip(ci) {
+            if cc == qc {
+                found = Some(j);
+                break;
+            }
+        }
+        let Some(found) = found else {
+            return Ok(0.0);
+        };
+        score += 10;
+        if found == ci {
+            run += 1;
+            score += 5;
+        } else {
+            run = 0;
+            score -= (found - ci) as i64;
+        }
+        if found == 0 || c[found - 1] == 0x20 || c[found - 1] == 0x2D || c[found - 1] == 0x5F {
+            score += 8;
+        }
+        ci = found + 1;
+    }
+    if run == q.len() {
+        score += 15;
+    }
+    Ok(score as f64)
+}
+
+/// Port of `bestMatch` (`src/fuzzy.ts:37`).
+pub fn best_match(query: String, texts: Vec&lt;String&gt;) -&gt; Result&lt;String, String&gt; {
+    let mut best = String::new();
+    let mut best_score: f64 = -1.0;
+    for cand in &amp;texts {
+        let s = fuzzy_score(query.clone(), cand.clone())?;
+        if s &gt; best_score {
+            best_score = s;
+            best = cand.clone();
+        }
+    }
+    Ok(best)
+}</code></pre>
+
+<p>Two details worth copying. The stub signatures return <code>Result&lt;f64, String&gt;</code> and <code>Result&lt;String, String&gt;</code>: return <code>Err</code> where the source throws, and the caller sees an error there too. And <code>#![forbid(unsafe_code)]</code> sits at the top — the generated bindings need a little unsafe behind the scenes, but your port does not, and the gate checks that it stays that way.</p>
+
+<p>Check the port against your own hand-picked cases before the tool's recording runs. A unit test in <code>port.rs</code> pins the arithmetic — and it caught a mistake in this tutorial's own first draft, where the expected value for <code>fuzzyScore("fi", "file-manager")</code> was written as 46 and the real answer is 53 (23 for the <code>f</code>, 15 for the <code>i</code>, plus the 15-point run bonus). The test failed, the arithmetic was rechecked by hand, and the expectation was fixed — that is the workflow working as intended:</p>
+
+<pre><code class="language-bash">cargo test --lib</code></pre>
+
+<pre><code class="language-text">running 1 test
+test port::tests::scores_match_the_typescript ... ok
+test result: ok. 1 passed; 0 failed</code></pre>
+
+<h2 id="step-5-record-the-behavior">Step 5 — Record: let the original define "correct"<a class="anchor" href="#step-5-record-the-behavior" aria-label="Link to section">#</a></h2>
+
+<p>This is the step that makes the whole approach different from a rewrite-and-hope. <code>record</code> runs the TypeScript original on generated inputs — edge cases, semantic traps, and your own inputs — and saves what each call returns. The recording is the specification. The port is correct when it reproduces the recording, not when it looks right:</p>
+
+<pre><code class="language-bash">rust-anything record /var/tmp/ra-verify/demo/rust/fuzzy-rs</code></pre>
+
+<pre><code class="language-text">Recorded 449 cases (0 threw) in /var/tmp/ra-verify/demo/rust/fuzzy-rs/cases.jsonl
+  bestMatch: 218
+  fuzzyScore: 231
+Coverage: the recorded cases ran 44 of the original's 44 lines (100%)</code></pre>
+
+<p>449 cases, 200 generated per function by default plus extras, and they cover 100% of the original's lines. Look at what the generator actually produced — it is not polite ASCII:</p>
+
+<pre><code class="language-text">{"fn":"fuzzyScore","args":["HELLO","src/a/b.ts"],"ok":0}
+{"fn":"fuzzyScore","args":["étrailing.","  padded  "],"ok":0}
+{"fn":"fuzzyScore","args":["tab	separated","ΣΊΣΥΦΟΣ"],"ok":0}</code></pre>
+
+<p>Greek, combining accents, tabs, a byte-order mark, emoji in other cases. This is why Step 4's UTF-16 decision matters: a port over Rust <code>chars()</code> would have failed these cases, and you would have found out in Step 6 instead of in production. <code>cases.jsonl</code> is committed with the crate, so the recording travels with the port and any later change to the original shows up as a diff against it. You can add your own cases with <code>--inputs</code> (JSONL of <code>{"fn": name, "args": [...]}</code>), and <code>--from-tests</code> records every call the original's own test suite makes.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/rust-anything-port-typescript-to-rust-tutorial/img2.webp" alt="Flow diagram of the rust-anything loop: analyze, bridge, record, port and build, diff, gate, with shadow as an optional safety net"><figcaption>The rust-anything loop. Each step is a command, and the loop only moves forward when the previous step passes. Diagram: AI Frontier Post.</figcaption></figure>
+
+<h2 id="step-6-build-and-diff">Step 6 — Build, then replay every case<a class="anchor" href="#step-6-build-and-diff" aria-label="Link to section">#</a></h2>
+
+<p>Build the native module, then replay the recording against it:</p>
+
+<pre><code class="language-bash">rust-anything build /var/tmp/ra-verify/demo/rust/fuzzy-rs
+rust-anything diff /var/tmp/ra-verify/demo/rust/fuzzy-rs</code></pre>
+
+<pre><code class="language-text">Built /var/tmp/ra-verify/demo/rust/fuzzy-rs/fuzzy_rs.node
+449/449 cases match</code></pre>
+
+<p>449 out of 449, including every unicode edge case. The build compiles the crate in release mode with link-time optimization and produces the <code>.node</code> module Node loads through the generated <code>index.cjs</code>.</p>
+
+<p>Before trusting that number, break something on purpose. Change one constant in the port — the consecutive-match bonus from <code>+5</code> to <code>+4</code> — rebuild, and diff again. A check that cannot fail is not a check:</p>
+
+<pre><code class="language-text">- fuzzyScore("ab", "a😀b😀c"): expected {"ok":31}, got {"ok":30}
+- fuzzyScore("🏽 m", "emoji 👍🏽 mix"): expected {"ok":55}, got {"ok":52}
+- fuzzyScore("İstanbul", ".leadingİstanbul"): expected {"ok":117}, got {"ok":110}
+- fuzzyScore("tems{name} has {coun", "{name} has {count} items{name} has {count} items"): expected {"ok":286}, got {"ok":268}
+- fuzzyScore(":", ":"): expected {"ok":38}, got {"ok":37}</code></pre>
+
+<p>The one-point change fails case after case, with the exact expected and actual values for each. Restore the constant, rebuild, and the count returns to 449/449. The recording catches a single-point scoring drift across ASCII, emoji, Turkish dotted capitals, and template strings alike — that is the whole point of recording behavior instead of asserting a handful of examples.</p>
+
+<h2 id="step-7-bench-honestly">Step 7 — Bench it, honestly<a class="anchor" href="#step-7-bench-honestly" aria-label="Link to section">#</a></h2>
+
+<p><code>bench</code> times the recorded cases on the TypeScript original and on the Rust port, crossing included, and gives a verdict:</p>
+
+<pre><code class="language-bash">rust-anything bench /var/tmp/ra-verify/demo/rust/fuzzy-rs</code></pre>
+
+<pre><code class="language-text">function                  cases orig ns/call Rust ns/call   speedup
+fuzzyScore                  231          140          741     0.19x
+bestMatch                   218          254         1658     0.15x
+
+Timed as callers call it, crossing included. Overall 0.17x (geometric mean);
+0 of 2 functions at least 1.1x faster.
+Do not ship this unit for speed: calling across costs more than the work
+these functions do. Port a bigger unit (these functions together with their
+callers), so one call does more work.</code></pre>
+
+<p>Read that again: the Rust port is five to six times <i>slower</i> per call. The function itself takes about 140 nanoseconds in TypeScript; crossing from JavaScript into the native module costs more than the work. This is not a bug in the tool — the project's own README says the same thing, in the same words: calling Rust once per small function is usually slower than a JIT, and the tool finds the loop worth moving and moves it. A tutorial that hid this number would be selling the tool short; the honest number is the reason the next paragraph exists.</p>
+
+<p>The fix is the batch class from Step 3. One crossing carries thousands of items into Rust, where rayon scores them in parallel across cores. Measured on a 4-core Linux VM, five repetitions, warmed up, totals identical between the two implementations at every size:</p>
+
+<table>
+<thead><tr><th>Items scored</th><th>TypeScript loop (median)</th><th>Rust batch (median)</th><th>Speedup</th></tr></thead>
+<tbody>
+<tr><td>10,000</td><td>3.0 ms</td><td>2.4 ms</td><td>1.24x</td></tr>
+<tr><td>100,000</td><td>26.5 ms</td><td>66.8 ms</td><td>0.40x</td></tr>
+<tr><td>500,000</td><td>163.9 ms</td><td>95.6 ms</td><td>1.72x</td></tr>
+</tbody>
+</table>
+
+<p>The batch numbers are noisy — repeated runs on this shared machine ranged from roughly break-even to about 3x at the same sizes — so do not quote a single figure. The shape is what matters: single calls lose by a wide margin, small batches roughly tie, and large batches win by up to a few times. The same shape shows up in the project's own reported results at real scale: its Prettier port runs 19x faster with 15,837 of 17,224 recorded runs fully in Rust, and its json-server port answers 514 of 514 recorded HTTP cases from a single 5.3 MB binary. Speed comes from porting a unit that does real work per call, not from the language change alone. Use it from Node like this — the batch and the single-call functions live in the same module:</p>
+
+<pre><code class="language-javascript">const { fuzzyScore, FuzzyScoreBatch } = require('./rust/fuzzy-rs/index.cjs');
+const batch = new FuzzyScoreBatch(items);   // items stay in Rust
+const scores = batch.run('fmt');            // one crossing, all cores
+const top = batch.rank('fmt', 30);          // indexes scoring &gt;= 30, best first
+fuzzyScore('fmt', 'format-code');           // 40, same as the TypeScript</code></pre>
+
+<figure class="inline-art"><img class="story-image" src="/articles/rust-anything-port-typescript-to-rust-tutorial/img3.webp" alt="Two charts from measured data: single calls where Rust via napi is slower than TypeScript, and batch scoring where Rust pulls ahead at 500,000 items"><figcaption>Measured on a 4-core Linux VM, November 20, 2026. Single-call times are from rust-anything bench; batch times are medians of five warmed-up runs. Chart: AI Frontier Post, from the recorded measurements.</figcaption></figure>
+
+<h2 id="step-8-pass-the-gate">Step 8 — Pass the gate<a class="anchor" href="#step-8-pass-the-gate" aria-label="Link to section">#</a></h2>
+
+<p><code>gate</code> is the project's definition of done, run as one command: formatting, clippy, tests, unsafe audit, lockfile, no leftover stubs, size, error cases, panics, build, coverage, API, and behavior. It failed twice here before it passed, and both failures were instructive:</p>
+
+<pre><code class="language-bash">rust-anything gate /var/tmp/ra-verify/demo/rust/fuzzy-rs</code></pre>
+
+<p>First failure: the <code>rustfmt</code> and <code>clippy</code> components were not installed for the toolchain — the minimal rustup profile does not include them. The gate prints the fix, so run it:</p>
+
+<pre><code class="language-bash">rustup component add rustfmt clippy</code></pre>
+
+<p>Second failure: two clippy lints in the port, both <code>needless_range_loop</code> — the index loops <code>for qi in 0..q.len()</code> and <code>for j in ci..c.len()</code>. Rewriting them as iterators (<code>for &amp;qc in &amp;q</code>, <code>for (j, &amp;cc) in c.iter().enumerate().skip(ci)</code>) cleared clippy, and <code>cargo fmt</code> cleaned up the generated <code>lib.rs</code> too — the scaffold itself ships one unformatted blank line, which the gate flags. After those fixes:</p>
+
+<pre><code class="language-text">pass  fmt        formatted
+pass  clippy     no warnings
+pass  cargo test passed
+pass  unsafe     3 unsafe uses, each with a `// SAFETY:` comment
+pass  lockfile   Cargo.lock matches Cargo.toml
+pass  ported     nothing in port.rs is `unimplemented!`, `todo!` or only a `panic!`
+pass  size       79 lines of Rust for 38 lines of TypeScript/JavaScript (2.1x)
+pass  error cases the original fails on purpose nowhere
+pass  panics     no unwrap, expect or panic where the original returns an error
+pass  build      built /var/tmp/ra-verify/demo/rust/fuzzy-rs/fuzzy_rs.node
+pass  coverage   the recorded cases ran 44 of the original's 44 lines (100%)
+pass  api        exports fuzzyScore, bestMatch
+pass  behavior   449/449 recorded cases match
+Gate passed.</code></pre>
+
+<p>Fourteen checks, all green. The size line is worth noting for planning: 79 lines of Rust for 38 of TypeScript, about 2.1x. Porting is not free in code volume — the payoff is the proof, not brevity.</p>
+
+<h2 id="step-9-ship-it-safely">Step 9 — Ship it safely: shadow mode and the batch habit<a class="anchor" href="#step-9-ship-it-safely" aria-label="Link to section">#</a></h2>
+
+<p>Passing the gate does not mean deploying blind. <code>shadow</code> generates a drop-in module that runs the TypeScript original and the Rust port side by side in your real application:</p>
+
+<pre><code class="language-bash">rust-anything shadow /var/tmp/ra-verify/demo/rust/fuzzy-rs</code></pre>
+
+<pre><code class="language-text">Wrote /var/tmp/ra-verify/demo/rust/fuzzy-rs/shadow/fuzzy.shadow.ts (fuzzyScore, bestMatch)
+Import it in place of the original. RUST_ANYTHING_MODE=old|shadow|new switches at runtime.</code></pre>
+
+<p>Import the shadow module in place of the original. In the default <code>shadow</code> mode it returns the original's result, runs the Rust port alongside, and logs the first 10 mismatches. <code>RUST_ANYTHING_MODE=new</code> runs Rust only; <code>old</code> runs the original only. Verified here in <code>new</code> mode: <code>fuzzyScore('fmt', 'format-code')</code> returns 40 and <code>bestMatch('fm', ['fast-render', 'file-manager'])</code> returns <code>'file-manager'</code> — identical to the TypeScript, through the drop-in module. The rollout is therefore: record, port, gate, shadow in production for a while, then switch the mode to <code>new</code> and delete the original. If a mismatch ever appears, the shadow log names the function, the arguments, and both answers.</p>
+
+<p>Two habits to keep from this tutorial. First, always run <code>analyze</code> before you start — on a real repository it ranks every unit by readiness and priority and tells you which wave each port belongs to, so the first port is the easy one, not the impressive one. Second, port the loop, not the leaf: a single tiny function will lose to the crossing cost every time, so the unit worth porting is the function together with its callers, or the batch that keeps the work on the Rust side.</p>
+
+<h2 id="when-to-use-this-vs-the-alternatives">When to use this vs the alternatives<a class="anchor" href="#when-to-use-this-vs-the-alternatives" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Versus rewriting by hand and testing as you go:</b> use rust-anything. A hand rewrite checks the cases you thought of; the recording checks 449, including the ones the generator invented. The cost is learning one CLI.</li>
+<li><b>Versus calling napi-rs or wasm-bindgen directly:</b> use rust-anything if the port is the hard part, napi or wasm-bindgen directly if the bindings are the hard part. The tool generates both bindings for you; it earns its keep on the verification, not the scaffolding.</li>
+<li><b>Versus an agent that rewrites the whole app (REA, Craft Anything):</b> different job. Whole-app rewriters aim at a new codebase; rust-anything aims at one verified unit at a time, with a recording that survives the port. Use the whole-app tools for a greenfield rewrite and this one for the hot path you cannot afford to get wrong.</li>
+<li><b>Versus doing nothing:</b> if the profiler says the function is 6% of a workload that runs in 224 ms, do nothing. Porting is justified by the profile, not by the language. The tool's own bench verdict will tell you the same thing.</li>
+</ul>
+
+<p>Skip it when the code is I/O-bound, when the hot function is a single database call, or when no Rust toolchain can run where the code ships. It also cannot catch what the recording does not cover: the README is explicit that side effects need <code>--effects</code> recording, and that code which writes files, talks to a database, or calls the network does so once per recorded case — run recording on a copy of the project, with a test database and no production credentials in the environment.</p>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+
+<p>rust-anything does not make Rust faster. It makes a Rust rewrite <i>checkable</i>: record what the code does, write the port, replay the recording, and let a gate decide when it is done. On a toy scorer the speedup is negative for single calls and modest for batches — the tool says so itself, in its own output — and the value is the 449-case proof that the port behaves identically, including on inputs no human would have written. That proof is what a rewrite usually lacks, and it is the reason a four-day-old project with no marketing has 5,614 stars. Port the loop, not the leaf; record first; ship behind a shadow.</p>
+
+<h2 id="how-this-tutorial-was-verified">How this tutorial was verified<a class="anchor" href="#how-this-tutorial-was-verified" aria-label="Link to section">#</a></h2>
+
+<p>Every command in this tutorial was run on a 4-core Linux VM on November 20, 2026, with rust-anything 2.1.0 (installed from npm as a prebuilt binary), cargo 1.99.1, Node v24.22.1, and Python 3.12.3. The demo project, the port, and the measurements are the author's own; the tool's demo directory was read for reference only. Results: <code>profile</code> identified <code>fuzzyScore</code> at 6% of a 224 ms workload; <code>bridge --kind napi</code> scaffolded the crate; <code>record</code> produced 449 cases at 100% line coverage; <code>diff</code> matched 449/449; a deliberate one-point scoring change was caught by <code>diff</code> with exact expected and actual values, then reverted; <code>bench</code> measured 140 ns vs 741 ns per call for <code>fuzzyScore</code> and 254 ns vs 1,658 ns for <code>bestMatch</code>; batch medians over five warmed-up runs were 3.0 ms vs 2.4 ms at 10,000 items, 26.5 ms vs 66.8 ms at 100,000, and 163.9 ms vs 95.6 ms at 500,000, with totals identical at every size; <code>gate</code> passed all 14 checks after installing the rustfmt and clippy components and fixing two clippy lints; <code>shadow</code> in <code>new</code> mode returned the same answers as the TypeScript. The only commands that did not run as documented were the relative-path forms of <code>build</code>, <code>diff</code>, and <code>gate</code>, which mis-resolve the manifest path — absolute paths work, and the tutorial uses them throughout. No API key or account was needed at any point.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="rust-anything-port-typescript-to-rust-tutorial"></div><div class="comments" data-comments="rust-anything-port-typescript-to-rust-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/"><span class="chip">Tutorials</span><h3>DuckDB 2.0 for AI engineers: the local analytics engine your agents can actually query</h3><div class="meta">November 20, 2026 · 28 min read</div></a><a class="rel-card" href="/articles/gemini-computer-use-api-tutorial/"><span class="chip">Tutorials</span><h3>Build your own browser agent with Gemini Computer Use: the complete hands-on tutorial</h3><div class="meta">November 19, 2026 · 22 min read</div></a><a class="rel-card" href="/articles/qmd-local-search-engine-tutorial/"><span class="chip">Tutorials</span><h3>QMD: turn your notes and docs into a local hybrid search engine your coding agent can query</h3><div class="meta">November 19, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/coral-agent-gateway-custom-tools-tutorial/"><span class="chip">Tutorials</span><h3>Coral hands-on: give your coding agent a gateway that writes its own tools</h3><div class="meta">November 19, 2026 · 13 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a coding agent or an API key to use rust-anything?</h3><p>No. Every command in this tutorial was run by hand in a terminal; no account and no API key are needed at any point. A coding agent (Claude Code, Codex, Cursor, Gemini CLI, or OpenCode) is optional: `rust-anything setup` registers the tool's MCP server and workflow skill with it, and the agent then writes the Rust port while the tool verifies it.</p><h3>Which languages can I port from?</h3><p>TypeScript/JavaScript, Python, C, Go, Ruby, Java, and Kotlin get full per-unit ports with napi or wasm bridges. PHP and C# work whole-app only: `app record`, `app replay`, and the front door for CLIs and servers. Kotlin and Java also get an Android JNI build path into `jniLibs/`.</p><h3>Why was the Rust port slower on single calls?</h3><p>The function itself takes about 140 nanoseconds in TypeScript, and crossing from JavaScript into the native module costs more than the work. The tool's own bench verdict says the same: do not ship that unit for speed. The fix is the batch class, which keeps thousands of items in Rust and scores them in parallel across cores, or porting a bigger unit — the function together with its callers — so one call does more work.</p><h3>Does rust-anything write the Rust code for me?</h3><p>No. You or your coding agent write the Rust in `src/port.rs`; the tool supplies what an agent cannot guess reliably — where the time goes, what to port first, the bridge so callers keep the original API, the exact behavior the port must match, and the gate that says when it is done. It does generate the crate scaffold, the bindings, and the batch classes.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/rtk-rust-token-killer-cli-tutorial/">RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy</a></li><li><a href="/articles/craft-anything-clean-room-website-rebuild-hands-on-tutorial/">Study any website, then rebuild it clean-room: hands-on with Craft Anything</a></li><li><a href="/articles/agentperf-local-benchmark-llm-serving-tutorial/">Benchmark how fast your machine really serves AI agents: hands-on with agentperf-local</a></li><li><a href="/articles/codegraph-code-knowledge-graph-tutorial/">Stop letting your coding agent grep: hands-on with CodeGraph, the 72K-star pre-indexed code knowledge graph</a></li><li><a href="/articles/obscura-headless-browser-no-chrome-tutorial/">Ditch headless Chrome: scrape, screenshot, and automate the web with Obscura&#x27;s 70 MB Rust browser</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
