@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Track anything on live video with tamserve: hands-on with the SAM 2 serving engine — AI Frontier Post</title>
+<meta name="description" content="tamserve puts Meta&#x27;s SAM 2 and EdgeTAM behind one serving engine: one model copy tracks every object on every camera. This tutorial installs it, tracks a moving ball through a 6-second clip on CPU, and reports the measured accuracy — 0.1-pixel mean centroid error.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/tamserve-live-object-tracking-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Track anything on live video with tamserve: hands-on with the SAM 2 serving engine">
+<meta property="og:description" content="tamserve puts Meta&#x27;s SAM 2 and EdgeTAM behind one serving engine: one model copy tracks every object on every camera. This tutorial installs it, tracks a moving ball through a 6-second clip on CPU, and reports the measured accuracy — 0.1-pixel mean centroid error.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/tamserve-live-object-tracking-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/tamserve-live-object-tracking-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Track anything on live video with tamserve: hands-on with the SAM 2 serving engine","description":"tamserve puts Meta's SAM 2 and EdgeTAM behind one serving engine: one model copy tracks every object on every camera. This tutorial installs it, tracks a moving ball through a 6-second clip on CPU, and reports the measured accuracy — 0.1-pixel mean centroid error.","datePublished":"2026-11-20","dateModified":"2026-11-20","author":{"@type":"Person","name":"Priya Nair","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/tamserve-live-object-tracking-tutorial/"},"image":"https://aifrontierpost.com/articles/tamserve-live-object-tracking-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a GPU?","acceptedAnswer":{"@type":"Answer","text":"No for this tutorial: the six-second clip tracked fine on CPU. Yes for anything live: at 6.8 seconds a frame on this VM, CPU is a way to try tamserve, not to run it. The project's GPU numbers are measured on one RTX 4090."}},{"@type":"Question","name":"Why is the first run slow to start?","acceptedAnswer":{"@type":"Answer","text":"The first load downloads the EdgeTAM source and its 54 MB checkpoint into ~/.cache/tamserve (TAMSERVE_CACHE moves it). The second load took 4.6 seconds here."}},{"@type":"Question","name":"What is the _C warning?","acceptedAnswer":{"@type":"Answer","text":"The compiled post-processing extension is not built for CPU-only installs, so that step is skipped. SAM 2's own install notes say results are unaffected; the masks in this tutorial came out exact."}},{"@type":"Question","name":"Can it find things by name, like “forklift”?","acceptedAnswer":{"@type":"Answer","text":"Only through Tracker or PeopleTracker, which need Meta's SAM 3: pip install “tamserve[sam3]”, a Hugging Face login, and accepting Meta's licence on the facebook/sam3 page. The weights are 3.5 GB and under Meta's licence, not Apache-2.0. The engine alone follows only what you point at."}},{"@type":"Question","name":"Can I use it on a recorded file instead of live cameras?","acceptedAnswer":{"@type":"Answer","text":"Yes — that is what this tutorial does. tamserve never opens cameras itself; your program reads frames however it likes and hands them to engine.step(). A file, an RTSP stream, or a USB camera all work the same way."}},{"@type":"Question","name":"What does it cost?","acceptedAnswer":{"@type":"Answer","text":"Nothing. Apache-2.0, no account, no API key; the only network call is the one-time model download."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Track anything on live video with tamserve: hands-on with the SAM 2 serving engine</h1>
+<p class="lede">Meta's SAM 2 tracks anything you point at — one video at a time. tamserve, nine days old and already on the Hacker News front page, is the serving engine it was missing: one copy of the model follows every object on every camera. This tutorial installs it, tracks a ball through a six-second clip on CPU, and reports the measured error — 0.1 pixels.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 20, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> tamserve (aryamandarda/tamserve, Apache-2.0) is a serving engine for Meta's SAM 2 and EdgeTAM: one copy of the model tracks every object on every camera. Created November 11, 2026, it has 261 stars and hit the Hacker News front page at #18 on November 19. Verified here on CPU: a ball tracked through all 60 frames of a 6-second clip with 0.1 px mean centroid error, zero lost frames, 6.82 s/frame; add() and drop() verified on a second two-ball clip. Free, no API key, no account. Track-by-name needs SAM 3's gated 3.5 GB weights and was not run here.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> aryamandarda/tamserve, 261 stars, 14 forks, Apache-2.0, created November 11, 2026 — Show HN November 16, Hacker News front page #18 on November 19 with 119 points. Version 0.3.3.</li><li><b>The engine:</b> one EdgeTAM model copy serves every camera; every object is a row in one batch; per-object memory capped at the prompt frame + last 6 frames + 15 summaries. Project's own RTX 4090 numbers: 8 cameras in 2.2 GB (stock: 8.6 GB), 323 fps total (stock: 280), DAVIS 2017 accuracy 0.8685 (stock: 0.8686).</li><li><b>Verified here:</b> 60-frame clip, mean centroid error 0.1 px, max 0.3 px, zero empty masks, 6.82 s/frame on CPU; add() and drop() verified on a 12-frame two-ball clip; first model load 35.8 s, second 4.6 s.</li><li><b>The honest limit:</b> CPU runs at seconds per frame — live video needs a GPU. Track-by-name (Tracker/PeopleTracker) needs SAM 3: 3.5 GB of gated weights, a Hugging Face login, and Meta's licence — not run here. No backward tracking, no mask nudging without re-seeding.</li><li><b>The cost:</b> free, Apache-2.0, no account, no API key. Install is about 900 MB on disk, mostly the CPU build of PyTorch (~800 MB); the EdgeTAM model is ~54 MB on first run.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/tamserve-live-object-tracking-tutorial/cover.webp" alt="A wall of security-camera feeds in a dark control room, with a forklift and a walking person outlined in glowing green tracking contours"><figcaption>AI-generated illustration. The speed and accuracy figures in this tutorial are the project’s own measurements or the author’s own runs, not marketing copy.</figcaption></figure>
+<div class="article-body"><p>SAM 2 will track anything you point at — one recorded video at a time. Put it on several cameras and the usual answer is a copy of the model per camera: memory piles up with every copy, and with every minute of video. tamserve is the serving engine those models were missing: one copy of the model tracks every object on every camera, for as long as the cameras run.</p>
+
+<p>The project is nine days old. Aryaman Darda created it on November 11, 2026; by November 20 it had 261 stars and 14 forks, and a Show HN post that reached the Hacker News front page at #18 on November 19 with 119 points. The reason it is moving that fast is a measurement, not a demo: on one RTX 4090, against EdgeTAM's own code, tamserve tracks eight cameras in 2.2 GB where stock needs 8.6 GB, at 323 frames a second against 280 — and the masks are the same to within rounding on DAVIS 2017 (0.8685 against 0.8686). Those numbers are the project's own, from its results doc; this tutorial re-runs the small end of the claim on a CPU and reports what actually happened.</p>
+
+<p>You will install tamserve, generate a six-second test clip, track a moving ball through all sixty frames, turn the masks into a video you can watch, and then start a second object mid-clip and drop it. Everything below ran on a plain Linux VM with no GPU. The timings are CPU timings, and the honest version of them is stated where it matters: this is a GPU tool that happens to run on CPU for short clips.</p>
+
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Python 3.10 or newer.</b> This tutorial ran with Python 3.12.3.</li>
+<li><b>About 900 MB of disk for the install.</b> The CPU build of PyTorch takes about 800 MB on disk; tamserve and its other dependencies take the rest. The EdgeTAM model is another 54 MB on first run.</li>
+<li><b>OpenCV for reading and writing video files:</b> <code>pip install opencv-python-headless</code>.</li>
+<li><b>No account, no API key, no GPU for this tutorial.</b> A GPU is what makes tamserve fast enough for live video; on CPU it runs at a few seconds per frame, which is fine for a six-second clip and nothing longer.</li>
+<li><b>About 15 minutes wall-clock</b>, most of it the first model load and the CPU tracking run.</li>
+</ul>
+
+<h2 id="step-1-install-it">Step 1 — Install it<a class="anchor" href="#step-1-install-it" aria-label="Link to section">#</a></h2>
+
+<p>Create a virtual environment and install tamserve. On a machine with an NVIDIA GPU, <code>pip install tamserve</code> pulls the CUDA build of PyTorch and you are done. On a CPU-only machine, install the CPU build of PyTorch first, or pip will fetch the CUDA wheel anyway:</p>
+
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+pip install tamserve opencv-python-headless</code></pre>
+
+<p>Verify the install:</p>
+
+<pre><code class="language-bash">python -c "import tamserve; print('tamserve OK')"</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code class="language-plaintext">tamserve OK</code></pre>
+
+<p>The install pulls torch 2.6 or newer, torchvision, numpy, tqdm, hydra-core, iopath, pillow, and timm — version 0.3.3 here. Nothing else is needed for the point-and-track path this tutorial uses. The first time you load a model, tamserve downloads the EdgeTAM source and its 54 MB checkpoint into <code>~/.cache/tamserve</code>, pinned to one version and SHA-verified before it loads. Set the <code>TAMSERVE_CACHE</code> environment variable to move that directory.</p>
+
+<h2 id="step-2-make-a-test-clip">Step 2 — Make a test clip<a class="anchor" href="#step-2-make-a-test-clip" aria-label="Link to section">#</a></h2>
+
+<p>Real footage works too, but a synthetic clip makes the check exact: you know where the ball is in every frame, so you can measure the tracker's error in pixels. Save this as <code>make_clip.py</code> and run it:</p>
+
+<pre><code class="language-python">"""Generate the test clip: a red ball crossing a static scene (320x240, 10fps, 6s)."""
+import cv2
+import numpy as np
+
+W, H, FPS, N = 320, 240, 10, 60
+R = 26
+out = cv2.VideoWriter("test.mp4",
+                      cv2.VideoWriter_fourcc(*"mp4v"), FPS, (W, H))
+rng = np.random.default_rng(7)
+# static background: vertical gradient + fixed texture dots
+bg = np.zeros((H, W, 3), dtype=np.uint8)
+for y in range(H):
+    bg[y, :, :] = (90 + y // 3, 95 + y // 3, 100 + y // 3)
+for _ in range(40):
+    cx, cy = rng.integers(0, W), rng.integers(0, H)
+    cv2.circle(bg, (int(cx), int(cy)), 3, (70, 75, 80), -1)
+centers = []
+for i in range(N):
+    x = int(40 + (280 - 40) * i / (N - 1))
+    y = int(120 + 30 * np.sin(2 * np.pi * i / N))
+    centers.append((x, y))
+    frame = bg.copy()
+    cv2.circle(frame, (x, y), R, (40, 40, 220), -1)  # BGR red
+    cv2.circle(frame, (x, y), R, (20, 20, 160), 2)
+    out.write(frame)
+out.release()
+np.save("centers.npy", np.array(centers))
+print("wrote test.mp4, 60 frames; first center", centers[0], "last", centers[-1])</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code class="language-plaintext">wrote test.mp4, 60 frames; first center (40, 120) last (280, 116)</code></pre>
+
+<p>Check the file:</p>
+
+<pre><code class="language-bash">ffprobe -v error -show_entries format=duration -show_entries stream=width,height,r_frame_rate -of default=nw=1 test.mp4</code></pre>
+
+<pre><code class="language-plaintext">width=320
+height=240
+r_frame_rate=10/1
+duration=6.000000</code></pre>
+
+<h2 id="step-3-track-your-first-object">Step 3 — Track your first object<a class="anchor" href="#step-3-track-your-first-object" aria-label="Link to section">#</a></h2>
+
+<p>Save this as <code>track_test.py</code>. It loads EdgeTAM on the CPU, reads the clip, seeds the tracker with one box around the ball in the first frame, steps through all sixty frames, and writes an annotated video with the mask tinted green:</p>
+
+<pre><code class="language-python">"""Track the ball through test.mp4 with tamserve on CPU; overlay masks; report."""
+import time
+import cv2
+import numpy as np
+
+from tamserve import Box, Engine, build_video_predictor
+
+t0 = time.time()
+predictor = build_video_predictor("cpu")  # first run downloads EdgeTAM (~54 MB)
+print(f"predictor loaded in {time.time() - t0:.1f}s")
+engine = Engine(predictor)
+
+cap = cv2.VideoCapture("test.mp4")
+frames = []
+while True:
+    ok, f = cap.read()
+    if not ok:
+        break
+    frames.append(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+cap.release()
+print(f"read {len(frames)} frames of {frames[0].shape}")
+
+centers = np.load("centers.npy")
+R = 26
+x0, y0 = centers[0]
+seeds = {"cam": {"ball": Box(int(x0 - R), int(y0 - R), int(x0 + R), int(y0 + R))}}
+
+out = cv2.VideoWriter("tracked.mp4",
+                      cv2.VideoWriter_fourcc(*"mp4v"), 10, (320, 240))
+rows = []
+t1 = time.time()
+for i, fr in enumerate(frames):
+    masks = engine.step({"cam": fr}, seeds if i == 0 else None)
+    m = masks["cam"]["ball"]
+    ys, xs = np.where(m)
+    area = int(m.sum())
+    cx, cy = (float(xs.mean()), float(ys.mean())) if area else (float("nan"), float("nan"))
+    rows.append((i, area, round(cx, 1), round(cy, 1)))
+    # overlay: green tint where the mask is
+    vis = cv2.cvtColor(fr, cv2.COLOR_RGB2BGR)
+    vis[m] = (vis[m] * 0.5 + np.array([0, 255, 0]) * 0.5).astype(np.uint8)
+    out.write(vis)
+out.release()
+print(f"tracked {len(frames)} frames in {time.time() - t1:.1f}s "
+      f"({(time.time() - t1) / len(frames):.2f}s/frame)")
+for r in rows[::10]:
+    print("frame", r[0], "mask px", r[1], "centroid", (r[2], r[3]),
+          "true center", tuple(centers[r[0]]))
+# accuracy summary
+errs = [abs(r[2] - centers[r[0]][0]) + abs(r[3] - centers[r[0]][1]) for r in rows]
+areas = [r[1] for r in rows]
+print(f"mean centroid L1 error: {np.mean(errs):.1f}px; max: {np.max(errs):.1f}px")
+print(f"mask area: mean {np.mean(areas):.0f}px (true disc ~{np.pi * R * R:.0f}px), "
+      f"min {np.min(areas)}, max {np.max(areas)}")
+print(f"empty masks: {sum(1 for a in areas if a == 0)} of {len(areas)}")</code></pre>
+
+<p>Three calls do the work. <code>build_video_predictor("cpu")</code> loads EdgeTAM, the default model. <code>Engine(predictor)</code> wraps it. <code>engine.step({"cam": frame}, seeds)</code> advances every tracked object by one frame and returns boolean masks at the frame's own size. Frames go in as H×W×3 uint8 RGB arrays — OpenCV gives you BGR, so convert. The box is in the frame's own pixels: <code>Box(left, top, right, bottom)</code>. Pass the seeds only on the first frame; after that the engine remembers what it is tracking.</p>
+
+<p>Run it:</p>
+
+<pre><code class="language-bash">python track_test.py</code></pre>
+
+<p>Expected output on the first run, with the model download included in the load time:</p>
+
+<pre><code class="language-plaintext">predictor loaded in 35.8s
+read 60 frames of (240, 320, 3)
+tracked 60 frames in 409.0s (6.82s/frame)
+frame 0 mask px 2385 centroid (40.0, 119.9) true center (40, 120)
+frame 10 mask px 2408 centroid (79.8, 145.0) true center (80, 145)
+frame 20 mask px 2415 centroid (120.9, 145.0) true center (121, 145)
+frame 30 mask px 2431 centroid (161.9, 120.0) true center (162, 120)
+frame 40 mask px 2428 centroid (201.8, 93.9) true center (202, 94)
+frame 50 mask px 2422 centroid (242.9, 93.9) true center (243, 94)
+mean centroid L1 error: 0.1px; max: 0.3px
+mask area: mean 2416px (true disc ~2124px), min 2385, max 2433
+empty masks: 0 of 60</code></pre>
+
+<p>Read that as: the mask followed the ball across the whole clip, its centre never more than 0.3 pixels from the truth, and it never lost the object once. The mask area runs about 300 px over the solid disc because the drawn ball has a 2-pixel dark outline ring and the mask covers that too — the disc including the ring is about 2,463 px, so the mask sits within 2% of it. Two things to know before you run it yourself. First, 6.82 seconds per frame is the CPU price on this VM, a 4-thread box with no GPU. The same loop on the project's RTX 4090 runs at 219 frames a second for one camera, with compiling on. A repeat run of the same script on the same box took 499.8 seconds (8.33 s/frame) with byte-identical mask numbers, and the first load took 18.2 seconds instead of 35.8 — CPU timing moves with machine load and download speed; the masks do not. Second, you will see one warning on a CPU-only install:</p>
+
+<pre><code class="language-plaintext">UserWarning: cannot import name '_C' from 'tamserve_sam2'
+Skipping the post-processing step due to the error above...</code></pre>
+
+<p>That is the compiled post-processing extension, which is not built for CPU-only installs. SAM 2's own install notes say the step is skipped and the results are unaffected, and the warning is safe to ignore. It appeared in this run and the masks came out exact anyway.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/tamserve-live-object-tracking-tutorial/img2.webp" alt="Six live camera feeds with tracked people, animals and a forklift outlined in translucent colour, with speed figures underneath"><figcaption>Still from the project's own demo: six live cameras, nine objects, one RTX 4090. Credit: aryamandarda/tamserve (Apache-2.0).</figcaption></figure>
+
+<h2 id="step-4-watch-the-result">Step 4 — Watch the result<a class="anchor" href="#step-4-watch-the-result" aria-label="Link to section">#</a></h2>
+
+<p><code>track_test.py</code> already wrote <code>tracked.mp4</code> — the same sixty frames with the mask tinted green over the ball. Verify it:</p>
+
+<pre><code class="language-bash">ffprobe -v error -show_entries format=duration -show_entries stream=width,height -of default=nw=1 tracked.mp4</code></pre>
+
+<pre><code class="language-plaintext">width=320
+height=240
+duration=6.000000</code></pre>
+
+<p>Open it in any player. The green tint should sit on the ball in every frame and nowhere else. If a frame shows green where the ball is not, the track has drifted — re-seed it with a fresh box on that frame, as the next step shows. In this run there was nothing to fix: the mask stayed on the ball for all sixty frames.</p>
+
+<h2 id="step-5-add-a-second-object-mid-clip">Step 5 — Add a second object mid-clip, then drop it<a class="anchor" href="#step-5-add-a-second-object-mid-clip" aria-label="Link to section">#</a></h2>
+
+<p>Four operations cover the whole API: start tracking (a seed on <code>step()</code>), stop (<code>drop()</code>), fix a drifted track (seed the same name again), and start something on a frame you already processed (<code>add()</code>). The last one matters because <code>step()</code> moves everything forward by one frame — calling <code>step()</code> again with the same frame would advance the rest twice. <code>add()</code> starts the new object on that frame and leaves the rest alone. Save this as <code>track_add_drop.py</code>:</p>
+
+<pre><code class="language-python">"""Verify add() + drop(): two balls, second starts mid-clip, then dropped."""
+import time
+import cv2
+import numpy as np
+
+from tamserve import Box, Engine, build_video_predictor
+
+W, H, N, R = 320, 240, 12, 22
+# two balls: A crosses left->right, B crosses right->left lower down
+frames = []
+for i in range(N):
+    f = np.full((H, W, 3), (110, 110, 115), dtype=np.uint8)
+    ax, ay = int(30 + 260 * i / (N - 1)), 80
+    bx, by = int(290 - 260 * i / (N - 1)), 180
+    cv2.circle(f, (ax, ay), R, (40, 40, 220), -1)   # red A (BGR)
+    cv2.circle(f, (bx, by), R, (220, 40, 40), -1)   # blue B (BGR)
+    frames.append(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+
+t0 = time.time()
+engine = Engine(build_video_predictor("cpu"))
+print(f"predictor loaded in {time.time() - t0:.1f}s")
+t1 = time.time()
+for i, fr in enumerate(frames):
+    if i == 0:
+        masks = engine.step({"cam": fr}, {"cam": {"A": Box(30 - R, 80 - R, 30 + R, 80 + R)}})
+    elif i == 6:
+        # start B on the frame just processed, without advancing A twice
+        masks = engine.add({"cam": fr}, {"cam": {"B": Box(290 - 260 * 6 // 11 - R, 180 - R, 290 - 260 * 6 // 11 + R, 180 + R)}})
+        print("frame 6 add() -&gt;", {k: int(v.sum()) for k, v in masks["cam"].items()})
+    elif i == 10:
+        engine.drop("cam", "B")
+        masks = engine.step({"cam": fr})
+        print("frame 10 drop(B) -&gt; tracked now:", sorted(masks["cam"].keys()))
+    else:
+        masks = engine.step({"cam": fr})
+    if i in (0, 5, 9, 11):
+        print(f"frame {i}: " + ", ".join(
+            f"{k}={int(v.sum())}px centroid=({np.where(v)[1].mean():.0f},{np.where(v)[0].mean():.0f})"
+            for k, v in masks["cam"].items()))
+print(f"{N} frames in {time.time() - t1:.1f}s; add()/drop() OK")</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code class="language-plaintext">predictor loaded in 4.6s
+frame 0: A=1517px centroid=(30,80)
+frame 5: A=1527px centroid=(148,80)
+frame 6 add() -&gt; {'B': 1517}
+frame 9: B=1519px centroid=(77,180), A=1546px centroid=(242,80)
+frame 10 drop(B) -&gt; tracked now: ['A']
+frame 11: A=1552px centroid=(290,80)
+12 frames in 67.3s; add()/drop() OK</code></pre>
+
+<p>Note the second load took 4.6 seconds — the model was cached. B starts at frame 6 with a full mask, both balls are tracked together at frame 9 with their centroids where the clip puts them, and after <code>drop("cam", "B")</code> only A remains. The names are yours: camera ids and object ids are plain strings.</p>
+
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to section">#</a></h2>
+
+<p>The speed comes from batching, not from a smaller model. For every frame, a SAM 2-style tracker encodes the image, looks each object up in its memory of recent frames, draws the mask, and writes the frame into memory. tamserve runs those same four stages once per step, over every object on every camera — every object is a row in one batch, the way vLLM batches chat requests. Each object keeps only the memory the model actually reads: the frame it was prompted on, its last six frames, and a short summary of its last fifteen, however long the camera has run. That cap is why memory stays flat: 0.28 GB for an 800-frame video against 9.8 GB for stock, in the project's measurements. The model itself is untouched, which is why the accuracy matches stock to the third decimal on DAVIS 2017.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/tamserve-live-object-tracking-tutorial/img3.webp" alt="Diagram: frames from three cameras converge into one shared model, which returns a mask for the tracked object in each frame"><figcaption>AI-generated diagram. The engine batches every object on every camera through one model copy; memory per object stays capped no matter how long the camera runs.</figcaption></figure>
+
+<h2 id="when-to-use-this-vs-the-alternatives">When to use this vs the alternatives<a class="anchor" href="#when-to-use-this-vs-the-alternatives" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Stock SAM 2 / EdgeTAM code.</b> Use it when you have one recorded video and need what tamserve deliberately leaves out: tracking backwards in time, or nudging a mask with an extra click. For everything live or multi-camera, stock costs a model copy per camera and memory that grows with the video.</li>
+<li><b>SAM 3's own tracker.</b> It finds things by name itself, which tamserve's engine cannot do alone. But it handles one video at a time, takes about 101 ms per frame against the Tracker's 41 ms, and its memory grows with the video — in the project's test it ran out of memory at frame 423 of a 3,000-frame clip. Use SAM 3's tracker for a single video; use tamserve's Tracker when the same words have to be followed on many cameras or for a long time.</li>
+<li><b>Detector-plus-tracker pairs (YOLO with ByteTrack or SORT).</b> Boxes, not masks, and a different failure mode: they lose identity when objects cross and re-acquire. They are the lighter tool when a bounding box is enough and you need CPU real-time. When you need the exact outline of each object, tamserve is the one that gives it to you without a model copy per camera.</li>
+<li><b>Cloud video analytics.</b> Managed, priced per minute, and your footage leaves the machine. tamserve is local, Apache-2.0, no account, and the only network call is the one-time model download.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+
+<p>tamserve does one thing: it turns a single-video tracker into a multi-camera serving engine, without touching the model. The verified part of this tutorial is the small end — point at a ball, follow it for six seconds on CPU, 0.1-pixel mean error, no lost frames. The part that makes it worth your time is the other end: one model copy, every camera, flat memory, and a track-by-name layer (Tracker and PeopleTracker) that trades a few points of accuracy for less than half the cost of SAM 3's own tracker. The honest boundary is the licence and the download: track-by-name needs SAM 3's gated 3.5 GB weights and a licence acceptance on Hugging Face, and that path was not run here. Install it, point at something in your own footage, and watch the mask stay on it.</p>
+
+<h2 id="how-this-tutorial-was-verified">How this tutorial was verified<a class="anchor" href="#how-this-tutorial-was-verified" aria-label="Link to section">#</a></h2>
+
+<p>Every command in this tutorial was run on a Linux VM on November 20, 2026, with Python 3.12.3, against tamserve 0.3.3 at commit 9c133a53955a78b721621a15f151cdfe3643cba8 (cloned November 20). PyTorch was the CPU build, 2.15.0+cpu; OpenCV was opencv-python-headless 5.1.0.95. The test material — a 60-frame synthetic clip with a red ball crossing a static scene, and a 12-frame two-ball clip — is the author's own, written for this tutorial. Results: the 60-frame run tracked all frames with mean centroid error 0.1 px and max 0.3 px, mask area mean 2,416 px, zero empty masks, in 409.0 seconds (6.82 s/frame); the 12-frame run verified add() starting a second object mid-clip and drop() removing it, in 67.3 seconds. The first model load took 35.8 seconds including the EdgeTAM download; the second took 4.6 seconds. Every script was then re-run verbatim from a fresh install after a VM restart: the 60-frame run took 499.8 seconds (8.33 s/frame) and the 12-frame run 110.8 seconds, with byte-identical mask numbers in both cases. The CPU-only _C warning appeared and the masks were exact regardless. The GPU speed and accuracy figures, the SAM 3 Tracker and PeopleTracker numbers, and the Router are the project's own, from its README and results doc — the SAM 3 path was not run here because its weights are 3.5 GB, gated behind a Hugging Face licence acceptance, and the Router needs more than one GPU. No account, API key, or GPU was used at any point.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="tamserve-live-object-tracking-tutorial"></div><div class="comments" data-comments="tamserve-live-object-tracking-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/instagram-agent-skill-claude-reels-tutorial/"><span class="chip">Tutorials</span><h3>Run an Instagram account with Claude Code: hands-on with instagram-agent-skill</h3><div class="meta">Tutorials & Reviews Lead · November 20, 2026 · 25 min read</div></a><a class="rel-card" href="/articles/gemini-computer-use-api-tutorial/"><span class="chip">Tutorials</span><h3>Build your own browser agent with Gemini Computer Use: the complete hands-on tutorial</h3><div class="meta">Research Editor · November 19, 2026 · 22 min read</div></a><a class="rel-card" href="/articles/coral-agent-gateway-custom-tools-tutorial/"><span class="chip">Tutorials</span><h3>Coral hands-on: give your coding agent a gateway that writes its own tools</h3><div class="meta">Tutorials & Reviews Lead · November 19, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/pyrit-ai-red-teaming-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your own chatbot: hands-on with Microsoft's PyRIT</h3><div class="meta">Tutorials & Reviews Lead · November 18, 2026 · 14 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU?</h3><p>No for this tutorial: the six-second clip tracked fine on CPU. Yes for anything live: at 6.8 seconds a frame on this VM, CPU is a way to try tamserve, not to run it. The project's GPU numbers are measured on one RTX 4090.</p><h3>Why is the first run slow to start?</h3><p>The first load downloads the EdgeTAM source and its 54 MB checkpoint into ~/.cache/tamserve (TAMSERVE_CACHE moves it). The second load took 4.6 seconds here.</p><h3>What is the _C warning?</h3><p>The compiled post-processing extension is not built for CPU-only installs, so that step is skipped. SAM 2's own install notes say results are unaffected; the masks in this tutorial came out exact.</p><h3>Can it find things by name, like “forklift”?</h3><p>Only through Tracker or PeopleTracker, which need Meta's SAM 3: pip install “tamserve[sam3]”, a Hugging Face login, and accepting Meta's licence on the facebook/sam3 page. The weights are 3.5 GB and under Meta's licence, not Apache-2.0. The engine alone follows only what you point at.</p><h3>Can I use it on a recorded file instead of live cameras?</h3><p>Yes — that is what this tutorial does. tamserve never opens cameras itself; your program reads frames however it likes and hands them to engine.step(). A file, an RTSP stream, or a USB camera all work the same way.</p><h3>What does it cost?</h3><p>Nothing. Apache-2.0, no account, no API key; the only network call is the one-time model download.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/ffmpeg-skill-coding-agent-video-editor-tutorial/">Give your coding agent a video editor: hands-on with ffmpeg-skill</a></li><li><a href="/articles/openfilm-ai-video-agent-hands-on-tutorial/">Turn your coding agent into a film crew: hands-on with OpenFilm, the open-source AI video agent</a></li><li><a href="/articles/video-shotcraft-ai-product-promo-tutorial/">Make product promos with your coding agent: hands-on with video-shotcraft's 124-shot Remotion library</a></li><li><a href="/articles/mcp-for-blender-ai-3d-tutorial/">Talk to Blender: build 3D scenes with Claude and MCP for Blender</a></li><li><a href="/articles/chrome-devtools-mcp-coding-agents-tutorial/">Give your coding agent a browser: hands-on with chrome-devtools-mcp</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
