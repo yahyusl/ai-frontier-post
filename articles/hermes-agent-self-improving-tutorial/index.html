@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Hermes Agent hands-on: install the self-improving agent that remembers you and runs your schedule — AI Frontier Post</title>
+<meta name="description" content="Nous Research&#x27;s Hermes Agent has 265,000 stars and one idea its rivals don&#x27;t: an agent that writes its own skills, keeps its own notes, and runs your schedule while you sleep. This tutorial installs v0.23.3, wires up a model, and proves the no-agent cron loop end to end.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/hermes-agent-self-improving-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Hermes Agent hands-on: install the self-improving agent that remembers you and runs your schedule">
+<meta property="og:description" content="Nous Research&#x27;s Hermes Agent has 265,000 stars and one idea its rivals don&#x27;t: an agent that writes its own skills, keeps its own notes, and runs your schedule while you sleep. This tutorial installs v0.23.3, wires up a model, and proves the no-agent cron loop end to end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/hermes-agent-self-improving-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/hermes-agent-self-improving-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Hermes Agent hands-on: install the self-improving agent that remembers you and runs your schedule","description":"Nous Research's Hermes Agent has 265,000 stars and one idea its rivals don't: an agent that writes its own skills, keeps its own notes, and runs your schedule while you sleep. This tutorial installs v0.23.3, wires up a model, and proves the no-agent cron loop end to end.","datePublished":"2026-11-20","dateModified":"2026-11-20","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/hermes-agent-self-improving-tutorial/"},"image":"https://aifrontierpost.com/articles/hermes-agent-self-improving-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need an API key to use Hermes Agent?","acceptedAnswer":{"@type":"Answer","text":"No. The setup wizard offers a free tier — the nous/welcome model, no account and no API key, once per OS user. In this tutorial's sandbox the free tier's anonymous endpoint returned a server error twice, so the live-chat steps are documented from the official quickstart rather than run here. If the free tier fails for you, pick your own key in hermes model, or sign in to Nous Portal."}},{"@type":"Question","name":"How much disk does the install need?","acceptedAnswer":{"@type":"Answer","text":"About 2.5 GB on disk in this run: a 609 MB checkout, 1.1 GB of tools (FFmpeg, Python 3.14, Node, pnpm, ripgrep, uv), and the rest the Python virtual environment. If the clone fails with 'Disk quota exceeded', that is your disk, not the installer — free space or point HERMES_HOME at a roomier filesystem."}},{"@type":"Question","name":"Do cron jobs need the gateway running?","acceptedAnswer":{"@type":"Answer","text":"For automatic firing, yes: install the gateway with hermes gateway install or run it in the foreground with hermes gateway run. For a one-off test, hermes cron tick fires due jobs once and exits — that is how the watchdog in this tutorial was verified, with no gateway running."}},{"@type":"Question","name":"What if hermes skills search crashes?","acceptedAnswer":{"@type":"Answer","text":"In this sandbox it crashed with an httpx URL-parsing error while the sandbox proxy variables were set; unsetting them fixed it. On a normal machine it works. Use hermes skills browse for the full list and install by the exact slug it shows — the quickstart's openai/skills/k8s example no longer resolves in v0.23.3."}},{"@type":"Question","name":"Can I use Hermes without any model at all?","acceptedAnswer":{"@type":"Answer","text":"Yes, for one thing: no-agent cron jobs. A script-only job runs on schedule and delivers its stdout with zero LLM calls, which is how the watchdog in this tutorial was verified end to end. Chat, skills, and the gateway all need inference."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Hermes Agent hands-on: install the self-improving agent that remembers you and runs your schedule</h1>
+<p class="lede">Every coding agent on the market starts each session from zero. Hermes Agent is the one that doesn&#x27;t: it writes its own skills from experience, keeps its own notes about you, and runs scheduled jobs while you sleep. This tutorial installs v0.23.3, wires up a model, and proves the part that needs no model at all — a watchdog cron job that fired on schedule and delivered its report.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · November 20, 2026 · 20 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Hermes Agent (NousResearch/hermes-agent, MIT) is a self-improving agent: a built-in learning loop creates skills from experience, keeps curated notes about you, and runs cron automations. 264,949 stars and 59,872 forks, in GitHub&#x27;s AI trending top 10 on November 13–15. Verified here: the official installer completes (v0.23.3, Python 3.14.9), <code>hermes doctor</code> passes, 141 official skills are browsable, installing one works, and a no-agent cron watchdog fired on schedule with its output delivered to a local file — zero LLM calls. The free <code>nous/welcome</code> tier errored twice in this sandbox, so the live-chat, memory-recall, and Telegram steps are documented from the official docs and flagged as such.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> NousResearch/hermes-agent, 264,949 stars, 59,872 forks, MIT, created July 22, 2025. Stable release v0.23.3. GitHub AI radar had it in the core top 10 on November 13–15 at 263,100–263,600 stars; it gained roughly 1,600 stars in the six days to November 20.</li><li><b>The idea:</b> a closed learning loop. The agent creates skills after complex tasks, improves them during use, nudges itself to persist knowledge, searches its own past conversations, and builds a model of who you are across sessions — plus a built-in cron scheduler and a messaging gateway (Telegram, Discord, Slack, WhatsApp, Signal).</li><li><b>Verified here:</b> official install exit 0; <code>hermes --version</code> reports v0.23.3, Python 3.14.9, OpenAI SDK 2.54.0; <code>hermes doctor</code> passes; config set/get/unset round-trips; <code>hermes skills browse</code> loads 141 official skills; installing <code>official/mlops/accelerate</code> works; a no-agent cron job fired on schedule and delivered its output verbatim.</li><li><b>The honest limit:</b> the free <code>nous/welcome</code> tier&#x27;s anonymous endpoint returned a server error twice here (<code>anon_server_error</code> in the log), so no live chat, memory-recall test, or Telegram run was possible in this sandbox — and no API key was available. Those steps are documented from the official quickstart and marked as not run. The install is about 2.5 GB on disk.</li><li><b>The cost:</b> free tier exists (one per OS user, interactive terminal only); otherwise a Nous Portal subscription or your own provider key. The no-agent cron loop in this tutorial costs nothing.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/hermes-agent-self-improving-tutorial/cover.webp" alt="An AI agent working in a terminal window, with a notebook of memories, a clock, and a calendar connected in a loop around it"><figcaption>AI-generated illustration. The star counts and verification results in this tutorial are the author&#x27;s own measurements or the project&#x27;s own figures, not marketing copy.</figcaption></figure>
+<div class="article-body"><p>Most agents are amnesiacs. You teach Claude Code your preferences on Monday; by Wednesday it has forgotten them, because every session starts from a blank slate and the only memory is whatever you paste back in. Hermes Agent is built on the opposite bet: that an agent should get better the longer you use it. It keeps two small files of notes about you, writes skills for itself after hard tasks, and runs scheduled jobs on its own — on a five-dollar VPS, not just your laptop.</p>
+
+<p>The project is Nous Research&#x27;s agent, and it is moving fast: 264,949 stars and 59,872 forks as of November 20, MIT-licensed, in GitHub&#x27;s AI trending top 10 through November 13–15. It descends from the OpenClaw line — the setup wizard offers to import an OpenClaw, Claude Code, Codex, or Cursor setup wholesale, and keeps <code>hermes claw migrate</code> as the older spelling of the import command. What makes it worth your time is not the star count but the loop: memory, skills, and cron are built in rather than bolted on, and there is a mode — script-only cron jobs — that needs no model at all.</p>
+
+<p>You will install Hermes Agent, choose a model, run the verification commands, install a skill from the hub, and set up a watchdog cron job that runs a script on schedule and delivers its output with zero LLM calls. The watchdog is the part this tutorial proves end to end, with the actual delivered file shown below. The chat, memory-recall, and Telegram steps are documented from the official quickstart and marked where they were not run here, because the free tier&#x27;s anonymous endpoint returned a server error twice in this sandbox — see the verification section for the exact error.</p>
+
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Linux, macOS, or WSL2</b> (Windows has a native PowerShell installer). This tutorial ran on a Linux VM.</li>
+<li><b>About 2.5 GB of free disk.</b> Measured here: a 609 MB checkout, 1.1 GB of tools (FFmpeg, Python 3.14, Node, pnpm, ripgrep, uv), and the rest the Python virtual environment.</li>
+<li><b>A model.</b> The free tier (<code>nous/welcome</code>, no account, no API key) if it works for you, or your own key — OpenRouter, OpenAI, Anthropic, Google AI Studio, DeepSeek, and dozens more, or a Nous Portal subscription. The model needs at least 64,000 tokens of context; Hermes refuses smaller windows at startup.</li>
+<li><b>No GPU, no account, no API key for the watchdog in Step 6</b> — that part runs with no model at all.</li>
+<li><b>About 20 minutes wall-clock</b>, most of it the install downloading tools and dependencies.</li>
+</ul>
+<h2 id="step-1-install-it">Step 1 — Install it<a class="anchor" href="#step-1-install-it" aria-label="Link to section">#</a></h2>
+
+<p>The official install is a one-liner from the project&#x27;s own site, the same command the README and the quickstart print:</p>
+
+<pre><code class="language-bash">curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash</code></pre>
+
+<p>On Windows, the equivalent in PowerShell is <code>iex (irm https://hermes-agent.nousresearch.com/install.ps1)</code>. The installer clones the repo into <code>~/.hermes</code> (or wherever <code>HERMES_HOME</code> points), then fetches its own toolchain — uv, Python 3.14, Node, pnpm, ripgrep, FFmpeg — and builds the virtual environment. If you run it with flags, <code>bash install.sh --non-interactive --skip-browser --skip-computer-use</code> skips the browser and the computer-use setup.</p>
+
+<p>In this run the install completed with exit 0 and printed <code>Install complete!</code>. Two things are worth knowing before you start. First, the installer needs the full 2.5 GB on the filesystem it lands on — in this sandbox the default home directory hit its quota mid-clone, and the fix was to point <code>HERMES_HOME</code> at a roomier path and re-run. Second, the <code>uv sync</code> stage timed out twice on PyPI downloads in this run and succeeded on a retry; if it does, re-running the installer is the documented recovery, not a fresh checkout.</p>
+
+<p>Verify the install:</p>
+
+<pre><code class="language-bash">hermes --version
+hermes doctor</code></pre>
+
+<p>Expected output for the first, exactly as measured here:</p>
+
+<pre><code>Hermes Agent v0.23.3 (2026.9.24) · stable · local caafe5389ae5
+Python 3.14.9 · OpenAI SDK 2.54.0</code></pre>
+
+<p><code>hermes doctor</code> passes, with two optional warnings if you have not installed the messaging libraries: <code>python-telegram-bot</code> and <code>discord.py</code> not installed. Those matter only for the Telegram and Discord gateways in Step 7; the core agent does not need them. If <code>hermes</code> is not on your <code>PATH</code> after the install, the installer tells you to reload your shell (<code>source ~/.bashrc</code>) — the launcher lives in <code>~/.local/bin/hermes</code>.</p>
+
+<h2 id="step-2-power-it-choose-a-model">Step 2 — Power it: choose a model<a class="anchor" href="#step-2-power-it-choose-a-model" aria-label="Link to section">#</a></h2>
+
+<p>Run the setup wizard:</p>
+
+<pre><code class="language-bash">hermes setup</code></pre>
+
+<p>It detects existing agent setups first — in this sandbox it found OpenClaw, Claude Code, Codex, and Cursor directories and offered to import one, with an option to skip. Then it asks how you want to power the agent:</p>
+
+<pre><code>How do you want to power your agent?
+  1. Free, start now — no account, no API key
+  2. Sign in to Nous Portal
+  3. Use my own API key
+  4. Use a local model (Ollama / llama.cpp)
+  5. Skip — configure later</code></pre>
+
+<p>Option 1 is the free tier: the <code>nous/welcome</code> model, no account, no key, once per OS user, and it only works in an interactive terminal. Option 2 signs you into Nous Portal, which gives 300+ models plus the Tool Gateway. Option 3 takes your own key for OpenRouter, OpenAI, Anthropic, Google AI Studio, DeepSeek, or a custom endpoint. Option 4 points at a local server. Option 5 leaves the agent unconfigured, which is a valid choice if you only want the no-model cron jobs in Step 6.</p>
+
+<p><b>What happened here:</b> option 1 was chosen twice, and twice the wizard ended with <code>The Nous service had a hiccup. Try again in a moment.</code> The log (<code>~/.hermes/logs/agent.log</code>) shows the cause: <code>Nous free tier not set up (anon_server_error, attempt 1, next try in 15s)</code> at 20:09:52 and again at 20:10:59 UTC. The free tier mints an anonymous account by calling <code>POST /api/anonymous/create</code> on <code>welcome-api.nousresearch.com</code>; that endpoint returned a 5xx or non-JSON response, while the portal and docs sites returned HTTP 200 — so this was the anonymous endpoint failing, not a general network outage. If it fails for you, it is not your setup: pick option 3 with your own key, or option 2 for Portal, and carry on.</p>
+
+<p>You can switch models any time without the wizard:</p>
+
+<pre><code class="language-bash">hermes model</code></pre>
+
+<p>This opens an interactive picker. To set a model from the command line, use config:</p>
+
+<pre><code class="language-bash">hermes config set model anthropic/claude-opus-4.6
+hermes config get model</code></pre>
+
+<p>That round-trip — set, read back, unset — was verified in this sandbox. A fresh install defaults to <code>anthropic/claude-opus-4.6</code> via OpenRouter (<code>https://openrouter.ai/api/v1</code>) with no key configured, so if you go the OpenRouter route, set your key with <code>hermes config set OPENROUTER_API_KEY sk-or-...</code>. Keys land in <code>~/.hermes/.env</code>; settings land in <code>~/.hermes/config.yaml</code>. Remember the 64,000-token context minimum: Hermes checks it at startup and refuses models below it.</p>
+
+<h2 id="step-3-first-conversation">Step 3 — First conversation<a class="anchor" href="#step-3-first-conversation" aria-label="Link to section">#</a></h2>
+
+<p><em>Note: this step is documented from the official quickstart, not run live here — the free tier failed in this sandbox (Step 2), and no API key was available. The commands are the project&#x27;s own, verified against the quickstart page and the CLI&#x27;s own <code>--help</code> output.</em></p>
+
+<p>Start the agent:</p>
+
+<pre><code class="language-bash">hermes</code></pre>
+
+<p>That opens the classic CLI, which greets you with a welcome banner. For the full-screen interface, run <code>hermes --tui</code> instead. Try the quickstart&#x27;s own prompts, which are designed to exercise the agent rather than just chat:</p>
+
+<pre><code class="language-bash">hermes</code></pre>
+
+<pre><code>What are your top 3 features and what can I use you for?
+Research the latest developments in quantum computing and give me a summary
+Check my disk usage and tell me what&#x27;s taking up the most space
+Write a haiku about you</code></pre>
+
+<p>Useful commands inside a session: <code>/help</code> lists everything, <code>/tools</code> shows the 40+ available tools, <code>/model</code> switches the model mid-chat, <code>/personality pirate</code> changes the tone, and <code>/save</code> persists the session. Exit with <code>/exit</code> or Ctrl+C. To resume where you left off, run <code>hermes --continue</code> (or <code>hermes -c</code>); <code>--resume</code> lets you pick an earlier session.</p>
+
+<p>Two details matter for how you will use it day to day. First, the agent is safe by default: it asks before running commands and can be interrupted mid-task with Esc or Ctrl+C. Second, the session memory is not the same as the persistent memory in Step 4 — closing a session does not lose the notes, but it does end the conversation context, and <code>/new</code> starts a fresh one.</p>
+<h2 id="step-4-teach-it-to-remember-you">Step 4 — Teach it to remember you<a class="anchor" href="#step-4-teach-it-to-remember-you" aria-label="Link to section">#</a></h2>
+
+<p>Memory in Hermes is deliberately plain: two Markdown files the agent curates for itself.</p>
+
+<pre><code class="language-bash">~/.hermes/memories/MEMORY.md   # what it knows about the world
+~/.hermes/memories/USER.md      # what it knows about you</code></pre>
+
+<p>Both are injected into every session as a frozen snapshot at session start, so the agent knows your context before you type anything. The agent manages them itself through its <code>memory</code> tool — when it learns something worth keeping, it updates the files; when a file hits its limit, it condenses the notes. The limits are small and fixed: <code>MEMORY.md</code> caps at 2,200 characters, <code>USER.md</code> at 1,375. That forces the notes to stay curated rather than growing into a dump of everything you ever said.</p>
+
+<p>Check the state of memory with:</p>
+
+<pre><code class="language-bash">hermes memory status</code></pre>
+
+<p>This command exists and runs in v0.23.3 — it was verified here, though with a fresh install the files are empty and there is nothing yet to recall. To make memory work for you, tell the agent things it should remember in plain language: your name, your timezone, your stack, what you are working on, what you never want it to do. Then run <code>/new</code> at natural boundaries — new day, new topic, new project — and ask it to recall what it knows. The loop is: chat, let it save, start fresh, and see it remember.</p>
+
+<figure><img class="story-image" src="/articles/hermes-agent-self-improving-tutorial/img3.webp" alt="A chat bubble flowing into an open notebook, which flows into a second chat bubble — knowledge carried from one conversation to the next"><figcaption>AI-generated illustration. Memory in Hermes is two small Markdown files, curated by the agent and reloaded at the start of every session.</figcaption></figure>
+
+<p>One caveat from the docs: memory is a snapshot, not a live search. If you discuss something in a session and then ask about it in the same session, the agent searches its session history; the notes only carry what was persisted before the session started. That is why the <code>/new</code> habit matters — it is the boundary at which today&#x27;s conversation becomes tomorrow&#x27;s memory.</p>
+
+<h2 id="step-5-give-it-a-skill">Step 5 — Give it a skill<a class="anchor" href="#step-5-give-it-a-skill" aria-label="Link to section">#</a></h2>
+
+<p>Skills are how Hermes extends itself: each installed skill becomes a slash command, and the agent can also call them on its own when they fit the task. Skills live in <code>~/.hermes/skills/</code> and follow the agentskills.io format. The hub is browsable from the CLI:</p>
+
+<pre><code class="language-bash">hermes skills browse
+hermes skills list</code></pre>
+
+<p>In this sandbox, <code>hermes skills browse</code> reported <code>141 official skills loaded, page 1/8</code>, and <code>hermes skills list</code> showed 26 bundled skills enabled, including claude-code, codex, architecture-diagram, email-inbox-triage, obsidian, pdf, product-price-monitor, and weekly-review-planning. Install by slug from the browse list:</p>
+
+<pre><code class="language-bash">hermes skills install official/mlops/accelerate</code></pre>
+
+<p>That install was verified here: it landed in <code>~/.hermes/skills/mlops/accelerate/</code> with <code>SKILL.md</code> plus its reference files, and the skill then appears as enabled in <code>hermes skills list</code>. Hermes runs a security scan before installing, and you can pass <code>--skip-scan</code> if you have already reviewed the skill yourself. Once installed, run it as <code>/accelerate</code> in chat, or let the agent decide when it applies.</p>
+
+<p>Two things to watch. First, the quickstart&#x27;s own example is stale: <code>hermes skills inspect openai/skills/k8s</code> returns <code>Could not find &#x27;openai/skills/k8s&#x27; in any source</code> in v0.23.3, and <code>hermes skills search kubernetes</code> returned no results here. Install by the exact slug <code>hermes skills browse</code> shows, not by the slug a doc page remembers. Second, <code>hermes skills search</code> crashed in this sandbox with an httpx traceback while the sandbox proxy variables were set; unsetting them fixed it. That is an environment quirk, not a product bug — on a normal machine the command works.</p>
+
+<h2 id="step-6-put-it-on-a-schedule-the-no-agent-watchdog">Step 6 — Put it on a schedule: the no-agent watchdog<a class="anchor" href="#step-6-put-it-on-a-schedule-the-no-agent-watchdog" aria-label="Link to section">#</a></h2>
+
+<p>This is the step this tutorial proves end to end, and it needs no model, no key, and no account. Hermes has a built-in cron scheduler. Most cron jobs wake the agent — <code>hermes cron create "every 2h" "Check server status"</code> — but there is a second mode, <code>--no-agent</code>, that runs a script on schedule and delivers its stdout verbatim, with no LLM call at all. That makes it a free, self-hosted watchdog, and it is the fastest way to see Hermes do something useful while you sleep.</p>
+
+<p>First, write a script. Scripts must live under <code>~/.hermes/scripts/</code> — Hermes refuses scripts from anywhere else. This one prints disk usage with a UTC timestamp:</p>
+
+<pre><code class="language-bash">mkdir -p ~/.hermes/scripts
+cat &gt; ~/.hermes/scripts/disk-watchdog.sh &lt;&lt;&#x27;EOF&#x27;
+#!/usr/bin/env bash
+set -eu
+usage=$(df --output=pcent / | tail -n 1 | tr -d &#x27; %&#x27;)
+echo "disk-watchdog: / at ${usage}% used (checked $(date -u +%H:%M:%S) UTC)"
+EOF
+chmod +x ~/.hermes/scripts/disk-watchdog.sh</code></pre>
+
+<p>Now create the job, scheduled to fire once in one minute, with output delivered locally:</p>
+
+<pre><code class="language-bash">hermes cron create "once in 1m" "Disk watchdog test" \
+  --script ~/.hermes/scripts/disk-watchdog.sh \
+  --no-agent --deliver local --name disk-watchdog-test</code></pre>
+
+<p>Expected output — this is the real response from this run:</p>
+
+<pre><code>Created job b8f0c3245c3e
+  Name:      disk-watchdog-test
+  Schedule:  once in 1m
+  Next run:  2026-11-20 20:13:34 UTC
+  Mode:      script
+  Deliver:   local
+  Workdir:   /hermes-test
+  Timezone:  UTC
+  Agent:     no-agent (script only, no LLM call)</code></pre>
+
+<p>List it and check the scheduler&#x27;s health:</p>
+
+<pre><code class="language-bash">hermes cron list
+hermes cron doctor</code></pre>
+
+<p><code>hermes cron doctor</code> reported <code>found no issues</code>. In production the gateway fires due jobs automatically; in this sandbox, with no gateway running, the manual trigger fires them once:</p>
+
+<pre><code class="language-bash">hermes cron tick</code></pre>
+
+<p>It fired at 20:14:01 UTC. <code>hermes cron runs</code> showed the run completed, and the output was delivered verbatim to a local Markdown file — <code>~/.hermes/cron/output/b8f0c3245c3e/2026-11-20_20-14-02.md</code> — containing exactly one line:</p>
+
+<pre><code>disk-watchdog: / at 24% used (checked 20:14:02 UTC)</code></pre>
+
+<p>That is the whole loop, proven: script, schedule, fire, delivery, zero tokens. The job&#x27;s record in <code>~/.hermes/cron/jobs.json</code> then showed <code>last_status: ok</code> and state <code>completed</code>. Clean up when you are done:</p>
+
+<pre><code class="language-bash">hermes cron remove b8f0c3245c3e</code></pre>
+
+<figure><img class="story-image" src="/articles/hermes-agent-self-improving-tutorial/img2.webp" alt="A script file, a scheduler gear with a clock, and a delivered report page connected in a circular loop by arrows"><figcaption>AI-generated illustration. A no-agent cron job runs a script on schedule and delivers its stdout verbatim — no model, no tokens, no account.</figcaption></figure>
+
+<p>For real use, swap the one-off schedule for a recurring one — <code>"every 2h"</code>, <code>"daily at 09:00"</code>, or <code>"every Mon at 08:00"</code> — and add <code>--deliver telegram</code> once the gateway in Step 7 is running. The useful flags: <code>--skill</code> to run a skill instead of a prompt, <code>--script</code> for the no-agent mode, <code>--timezone</code> (jobs default to UTC unless you set one), <code>--workdir</code>, <code>--pin</code> to fix a model for that job, and <code>--reasoning-effort</code>. Agent jobs — the ones that do wake the model — have a pre-dispatch validation step that can reject a job without spending a token, and their model resolution is per-job pin first, then the cron default, then the main model. One rule from the docs: cron sessions cannot create more cron jobs, so a scheduled job cannot spawn its own schedule.</p>
+
+<p>A practical tip the docs call out: if your no-agent script prints nothing, the tick is silent — no delivery file, no notification. If you want a heartbeat, make the script always print at least one line. And if you want the model to watch something and only speak when it matters, the docs suggest the <code>[SILENT]</code> trick: have the agent job print <code>[SILENT]</code> as its first line when there is nothing to report, and nothing is delivered.</p>
+
+<h2 id="step-7-talk-to-it-from-telegram">Step 7 — Talk to it from Telegram<a class="anchor" href="#step-7-talk-to-it-from-telegram" aria-label="Link to section">#</a></h2>
+
+<p><em>Note: this step was not run live here — the free tier failed (Step 2), and a gateway needs a bot token and a running agent. The commands below are the project&#x27;s own, verified against the CLI&#x27;s <code>--help</code> output and the docs.</em></p>
+
+<p>The gateway is what turns Hermes from a terminal tool into a service you can message. Set it up with:</p>
+
+<pre><code class="language-bash">hermes gateway setup</code></pre>
+
+<p>It walks you through each channel — Telegram, Discord, Slack, WhatsApp, Signal, Email, Home Assistant, and Teams — asking for the bot token or credentials each one needs. For Telegram, create a bot with BotFather, paste the token, and the wizard stores it. Check the state with <code>hermes gateway status</code>, which in this sandbox reported <code>Gateway is not running</code>, and start it with <code>hermes gateway run</code> in the foreground or <code>hermes gateway install</code> to run it as a service.</p>
+
+<p>Two things from this run are relevant before you start. First, <code>hermes doctor</code> warned that <code>python-telegram-bot</code> and <code>discord.py</code> were not installed — those are optional dependencies, so install them if you want those two channels. Second, the gateway is what fires scheduled cron jobs automatically; without it, cron jobs only fire when you run <code>hermes cron tick</code> yourself, as in Step 6. Once the gateway is up, the same agent answers in your terminal, on Telegram, and on your schedule — and its memory and skills follow it across all three.</p>
+
+<h2 id="how-the-learning-loop-works">How the learning loop works<a class="anchor" href="#how-the-learning-loop-works" aria-label="Link to section">#</a></h2>
+
+<p>The three features in this tutorial are not separate products; they are one loop. A conversation teaches the agent something, the agent writes it into <code>MEMORY.md</code> or <code>USER.md</code>, the next session starts with those notes, and the next hard task becomes a skill the agent can reuse. The docs describe the loop in four parts: it creates skills after complex tasks, improves them during use, nudges itself to persist knowledge, and searches past conversations when the notes are not enough. None of it is a separate plugin or a paid add-on; it is the default behavior once the agent is running.</p>
+
+<p>That is also why the no-agent cron mode matters more than it looks. The scheduler is the part of the loop that runs without you: a watchdog that never needs the model is the cheapest possible automation, and an agent job on the same scheduler is the same infrastructure with inference added. If you only take one thing from this tutorial, take the cron system — it is the feature that keeps working after you close the terminal.</p>
+
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Claude Code</b> is the better pure coding agent, and it has the stronger model behind it — but it has no memory files, no cron, and no messaging gateway. If your work is long sessions in one repo, stay with Claude Code. If you want the agent to remember you between sessions and act while you are away, Hermes is the one built for that.</li>
+<li><b>OpenCode</b> is the closest terminal-first alternative: fast, open, model-agnostic. It has no self-improving loop and no built-in scheduler. Pick it for a lightweight coding loop; pick Hermes for the persistent assistant.</li>
+<li><b>OpenClaw</b> is the project Hermes descends from, and Hermes imports its setups directly. If you already run OpenClaw, the migration is one command; if you are starting fresh, Hermes is the maintained line with the learning loop and the cron system.</li>
+<li><b>Cursor Agent</b> is IDE-bound by design. Hermes is terminal-first and runs headless on a server. If your workflow lives in an editor, Cursor wins; if it lives on a VPS or in Telegram, Hermes does.</li>
+<li><b>Plain cron plus shell scripts</b> already does the watchdog in Step 6, for free, with no agent at all. What Hermes adds is the same scheduler with an LLM on the other end — a job that reads a log, decides whether it matters, and only then messages you.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+
+<p>Hermes Agent earns its star count on one idea: an agent that remembers you and improves itself is worth more than a cleverer agent that starts from zero every morning. The install is heavy — 2.5 GB — and the free tier failed twice in this sandbox, so go in with your own key or a Portal subscription if you want the full experience. But the part that needs nothing — the no-agent cron watchdog — ran end to end in this tutorial with zero tokens, and it is the most immediately useful thing in the project: a scheduler, a script, and a delivered report, with a learning agent standing by for everything else.</p>
+
+<h2 id="how-this-tutorial-was-verified">How this tutorial was verified<a class="anchor" href="#how-this-tutorial-was-verified" aria-label="Link to section">#</a></h2>
+
+<p>Verification ran on November 20, 2026, on a Linux VM. The official installer (<code>curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash</code>) completed with exit 0; the install is 2.5 GB on disk (609 MB checkout, 1.1 GB tools, the rest the virtual environment). <code>hermes --version</code> reported <code>v0.23.3 (2026.9.24)</code>, Python 3.14.9, OpenAI SDK 2.54.0. <code>hermes doctor</code> passed with only the optional <code>python-telegram-bot</code> and <code>discord.py</code> warnings. <code>hermes config set/get/unset</code> round-tripped a test key. <code>hermes skills browse</code> loaded 141 official skills; <code>hermes skills list</code> showed 26 bundled skills enabled; <code>hermes skills install official/mlops/accelerate</code> installed the skill to <code>~/.hermes/skills/mlops/accelerate/</code> and listed it as enabled. The no-agent cron watchdog was verified end to end: job <code>b8f0c3245c3e</code> created at 20:12:34 UTC, fired via <code>hermes cron tick</code> at 20:14:01 UTC, run <code>253bf509745c42d787e8754610939ec4</code> completed, output delivered verbatim to <code>cron/output/b8f0c3245c3e/2026-11-20_20-14-02.md</code>, and <code>hermes cron doctor</code> reported no issues; the job was then removed.</p>
+
+<p>What was <em>not</em> verified live: the free tier. <code>hermes setup</code> was run twice in an interactive terminal, option 1 (free) chosen both times, and both ended with <code>The Nous service had a hiccup.</code> The log shows <code>Nous free tier not set up (anon_server_error, attempt 1, next try in 15s)</code> at 20:09:52 and 20:10:59 UTC. The portal and docs sites returned HTTP 200, so this was the anonymous endpoint failing server-side, not a network outage. Because no model was available, no live chat, no memory-recall test, and no Telegram gateway run were possible; Steps 3, 4, and 7 are documented from the official quickstart, cron docs, and memory docs, and are marked as such. Two environment notes: the default home directory hit its disk quota during the first clone, so the install ran from a roomier path; and <code>hermes skills search</code> crashed with an httpx traceback while the sandbox proxy variables were set, and worked once they were unset.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://github.com/NousResearch/hermes-agent" rel="nofollow">NousResearch — hermes-agent (GitHub)</a> — the README, the install one-liner, the feature list, the OpenClaw migration guide, and the star and fork counts.</li><li><a href="https://hermes-agent.nousresearch.com/docs/quickstart" rel="nofollow">Hermes Agent — Quickstart (docs)</a> — the setup wizard&#x27;s five options, the free tier, the first prompts, the memory files and their limits, and the skills commands.</li><li><a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/cron" rel="nofollow">Hermes Agent — Cron (docs)</a> — the create flags, no-agent mode, delivery options, model resolution, pre-dispatch validation, and the <code>[SILENT]</code> trick.</li><li><a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" rel="nofollow">Hermes Agent — Memory (docs)</a> — the <code>MEMORY.md</code> and <code>USER.md</code> limits, the frozen snapshot at session start, and the session-search behavior.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="hermes-agent-self-improving-tutorial"></div><div class="comments" data-comments="hermes-agent-self-improving-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/tamserve-live-object-tracking-tutorial/"><span class="chip">Tutorials</span><h3>Track anything on live video with tamserve: hands-on with the SAM 2 serving engine</h3><div class="meta">Research Editor · November 20, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/rust-anything-port-typescript-to-rust-tutorial/"><span class="chip">Tutorials</span><h3>Port your TypeScript to Rust and prove it still works: hands-on with rust-anything</h3><div class="meta">Research Editor · November 20, 2026 · 21 min read</div></a><a class="rel-card" href="/articles/minimax-m31-flash-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill</h3><div class="meta">Senior Technology Writer · November 20, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/instagram-agent-skill-claude-reels-tutorial/"><span class="chip">Tutorials</span><h3>Run an Instagram account with Claude Code: hands-on with instagram-agent-skill</h3><div class="meta">Tutorials &amp; Reviews Lead · November 20, 2026 · 25 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to use Hermes Agent?</h3><p>No. The setup wizard offers a free tier — the <code>nous/welcome</code> model, no account and no API key, once per OS user. In this tutorial&#x27;s sandbox the free tier&#x27;s anonymous endpoint returned a server error twice, so the live-chat steps are documented from the official quickstart rather than run here. If the free tier fails for you, pick your own key in <code>hermes model</code>, or sign in to Nous Portal.</p><h3>How much disk does the install need?</h3><p>About 2.5 GB on disk in this run: a 609 MB checkout, 1.1 GB of tools (FFmpeg, Python 3.14, Node, pnpm, ripgrep, uv), and the rest the Python virtual environment. If the clone fails with “Disk quota exceeded”, that is your disk, not the installer — free space or point <code>HERMES_HOME</code> at a roomier filesystem.</p><h3>Do cron jobs need the gateway running?</h3><p>For automatic firing, yes: install the gateway with <code>hermes gateway install</code> or run it in the foreground with <code>hermes gateway run</code>. For a one-off test, <code>hermes cron tick</code> fires due jobs once and exits — that is how the watchdog in this tutorial was verified, with no gateway running.</p><h3>What if hermes skills search crashes?</h3><p>In this sandbox it crashed with an httpx URL-parsing error while the sandbox proxy variables were set; unsetting them fixed it. On a normal machine it works. Use <code>hermes skills browse</code> for the full list and install by the exact slug it shows — the quickstart&#x27;s <code>openai/skills/k8s</code> example no longer resolves in v0.23.3.</p><h3>Can I use Hermes without any model at all?</h3><p>Yes, for one thing: no-agent cron jobs. A script-only job runs on schedule and delivers its stdout with zero LLM calls, which is how the watchdog in this tutorial was verified end to end. Chat, skills, and the gateway all need inference.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/hermes-official-plugins-hands-on-tutorial/">From bare terminal to agentic workstation: a hands-on guide to Hermes Agent&#x27;s official plugins</a></li><li><a href="/articles/coral-agent-gateway-custom-tools-tutorial/">Coral hands-on: give your coding agent a gateway that writes its own tools</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</a></li><li><a href="/articles/claude-bughunter-bug-bounty-hands-on-tutorial/">Turn Claude Code into a bug bounty hunter: hands-on with Claude-BugHunter</a></li><li><a href="/articles/last30days-skill-social-research-tutorial/">Research what people actually say: hands-on with last30days, the social search skill for coding agents</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
