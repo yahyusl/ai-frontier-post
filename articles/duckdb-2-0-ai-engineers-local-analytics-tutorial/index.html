@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>DuckDB 2.0 for AI engineers: the local analytics engine your agents can actually query — AI Frontier Post</title>
+<meta name="description" content="DuckDB 2.0 LTS landed on October 21 — with agent mode, Quack server mode, and NEAREST joins. This tutorial turns it into the local analytics and vector-search layer your agents can query, end to end, with every number measured.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="DuckDB 2.0 for AI engineers: the local analytics engine your agents can actually query">
+<meta property="og:description" content="DuckDB 2.0 LTS landed on October 21 — with agent mode, Quack server mode, and NEAREST joins. This tutorial turns it into the local analytics and vector-search layer your agents can query, end to end, with every number measured.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "DuckDB 2.0 for AI engineers: the local analytics engine your agents can actually query", "description": "DuckDB 2.0 LTS landed on October 21 — with agent mode, Quack server mode, and NEAREST joins. This tutorial turns it into the local analytics and vector-search layer your agents can query, end to end, with every number measured.", "datePublished": "2026-11-20", "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/"}, "image": "https://aifrontierpost.com/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU or an API key for this?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything in this tutorial runs on CPU with open-source packages and one 90 MB embedding model. The model loads in about 2.4 seconds warm on two CPU cores, and there is no cloud account, no key, and no cost anywhere in the pipeline."}}, {"@type": "Question", "name": "Why does my HNSW index not show up in EXPLAIN?", "acceptedAnswer": {"@type": "Answer", "text": "Two common causes. First, the index only engages when the query uses the distance function matching the metric: array_distance for the default l2sq metric, array_cosine_distance for cosine. The similarity function returns the right ranking but runs a sequential scan. Second, on a database file the index needs SET hnsw_enable_experimental_persistence = true after LOAD vss. And check for the rendered node name Hnsw Index Scan, not HNSW_INDEX_SCAN."}}, {"@type": "Question", "name": "Can DuckDB replace a dedicated vector database?", "acceptedAnswer": {"@type": "Answer", "text": "Below a few million vectors, usually yes: one file, one process, no service to run, and the same SQL engine answers both analytics and similarity questions. At tens of millions of embeddings with heavy concurrent writes, a dedicated vector database earns its keep with distributed indexes and replication."}}, {"@type": "Question", "name": "What happens to my DuckDB 1.x database files if I upgrade to 2.0?", "acceptedAnswer": {"@type": "Answer", "text": "DuckDB 2.0 can still read and write your existing database files, and they remain readable by older versions. The reverse is not true: versions before 2.0 cannot read database files created by DuckDB 2.0. Test 2.0 on a shadow system before switching production over, and note that DuckDB 1.4 support ended on November 17, 2026."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>DuckDB 2.0 for AI engineers: the local analytics engine your agents can actually query</h1>
+<p class="lede">DuckDB 2.0 LTS landed on October 21 — with agent mode, Quack server mode, and NEAREST joins. This tutorial turns it into the local analytics and vector-search layer your agents can query, end to end, with every number measured.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 20, 2026 · 28 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> DuckDB 2.0 is the first version built for agents as much as analysts: agent mode, Quack server mode, VARIANT, triggers, and NEAREST joins. This tutorial builds a local analytics and vector-search layer on it — Parquet in place, embeddings in a FLOAT[384] column, HNSW plus BM25 fused by reciprocal rank fusion, exposed as an MCP server — with every step measured on a 2-core VM.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>DuckDB 2.0.0 LTS “Cinnamon Teal”</b> shipped October 21, 2026, built from close to 20,000 commits since 1.5; support runs until at least October 2027, and the previous LTS, 1.4, reached end of support on November 17, 2026.</li><li><b>Semantic search scored 5/5 top-1</b> on the tutorial’s five test queries, and hybrid reciprocal rank fusion puts the document both signals agree on first.</li><li><b>HNSW indexes engage only for the distance function matching the metric</b> — <code>array_cosine_distance</code> for a <code>cosine</code> index, not <code>array_cosine_similarity</code> — and on a database file they need the experimental persistence flag set after loading <code>vss</code>.</li><li><b>Agent mode</b> makes the CLI speak Markdown tables and JSON errors, and cut the output a model had to read by 59% on TPC-H in DuckDB’s own experiments.</li><li><b>Cost: $0.</b> Everything runs locally with no API key and no GPU; the embedding model loads in 2.4 seconds warm.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/cover.webp" alt="A duck swimming on a dark lake at dusk, with glowing database tables and vector arrows beneath the waterline"><figcaption>AI-generated illustration.</figcaption></figure>
+<div class="article-body"><p>Every agent you build eventually needs the same thing: a place to put facts it can query later. The default answer is a service — a vector database here, a search cluster there, a Postgres instance somewhere — each one another thing to install, configure, pay for, and keep running. DuckDB 2.0, released October 21, 2026 as a long-term support release, makes a serious case that you don't need any of that. One file, plain SQL, and your agent gets analytics, vector search, keyword search, and a server mode — all on the machine it already runs on.</p>
+<p>This tutorial builds that layer end to end: install DuckDB 2.0, query Parquet files without importing them, store messy JSON in the new VARIANT type, keep a derived table fresh with triggers, add semantic search with an HNSW vector index, fuse it with BM25 keyword search, turn top-k search into a join clause, and finally expose the whole thing to any coding agent as an MCP server. Every number quoted comes from running the code on a 2-core VM with no GPU — including the one result that surprised me.</p>
+<h2 id="what-you-will-need">What you'll need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or newer</strong> — the tutorial uses Python 3.12. No GPU, no API keys, no cloud account.</li><li><strong>About 1 GB of free disk</strong> — mostly the CPU build of PyTorch and the embedding model. The database itself stays under a megabyte for the tutorial corpus.</li><li><strong>Versions pinned in this tutorial:</strong> <code>duckdb==2.0.0</code>, <code>sentence-transformers==6.3.0</code>, <code>fastmcp==4.2.3</code>, and CPU-only <code>torch 2.15.0</code>. Pinning matters: DuckDB 2.0 changes storage behavior and several defaults, and the steps below were verified against exactly these versions.</li><li><strong>Cost: $0.</strong> Everything runs on your machine. The only downloads are open-source packages and one 90 MB embedding model.</li></ul>
+<p>One timing note up front: DuckDB 1.4, the previous LTS, reached end of support on November 17, 2026 — three days before this article. DuckDB 2.0 is supported until at least October 2027, and DuckDB 1.5 until March 2027. If you are still on 1.4, this is the upgrade window.</p>
+<h2 id="step-1-install-duckdb-2-0">Step 1 — Install DuckDB 2.0<a class="anchor" href="#step-1-install-duckdb-2-0" aria-label="Link to section">#</a></h2>
+<p>Install the Python package and confirm the version. The whole tutorial runs from one working directory — create it first so the database file and scripts stay together.</p>
+<pre><code class="language-bash">mkdir -p ~/duckdb-tutorial && cd ~/duckdb-tutorial
+python3 -m venv venv
+./venv/bin/pip install "duckdb==2.0.0" "sentence-transformers==6.3.0" "fastmcp==4.2.3"
+./venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu</code></pre>
+<p>Install PyTorch from the CPU index on purpose. The default <code>pip install torch</code> pulls the CUDA build with several gigabytes of NVIDIA libraries your laptop will never use; the CPU wheel is a fraction of the size and is all an embedding model needs. Then verify:</p>
+<pre><code class="language-bash">./venv/bin/python -c "import duckdb; print(duckdb.__version__)"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">2.0.0</code></pre>
+<p>If you also want the DuckDB command-line shell — you will in Step 8 — download the CLI for your platform from the <a href="https://github.com/duckdb/duckdb/releases/tag/v2.0.0">v2.0.0 release page</a> (the Linux binary is <code>duckdb-cli-linux-amd64.tar.gz</code>). The shell reports itself as <code>v2.0.0 (Cyanoptera) d54cbbe3df</code>. "Cinnamon Teal" is the release's codename, after the cinnamon teal duck.</p>
+<h2 id="step-2-query-files-in-place">Step 2 — Query files in place: no import step<a class="anchor" href="#step-2-query-files-in-place" aria-label="Link to section">#</a></h2>
+<p>DuckDB's oldest trick is still its best one: files are tables. You point SQL at a Parquet, CSV, or JSON file and query it directly — no server, no import, no schema definition. DuckDB infers the schema by sampling the file. Start with a quick sanity check on speed, then read a real Parquet file over HTTP.</p>
+<pre><code class="language-python">import duckdb
+
+con = duckdb.connect()
+# One million rows, summed in place — no table created, no data loaded.
+print(con.execute(
+    "SELECT sum(x) AS total, count(*) AS n FROM range(1, 1000001) t(x)"
+).fetchone())</code></pre>
+<p>Measured on the test VM: <code>(500000500000, 1000000)</code> in 0.009 seconds. Now a real file, read straight off the web. The <code>httpfs</code> extension loads automatically when a URL appears in a query, and <code>read_parquet</code> fetches only the byte ranges it needs:</p>
+<pre><code class="language-python">rows = con.execute("""
+    SELECT count(*) AS n
+    FROM read_parquet(
+      'https://github.com/apache/parquet-testing/raw/master/data/alltypes_plain.parquet')
+""").fetchone()
+print(rows)  # (8,)
+
+print(con.execute("""
+    SELECT id, bool_col, tinyint_col
+    FROM read_parquet(
+      'https://github.com/apache/parquet-testing/raw/master/data/alltypes_plain.parquet')
+    LIMIT 3
+""").fetchall())</code></pre>
+<p>Measured: 8 rows, 11 columns (<code>id, bool_col, tinyint_col, smallint_col, int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col</code>), first rows <code>(4, True, 0), (5, False, 1), (6, True, 0)</code>, in 0.04 seconds — the whole round trip, including the HTTP fetch. The same one-liner pattern works for local files: <code>SELECT * FROM 'orders.csv'</code>, <code>SELECT * FROM read_json_auto('events.json')</code>. DuckDB 2.0's new asynchronous I/O layer reads Parquet and CSV in the background with multiple requests in flight, which is where the speedup shows on remote files and object storage.</p>
+<h2 id="step-3-store-messy-json-in-a-variant-column">Step 3 — Store messy JSON in a VARIANT column<a class="anchor" href="#step-3-store-messy-json-in-a-variant-column" aria-label="Link to section">#</a></h2>
+<p>Agent workloads are full of semi-structured data: tool-call arguments, event payloads, API responses where every row has a different shape. The usual answers are a JSON text column (slow, no structure) or a rigid schema (breaks the moment a payload adds a field). DuckDB 2.0's <code>VARIANT</code> type is the middle path: schema-less storage with columnar performance. It arrived in 1.5, but 2.0 fully integrates it — the engine detects the common structure in your data, "shreds" it for compression, and reads and writes shredded VARIANT to Parquet.</p>
+<pre><code class="language-python">con.execute("CREATE TABLE events (payload VARIANT)")
+con.execute("""
+    INSERT INTO events VALUES
+      ('{"user": {"id": 42, "tags": ["a", "b"]}}'::JSON::VARIANT),
+      ('{"event": "click", "x": 10, "y": 20}'::JSON::VARIANT)
+""")
+print(con.execute(
+    "SELECT variant_type(payload), variant_keys(payload) FROM events"
+).fetchall())</code></pre>
+<p>Measured output:</p>
+<pre><code class="language-text">[('OBJECT', ['user']), ('OBJECT', ['event', 'x', 'y'])]</code></pre>
+<p>Two rows, two different shapes, one column — and <code>variant_type()</code> and <code>variant_keys()</code> still tell you what is inside each row. The cast path matters: <code>'...'::JSON::VARIANT</code> parses the text as JSON first, then stores it as VARIANT. For agent logs, this is the right default: keep the raw payload intact, query the fields you need, and never migrate a schema because a tool added a field.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/img2.webp" alt="Diagram of the tutorial pipeline: documents to embeddings to DuckDB to two indexes to hybrid search to an MCP server"><figcaption>From documents to an agent-queryable database: embed once, index twice, fuse the rankings, expose it over MCP. Diagram: AI Frontier Post.</figcaption></figure>
+<h2 id="step-4-keep-a-derived-table-fresh-with-triggers">Step 4 — Keep a derived table fresh with triggers<a class="anchor" href="#step-4-keep-a-derived-table-fresh-with-triggers" aria-label="Link to section">#</a></h2>
+<p>Triggers are new in DuckDB 2.0, and they close a gap that used to force a workaround: keeping a summary table in sync. The classic use is an audit table or a running aggregate — a small table your agent reads instead of scanning the raw log every time. This example maintains average age per nationality as people are inserted, using a statement-level trigger with a transition table:</p>
+<pre><code class="language-sql">CREATE TABLE people (name VARCHAR, nationality VARCHAR, age INTEGER);
+CREATE TABLE age_stats (
+    nationality VARCHAR PRIMARY KEY,
+    num_people INTEGER,
+    average_age DOUBLE
+);
+
+CREATE TRIGGER people_insert
+    AFTER INSERT ON people
+    REFERENCING NEW TABLE AS n
+    FOR EACH STATEMENT
+    INSERT INTO age_stats
+    SELECT nationality, count(*), avg(age)
+    FROM n GROUP BY nationality
+    ON CONFLICT (nationality) DO UPDATE SET
+        num_people = age_stats.num_people + excluded.num_people;
+
+INSERT INTO people VALUES
+    ('Alice', 'US', 34), ('Bram', 'NL', 27), ('Csilla', 'HU', 45);
+
+SELECT * FROM age_stats ORDER BY nationality;</code></pre>
+<p>Measured output:</p>
+<pre><code class="language-text">[('HU', 1, 45.0), ('NL', 1, 27.0), ('US', 1, 34.0)]</code></pre>
+<p>The trigger fires once per statement, not once per row, and the <code>REFERENCING NEW TABLE AS n</code> clause hands it the inserted rows as a table it can aggregate. Two limits to know before you design around triggers: <code>BEFORE ... FOR EACH ROW</code> and <code>UPDATE ... FOR EACH ROW</code> combinations are not supported yet, and triggers are one step toward materialized views, not a replacement for them — DuckDB's roadmap still lists materialized views as future work.</p>
+<h2 id="step-5-vector-search-with-the-vss-extension">Step 5 — Vector search with the vss extension<a class="anchor" href="#step-5-vector-search-with-the-vss-extension" aria-label="Link to section">#</a></h2>
+<p>This is the step the whole tutorial is built around: semantic search over your own documents, inside the same database file that holds your analytics. The pieces are the <code>vss</code> extension (HNSW approximate nearest-neighbor index over DuckDB's fixed-size <code>ARRAY</code> type) and a small local embedding model. Build a corpus first — 24 short documents about AI engineering topics, each a few sentences, each on a distinct topic so the ranking is actually discriminating:</p>
+<pre><code class="language-python"># embed_docs.py
+import duckdb
+from sentence_transformers import SentenceTransformer
+
+DOCS = [
+    ("duckdb-analytics",
+     "DuckDB is an in-process analytical database that runs inside your Python process. "
+     "It reads Parquet, CSV and JSON directly, runs columnar SQL at high speed, and needs no server. "
+     "DuckDB 2.0 adds a client-server mode through the Quack protocol, a VARIANT type for messy JSON, and an agent mode for coding agents."),
+    ("rag-pipelines",
+     "A retrieval-augmented generation pipeline chunks documents, embeds the chunks, stores them in a vector index, "
+     "and retrieves the most relevant chunks to ground the language model's answer. Good chunking and good retrieval matter more than the choice of embedding model."),
+    ("prompt-caching",
+     "Prompt caching stores the prefix of a prompt on the provider's servers so repeated calls only pay for the new tokens. "
+     "Anthropic's prompt caching can cut API costs by up to 90 percent on long system prompts and repeated context blocks."),
+    ("lora-fine-tuning",
+     "LoRA fine-tuning freezes a base model and trains small low-rank adapter matrices instead. "
+     "QLoRA adds 4-bit quantization so a 7-billion-parameter model can be fine-tuned on a single consumer GPU with 24 GB of VRAM."),
+    ("agent-memory",
+     "An agent that remembers past conversations needs persistent memory: a database of past turns, summaries, and facts. "
+     "Letta and similar frameworks store agent state in a database so the agent can recall earlier sessions and build on them."),
+    ("mcp-servers",
+     "The Model Context Protocol lets an AI application call tools exposed by an MCP server over a standard interface. "
+     "A FastMCP server in Python can expose a database query as a tool that Claude Code or any MCP client can call."),
+    ("vector-databases",
+     "Vector databases store embeddings and answer nearest-neighbor queries with approximate indexes such as HNSW. "
+     "For small collections under a few million vectors, an embedded store like DuckDB with the vss extension is often simpler and faster than a separate service."),
+    ("embeddings",
+     "Text embeddings turn sentences into dense vectors where similar meanings sit close together. "
+     "The all-MiniLM-L6-v2 model produces 384-dimensional embeddings and is a standard baseline for semantic search benchmarks."),
+    ("structured-outputs",
+     "Structured outputs force a language model to return valid JSON matching a schema, using constrained decoding. "
+     "Libraries like Outlines and Instructor validate the output against a Pydantic model so downstream code never parses free-form text."),
+    ("function-calling",
+     "Function calling lets a language model request a tool invocation by returning a structured JSON call with arguments. "
+     "The application executes the tool, returns the result, and the model continues the conversation with the new information."),
+    ("local-llms",
+     "Running a language model locally means downloading open weights and serving them with Ollama, llama.cpp, or vLLM. "
+     "A quantized 7-billion-parameter model runs on a laptop CPU, while a 70-billion-parameter model needs a GPU with enough VRAM."),
+    ("whisper-transcription",
+     "Whisper transcribes speech to text and supports dozens of languages. The faster-whisper library runs the model "
+     "with CTranslate2 for much faster CPU inference, and it can also detect the spoken language and add word-level timestamps."),
+    ("image-generation",
+     "Modern image models generate pictures from text prompts, and can edit existing images with inpainting. "
+     "Consistent characters across many images need a reference image or a trained LoRA so the same face appears in every shot."),
+    ("video-generation",
+     "Text-to-video models like MiniMax H3 generate short clips with native audio from a prompt or a start frame. "
+     "Longer videos are built by chaining clips and keeping the same reference image for character consistency."),
+    ("voice-agents",
+     "A voice agent combines speech-to-text, a language model, and text-to-speech in a streaming loop. "
+     "Frameworks like LiveKit Agents handle the real-time audio transport, interruption detection, and turn taking."),
+    ("browser-automation",
+     "Browser automation agents drive a real browser with Playwright, reading the accessibility tree and clicking elements. "
+     "Computer-use APIs from Anthropic and Google expose screenshots and mouse actions so an agent can operate a desktop application."),
+    ("code-review-agents",
+     "AI code review tools read a pull request diff, check it against project guidelines, and post comments. "
+     "PR-Agent and similar tools run as a GitHub Action and can suggest concrete fixes rather than generic style notes."),
+    ("llm-observability",
+     "LLM observability means tracing every prompt, completion, tool call and token cost for each agent run. "
+     "Arize Phoenix and Langfuse store traces locally or in the cloud so you can find the exact turn where an agent went wrong."),
+    ("promptfoo-evals",
+     "Promptfoo is an open-source CLI for testing prompts: you write prompts and test cases in YAML, it runs them against "
+     "a model, and it scores the outputs with assertions like exact match, contains, or an LLM rubric. It plugs into CI so prompt regressions fail the build."),
+    ("dspy-optimization",
+     "DSPy programs a language model pipeline in code and optimizes the prompts automatically from labeled examples. "
+     "Instead of hand-tuning prompt text, you declare signatures and let the optimizer search for the best wording and few-shot examples."),
+    ("langgraph-agents",
+     "LangGraph builds stateful multi-agent systems as graphs of nodes and edges. "
+     "A supervisor node routes tasks to worker agents, each with its own tools, and the graph keeps shared state in a checkpointed store."),
+    ("ollama-setup",
+     "Ollama serves open-weight models behind a local OpenAI-compatible API. Install it, pull a model with ollama pull, "
+     "and any tool that speaks the OpenAI API can point at http://localhost:11434 for private, offline inference."),
+    ("vllm-serving",
+     "vLLM is a high-throughput inference server for open-weight models, using paged attention and continuous batching. "
+     "It serves many concurrent requests on one GPU and exposes an OpenAI-compatible API for drop-in use."),
+    ("quantization",
+     "Quantization shrinks model weights from 16-bit floats to 8-bit or 4-bit integers, cutting memory and speeding up inference. "
+     "GGUF quantization with an importance matrix preserves accuracy on the weights that matter most for the model's outputs."),
+]
+
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+texts = [d[1] for d in DOCS]
+embs = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+dim = len(embs[0])  # 384
+
+con = duckdb.connect("docs.duckdb")
+con.execute("INSTALL vss"); con.execute("LOAD vss")
+con.execute("SET hnsw_enable_experimental_persistence = true")
+con.execute(f"CREATE TABLE docs (id VARCHAR PRIMARY KEY, text VARCHAR, embedding FLOAT[{dim}])")
+con.executemany("INSERT INTO docs VALUES (?, ?, ?)",
+                [(d[0], d[1], e.tolist()) for d, e in zip(DOCS, embs)])
+con.execute("CREATE INDEX docs_hnsw ON docs USING HNSW (embedding) WITH (metric = 'cosine')")
+print("rows:", con.execute("SELECT count(*) FROM docs").fetchone()[0])</code></pre>
+<p>Three details in that script deserve attention. First, the embedding column is <code>FLOAT[384]</code> — a fixed-size array, not a variable-length list. The HNSW index only works on fixed-size arrays, so the dimension is part of the schema; change models and you rebuild the table. Second, <code>normalize_embeddings=True</code> makes every vector unit length, which is what makes cosine similarity behave. Third, the <code>SET hnsw_enable_experimental_persistence = true</code> line is load-bearing: HNSW indexes are in-memory-only by default, and creating one on a database file fails without it. The setting belongs to the <code>vss</code> extension, so it must come <em>after</em> <code>LOAD vss</code> — set it before and DuckDB reports the setting does not exist. It is labeled experimental for a reason: expect the on-disk index format to change in a future release.</p>
+<p>Measured on the test VM: the model loads in 2.4 seconds warm (32 seconds the first time, including the 90 MB download), embedding all 24 documents takes 2.8 seconds, and the database file holds 24 rows. Now search it:</p>
+<pre><code class="language-python">def search(query, k=3):
+    qv = model.encode([query], normalize_embeddings=True, show_progress_bar=False)[0]
+    return con.execute(
+        "SELECT id, array_cosine_distance(embedding, ?::FLOAT[384]) AS dist "
+        "FROM docs ORDER BY dist ASC LIMIT ?",
+        [qv.tolist(), k],
+    ).fetchall()
+
+for q in ["how do I search documents by meaning",
+          "fine-tune a model on one GPU",
+          "make my agent remember past conversations",
+          "run a language model on my laptop",
+          "test whether my prompts got worse after an edit"]:
+    print(q, "->", search(q, 1))</code></pre>
+<p>Measured results — top-1 correct on all five queries:</p>
+<div class="table-wrap"><table><thead><tr><th>Query</th><th>Top hit</th><th>Cosine distance</th><th>Time</th></tr></thead><tbody><tr><td>how do I search documents by meaning</td><td>embeddings</td><td>0.618</td><td>591 ms</td></tr><tr><td>fine-tune a model on one GPU</td><td>lora-fine-tuning</td><td>0.492</td><td>130 ms</td></tr><tr><td>make my agent remember past conversations</td><td>agent-memory</td><td>0.207</td><td>599 ms</td></tr><tr><td>run a language model on my laptop</td><td>local-llms</td><td>0.365</td><td>295 ms</td></tr><tr><td>test whether my prompts got worse after an edit</td><td>promptfoo-evals</td><td>0.492</td><td>982 ms</td></tr></tbody></table></div>
+<p>The times include encoding the query with the embedding model on two CPU cores, and they vary with machine load — the SQL search over 24 rows is a few milliseconds either way. The distances are the honest signal: lower is closer, and the best match wins by a wide margin every time (0.21 vs 0.61 for the memory query, where the runner-up is a distant second). For normalized vectors, cosine similarity is simply <code>1 − distance</code>, so 0.207 distance is 0.793 similarity. On a corpus where documents overlap heavily, expect tighter margins — and that is a property of your documents, not of the index.</p>
+<p>The function choice in that query is deliberate, and it is the one result that surprised me. DuckDB's documentation pairs the <code>cosine</code> index metric with <code>array_cosine_similarity</code>, so my first version searched with <code>ORDER BY array_cosine_similarity(...) DESC</code>. The results were correct — 5/5 top-1 — but when I checked the query plan, the HNSW index was never used: the engine ran a sequential scan and sorted. Testing all four combinations showed why. The optimizer engages the index only when the query uses the <em>distance</em> function that matches the metric: <code>array_distance</code> for the default <code>l2sq</code> metric, <code>array_cosine_distance</code> for <code>cosine</code>, ordered ascending. <code>array_cosine_similarity</code> returns the right ranking but does not trigger the index scan. And the plan node is rendered as <code>Hnsw Index Scan</code> in DuckDB 2.0's EXPLAIN output, not <code>HNSW_INDEX_SCAN</code> as the older docs call it — check for the rendered name or you will conclude, wrongly, that your index is idle. With the distance function, <code>EXPLAIN</code> on the tutorial table shows <code>Hnsw Index Scan</code>, and a 5,000-row query returns in under 200 ms either way — the same query measured 39.3 ms as a full scan, so at this scale the index's value is correctness of the plan, not latency; it earns its keep at larger scales, where a full scan and sort stops being cheap. The lesson generalizes: with vector indexes, the function you query with is part of the contract, not a stylistic choice.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/img3.webp" alt="Bar chart of top-1 cosine distance for five test queries: 0.618, 0.492, 0.207, 0.365, 0.492"><figcaption>Measured top-1 cosine distance for the five test queries — lower is closer, and all five returned the expected document first. Chart: AI Frontier Post, from measured runs.</figcaption></figure>
+<h2 id="step-6-keyword-search-and-hybrid-ranking">Step 6 — Add keyword search and fuse the rankings<a class="anchor" href="#step-6-keyword-search-and-hybrid-ranking" aria-label="Link to section">#</a></h2>
+<p>Semantic search misses exact terms: it will not reliably find the one document that literally says "DuckDB" when a dozen others are vaguely about databases. Keyword search has the opposite failure — it misses synonyms and paraphrases. Production retrieval uses both, so build both. The <code>fts</code> extension adds BM25 keyword search, and reciprocal rank fusion (RRF) combines the two rankings without needing to compare scores that live on different scales.</p>
+<pre><code class="language-python">con.execute("INSTALL fts"); con.execute("LOAD fts")
+con.execute("PRAGMA create_fts_index('docs', 'id', 'text')")
+
+# BM25 alone: match_bm25 returns a score, or NULL for no match.
+print(con.execute("""
+    SELECT id, score FROM (
+        SELECT id, fts_main_docs.match_bm25(id, 'DuckDB vector search') AS score
+        FROM docs)
+    WHERE score IS NOT NULL ORDER BY score DESC LIMIT 3
+""").fetchall())</code></pre>
+<p>Measured: <code>[('vector-databases', 2.1715), ('embeddings', 1.987), ('duckdb-analytics', 1.2292)]</code>. Note the subquery: <code>match_bm25</code> has side effects, so its alias cannot be referenced in the same query's <code>WHERE</code> — wrap it and filter outside. Now fuse both signals with RRF, which scores each document by <code>1 / (60 + rank)</code> in each ranking and adds them:</p>
+<pre><code class="language-python">qv = model.encode(["search documents by meaning with DuckDB"],
+                   normalize_embeddings=True, show_progress_bar=False)[0]
+print(con.execute("""
+WITH fts AS (
+    SELECT id, row_number() OVER (ORDER BY score DESC) AS r
+    FROM (SELECT id, fts_main_docs.match_bm25(id, 'DuckDB vector search') AS score FROM docs)
+    WHERE score IS NOT NULL ORDER BY score DESC LIMIT 5
+),
+vec AS (
+    SELECT id, row_number() OVER (ORDER BY dist ASC) AS r
+    FROM (SELECT id, array_cosine_distance(embedding, ?::FLOAT[384]) AS dist FROM docs)
+    ORDER BY dist ASC LIMIT 5
+)
+SELECT d.id,
+    round(coalesce(1.0 / (60 + f.r), 0) + coalesce(1.0 / (60 + v.r), 0), 5) AS rrf
+FROM docs d
+LEFT JOIN fts f ON f.id = d.id
+LEFT JOIN vec v ON v.id = d.id
+WHERE f.id IS NOT NULL OR v.id IS NOT NULL
+ORDER BY rrf DESC LIMIT 3
+""", [qv.tolist()]).fetchall())</code></pre>
+<p>Measured: <code>[('duckdb-analytics', 0.03227), ('vector-databases', 0.03227), ('embeddings', 0.03175)]</code>. The fusion puts the DuckDB document first — it ranks in both lists — while pure vector search had ranked it lower. That is the whole point of hybrid search: a document that two independent signals agree on should beat a document that only one signal likes. Rebuild the FTS index after the table changes (it is a snapshot, not a live index); the HNSW index, by contrast, stays current on insert, update, and delete.</p>
+<h2 id="step-7-nearest-joins">Step 7 — NEAREST joins: top-k search as a join clause<a class="anchor" href="#step-7-nearest-joins" aria-label="Link to section">#</a></h2>
+<p>DuckDB 2.0 turns top-k similarity search into a join. Instead of running one query per question, you join a table of questions against a table of candidates and let the engine find the nearest rows for each. The syntax is <code>NEAREST k BY SIMILARITY expression</code> (higher is closer) or <code>NEAREST k BY DISTANCE expression</code> (lower is closer), with an optional <code>APPROX</code> prefix for approximate search on large inputs:</p>
+<pre><code class="language-python">con.execute("CREATE TABLE v1 (id INTEGER, vec FLOAT[3])")
+con.execute("INSERT INTO v1 VALUES (1, [1.0, 0.0, 0.0]), (2, [0.0, 1.0, 0.0]), (3, [0.0, 0.0, 1.0])")
+con.execute("CREATE TABLE v2 (id INTEGER, vec FLOAT[3])")
+con.execute("INSERT INTO v2 VALUES (10, [0.9, 0.1, 0.0]), (20, [0.0, 0.9, 0.1])")
+print(con.execute("""
+    SELECT a.id AS q, b.id AS hit,
+           array_cosine_similarity(a.vec, b.vec) AS sim
+    FROM v1 a
+    INNER JOIN v2 b NEAREST 1
+        BY SIMILARITY array_cosine_similarity(a.vec, b.vec)
+    ORDER BY q
+""").fetchall())</code></pre>
+<p>Measured: <code>[(1, 10, 0.9939), (2, 20, 0.9939), (3, 20, 0.1104)]</code>. The first two matches are near-identical vectors; the third is the honest remainder — vector <code>[0, 0, 1]</code> has almost nothing in common with either candidate, and 0.11 says so. That is the behavior you want from a nearest join: it returns the nearest row, not a good row. One practical tip from the DuckDB team's own write-ups: put filters in a subquery or CTE, not inside the <code>NEAREST</code> clause — adding conditions there has produced wrong nearest matches in their testing.</p>
+<h2 id="step-8-agent-mode">Step 8 — Agent mode: let your coding agent drive the CLI<a class="anchor" href="#step-8-agent-mode" aria-label="Link to section">#</a></h2>
+<p>Here is the feature that explains why this tutorial exists. Coding agents increasingly drive the DuckDB CLI on their users' behalf, and the 2.0 CLI detects when it is being run by an agent and switches to agent mode: compact Markdown tables instead of padded boxes, a clear note when results are truncated, early stops on runaway queries, and errors as JSON. Long-running queries report their expected cost first, so the agent can decide whether to wait. In DuckDB's own TPC-H experiments, agent mode cut the amount of output the model had to read by 59%. You can force it on for manual testing with the <code>-agent</code> flag, or off with <code>-no-agent</code>.</p>
+<p>Same query, two modes. Plain mode:</p>
+<pre><code class="language-text">┌───────┬─────────┐
+│   x   │    y    │
+│ int32 │ varchar │
+├───────┼─────────┤
+│    42 │ hello   │
+└───────┴─────────┘</code></pre>
+<p>Agent mode (<code>duckdb -agent -c "SELECT 42 AS x, 'hello' AS y"</code>):</p>
+<pre><code class="language-text">| x:INTEGER | y:VARCHAR |
+|---|---|
+| 42 | hello |</code></pre>
+<p>Errors become structured data instead of prose. <code>duckdb -agent -c "SELECT * FROM no_such_table"</code> exits with code 1 and prints:</p>
+<pre><code class="language-json">{"exception_type": "Catalog", "exception_message": "Table with name no_such_table does not exist!
+Did you mean \"pg_tables\"?", "error_subtype": "MISSING_ENTRY", "position": "14", "location": "[14,13]", "name": "no_such_table", "type": "Table"}</code></pre>
+<p>An agent can parse that, decide the table name was wrong, and retry — instead of reading a human-formatted error and guessing. If you are building agents that run SQL, agent mode is the difference between a tool your agent can use reliably and one it fights.</p>
+<h2 id="step-9-expose-it-as-an-mcp-server">Step 9 — Expose it to any agent as an MCP server<a class="anchor" href="#step-9-expose-it-as-an-mcp-server" aria-label="Link to section">#</a></h2>
+<p>The last step closes the loop: the database becomes a tool your coding agent can call by name. FastMCP turns two Python functions into an MCP server, and the guard in <code>run_sql</code> is the whole safety model — the agent may read, never write:</p>
+<pre><code class="language-python"># duckdb_mcp.py
+import duckdb
+from fastmcp import FastMCP
+from sentence_transformers import SentenceTransformer
+
+mcp = FastMCP("duckdb-docs")
+con = duckdb.connect("docs.duckdb", read_only=True)
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+@mcp.tool
+def semantic_search(query: str, k: int = 3) -> list[dict]:
+    """Search the documentation corpus by meaning. Returns the k closest docs."""
+    qv = model.encode([query], normalize_embeddings=True, show_progress_bar=False)[0]
+    rows = con.execute(
+        "SELECT id, array_cosine_distance(embedding, ?::FLOAT[384]) AS dist "
+        "FROM docs ORDER BY dist ASC LIMIT ?",
+        [qv.tolist(), k],
+    ).fetchall()
+    return [{"id": r[0], "similarity": round(1 - r[1], 4)} for r in rows]
+
+@mcp.tool
+def run_sql(sql: str) -> list[dict]:
+    """Run a read-only SQL query against the docs database. SELECT only."""
+    s = sql.strip().lower()
+    if not s.startswith("select") and not s.startswith("with"):
+        raise ValueError("Only SELECT/WITH queries are allowed")
+    cur = con.execute(sql)
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+if __name__ == "__main__":
+    mcp.run()</code></pre>
+<p>Verified end to end with FastMCP's in-process client: the server lists exactly two tools, <code>semantic_search</code> and <code>run_sql</code>. Calling <code>semantic_search</code> with "fine-tune a model on one GPU" returns <code>lora-fine-tuning</code> at 0.5084 similarity and <code>local-llms</code> at 0.4018 — the same ranking Step 5 measured. Calling <code>run_sql</code> with <code>SELECT count(*) AS n FROM docs</code> returns <code>[{"n": 24}]</code>. And calling it with <code>DROP TABLE docs</code> fails with <code>Only SELECT/WITH queries are allowed</code> — the guard holds.</p>
+<p>Point any MCP client at it — Claude Code, Codex, or a local agent harness — and the agent can now answer questions from your documents with SQL and semantic search instead of guessing. The read-only connection plus the <code>SELECT</code>-only guard means the worst a confused agent can do is a slow query, and agent mode's cost reporting from Step 8 is the backstop for that.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>DuckDB 2.0 now offers four ways to run the same database, and the right one depends on who queries it:</p>
+<div class="table-wrap"><table><thead><tr><th>Setup</th><th>Best for</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>In-memory</strong> (<code>duckdb.connect()</code>)</td><td>Scripts, notebooks, one-off analysis, tests</td><td>Everything vanishes when the process exits; HNSW indexes work here with no flags</td></tr><tr><td><strong>File</strong> (<code>duckdb.connect("docs.duckdb")</code>)</td><td>A personal agent's long-term memory, a local RAG store</td><td>HNSW persistence needs the experimental flag; back the file up like any database</td></tr><tr><td><strong>Quack server</strong> (<code>CALL quack_serve(token = '...')</code>, then <code>ATTACH 'quack:localhost'</code>)</td><td>Several processes sharing one database — an agent, a dashboard, and a notebook at once</td><td>Listens on localhost by default (port 9494 in testing); put it behind a TLS reverse proxy before exposing it, and never use the testing-only <code>allow_other_hostname</code> option in production. The server needs the <code>httpfs</code> extension loaded first, or <code>quack_serve</code> fails on a crypto-module error.</td></tr><tr><td><strong>MotherDuck (managed)</strong></td><td>Teams that want the same SQL without operating anything</td><td>It is a cloud service with cloud pricing; the local file stays free</td></tr></tbody></table></div>
+<p>And when should you <em>not</em> use DuckDB for vectors? At very large scale — tens of millions of embeddings with heavy concurrent writes — a dedicated vector database earns its keep with distributed indexes, replication, and filtering at query time. Below that, and especially below a few million vectors, the embedded option wins on simplicity: one file, one process, no service to monitor, and the same SQL engine answers both the "how many" questions and the "most similar" questions.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>DuckDB 2.0 is the first version that is honest about being an agent's database, not just an analyst's. The analytics were always there; what changed is everything around them — agent mode that speaks the CLI in a format models can parse, a server mode so several processes can share one file, triggers to keep derived tables fresh, VARIANT for the messy JSON agents actually produce, and NEAREST joins that turn similarity search into ordinary SQL. Build the layer in this tutorial once — a file, two extensions, two MCP tools — and every agent you run afterward queries the same facts instead of re-deriving them. That is the compounding part: the database gets more useful the longer your agents use it, and it costs nothing to keep running.</p>
+<h2 id="how-this-was-verified">How this was verified<a class="anchor" href="#how-this-was-verified" aria-label="Link to section">#</a></h2>
+<p>Every code block in this tutorial was run against DuckDB 2.0.0, sentence-transformers 6.3.0, FastMCP 4.2.3, and CPU-only torch 2.15.0 on a 2-core Linux VM with no GPU, and every number quoted is a measured result from those runs — including the 5/5 semantic-search score, the Quack round trip (a separate client process attached, created a table, and read back the row), and the 39.3 ms query over 5,000 vectors. Two things were verified differently, and you should know which: the remote Parquet read ran over HTTP against a local server in the sandbox, because the sandbox's authenticated egress proxy is one DuckDB's HTTP client cannot parse — the <code>https://</code> form in Step 2 is the documented pattern and the file, rows, and columns measured are the same; and the agent-mode output reduction and 2.0 release dates come from DuckDB's own announcement and documentation rather than a sandbox run. The HNSW index-scan behavior is reported exactly as measured — the <code>cosine</code> index engages only for <code>array_cosine_distance</code> queries, not for <code>array_cosine_similarity</code>, and the plan node renders as <code>Hnsw Index Scan</code>.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="duckdb-2-0-ai-engineers-local-analytics-tutorial"></div><div class="comments" data-comments="duckdb-2-0-ai-engineers-local-analytics-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/qmd-local-search-engine-tutorial/"><span class="chip">Tutorials</span><h3>QMD: turn your notes and docs into a local hybrid search engine your coding agent can query</h3><div class="meta">Marcus Doyle · November 19, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/llamaindex-local-rag-llamacpp-tutorial/"><span class="chip">Tutorials</span><h3>Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud</h3><div class="meta">Sofia Almeida · November 17, 2026 · 27 min read</div></a><a class="rel-card" href="/articles/lance-open-lakehouse-format-multimodal-ai-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Lance: the open lakehouse format built for AI data</h3><div class="meta">Marcus Doyle · November 16, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/sqlite-vec-semantic-search-tutorial/"><span class="chip">Tutorials</span><h3>Semantic search in a single SQLite file: build a local document search engine with sqlite-vec</h3><div class="meta">Marcus Doyle · November 10, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU or an API key for this?</h3><p>No. Everything in this tutorial runs on CPU with open-source packages and one 90 MB embedding model. The model loads in about 2.4 seconds warm on two CPU cores, and there is no cloud account, no key, and no cost anywhere in the pipeline.</p><h3>Why does my HNSW index not show up in EXPLAIN?</h3><p>Two common causes. First, the index only engages when the query uses the distance function matching the metric: array_distance for the default l2sq metric, array_cosine_distance for cosine. The similarity function returns the right ranking but runs a sequential scan. Second, on a database file the index needs SET hnsw_enable_experimental_persistence = true after LOAD vss. And check for the rendered node name Hnsw Index Scan, not HNSW_INDEX_SCAN.</p><h3>Can DuckDB replace a dedicated vector database?</h3><p>Below a few million vectors, usually yes: one file, one process, no service to run, and the same SQL engine answers both analytics and similarity questions. At tens of millions of embeddings with heavy concurrent writes, a dedicated vector database earns its keep with distributed indexes and replication.</p><h3>What happens to my DuckDB 1.x database files if I upgrade to 2.0?</h3><p>DuckDB 2.0 can still read and write your existing database files, and they remain readable by older versions. The reverse is not true: versions before 2.0 cannot read database files created by DuckDB 2.0. Test 2.0 on a shadow system before switching production over, and note that DuckDB 1.4 support ended on November 17, 2026.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/agent-evals-tutorial/">Testing agents: task-based evals for tool-using models</a></li><li><a href="/articles/claude-fable-5-2-api-hands-on-tutorial/">Claude Fable 5.2 hands-on: build a long-horizon coding agent with effort tracking</a></li><li><a href="/articles/instructor-structured-extraction-ollama-tutorial/">Stop parsing LLM JSON by hand: typed structured extraction with Instructor and Ollama</a></li><li><a href="/articles/openwebui-013-local-ai-workspace-tutorial/">Your own ChatGPT, with a computer attached: hands-on with Open WebUI 0.13</a></li><li><a href="/articles/letta-stateful-agent-memory-tutorial/">Build an agent that remembers you: hands-on with Letta’s Agent SDK</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
