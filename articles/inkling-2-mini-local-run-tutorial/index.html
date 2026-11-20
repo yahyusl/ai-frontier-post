@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run Thinking Machines’ Inkling 2 Mini on your laptop: the looped-transformer local setup — AI Frontier Post</title>
+<meta name="description" content="Thinking Machines’ Inkling 2 Mini is the first looped transformer you can run on your own hardware: 26.4B total parameters, 5.4B active, a 20GB footprint, and coding scores that beat Qwen3.8-27B. This tutorial gets it running three ways — Ollama on a Mac, llama.cpp on Linux, and vLLM on a GPU — then wires it into a sandboxed coding agent.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/inkling-2-mini-local-run-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run Thinking Machines’ Inkling 2 Mini on your laptop: the looped-transformer local setup">
+<meta property="og:description" content="Thinking Machines’ Inkling 2 Mini is the first looped transformer you can run on your own hardware: 26.4B total parameters, 5.4B active, a 20GB footprint, and coding scores that beat Qwen3.8-27B. This tutorial gets it running three ways — Ollama on a Mac, llama.cpp on Linux, and vLLM on a GPU — then wires it into a sandboxed coding agent.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/inkling-2-mini-local-run-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/inkling-2-mini-local-run-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-20">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run Thinking Machines’ Inkling 2 Mini on your laptop: the looped-transformer local setup", "description": "Thinking Machines’ Inkling 2 Mini is the first looped transformer you can run on your own hardware: 26.4B total parameters, 5.4B active, a 20GB footprint, and coding scores that beat Qwen3.8-27B. This tutorial gets it running three ways — Ollama on a Mac, llama.cpp on Linux, and vLLM on a GPU — then wires it into a sandboxed coding agent.", "datePublished": "2026-11-20", "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/inkling-2-mini-local-run-tutorial/"}, "image": "https://aifrontierpost.com/articles/inkling-2-mini-local-run-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Can I run Inkling 2 Mini on a 16GB laptop?", "acceptedAnswer": {"@type": "Answer", "text": "No — not the full model. The checkpoint is about 20GB and Thinking Machines recommends at least 32GB of unified memory on a Mac (32GB+ VRAM on a GPU). With 16GB, use the hosted Tinker API, or wait for smaller GGUF quantizations to appear."}}, {"@type": "Question", "name": "Does looping make the model slower?", "acceptedAnswer": {"@type": "Answer", "text": "Per token, yes — the middle layers run three times, so compute per token is higher than the 3.4B active-parameter count suggests (5.4B effective). But it reaches the answer in fewer reasoning tokens, so whole tasks often finish faster than with a comparable non-looped model."}}, {"@type": "Question", "name": "Can I fine-tune Inkling 2 Mini?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Thinking Machines supports post-training through Tinker (with the tinker-cookbook), and lists Miles and SkyRL for RL fine-tuning. The weights are Apache 2.0, so you can also fine-tune them with your own stack — but check the Model Acceptable Use Policy linked from the model card first."}}, {"@type": "Question", "name": "Why does my agent return empty replies with a small local model?", "acceptedAnswer": {"@type": "Answer", "text": "Thinking models spend part of every call’s token budget on reasoning. A 0.6B stand-in given 256 tokens spent the whole budget thinking and returned an empty reply with no tool call. Raise max_tokens, and use a capable model for tool calling — that is exactly what Inkling 2 Mini is built for."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run Thinking Machines’ Inkling 2 Mini on your laptop: the looped-transformer local setup</h1>
+<p class="lede">Thinking Machines’ Inkling 2 Mini is the first looped transformer that runs on your own hardware — 26.4 billion parameters, 5.4 billion active, a 20GB footprint, and coding scores ahead of Qwen3.8-27B. Here’s how to run it three ways and put it to work as a local coding agent.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 20, 2026 · 20 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Inkling 2 Mini is a 26.4B-parameter looped transformer released November 20: its middle 12 layers run three times per token, it fits in about 20GB, and it leads open-weights models under 100B parameters on agentic coding benchmarks. This tutorial runs it with Ollama on a Mac, llama.cpp on Linux or Windows, and vLLM on a GPU server, then builds a sandboxed coding agent on the local endpoint and shows how to control its reasoning effort.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>26.4B total / 3.4B active parameters</b> (5.4B effective with looping); 24 layers, the middle 12 run three times per token for 48 layer visits.</li><li><b>About a 20GB footprint</b> in native NVFP4 (last four layers MXFP8); needs 32GB+ unified memory on a Mac or 32GB+ VRAM on a GPU.</li><li><b>Vendor-reported coding scores:</b> 48.2% on DeepSWE v1.1, 79.2% on SWE-bench Verified, 82.7% on MCP Atlas — ahead of Qwen3.8-27B on DeepSWE.</li><li><b>Reasoning effort is a 0.0–0.99 dial</b> (none to max, default high 0.9); set it per runtime via Ollama’s think parameter, the chat-completions body, or the Transformers chat template.</li><li><b>Apache 2.0 license;</b> text and image inputs, up to 1M tokens of context. The model card warns it can take destructive actions without confirmation — run agents sandboxed, with turn and token caps.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/inkling-2-mini-local-run-tutorial/cover.webp" alt="A laptop on a desk at dusk, its screen glowing with a diagram of neural-network layers looping back on themselves"><figcaption>AI-generated illustration.</figcaption></figure>
+<div class="article-body"><p>Thinking Machines Lab released Inkling 2 Mini today, November 20, 2026, and it is the first looped transformer you can run on your own hardware. It is a mixture-of-experts model with 26.4 billion total parameters, only 3.4 billion of them active for any given token, a memory footprint of about 20GB, and an Apache 2.0 license. It takes text and image inputs, offers a context window of up to one million tokens, and is built for exactly the work people run locally: agentic coding, tool use, and long-horizon tasks.</p>
+<p>The headline numbers are what make it worth an evening of setup. On DeepSWE v1.1, an agentic coding benchmark, Inkling 2 Mini resolves 48.2% of tasks — ahead of every other open-weights model under 100 billion parameters, including Qwen3.8-27B at 42.2%. On SWE-bench Verified it scores 79.2%, on the hard 51-task SWE-bench Pro v2 it scores 77.9%, and on MCP Atlas, a tool-use benchmark, it scores 82.7%. These are the vendor's own reported figures, measured with mini-swe-agent v2.4.6 and the harnesses named in the model card, and evaluation setups vary between models — but the direction is consistent across 32 of the 48 benchmarks the lab reports.</p>
+<p>The reason for the scores is the architecture, not the parameter count. Twelve of the model's 24 layers run three times for every token, reusing the same weights. The model does more reasoning per token without writing more reasoning tokens down — which is why it is strong on long agentic traces and weak, relatively, on closed-book factual recall. This tutorial gets it running three ways — Ollama on a Mac, llama.cpp on Linux or Windows, and vLLM on a GPU server — then wires the local endpoint into a small sandboxed coding agent, and shows how to dial its reasoning effort up and down.</p>
+<h2 id="what-you-ll-need">What you&#x27;ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<p>One of the following machines. The 20GB footprint is the hard floor; the 32GB figures are what the runtimes need once context and overhead are included.</p>
+<div class="table-wrap"><table><thead><tr><th>Machine</th><th>What runs</th><th>Runtime in this tutorial</th></tr></thead><tbody><tr><td><strong>Mac with 32GB+ unified memory</strong> (MacBook, Mac mini, Studio)</td><td>The full model, offline</td><td>Ollama (Step 3) or MLX</td></tr><tr><td><strong>Linux or Windows PC</strong> with 32GB+ RAM</td><td>The GGUF quantizations</td><td>llama.cpp (Step 4)</td></tr><tr><td><strong>GPU server, 32GB+ VRAM</strong> (or a DGX Spark)</td><td>The native NVFP4 checkpoint</td><td>vLLM or SGLang (Step 6)</td></tr><tr><td><strong>No suitable hardware</strong></td><td>Nothing local — use the hosted API</td><td>Tinker (see Step 2)</td></tr></tbody></table></div>
+<p>Software, per path: Ollama (the preview build on Mac at launch), llama.cpp build b12599 or later, or Docker with the NVIDIA container runtime for vLLM. Python 3.10+ and <code>pytest</code> for the agent in Step 5 — nothing else. No account is needed for any local path. The hosted Tinker path needs a Thinking Machines account and an API key, and is billed: Thinking Machines' first-party pricing is $0.15 per million input tokens, $0.50 per million output tokens, and $0.015 per million cached input tokens, as reported by Artificial Analysis.</p>
+<h2 id="how-the-looping-works">How the looping works<a class="anchor" href="#how-the-looping-works" aria-label="Link to section">#</a></h2>
+<p>A standard transformer runs each token through its layers once, top to bottom. Inkling 2 Mini splits its 24 layers into four blocks of six. The first block (the prelude, layers 0–5) and the last block (the coda, layers 18–23) each run once. The two middle blocks (layers 6–17) run three times, with the same weights on every pass. That is 6 + 3 × 12 + 6 = 48 layer visits per token, from 24 stored layers.</p>
+<p>Every pass starts from the prelude's output — later passes do not simply continue where the previous pass ended. Instead, each layer in passes two and three reads a <em>message</em> from the previous pass's outputs, merged in through a learned gate that starts out blocking the message entirely and opens up during training. Each pass also keeps its own KV cache and convolution state, so the passes do not overwrite each other's memory of earlier tokens.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/inkling-2-mini-local-run-tutorial/img2.webp" alt="Diagram of Inkling 2 Mini's looped architecture: a six-layer prelude runs once, the twelve-layer core runs three times with shared weights, and a six-layer coda runs once, for 48 layer visits per token"><figcaption>Thinking Machines Lab, “Introducing Inkling 2 Mini” (November 20, 2026) — diagram by AI Frontier Post.</figcaption></figure>
+<p>Two consequences matter in practice. First, looping buys reasoning without parameters: the model behaves like a larger model on multi-step work (the lab's no-chain-of-thought time horizon for the variable-loop research variant rises from 16 seconds at one pass to 37 seconds at three), but its stored knowledge does not grow — knowledge is mostly a function of total parameter count, and on factual benchmarks such as AA-Omniscience it scores in line with other models of its size. Second, looping compresses the chain of thought: the same correct answer takes fewer reasoning tokens at five passes than at one (1,661 vs. 3,703 tokens on average in the lab's GPQA Diamond comparison), while staying legible. The model does more of its thinking inside the loop, where a reader cannot see it — which is why Thinking Machines released the variable-loop research checkpoint alongside it, so researchers can study exactly that trade-off.</p>
+<h2 id="step-1-check-whether-your-machine-can-run-it">Step 1: Check whether your machine can run it<a class="anchor" href="#step-1-check-whether-your-machine-can-run-it" aria-label="Link to section">#</a></h2>
+<p>Before downloading 20GB of weights, confirm the machine clears the bar. On a Mac:</p>
+<pre><code class="language-bash">sysctl hw.memsize
+# divide by 1,073,741,824 for GB — you want 32 or more
+system_profiler SPHardwareDataType | grep Memory</code></pre>
+<p>On Linux:</p>
+<pre><code class="language-bash">free -h
+nvidia-smi --query-gpu=name,memory.total --format=csv  # if you have a GPU</code></pre>
+<p>On Windows (PowerShell):</p>
+<pre><code class="language-powershell">Get-CimInstance Win32_ComputerSystem | Select-Object TotalPhysicalMemory
+nvidia-smi --query-gpu=name,memory.total --format=csv  # if you have a GPU</code></pre>
+<p>What the numbers mean: the checkpoint itself is about 20GB, and the runtime needs headroom for the context window and the per-pass caches — 48 KV caches instead of 24. Thinking Machines recommends at least 32GB of unified memory on a Mac, and 32GB or more of VRAM on other GPUs. With 16GB, do not try the local path; use Tinker or another hosted endpoint instead. With exactly 32GB, keep the context modest at first (see Step 7) and close other heavy applications before the first load.</p>
+<h2 id="step-2-pick-your-runtime">Step 2: Pick your runtime<a class="anchor" href="#step-2-pick-your-runtime" aria-label="Link to section">#</a></h2>
+<p>There is no single right way to run this model — the right runtime depends on the machine you have and what you want to do with it.</p>
+<div class="table-wrap"><table><thead><tr><th>Runtime</th><th>Best for</th><th>Hardware</th><th>What you give up</th></tr></thead><tbody><tr><td><strong>Ollama</strong></td><td>Fastest start on a Mac; chat and coding agents</td><td>Mac, 32GB+ unified memory</td><td>Mac-only at launch; preview build required</td></tr><tr><td><strong>llama.cpp (GGUF)</strong></td><td>Linux/Windows, CPU or single GPU, full control</td><td>32GB+ RAM</td><td>Quantized weights (IQ4_NL or Q8_0), not the native NVFP4</td></tr><tr><td><strong>vLLM</strong></td><td>Serving a team, long contexts, max throughput</td><td>NVIDIA Blackwell/Hopper or DGX Spark</td><td>Needs a GPU server and Docker</td></tr><tr><td><strong>SGLang</strong></td><td>GPU serving with speculative decoding</td><td>NVIDIA SM103 (Blackwell) and up</td><td>More setup than vLLM for a single user</td></tr><tr><td><strong>Tinker</strong></td><td>No hardware; hosted inference and fine-tuning</td><td>None (account + API key)</td><td>Metered; prompts leave your machine</td></tr><tr><td><strong>MLX</strong></td><td>Mac power users who want the native checkpoint in Python</td><td>Apple silicon</td><td>Mac-only; command-line workflow</td></tr></tbody></table></div>
+<p>The rest of this tutorial walks the first three rows in order. If you only want one path, read Step 3 for a Mac, Step 4 for Linux or Windows, and Step 6 for a GPU server — then rejoin at Step 5, which works against any of them, because all three expose an OpenAI-compatible HTTP endpoint.</p>
+<h2 id="step-3-run-it-with-ollama-on-a-mac">Step 3: Run it with Ollama on a Mac<a class="anchor" href="#step-3-run-it-with-ollama-on-a-mac" aria-label="Link to section">#</a></h2>
+<p>Ollama is the shortest path on a Mac, and at launch it is the path Thinking Machines supports first. One detail matters: Inkling 2 Mini needs Ollama's preview build, not the stable release. Download and open it:</p>
+<pre><code class="language-bash">curl -fsSL 'https://ollama.com/download/Ollama.dmg?channel=preview' -o Ollama.dmg
+open Ollama.dmg</code></pre>
+<p>Then pull the model and start chatting. The first pull downloads roughly 20GB, so do it on a stable connection:</p>
+<pre><code class="language-bash">ollama run inkling-2-mini</code></pre>
+<p>That command downloads the model if it is not already local, loads it, and drops you into a chat prompt. Try a task that exercises the model's strengths — a small coding job with a verifiable answer, not a trivia question:</p>
+<pre><code class="language-bash">&gt;&gt;&gt; Write a Python function that parses a CSV of expenses and returns
+... the total per category. Include a test.</code></pre>
+<p>Check what you have, and how much memory it is using:</p>
+<pre><code class="language-bash">ollama list
+ollama ps</code></pre>
+<p>For scripts and agents, use the HTTP API that Ollama serves on port 11434. The native chat endpoint takes a <code>think</code> parameter — a boolean, or a level (<code>"low"</code>, <code>"medium"</code>, <code>"high"</code>, <code>"max"</code>) — which controls whether the model reasons before answering:</p>
+<pre><code class="language-bash">curl http://localhost:11434/api/chat -d '{
+  "model": "inkling-2-mini",
+  "messages": [{"role": "user", "content": "What is 17 times 24?"}],
+  "think": "low",
+  "stream": false
+}'</code></pre>
+<p>The OpenAI-compatible endpoint works the same way, which is what Step 5 uses:</p>
+<pre><code class="language-bash">curl http://localhost:11434/v1/chat/completions -H "Content-Type: application/json" -d '{
+  "model": "inkling-2-mini",
+  "messages": [{"role": "user", "content": "What is 17 times 24?"}]
+}'</code></pre>
+<p>Two settings worth knowing. First, context: Ollama's default context window is far smaller than the model's 1M-token maximum. For long documents, raise it with the <code>num_ctx</code> option (<code>"options": {"num_ctx": 131072}</code> in the API call), and remember that a bigger context costs memory — the reason the model card recommends 32GB as a floor. Second, <code>keep_alive</code> controls how long the model stays loaded after a request (default five minutes); set <code>"keep_alive": "30m"</code> when an agent will call it repeatedly, so every turn does not pay a reload.</p>
+<h2 id="step-4-run-it-with-llama-cpp-on-linux-or-windows">Step 4: Run it with llama.cpp on Linux or Windows<a class="anchor" href="#step-4-run-it-with-llama-cpp-on-linux-or-windows" aria-label="Link to section">#</a></h2>
+<p>If you are not on a Mac, llama.cpp is the route. It serves the GGUF quantizations — 4-bit (<code>IQ4_NL</code>) and 8-bit (<code>Q8_0</code>) — published for this release. You need a build with Inkling 2 support: that landed in llama.cpp release b12406 (November 15, 2026), and the current build at time of writing is b12599. Grab the binary bundle for your platform from the llama.cpp releases page and confirm the version:</p>
+<pre><code class="language-bash">./llama version
+# version: 1.0.0-dev (build 12599, ...)</code></pre>
+<p>Then serve the model. The <code>-hf</code> flag downloads the weights straight from Hugging Face — no separate download step:</p>
+<pre><code class="language-bash">llama serve -hf ggml-org/Inkling-2-Mini-GGUF:IQ4_NL</code></pre>
+<p>For the 8-bit weights, change the suffix to <code>:Q8_0</code>. Two things to know about that flag, both verified against the b12599 build: the default quant is <code>Q4_K_M</code> when you omit it, and not every repository publishes that quant — specifying the quant explicitly, as above, avoids a failed load. The server listens on port 8080 and exposes the same OpenAI-compatible API shape as Ollama:</p>
+<pre><code class="language-bash">curl http://127.0.0.1:8080/v1/models
+curl http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d '{
+  "model": "ggml-org/Inkling-2-Mini-GGUF:IQ4_NL",
+  "messages": [{"role": "user", "content": "What is 17 times 24?"}],
+  "max_tokens": 512
+}'</code></pre>
+<p>The same server also serves a chat UI at <code>http://127.0.0.1:8080</code> in a browser. If you want a vision test, the model takes image inputs — the model card recommends each image dimension be between 40px and 4096px — and the server's <code>/v1/chat/completions</code> endpoint accepts <code>image_url</code> parts, the same shape as the vLLM client in Step 6.</p>
+<p>A note on expectations: on a CPU-only machine this is slow. A 0.6B stand-in model served the same way managed about 11 tokens per second on a 4-core virtual machine in our verification, and a 26B model will be slower still. llama.cpp is the right choice for a machine with a good GPU or a lot of patience — for interactive coding work on a laptop, the Mac/Ollama path in Step 3 is the faster one.</p>
+<h2 id="step-5-build-a-sandboxed-coding-agent-on-the-local-endpoint">Step 5: Build a sandboxed coding agent on the local endpoint<a class="anchor" href="#step-5-build-a-sandboxed-coding-agent-on-the-local-endpoint" aria-label="Link to section">#</a></h2>
+<p>A model that scores 82.7% on MCP Atlas and 48.2% on DeepSWE is a tool-use model, so the interesting test is not chatting with it — it is letting it call tools. The script below is a minimal coding agent that runs against any OpenAI-compatible local endpoint: Ollama on port 11434, llama.cpp on port 8080, or vLLM on port 8000. It has three tools (<code>write_file</code>, <code>read_file</code>, <code>run_tests</code>), three guardrails, and no dependencies beyond the standard library.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/inkling-2-mini-local-run-tutorial/img3.webp" alt="Bar chart of DeepSWE v1.1 scores: Inkling 2 Mini 48.2 percent, Qwen3.8-27B 42.2 percent, Nemotron 3.5 Super VL 24.7 percent, Muse Glimmer 4.4 percent, Gemma 4 31B 0.3 percent"><figcaption>Vendor-reported DeepSWE v1.1 scores (mini-swe-agent v2.4.6) from the Inkling 2 Mini model card — chart by AI Frontier Post.</figcaption></figure>
+<p>The guardrails are not optional decoration. The model card warns that Inkling 2 Mini can take destructive actions, such as deleting or overwriting files, without confirmation, and may not report the outcome of its work accurately; it also sometimes gets stuck in long reasoning loops when debugging. So the agent confines every file write to one sandbox directory, allows exactly one shell command (<code>python -m pytest</code>), and caps both the number of turns and the tokens per call:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""Minimal sandboxed coding agent against an OpenAI-compatible local endpoint.
+
+Task: write calc.py (add/subtract/multiply) plus a pytest file, run the tests,
+fix failures. Guards: files may only live inside WORKDIR; the only shell
+command the agent can run is `python -m pytest`; at most MAX_TURNS turns;
+each model call is capped at MAX_TOKENS output tokens.
+
+Stdlib only. Point it at any OpenAI-compatible server:
+  OLLAMA_URL=http://localhost:11434/v1 OLLAMA_MODEL=inkling-2-mini python3 agent.py
+"""
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+
+BASE_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/v1")
+MODEL = os.environ.get("OLLAMA_MODEL", "inkling-2-mini")
+WORKDIR = os.environ.get("AGENT_WORKDIR", os.path.join(os.path.dirname(__file__), "sandbox"))
+MAX_TURNS = int(os.environ.get("MAX_TURNS", "8"))
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "1024"))
+
+SYSTEM = (
+    "You are a careful coding agent working inside a sandbox directory. "
+    "Use the tools to write calc.py with add(a, b), subtract(a, b) and "
+    "multiply(a, b), write test_calc.py with pytest tests for all three, "
+    "run the tests, and fix any failures. Do not create files outside the "
+    "sandbox. When the tests pass, reply with a short summary and stop."
+)
+
+TOOLS = [
+    {"type": "function", "function": {
+        "name": "write_file",
+        "description": "Write content to a file inside the sandbox.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Relative path, e.g. calc.py"},
+            "content": {"type": "string"}},
+            "required": ["path", "content"]}}},
+    {"type": "function", "function": {
+        "name": "read_file",
+        "description": "Read a file inside the sandbox.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"}},
+            "required": ["path"]}}},
+    {"type": "function", "function": {
+        "name": "run_tests",
+        "description": "Run `python -m pytest -q` in the sandbox and return the output.",
+        "parameters": {"type": "object", "properties": {}}}},
+]
+
+
+def _safe_path(rel):
+    full = os.path.realpath(os.path.join(WORKDIR, rel))
+    if os.path.commonpath([full, os.path.realpath(WORKDIR)]) != os.path.realpath(WORKDIR):
+        raise ValueError(f"path escapes sandbox: {rel}")
+    return full
+
+
+def run_tool(name, args):
+    if name == "write_file":
+        p = _safe_path(args["path"])
+        os.makedirs(os.path.dirname(p) or WORKDIR, exist_ok=True)
+        with open(p, "w") as f:
+            f.write(args["content"])
+        return f"wrote {args['path']} ({len(args['content'])} bytes)"
+    if name == "read_file":
+        with open(_safe_path(args["path"])) as f:
+            return f.read()
+    if name == "run_tests":
+        r = subprocess.run([sys.executable, "-m", "pytest", "-q"],
+                           cwd=WORKDIR, capture_output=True, text=True, timeout=120)
+        return (r.stdout + r.stderr)[-2000:]
+    raise ValueError(f"unknown tool {name}")
+
+
+def chat(messages):
+    body = json.dumps({"model": MODEL, "messages": messages, "tools": TOOLS,
+                       "max_tokens": MAX_TOKENS}).encode()
+    req = urllib.request.Request(BASE_URL + "/chat/completions", data=body,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as resp:
+        return json.load(resp)
+
+
+def main():
+    os.makedirs(WORKDIR, exist_ok=True)
+    messages = [{"role": "system", "content": SYSTEM},
+                {"role": "user", "content": "Build calc.py and its tests, then make the tests pass."}]
+    for turn in range(1, MAX_TURNS + 1):
+        data = chat(messages)
+        msg = data["choices"][0]["message"]
+        print(f"--- turn {turn} ---")
+        print("assistant:", (msg.get("content") or "")[:300])
+        calls = msg.get("tool_calls") or []
+        if not calls:
+            print("no tool calls; done.")
+            break
+        messages.append(msg)
+        for call in calls:
+            fn = call["function"]["name"]
+            args = json.loads(call["function"]["arguments"] or "{}")
+            print(f"tool: {fn} {args if fn != 'write_file' else args['path']}")
+            try:
+                result = run_tool(fn, args)
+            except Exception as e:  # noqa: BLE001 - surface tool errors to the model
+                result = f"ERROR: {e}"
+            print("result:", result[:300])
+            messages.append({"role": "tool", "tool_call_id": call["id"],
+                             "content": result})
+    else:
+        print(f"stopped: hit MAX_TURNS={MAX_TURNS}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<p>Run it against the Ollama endpoint from Step 3, or point it at llama.cpp on port 8080:</p>
+<pre><code class="language-bash">OLLAMA_URL=http://localhost:11434/v1 OLLAMA_MODEL=inkling-2-mini python3 agent.py
+# llama.cpp instead:
+OLLAMA_URL=http://127.0.0.1:8080/v1 OLLAMA_MODEL="ggml-org/Inkling-2-Mini-GGUF:IQ4_NL" python3 agent.py</code></pre>
+<p>What to expect: the agent writes <code>calc.py</code>, writes <code>test_calc.py</code>, runs pytest, fixes any failure, and stops with a summary. In verification, the loop ran end to end against a scripted mock of the endpoint — four turns, ending with <code>3 passed</code> — which proves the client, the tool schemas, and the sandbox. Against a real 0.6B stand-in model served locally, the same script got an empty reply with no tool calls: the loop works, the tiny model does not. Two practical notes follow from that. First, keep <code>MAX_TOKENS</code> generous: thinking models spend part of every call's budget on reasoning, and the stand-in given 256 tokens spent the whole budget thinking. Second, the model card's warning about destructive actions is real — this script's sandbox is the whole safety story, so do not widen the toolset (no shell, no network, no paths outside the sandbox) until you have watched the agent behave on harmless tasks.</p>
+<h2 id="step-6-serve-it-on-a-gpu-with-vllm">Step 6: Serve it on a GPU with vLLM<a class="anchor" href="#step-6-serve-it-on-a-gpu-with-vllm" aria-label="Link to section">#</a></h2>
+<p>For a GPU server — a team sharing one model, or a long-context workload — vLLM is the supported path, with day-zero support for Inkling 2 Mini on NVIDIA Blackwell, Hopper, and DGX Spark hardware. Support is not in a vLLM release yet, so use the dedicated image, <code>vllm/vllm-openai:inkling-2-mini</code>:</p>
+<pre><code class="language-bash">docker run --gpus all --ipc=host -p 8000:8000 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  vllm/vllm-openai:inkling-2-mini thinkingmachines/Inkling-2-Mini \
+  --reasoning-parser inkling --tool-call-parser inkling --enable-auto-tool-choice \
+  --speculative-config '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'</code></pre>
+<p>What the flags do: <code>--reasoning-parser inkling</code> and <code>--tool-call-parser inkling</code> teach the server the model's own reasoning and tool-call format; <code>--enable-auto-tool-choice</code> lets the model decide when to call a tool; the speculative config enables the DSpark draft model bundled in the checkpoint, which proposes tokens for the target model to verify. The draft reads hidden states from inside the loop itself, so it stays aligned with the looped computation.</p>
+<p>The client is the standard OpenAI SDK against port 8000. This snippet is from vLLM's own recipe, including an image input:</p>
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI(api_key="not-needed", base_url="http://localhost:8000/v1")
+response = client.chat.completions.create(
+    model="thinkingmachines/Inkling-2-Mini",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Describe this image."},
+            {"type": "image_url", "image_url": {"url": "https://example.com/photo.jpg"}},
+        ],
+    }],
+)
+print(response.choices[0].message.content)</code></pre>
+<p>Context limits depend on the GPU. On one GB200 the recipe serves the full 1,048,576-token context; on H100 and DGX Spark it caps context at 262,144 tokens to fit in memory. The same cap applies to concurrent long sessions: with 32K, 64K, and 128K-token sessions, roughly 45, 32, and 20 sessions run at 100 tokens per second per user on one GPU. If you are experimenting with the loop itself rather than serving the fixed model, the variable-loop research checkpoint takes the same command with <code>thinkingmachines/TML-d24-varloop-research</code> and an <code>--hf-overrides</code> flag that sets <code>loop_num_passes</code> (fewer passes run faster; more passes score higher) — vLLM's own measurements show a single-token decode step on one GB200 rising from 1.51ms at one pass to 3.85ms at three.</p>
+<p>SGLang is the equivalent server path, with day-zero support and a slightly different command shape. It needs SM103 hardware, and the model path, served name, and backends are explicit:</p>
+<pre><code class="language-bash">export MODEL="thinkingmachines/Inkling-2-Mini"
+python -m sglang.launch_server \
+  --model-path $MODEL \
+  --served-model-name inkling \
+  --attention-backend fa4 --bf16-gemm-backend torch --dtype bfloat16 \
+  --tp 1 --page-size 128 --grammar-backend xgrammar \
+  --host 0.0.0.0 --port 30000</code></pre>
+<p>Check it with <code>curl -s localhost:30000/health_generate</code>, then call it like any OpenAI-compatible endpoint — with the served name <code>inkling</code> as the model, and <code>"reasoning_effort": "low"</code> in the request body when you want a quick answer.</p>
+<h2 id="step-7-dial-the-reasoning-effort-up-and-down">Step 7: Dial the reasoning effort up and down<a class="anchor" href="#step-7-dial-the-reasoning-effort-up-and-down" aria-label="Link to section">#</a></h2>
+<p>Every Inkling model shares one reasoning-effort interface, and it is the most useful knob on this model. Effort is a number from 0.0 to 0.99, with named levels:</p>
+<div class="table-wrap"><table><thead><tr><th>Level</th><th>Value</th><th>Use it for</th></tr></thead><tbody><tr><td><code>none</code></td><td>0.0</td><td>Direct answers; but note the minimum does not fully disable reasoning — the middle layers still loop three times</td></tr><tr><td><code>minimal</code></td><td>0.1</td><td>Trivia, formatting, quick lookups</td></tr><tr><td><code>low</code></td><td>0.2</td><td>Short coding questions, single-file edits</td></tr><tr><td><code>medium</code></td><td>0.7</td><td>Everyday coding and research</td></tr><tr><td><code>high</code></td><td>0.9 (default)</td><td>Hard debugging, multi-file refactors</td></tr><tr><td><code>xhigh</code> / <code>max</code></td><td>0.99</td><td>The longest agentic traces; slowest, most expensive per token</td></tr></tbody></table></div>
+<p>Where you set it depends on the runtime. In Hugging Face Transformers, pass it to the chat template — <code>processor.apply_chat_template(messages, reasoning_effort="medium", ...)</code> — and the template adds the numeric value to the prompt as a system message. The same call also drives tool calling: pass <code>tools=[your_function]</code> and the model returns parsed tool calls via <code>processor.parse_response</code>. With SGLang or vLLM, put <code>"reasoning_effort": "low"</code> in the chat-completions JSON body. With Ollama, use the <code>think</code> parameter from Step 3 (<code>"low"</code>, <code>"medium"</code>, <code>"high"</code>, or <code>"max"</code>).</p>
+<p>The practical rule: start at <code>medium</code> for coding work and drop to <code>low</code> when the answers are good but slow. Do not expect effort to fix factual gaps — the lab's own measurements show closed-book factual QA barely moves with more passes, while multi-hop reasoning and long-context retrieval improve. And keep the monitorability caveat in mind: higher effort means shorter, denser reasoning traces, not necessarily more transparent ones.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>If you have a 32GB+ Mac and want to code tonight, use Ollama — it is the only path Thinking Machines supports at launch, and the preview build is a two-command install. If you are on Linux or Windows, use llama.cpp with the IQ4_NL quant and accept the speed trade-off, or the Q8_0 quant if you have the disk space and RAM to spare. If you are serving a team or feeding the model hundred-thousand-token contexts, use vLLM on a GPU server, where the full 1M context is real and the DSpark draft makes it fast. If you have no suitable hardware at all, use Tinker: the same model, metered, with fine-tuning available when you outgrow prompting. And if you are a researcher, skip the fixed model and run the variable-loop checkpoint — it is the only artifact that lets you change the number of passes and watch the reasoning compress.</p>
+<p>One thing none of these paths change: this is a small model that punches above its size on agentic work and stays a small model on factual recall. Pair it with search and tools — the benchmarks where it leads, BrowseComp (79.0%) and DeepSearchQA (85.3%), are the ones where it can look things up — and do not ask it to recite facts from memory.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Inkling 2 Mini is the most capable open-weights model you can actually run on a laptop today: 26.4 billion parameters, 5.4 billion active per token once looping is counted, a 20GB footprint, and coding scores ahead of Qwen3.8-27B. The loop is the whole idea — twelve layers, three passes, forty-eight visits per token — and it is what makes the model good at the multi-step work local agents do, while leaving its factual knowledge at the level of any model its size.</p>
+<p>To run it: check for 32GB of memory, pick the runtime that matches your machine, and start with Ollama on a Mac or llama.cpp elsewhere. Keep the agent sandboxed, cap its turns and tokens, and let the model call tools — that is where it earns its keep. Then tune the reasoning effort to the task, and remember that the cheapest way to make this model smarter is to give it tools and a search box, not a longer thinking budget.</p>
+<p>How this was verified: the Ollama, vLLM, SGLang, and Tinker commands in this tutorial are quoted from the official Ollama library page, vLLM's recipe and launch blog, Hugging Face's release post, and Thinking Machines' cookbook, all read on November 20, 2026. The <code>llama serve -hf</code> form was confirmed against llama.cpp build b12599, whose <code>--help</code> lists the <code>-hf</code> flag. The agent script ran end to end against a scripted mock of the OpenAI-compatible endpoint (four turns, three tests passing) and against a real local llama.cpp server running a 0.6B stand-in model, which returned an empty reply and no tool calls. The 20GB model itself was not run on the author's machine — it needs a 32GB Mac — so the Inkling-specific behavior in this tutorial is documented from the official sources, not from a local run of the weights.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://thinkingmachines.ai/news/inkling-2-mini/" rel="nofollow">Thinking Machines Lab — Introducing Inkling 2 Mini</a> — the announcement: architecture, benchmarks, limitations, and the Mac/Ollama launch support.</li><li><a href="https://huggingface.co/thinkingmachines/Inkling-2-Mini" rel="nofollow">Thinking Machines Lab — Inkling-2-Mini model card (Hugging Face)</a> — parameters, hardware requirements, supported frameworks, and the safety and limitations section.</li><li><a href="https://huggingface.co/blog/inkling2mini" rel="nofollow">Hugging Face — Welcome Inkling 2 Mini, Cutting-edge Performance for your Local Setup</a> — the Transformers, llama.cpp, SGLang, and MLX quickstarts, reasoning-effort levels, and tool-calling example.</li><li><a href="https://ollama.com/library/inkling-2-mini" rel="nofollow">Ollama — inkling-2-mini</a> — the model listing, the <code>ollama run inkling-2-mini</code> command, and the preview-build install.</li><li><a href="https://github.com/ollama/ollama/blob/main/docs/api.md" rel="nofollow">Ollama — API documentation</a> — the <code>think</code> parameter and the <code>num_ctx</code> / <code>keep_alive</code> options.</li><li><a href="https://recipes.vllm.ai/thinkingmachines/Inkling-2-Mini" rel="nofollow">vLLM — Inkling-2-Mini recipe</a> — the Docker image, context caps per GPU, and the OpenAI client example.</li><li><a href="https://vllm.ai/blog/2026-11-20-inkling2-mini" rel="nofollow">vLLM — Inkling 2 Mini on vLLM: Day-0 Support for a Looped Model</a> — the full Docker serve command, the variable-loop variant, and per-pass decode timings.</li><li><a href="https://github.com/thinking-machines-lab/tinker-cookbook" rel="nofollow">Thinking Machines Lab — Tinker Cookbook (GitHub)</a> — Tinker signup, API key setup, and the <code>thinkingmachines/Inkling-2-Mini</code> model name.</li><li><a href="https://artificialanalysis.ai/articles/inkling-2-mini" rel="nofollow">Artificial Analysis — Thinking Machines has released Inkling 2 Mini</a> — the independent Intelligence Index score (20) and Tinker's first-party pricing.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="inkling-2-mini-local-run-tutorial"></div><div class="comments" data-comments="inkling-2-mini-local-run-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/localai-v5-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>LocalAI 5.0 hands-on: your own ChatGPT-style server with projects, files, and a Python sandbox</h3><div class="meta">November 20, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/hermes-agent-self-improving-tutorial/"><span class="chip">Tutorials</span><h3>Hermes Agent hands-on: install the self-improving agent that remembers you and runs your schedule</h3><div class="meta">November 20, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/tamserve-live-object-tracking-tutorial/"><span class="chip">Tutorials</span><h3>Track anything on live video with tamserve: hands-on with the SAM 2 serving engine</h3><div class="meta">November 20, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/instagram-agent-skill-claude-reels-tutorial/"><span class="chip">Tutorials</span><h3>Run an Instagram account with Claude Code: hands-on with instagram-agent-skill</h3><div class="meta">November 20, 2026 · 25 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Can I run Inkling 2 Mini on a 16GB laptop?</h3><p>No — not the full model. The checkpoint is about 20GB and Thinking Machines recommends at least 32GB of unified memory on a Mac (32GB+ VRAM on a GPU). With 16GB, use the hosted Tinker API, or wait for smaller GGUF quantizations to appear.</p><h3>Does looping make the model slower?</h3><p>Per token, yes — the middle layers run three times, so compute per token is higher than the 3.4B active-parameter count suggests (5.4B effective). But it reaches the answer in fewer reasoning tokens, so whole tasks often finish faster than with a comparable non-looped model.</p><h3>Can I fine-tune Inkling 2 Mini?</h3><p>Yes. Thinking Machines supports post-training through Tinker (with the tinker-cookbook), and lists Miles and SkyRL for RL fine-tuning. The weights are Apache 2.0, so you can also fine-tune them with your own stack — but check the Model Acceptable Use Policy linked from the model card first.</p><h3>Why does my agent return empty replies with a small local model?</h3><p>Thinking models spend part of every call’s token budget on reasoning. A 0.6B stand-in given 256 tokens spent the whole budget thinking and returned an empty reply with no tool call. Raise max_tokens, and use a capable model for tool calling — that is exactly what Inkling 2 Mini is built for.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/thinking-machines-inkling-2-mini-open-weights-laptop/">Thinking Machines releases Inkling 2 Mini: a 26B looped model that runs on your laptop</a></li><li><a href="/articles/ollama-local-llm-hands-on-tutorial/">Run open models on your own machine: the complete Ollama hands-on guide</a></li><li><a href="/articles/k2-horizon-local-run-tutorial/">Run MBZUAI&#x27;s K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B</a></li><li><a href="/articles/hy4-flash-hands-on-tutorial/">Hands-on with Tencent Hy4 Flash: 1M-token context, reasoning modes, and the open-weights deployment</a></li><li><a href="/articles/gguf-quantization-imatrix-measured/">Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
