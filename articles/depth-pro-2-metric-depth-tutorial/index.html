@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Turn any photo or video into metric depth with Apple’s Depth Pro 2: the complete hands-on tutorial — AI Frontier Post</title>
+<meta name="description" content="Apple&#x27;s Depth Pro 2 turns a single photo or video into depth in real meters — no stereo camera, no LiDAR. This tutorial installs it, runs it on a photo and a video, reads the depth in meters, and turns the result into a point cloud.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/depth-pro-2-metric-depth-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Turn any photo or video into metric depth with Apple’s Depth Pro 2: the complete hands-on tutorial">
+<meta property="og:description" content="Apple&#x27;s Depth Pro 2 turns a single photo or video into depth in real meters — no stereo camera, no LiDAR. This tutorial installs it, runs it on a photo and a video, reads the depth in meters, and turns the result into a point cloud.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/depth-pro-2-metric-depth-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/depth-pro-2-metric-depth-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-21">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Turn any photo or video into metric depth with Apple\u2019s Depth Pro 2: the complete hands-on tutorial","description":"Apple's Depth Pro 2 turns a single photo or video into depth in real meters \u2014 no stereo camera, no LiDAR. This tutorial installs it, runs it on a photo and a video, reads the depth in meters, and turns the result into a point cloud.","datePublished":"2026-11-21","dateModified":"2026-11-21","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/depth-pro-2-metric-depth-tutorial/"},"image":"https://aifrontierpost.com/articles/depth-pro-2-metric-depth-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a GPU to run Depth Pro 2?","acceptedAnswer":{"@type":"Answer","text":"No. The model runs on NVIDIA GPUs, Apple silicon, or the CPU \u2014 on the CPU it runs in float32 and is slow (a 1920\u00d71440 photo took about three minutes wall-clock here, downloads included). The small model is the README's recommendation for laptops. Use a GPU for video: a 2-second clip at full resolution exceeded this tutorial's 6 GB CPU virtual machine twice, while 8 frames at 960\u00d7720 completed."}},{"@type":"Question","name":"Can I use Depth Pro 2 in a commercial product?","acceptedAnswer":{"@type":"Answer","text":"No. The weights are released under Apple's Machine Learning Research Model license, which permits use exclusively for research purposes \u2014 non-commercial scientific research and academic development. The code ships under Apple's own license. Learn with it and evaluate with it, but do not ship it in a commercial product."}},{"@type":"Question","name":"Why is the sky infinitely far, and what do I do with those pixels?","acceptedAnswer":{"@type":"Answer","text":"Sky pixels have no finite depth, so the model reports them as infinity (or several kilometres with the smaller models) rather than inventing a number. Clip or mask infinite pixels before building a point cloud, a mesh, or a composite, or the far end of your scene will be garbage."}},{"@type":"Question","name":"My video ran out of memory \u2014 what now?","acceptedAnswer":{"@type":"Answer","text":"Shorten --window first (and --overlap with it), then switch to a smaller model, and resize the input only as a last resort \u2014 that is the README's own order. Memory grows with frame size and window, not with the length of the video. On this tutorial's 6 GB CPU machine, the full-resolution 2-second clip failed twice; downscaling to 960\u00d7720 with an 8-frame window worked."}},{"@type":"Question","name":"What if my photo has no EXIF focal length?","acceptedAnswer":{"@type":"Answer","text":"The built-in field-of-view estimator predicts one \u2014 1566.8 px for the sample photo in this tutorial. If your photo does record a 35mm-equivalent focal length, the tool reads it from EXIF instead. In Python, pass f_px yourself when you know it; with a calibrated camera, undistort the frames and pass the horizontal focal length."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Turn any photo or video into metric depth with Apple’s Depth Pro 2: the complete hands-on tutorial</h1>
+<p class="lede">A single photo can now tell you how far away everything in it is — in meters. Apple&#x27;s Depth Pro 2 estimates sharp, steady, metric depth from one photo, a video, or a live feed, and this tutorial runs it on a CPU-only machine: install, first photo, video, the Python API, and a point cloud built from the result.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials &amp; Reviews Lead · November 21, 2026 · 20 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Depth Pro 2 (Apple, released November 19, 2026) estimates metric depth — distance in meters — from a single photo, a video, or a live camera feed, at full input resolution. Four sizes, S (24M) to H+ (872M), plus a focal-length estimator for photos without EXIF data. Verified here on a CPU-only VM: the small model ran the sample photo (focal 1566.8 px estimated, depth 7.96–50.70 m, 45.9% sky), the Python API returned identical numbers, and an 8-frame video clip at 960×720 completed with one focal length for the whole clip. Weights are research-only — no commercial use.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> apple-aiml-research/ml-depth-pro-2, released November 19, 2026, with the paper “Depth Pro 2: Sharp and Temporally Consistent Metric Monocular Depth” (arXiv:2611.26603). The repository had just over 200 stars when this tutorial was written.</li><li><b>The idea:</b> one network handles a photo, a whole video, or a live feed, at the input's full resolution. A multi-view transformer attends within and across frames, a DPT decoder predicts inverse depth per frame, and a separate 23.5M-parameter estimator predicts the focal length when the photo does not record one.</li><li><b>Verified here:</b> the photo CLI end to end on a CPU-only VM (exact output shown in Step 2); the NPZ checked (depth 1440×1920, focal 1566.83 px, median 33.30 m); the Python <code>infer</code> call returning identical numbers; the point-cloud snippet run against the real NPZ; and an 8-frame video clip at 960×720 completing with a depth MP4 and per-frame NPZ files.</li><li><b>The honest limit:</b> the full-resolution 2-second video clip ran out of memory twice on this 6 GB CPU machine — the video step below uses a downscaled clip and says so. <code>infer_video</code>, <code>stream</code>, and the Mac demo are documented from the README and the source, not run live. The weights are research-only.</li><li><b>The cost:</b> free to run — no GPU, no account, no API key. About 200 MB of disk for the small model plus its focal-length estimator; 3.5 GB for the default large model.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/depth-pro-2-metric-depth-tutorial/cover.webp" alt="A town square with a fountain, half ordinary photograph and half color depth map, with near objects in red and far buildings in blue"><figcaption>AI-generated illustration. The depth figures inside this tutorial are the real outputs of the verified runs, not illustrations.</figcaption></figure>
+<div class="article-body"><p>Point your phone at a street, take a photo, and you have a flat grid of pixels. What you do not have is the third dimension: how far away is the fountain, the building behind it, the person on the corner? Depth Pro 2, released by Apple in November 2026, answers that question from a single ordinary photo or video — and its answer is in meters, not in a 0-to-1 guess. No stereo pair, no LiDAR, no depth sensor. One image in, a depth map out, with every pixel carrying a distance you can measure, convert into a point cloud, or feed into an edit.</p>
+
+<p>This is the second version of Apple's Depth Pro, and the upgrade that matters is video. The first Depth Pro handled one photo at a time. Depth Pro 2 processes photos, whole videos, and live camera feeds with one network, keeps depth steady from frame to frame, and keeps edges sharp — the two qualities earlier methods traded against each other. It also ships in four sizes, from a 24-million-parameter model that runs on a laptop to an 872-million-parameter model that works at full input resolution, and it estimates the camera's focal length itself when your photo does not record one. That last detail is what makes the depth metric: without a focal length, a depth map is a shape; with one, it is a measurement.</p>
+
+<p>You will install Depth Pro 2, run it on a photo and a video, read the depth in meters, and turn the result into a point cloud you can open in any 3D tool. Every command below was run on a CPU-only Linux virtual machine with no GPU, and the exact output is shown where it matters.</p>
+
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Linux or an Apple silicon Mac.</b> The project supports both; this tutorial ran on Linux. Windows is not listed in the README.</li>
+<li><b>Python 3.11 or newer</b> and <b><code>uv</code></b>, the package runner the project uses (install it from <a href="https://docs.astral.sh/uv/" rel="nofollow">docs.astral.sh/uv</a>). If you would rather use pip, a virtual environment with <code>torch</code>, <code>timm</code>, <code>av</code>, <code>huggingface-hub</code>, <code>pillow-heif</code>, and <code>safetensors</code> works — that is the full dependency list from the project's <code>pyproject.toml</code>.</li>
+<li><b>About 200 MB of disk for the small model</b> (97 MB for the model, 94 MB for the focal-length estimator), or 3.5 GB if you want the default large model. The first run downloads the weights from Apple's CDN; later runs reuse them.</li>
+<li><b>No GPU, no account, no API key.</b> The model runs on NVIDIA GPUs, Apple silicon, or the CPU. On the CPU it runs in float32 and is slow — a 1920×1440 photo took about three minutes wall-clock here, downloads included — but it works.</li>
+<li><b>A photo or a short video of your own.</b> The repository ships with a sample photo and video (<code>assets/example.jpg</code> and <code>assets/example.mp4</code>) if you want to follow along exactly.</li>
+<li><b>The license, read before you build anything on this.</b> The weights are released under Apple's Machine Learning Research Model license, which permits use "exclusively for Research Purposes" — non-commercial scientific research and academic development. The code ships under Apple's own license too. You can learn with it, evaluate with it, and build research prototypes. You cannot ship it in a commercial product.</li>
+</ul>
+
+<h2 id="step-1-install-depth-pro-2">Step 1 — Install Depth Pro 2<a class="anchor" href="#step-1-install-depth-pro-2" aria-label="Link to section">#</a></h2>
+
+<p>There is no package to install from PyPI and no model to download by hand. Clone the repository and let <code>uv</code> resolve the environment on first run:</p>
+
+<pre><code class="language-bash">git clone https://github.com/apple-aiml-research/ml-depth-pro-2
+cd ml-depth-pro-2
+uv run depth-pro-2 predict -i assets/example.jpg -o out/</code></pre>
+
+<p>That third command is also your first inference: it downloads the default model (H+, 3.5 GB) and predicts depth for the bundled sample photo. If you are on a laptop, or on a CPU-only machine like the one this tutorial ran on, add <code>-m depthpro2-s</code> to use the small model instead — a 97 MB download rather than 3.5 GB:</p>
+
+<pre><code class="language-bash">uv run depth-pro-2 predict -i assets/example.jpg -o out/ -m depthpro2-s</code></pre>
+
+<p>If you installed the dependencies with pip instead of <code>uv</code>, the same command is available as <code>depth-pro-2</code> on your path after <code>pip install -e .</code> from the repository root. The rest of this tutorial uses the <code>uv run</code> form.</p>
+
+<h2 id="step-2-your-first-photo">Step 2 — Your first photo: depth in meters<a class="anchor" href="#step-2-your-first-photo" aria-label="Link to section">#</a></h2>
+
+<p>Run the small model on the sample photo and watch the output. This is the exact output from this tutorial's CPU run:</p>
+
+<pre><code class="language-bash">uv run depth-pro-2 predict -i assets/example.jpg -o out/ -m depthpro2-s --save-npz --save-png16</code></pre>
+
+<pre><code class="language-plaintext">Loading depthpro2-s onto cpu in float32.
+Wrote out/example-depth.png, out/example-depth.npz, out/example-depth16.png.
+Focal length: 1566.8 px, estimated.
+Depth: 7.96 m to 50.70 m (5th to 95th percentile), 45.9% infinitely far.
+16-bit PNG: depth in meters = 354455.48 / value, 0 is infinitely far.</code></pre>
+
+<p>Every line is worth reading, because the tool is telling you exactly what it did and what it could not do:</p>
+
+<ul>
+<li><b><code>Loading depthpro2-s onto cpu in float32.</code></b> On a GPU the same line reads <code>bf16</code>; on the CPU it runs in float32, which is slower but more precise. You can override this with <code>--precision fp16</code> or <code>--precision fp32</code>.</li>
+<li><b><code>Focal length: 1566.8 px, estimated.</code></b> The sample photo carries no focal length in its EXIF data, so the built-in field-of-view estimator predicted one: 1,566.8 pixels. If your photo does record a 35mm-equivalent focal length, the tool reads it from EXIF instead. This number is the whole reason the depth comes out in meters — a focal length 10% too long places everything 10% too far, as the README warns.</li>
+<li><b><code>Depth: 7.96 m to 50.70 m (5th to 95th percentile), 45.9% infinitely far.</code></b> The middle 90% of the scene sits between about 8 and 51 meters. The "infinitely far" share is the sky: sky pixels have no finite depth, and the tool reports them as infinity rather than inventing a number.</li>
+<li><b><code>16-bit PNG: depth in meters = 354455.48 / value.</code></b> The 16-bit grayscale file stores inverse depth, and this line gives you the constant that converts it back to meters. Keep it; you will need it in Step 3.</li>
+</ul>
+
+<p>The sample photo is a town square — a stone fountain in the foreground, colonial buildings across the plaza, a flock of birds overhead, an overcast sky. The depth image it produces is the first thing to look at, because it shows what "sharp at object edges" actually means:</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/depth-pro-2-metric-depth-tutorial/img2.webp" alt="The sample photo of a town square above its Depth Pro 2 depth map, where the fountain glows red and yellow up close and the buildings fade to blue"><figcaption>Top: the sample photo bundled with Depth Pro 2. Bottom: the depth map this tutorial generated from it with model S. Red is near, blue is far, dark is the sky at infinite depth. The birds are resolved as individual objects — a good test of edge sharpness. Photo and depth map: Apple ml-depth-pro-2 repository sample; depth map generated by the author.</figcaption></figure>
+
+<p>Read the depth map the way the tool colors it: red and yellow are near, blue is far, and the dark sky is infinite depth. The fountain and its steps burn yellow-green in the foreground; the buildings sit in mid-blue at 30–50 meters; the birds, small and fast-moving, are picked out in green and cyan against the dark sky. That last detail is the one to check on your own photos: a weaker depth model smears small foreground objects into the background. Here each bird holds its own depth.</p>
+
+<p>One more thing to notice: the cobbled ground in the foreground grades smoothly from red at the bottom of the frame to green further away. That gradient is the ground plane receding, and it is exactly what makes the depth metric rather than decorative — the same gradient, read as numbers, is a measurement of the plaza.</p>
+
+<h2 id="step-3-read-the-depth">Step 3 — Read the depth properly: the NPZ and the 16-bit PNG<a class="anchor" href="#step-3-read-the-depth" aria-label="Link to section">#</a></h2>
+
+<p>The color PNG is for looking. The numbers live in the NPZ file, and that is where the tutorial gets useful. <code>--save-npz</code> writes two arrays:</p>
+
+<pre><code class="language-python">import numpy as np
+
+d = np.load("out/example-depth.npz")
+depth = d["depth"]            # meters, shape (1440, 1920)
+f_px = float(d["focallength_px"])   # 1566.83 pixels</code></pre>
+
+<p>Checking the file from this tutorial's run confirms what the CLI printed: the depth array is (1440, 1920) float32, the focal length is 1566.83 px, 54.3% of pixels are finite, and the median finite depth is 33.30 m. The minimum finite depth is 6.49 m; the maximum runs to 182,579 m, which is the model assigning a huge-but-finite number to some sky pixels instead of infinity — one more reason to clip before you use the numbers.</p>
+
+<p>Three rules for reading the numbers, all from the README:</p>
+
+<ul>
+<li><b>Depth is <code>z</code>, not distance from the camera.</b> It is the distance along the camera's viewing direction. A pixel at the edge of the frame is further from the camera in a straight line than its depth value says.</li>
+<li><b>The focal length is in pixels of the input image.</b> It applies horizontally and vertically, and the principal point is the image center unless your camera is calibrated. If you resize the image, scale the focal length by the same factor.</li>
+<li><b>Clip the sky before anything else.</b> Sky pixels are infinite, or several kilometers with the smaller models. Any point cloud, mesh, or composite built from unclipped depth will have a wall of garbage at the far end.</li>
+</ul>
+
+<p>The 16-bit PNG exists for a different workflow: editing and compositing tools. It stores inverse depth as grayscale — white is near, black is infinitely far — on the same scale as the color preview. Convert it back to meters with the constant the CLI printed for your image (354455.48 for the sample): depth in meters = 354455.48 / pixel value, with 0 meaning infinitely far. Read these files as raw data (Raw in Nuke, Non-Color in Blender), not as a photograph.</p>
+
+<h2 id="step-4-video">Step 4 — Video: steady depth across frames<a class="anchor" href="#step-4-video" aria-label="Link to section">#</a></h2>
+
+<p>Photos are the easy case. The reason Depth Pro 2 exists is video, where the hard problem is keeping depth steady: run a photo model frame by frame and the depth shimmers, because each frame is guessed independently. Depth Pro 2 processes frames jointly — its transformer attends across frames as well as within them — so the depth of a wall stays put while the camera moves.</p>
+
+<p>The command is the same one, with a video file as input:</p>
+
+<pre><code class="language-bash">uv run depth-pro-2 predict -i assets/example.mp4 -o out/ -m depthpro2-s --save-npz</code></pre>
+
+<p>The bundled sample is a 2-second, 1920×1440 clip of the same plaza. On a GPU this is routine; on this tutorial's CPU-only virtual machine it is the step where hardware matters. The full-resolution clip was killed twice by the machine running out of memory — first with the default 16-frame window, then with a 4-frame window. That is not a bug in the tool: the README says memory grows with frame size and window, and tells you to shorten the window first, then switch to a smaller model, and only resize the input as a last resort. Following that advice, the clip was downscaled to 960×720 and run with an 8-frame window, and the first 8 frames completed cleanly:</p>
+
+<pre><code class="language-plaintext">Loading depthpro2-s onto cpu in float32.
+Wrote 8 frames at 29.97 fps to clipout/clip8-depth.mp4, clipout/clip8-depth/.
+Focal length: 781.4 px, estimated from the first 8 frames.
+Depth: 6.12 m to 47.97 m (5th to 95th percentile), 42.8% infinitely far.</code></pre>
+
+<p>Three details in that output are the whole video story:</p>
+
+<ul>
+<li><b>One focal length for the whole video.</b> The photo run estimated 1566.8 px at 1920 pixels wide; the video run estimated 781.4 px at 960 pixels wide — exactly half, because the focal length scales with the input. A video gets a single focal length for all its frames (the median of the estimates over its first window), so meters stay meters across the clip.</li>
+<li><b>The depth range matches the photo.</b> 6.12–47.97 m for the video against 7.96–50.70 m for the photo of the same plaza, with a similar share of sky. The two runs agree, which is what you want from a model that claims metric depth.</li>
+<li><b>The outputs are a video and a folder of numbers.</b> <code>clip8-depth.mp4</code> is the color depth video; <code>clip8-depth/</code> holds one NPZ per frame (each with <code>depth</code> in meters and <code>focallength_px</code>), ready for per-frame processing.</li>
+</ul>
+
+<p>The two settings that control video quality are <code>--window</code> and <code>--overlap</code>. By default (<code>--mode buffered</code>), the model processes clips of 16 frames that overlap by 4, which keeps depth steady where clips meet. Longer clips and larger overlaps give slightly steadier depth and run slower. If you run out of memory, shorten <code>--window</code> (and <code>--overlap</code> with it) before anything else. For a live camera, use <code>--mode unbuffered</code>: the model predicts each frame as soon as it arrives, from the frame itself and the 15 frames before it, at the cost of steadiness on the first frames of a stream. To keep up with a camera, the README advises reducing the model size, the input size, and the window.</p>
+
+<p>One practical warning from the run above: video on the CPU is slow. Eight frames at 960×720 took about three and a half minutes including the weight downloads on this machine. A minute of footage on a CPU is an overnight job, not a coffee break. Treat the CPU as the way to verify the pipeline, and use a GPU — or the small model on short clips — for real video work. The <code>--save-npz</code> flag makes this worse in a different way: one NPZ per frame, and a 4K frame is 33 MB, so a minute of footage is about 60 GB. Save NPZ only for the frames you need.</p>
+
+<h2 id="step-5-python-api">Step 5 — The Python API: photos, video, and live streams<a class="anchor" href="#step-5-python-api" aria-label="Link to section">#</a></h2>
+
+<p>The CLI covers files. For anything interactive — a camera feed, a web service, a batch job with custom logic — use the Python API. This is the README's example, and it ran unchanged in this tutorial (the model and weights were already downloaded, so it went straight to inference):</p>
+
+<pre><code class="language-python">import av
+from depth_pro_2 import create_model_and_transforms, load_rgb, upright
+
+model, transform = create_model_and_transforms("depthpro2-h")  # on the GPU if there is one
+
+# A photo. f_px is the focal length recorded in the photo, or None.
+image, f_px = load_rgb("assets/example.jpg")
+depth = model.infer(transform(image), f_px=f_px)["depth"]  # meters, shape (height, width)
+
+# A video file, 16 frames at a time. upright turns phone videos the right way up.
+video = av.open("assets/example.mp4")
+frames = (transform(upright(f)) for f in video.decode(video=0))
+for prediction in model.infer_video(frames):
+    depth = prediction["depth"]
+
+# A live feed, one frame at a time.
+stream = model.stream(mode="unbuffered")
+for f in av.open("assets/example.mp4").decode(video=0):  # stands in for a camera
+    for prediction in stream.step(transform(upright(f))):
+        depth = prediction["depth"]</code></pre>
+
+<p>With the small model on this tutorial's machine, the photo path returned a (1440, 1920) float32 depth map with a finite median of 33.30 m — the same numbers as the CLI run, as it should be: the CLI is a thin wrapper around this API. <code>load_rgb</code> also returned <code>f_px=None</code> for the sample photo, confirming there is no EXIF focal length in it and the estimator did the work.</p>
+
+<p>Four API rules worth knowing before you build on it:</p>
+
+<ul>
+<li><b><code>transform</code> takes RGB.</b> It expects a uint8 array of shape <code>(H, W, 3)</code>. Frames from OpenCV are BGR — convert them first.</li>
+<li><b>A stack of frames is one clip.</b> Pass <code>infer</code> a <code>(T, 3, H, W)</code> stack and the frames attend to each other and share one focal length. Pass unrelated photos one at a time, each at its own size: padding or resizing them to a shared size changes the depth.</li>
+<li><b>Pass your focal length when you know it.</b> Give <code>f_px</code> in pixels of the frames you pass; if you resize the frames, scale it by the same factor. With a calibrated camera, undistort the frames and pass the horizontal focal length. When <code>f_px</code> is given, the model skips the focal-length estimator entirely.</li>
+<li><b>A stream belongs to one video.</b> At its end, <code>flush</code> returns the predictions still held. It does not reset the stream, which keeps its recent frames and, once set, the focal length — open a new stream for another video, camera, or frame size.</li>
+</ul>
+
+<p>The video and stream paths in this example are documented from the README and the source, not run live here — the photo path and the CLI video path are the parts this tutorial executed. The calls are the same ones the CLI uses internally, so the risk is low, but that is the honest boundary.</p>
+
+<h2 id="step-6-point-cloud">Step 6 — Turn depth into a point cloud<a class="anchor" href="#step-6-point-cloud" aria-label="Link to section">#</a></h2>
+
+<p>A depth map in meters plus a focal length is a 3D scene waiting to happen. The conversion is one pinhole-camera equation per pixel: with the image center as the principal point, a pixel at column <code>x</code>, row <code>y</code>, depth <code>z</code> sits at <code>((x - cx) * z / f, (y - cy) * z / f, z)</code>. This snippet does it for the sample photo and writes a PLY file that opens in MeshLab, Blender, or CloudCompare. It ran against the real NPZ from Step 2:</p>
+
+<pre><code class="language-python">import numpy as np
+from PIL import Image
+
+d = np.load("out/example-depth.npz")
+depth, f_px = d["depth"].astype(np.float64), float(d["focallength_px"])
+image = np.asarray(Image.open("assets/example.jpg").convert("RGB"))
+h, w = depth.shape
+ys, xs = np.mgrid[0:h, 0:w]
+cx, cy = w / 2.0, h / 2.0
+
+mask = np.isfinite(depth) &amp; (depth &gt; 0) &amp; (depth &lt; 60)  # drop sky (inf) and the far tail
+xs, ys = xs[mask], ys[mask]
+dd, rgb = depth[mask], image[mask]
+x = (xs - cx) * dd / f_px
+y = (ys - cy) * dd / f_px   # positive down; negate for a Y-up cloud
+z = dd
+
+pts = np.stack([x, y, z], axis=1)[::4]
+cols = rgb[::4]
+with open("plaza.ply", "w") as fh:
+    fh.write("ply\nformat ascii 1.0\nelement vertex %d\n" % len(pts))
+    fh.write("property float x\nproperty float y\nproperty float z\n")
+    fh.write("property uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n")
+    for p, c in zip(pts, cols):
+        fh.write("%.3f %.3f %.3f %d %d %d\n" % (*p, *c))</code></pre>
+
+<p>On the sample photo this keeps 1,486,197 of the 2,764,800 pixels — the rest is sky or beyond 60 m — and the cloud spans x from −35.0 to 35.2 m, y from −26.0 to 14.9 m, and z from 6.5 to 60.0 m. Rendered from an angle, the plaza is unmistakable: the fountain and its steps in the foreground, the facades standing upright behind it, the cobbled ground running away underneath.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/depth-pro-2-metric-depth-tutorial/img3.webp" alt="A 3D point cloud of the town square rendered from the depth map, showing the fountain, building facades, and ground plane"><figcaption>The same plaza as a point cloud, built from the NPZ in Step 3 with the snippet above (164,986 plotted points, depth clipped at 60 m). One photo, no LiDAR, no second camera. Figure generated by the author from the verified run.</figcaption></figure>
+
+<p>Two choices in that snippet deserve a note. First, the 60 m clip: without it, the handful of sky pixels that got a finite-but-enormous depth would stretch the cloud to 182 kilometers and hide the plaza. Second, the <code>[::4]</code> subsample: the full cloud is 1.5 million points, which is fine for a file but slow to render interactively — a quarter of it is plenty for a first look, and you can keep every point by dropping the slice.</p>
+
+<h2 id="which-model-should-you-use">Which model should you use?<a class="anchor" href="#which-model-should-you-use" aria-label="Link to section">#</a></h2>
+
+<p>All four sizes share the focal-length estimator and the same code path; they differ in sharpness, steadiness, speed, and download size. H+ is the default.</p>
+
+<table>
+<thead><tr><th>Model</th><th>Flag</th><th>Parameters</th><th>Download</th><th>Use it for</th></tr></thead>
+<tbody>
+<tr><td>S</td><td><code>-m depthpro2-s</code></td><td>24M</td><td>97 MB</td><td>Laptops, quick tests, live use, CPU runs</td></tr>
+<tr><td>B</td><td><code>-m depthpro2-b</code></td><td>97M</td><td>386 MB</td><td>A middle step when S looks too soft</td></tr>
+<tr><td>L</td><td><code>-m depthpro2-l</code></td><td>334M</td><td>1.3 GB</td><td>Better quality on a desktop GPU</td></tr>
+<tr><td>H+</td><td><code>-m depthpro2-h</code></td><td>872M</td><td>3.5 GB</td><td>Best quality, native-resolution video</td></tr>
+</tbody>
+</table>
+
+<p>The decision is simple: start with S. It is the model this tutorial verified end to end, and on the sample photo its edges — the birds, the fountain's rim, the window frames — are already clean. Step up only when you can see a specific defect: soft edges on fine detail, or depth that wobbles between video frames. Larger models give sharper, steadier depth; smaller ones run faster. On a laptop, S is the README's own recommendation, and on a CPU-only machine it is the only sane starting point — H+ at full resolution on a CPU would be an exercise in patience, not a workflow.</p>
+
+<p>On Apple hardware there is one more option: exported Core ML models are published on Hugging Face, and the repository includes a minimal Mac demo app (<code>demo/</code>) that shows live depth from the camera. It needs Apple silicon, macOS 15 or later, and Xcode 16 or later. This tutorial did not run the Mac demo — no Mac was available — so treat it as documented, not verified.</p>
+
+<h2 id="limits">Limits and honest notes<a class="anchor" href="#limits" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>The license is the biggest limit.</b> Research use only, non-commercial. If you need depth estimation in a product, look at permissively licensed alternatives (Depth Anything, Marigold, or the original Depth Pro's ecosystem) instead of building on these weights.</li>
+<li><b>There are no published benchmark tables.</b> Apple's project page claims a new Pareto frontier across metric accuracy, sharpness, temporal consistency, and runtime, and reports Boundary F1 and Jitter averaged over the Sintel and Spring datasets — but the release pages this tutorial read carry no results table and no per-dataset numbers. Treat the claim as the vendor's, and judge the model on your own footage, as this tutorial did.</li>
+<li><b>The sky is not a measurement.</b> Sky pixels are infinite, or kilometers with the small models. Any downstream step — point clouds, meshes, compositing — must mask or clip them first.</li>
+<li><b>Focal length is the accuracy bottleneck.</b> A 10% error in the focal length is a 10% error in every depth. Photos with EXIF focal lengths are the most trustworthy; the estimator is a fallback, and it is still an estimate. Calibrated cameras beat both.</li>
+<li><b>Video needs a GPU for real work.</b> On a 4-core CPU virtual machine with 6 GB of RAM, the full-resolution 2-second clip was killed twice by out-of-memory, and 8 frames at 960×720 took three and a half minutes. The pipeline is correct; the hardware is the constraint.</li>
+<li><b>No training or evaluation code ships.</b> The repository contains inference code and weight links only. If you want to fine-tune or reproduce the paper's numbers, you are on your own.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+
+<p>Depth Pro 2 does one thing and does it completely: it turns any photo or video into depth in meters, with no special hardware and no calibration step. Install it with <code>uv</code>, run <code>depth-pro-2 predict</code> on a photo, and you get a color depth map plus the numbers behind it. Add <code>--save-npz</code> and the depth is yours to measure, recolor, composite, or unproject into a point cloud. Use the small model first, clip the sky, and keep the focal length in mind — it is the number the whole measurement hangs on.</p>
+
+<p>The practical shape of the tool is clear from this run: photos are cheap and work anywhere, video is real but wants a GPU, and the research-only license draws a hard line around commercial use. Inside that line, it is the fastest way to get metric depth out of footage you already have. Take a photo of a room, a street, a product — and measure it.</p>
+
+<h2 id="verification">What was verified in this tutorial<a class="anchor" href="#verification" aria-label="Link to section">#</a></h2>
+
+<p>Everything with a number in it was run, not copied. The environment was a CPU-only Linux virtual machine (4 cores, no GPU) running the repository at commit <code>aa389cb</code>, with torch 2.15.0+cpu, timm 1.0.31, av 19.0.2, and huggingface-hub 2.4.0. The photo command, its exact output, the NPZ contents, the Python <code>infer</code> call, and the point-cloud snippet were all executed here; the CLI video path was executed on an 8-frame clip at 960×720 (the full-resolution 2-second clip exceeded the machine's 6 GB of RAM twice). The <code>infer_video</code>, <code>stream</code>, and Mac demo paths are documented from the README and the source, not run live. The cover illustration is AI-generated; the two inline figures are the actual outputs of the verified runs.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="depth-pro-2-metric-depth-tutorial"></div><div class="comments" data-comments="depth-pro-2-metric-depth-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/localai-v5-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>LocalAI 5.0 hands-on: your own ChatGPT-style server with projects, files, and a Python sandbox</h3><div class="meta">November 20, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/hermes-agent-self-improving-tutorial/"><span class="chip">Tutorials</span><h3>Hermes Agent hands-on: install the self-improving agent that remembers you and runs your schedule</h3><div class="meta">November 20, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/tamserve-live-object-tracking-tutorial/"><span class="chip">Tutorials</span><h3>Track anything on live video with tamserve: hands-on with the SAM 2 serving engine</h3><div class="meta">November 20, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/instagram-agent-skill-claude-reels-tutorial/"><span class="chip">Tutorials</span><h3>Run an Instagram account with Claude Code: hands-on with instagram-agent-skill</h3><div class="meta">November 20, 2026 · 25 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run Depth Pro 2?</h3><p>No. The model runs on NVIDIA GPUs, Apple silicon, or the CPU — on the CPU it runs in float32 and is slow (a 1920×1440 photo took about three minutes wall-clock here, downloads included). The small model is the README&#x27;s recommendation for laptops. Use a GPU for video: a 2-second clip at full resolution exceeded this tutorial&#x27;s 6 GB CPU virtual machine twice, while 8 frames at 960×720 completed.</p><h3>Can I use Depth Pro 2 in a commercial product?</h3><p>No. The weights are released under Apple&#x27;s Machine Learning Research Model license, which permits use exclusively for research purposes — non-commercial scientific research and academic development. The code ships under Apple&#x27;s own license. Learn with it and evaluate with it, but do not ship it in a commercial product.</p><h3>Why is the sky infinitely far, and what do I do with those pixels?</h3><p>Sky pixels have no finite depth, so the model reports them as infinity (or several kilometres with the smaller models) rather than inventing a number. Clip or mask infinite pixels before building a point cloud, a mesh, or a composite, or the far end of your scene will be garbage.</p><h3>My video ran out of memory — what now?</h3><p>Shorten --window first (and --overlap with it), then switch to a smaller model, and resize the input only as a last resort — that is the README&#x27;s own order. Memory grows with frame size and window, not with the length of the video. On this tutorial&#x27;s 6 GB CPU machine, the full-resolution 2-second clip failed twice; downscaling to 960×720 with an 8-frame window worked.</p><h3>What if my photo has no EXIF focal length?</h3><p>The built-in field-of-view estimator predicts one — 1566.8 px for the sample photo in this tutorial. If your photo does record a 35mm-equivalent focal length, the tool reads it from EXIF instead. In Python, pass f_px yourself when you know it; with a calibrated camera, undistort the frames and pass the horizontal focal length.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/tamserve-live-object-tracking-tutorial/">Track anything on live video with tamserve: hands-on with the SAM 2 serving engine</a></li><li><a href="/articles/k2-horizon-local-run-tutorial/">Run MBZUAI&#x27;s K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B</a></li><li><a href="/articles/inkling-2-mini-local-run-tutorial/">Run Thinking Machines’ Inkling 2 Mini on your laptop: the looped-transformer local setup</a></li><li><a href="/articles/localai-v5-hands-on-tutorial/">LocalAI 5.0 hands-on: your own ChatGPT-style server with projects, files, and a Python sandbox</a></li><li><a href="/articles/higgsfield-soul-id-cinema-studio-hands-on-tutorial/">Higgsfield hands-on: Soul ID keeps one face consistent from photo to cinematic video</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
