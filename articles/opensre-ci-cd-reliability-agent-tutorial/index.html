@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>OpenSRE hands-on: the open-source agent that reads your failed CI run and opens the fix — AI Frontier Post</title>
+<meta name="description" content="OpenSRE is a 13,686-star open-source CLI agent that reads a failed GitHub Actions run, traces the cause, and opens a fix for review. This tutorial installs it, signs in, runs the CI reliability demo, and wires it into a headless CI job — every install and CLI command verified on Linux.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/opensre-ci-cd-reliability-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="OpenSRE hands-on: the open-source agent that reads your failed CI run and opens the fix">
+<meta property="og:description" content="OpenSRE is a 13,686-star open-source CLI agent that reads a failed GitHub Actions run, traces the cause, and opens a fix for review. This tutorial installs it, signs in, runs the CI reliability demo, and wires it into a headless CI job — every install and CLI command verified on Linux.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/opensre-ci-cd-reliability-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/opensre-ci-cd-reliability-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-21">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"OpenSRE hands-on: the open-source agent that reads your failed CI run and opens the fix","description":"OpenSRE is a 13,686-star open-source CLI agent that reads a failed GitHub Actions run, traces the cause, and opens a fix for review. This tutorial installs it, signs in, runs the CI reliability demo, and wires it into a headless CI job — every install and CLI command verified on Linux.","datePublished":"2026-11-21","dateModified":"2026-11-21","author":{"@type":"Person","name":"Priya Nair","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/opensre-ci-cd-reliability-agent-tutorial/"},"image":"https://aifrontierpost.com/articles/opensre-ci-cd-reliability-agent-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need an LLM API key to use OpenSRE?","acceptedAnswer":{"@type":"Answer","text":"No, if you sign in. Signing in activates the OpenSRE-hosted model, so the interactive shell and opensre ask work without any provider key. The key path exists for machines that are not signed in: set LLM_PROVIDER and the matching provider key, for example ANTHROPIC_API_KEY with LLM_PROVIDER=anthropic."}},{"@type":"Question","name":"Do I need a GitHub account?","acceptedAnswer":{"@type":"Answer","text":"Yes for the CI work. The hosted model, Slack and Telegram answers, and hosted-gateway prompts all wait for a connected GitHub account. Connect it in the OpenSRE web app, then choose 'I've connected GitHub, continue' in the shell. The CI/CD demo reads your repository's last 30 days of GitHub Actions history."}},{"@type":"Question","name":"What does OpenSRE cost?","acceptedAnswer":{"@type":"Answer","text":"The software is free under Apache-2.0. The hosted model comes with the free account sign-in. If you use the bring-your-own-provider path instead, the provider bills you at its own rates. Telemetry is first-party analytics plus Sentry, and it is opt-out with OPENSRE_NO_TELEMETRY=1."}},{"@type":"Question","name":"Is OpenSRE stable enough to use?","acceptedAnswer":{"@type":"Answer","text":"It is public alpha. The README says core workflows are usable for early exploration but not yet fully stable, and that APIs and integrations may evolve. Treat it as a tool to try on a real repository, not as infrastructure to bet a release on."}},{"@type":"Question","name":"Does OpenSRE change my code without asking?","acceptedAnswer":{"@type":"Answer","text":"No. A repair is pushed to the pull request's branch — or a fresh repair branch — for you to review. In headless runs, tools that mutate state are denied by default and need an explicit --allowed-tool flag for that run. Read-only tools run automatically."}},{"@type":"Question","name":"Can I run it with my own model instead of the hosted one?","acceptedAnswer":{"@type":"Answer","text":"Yes. Account-independent CLI workflows support Anthropic, OpenAI, OpenRouter, TrustedRouter, DeepSeek, Gemini, Bedrock, Azure OpenAI, and CLI-backed providers through LLM_PROVIDER plus the provider's API key. You can also self-host the repository's Docker image in web, gateway, or scheduler mode."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>OpenSRE hands-on: the open-source agent that reads your failed CI run and opens the fix</h1>
+<p class="lede">Your CI tells you a build broke. It does not tell you why, or how to fix it — so the build gets re-run, the flaky check piles up, and main stays red until a senior engineer has time to investigate. OpenSRE is the open-source CLI agent that does that investigation: it reads the failed run, traces the cause, and pushes a fix to the pull request for you to review. This tutorial installs it, signs in, runs the CI reliability demo, and wires it into a headless CI job.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 21, 2026 · 18 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> OpenSRE (Tracer-Cloud/opensre, Apache-2.0) is a CLI agent for CI/CD reliability: it fetches failing checks and logs, tests hypotheses in a tool-calling loop, and opens a fix on the PR branch. It has 13,686 stars and 1,928 forks and sits on GitHub's daily trending list as of November 21, 2026. Verified here on Linux: the installer runs clean (v0.1.2026.11.18+main.29d9ba6), <code>opensre doctor</code> reports the setup state, and the unauthenticated error tells you exactly what to run next. The hosted model needs only a free account sign-in — no LLM key. The honest limit: it is public alpha, and the live agent turn needs your own account or provider key, so the run up to that point was verified here and the agent turn itself is documented from the project's docs.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> Tracer-Cloud/opensre, 13,686 stars, 1,928 forks, 4,439 commits, 227 releases, Apache-2.0, created January 13, 2026 — on GitHub's daily trending list on November 21, 2026.</li><li><b>What it does:</b> reads a failed GitHub Actions run, separates CI-caused failures from code-caused ones, and pushes a fix to the PR branch for review; also reports what unreliable CI costs (failure rate, developer hours lost, how long main stays red) and can run a scheduled reliability agent.</li><li><b>Verified here:</b> installer ran clean on Linux (tarball 150.4 MB, version 0.1.2026.11.18+main.29d9ba6, Python 3.13.18); <code>--help</code>, <code>ask --help</code>, <code>integrations --help</code>, <code>login --help</code>, <code>doctor</code>, and <code>account status</code> all run and their output is quoted below.</li><li><b>The honest limit:</b> public alpha — core workflows are usable for early exploration but not yet fully stable, and APIs and integrations may evolve. No live agent turn was run in this sandbox: that needs your own signed-in account or provider key, which this tutorial does not have. Everything up to that point was run, and the agent steps are taken from the project's own docs.</li><li><b>The cost:</b> free, Apache-2.0. The hosted model comes with the free account sign-in; the bring-your-own-provider path bills at the provider's rates. Telemetry is opt-out with <code>OPENSRE_NO_TELEMETRY=1</code>.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/opensre-ci-cd-reliability-agent-tutorial/cover.webp" alt="A CI pipeline with two green steps and one red failed step, connected by a glowing green line to a robot holding a wrench and a large green checkmark"><figcaption>AI-generated illustration. The star counts, version, and command output in this tutorial are the author's own measurements or the project's own pages, not marketing copy.</figcaption></figure>
+<div class="article-body"><p>Every team with a CI pipeline knows the shape of this failure. A check goes red, the notification says the build failed, and the actual cause is buried in a log three clicks deep — a flaky test, a changed dependency, a runner that ran out of disk. Someone re-runs the build, it passes, and the real cause waits for the next time it fails. OpenSRE exists for the investigation in between: an open-source agent that reads the failed run, checks the recent commits and deploys, correlates logs, metrics, and traces, and either explains the cause with evidence or pushes a fix to the pull request for review.</p>
+
+<p>The project is Tracer-Cloud/opensre. It has 13,686 stars and 1,928 forks, 4,439 commits across 227 releases, and it sits on GitHub's daily trending list as of November 21, 2026. It is Apache-2.0, self-hosted, and designed to run with your own models. The part that matters for this tutorial is the CLI: one binary, one sign-in, and a first prompt that offers a demo analysis of your own repository's CI history. Everything below was run on a plain Linux VM with no GPU — the install, the version check, the doctor diagnostic, and the exact error you get before signing in are all quoted from those runs.</p>
+
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>macOS or Linux (Windows works too, via PowerShell).</b> The prebuilt Linux binaries need glibc 2.35 or newer — Ubuntu 22.04 or comparable. This tutorial ran on Linux x86_64.</li>
+<li><b>A terminal open in a code project.</b> A Git repository is recommended: the full workflow demonstration runs against your own repo's CI history.</li>
+<li><b>A GitHub account.</b> The CI work reads your repository's GitHub Actions history, and the hosted model, Slack and Telegram answers, and hosted-gateway prompts all wait for a connected GitHub account.</li>
+<li><b>An OpenSRE account (free).</b> Sign-in is by email or another enabled provider, in the browser. It activates the hosted model, so you need no LLM key for the interactive shell.</li>
+<li><b>About 150 MB of download, and about 20 minutes.</b> The Linux x86_64 tarball is 150.4 MB. No GPU, no Docker, no provider key for the signed-in path.</li>
+</ul>
+
+<h2 id="step-1-install-it">Step 1 — Install it<a class="anchor" href="#step-1-install-it" aria-label="Link to section">#</a></h2>
+
+<p>On macOS or Linux, run the installer. The <code>-gh</code> flag also installs the GitHub CLI, which OpenSRE's GitHub tools use:</p>
+
+<pre><code class="language-bash">curl -fsSL https://install.opensre.com | bash -s -- -gh</code></pre>
+
+<p>On Windows, in PowerShell:</p>
+
+<pre><code class="language-powershell">&amp; ([scriptblock]::Create((irm https://install.opensre.com/install.ps1))) -gh</code></pre>
+
+<p>The installer fetches the latest build from <code>main</code> without requiring sudo, verifies the checksum, and installs to <code>~/.local/bin</code> by default. If <code>opensre</code> is not found afterwards, open a new terminal or add the bin directory the installer prints to your <code>PATH</code>. Verify the install:</p>
+
+<pre><code class="language-bash">opensre --version
+opensre version</code></pre>
+
+<p>Expected output — this is the exact output from the run for this tutorial, on November 21, 2026:</p>
+
+<pre><code class="language-plaintext">opensre, version 0.1.2026.11.18+main.29d9ba6
+opensre 0.1.2026.11.18+main.29d9ba6
+Python  3.13.18
+OS      linux (x86_64)</code></pre>
+
+<p>Two things are worth knowing here. First, the version string carries the build date and the commit: <code>0.1.2026.11.18+main.29d9ba6</code> matches the repository's current commit, <code>29d9ba6</code>, so you can confirm the installer gave you the latest main build. Second, the binary bundles its own Python 3.13 — you do not need a Python environment, and nothing else is installed. <code>opensre update</code> checks for a newer main build later, and <code>opensre uninstall</code> removes the binary and all its local data (pass <code>--yes</code> to skip the confirmation prompt).</p>
+
+<h2 id="step-2-sign-in-and-connect-github">Step 2 — Sign in and connect GitHub<a class="anchor" href="#step-2-sign-in-and-connect-github" aria-label="Link to section">#</a></h2>
+
+<p>Run <code>opensre</code> with no arguments. The welcome screen asks you to sign in or create an account, and the browser opens the OpenSRE sign-up page, where you can use email or another enabled provider. Signing in activates the OpenSRE-hosted model, so you need no LLM key. Back in the terminal, OpenSRE confirms the session with the web app.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/opensre-ci-cd-reliability-agent-tutorial/img2.webp" alt="The OpenSRE CLI welcome screen: a dotted-ring logo, the version string, a welcome message, and a sign-in prompt"><figcaption>The project's own welcome screen, from its docs. The version in the screenshot is an older build; the install in this tutorial is v0.1.2026.11.18. Credit: Tracer-Cloud/OpenSRE.</figcaption></figure>
+
+<p>If GitHub is not connected yet, the shell shows <b>Connect GitHub to continue</b> instead of the prompt. Choose <b>Open the dashboard to connect GitHub</b>, connect your own account (or ask a workspace admin to connect one for everyone), then choose <b>I've connected GitHub, continue</b>. The shell opens once the app confirms the connection. If the sign-in screen comes back instead, run <code>opensre account status</code> — it names what is wrong with the session (expired, revoked, or the web app unreachable).</p>
+
+<p>Before signing in, <code>account status</code> reports exactly this, which is also how you can confirm you are starting from a clean machine:</p>
+
+<pre><code class="language-bash">opensre account status</code></pre>
+
+<pre><code class="language-plaintext">✗  Not signed in
+    detail  No OpenSRE account is signed in.</code></pre>
+
+<p>On a server, over SSH, or in a container — anywhere the terminal runs on a different machine from your browser — the browser cannot hand the sign-in back to the terminal. OpenSRE prints a link and asks for a code instead: open the link in a browser on any device and sign in, confirm that you started the sign-in, then choose <b>Show sign-in code</b> and paste the code at the <code>Code:</code> prompt. OpenSRE switches to this automatically over SSH (<code>SSH_CONNECTION</code>, <code>SSH_CLIENT</code>, or <code>SSH_TTY</code> is set) and on Linux with neither <code>DISPLAY</code> nor <code>WAYLAND_DISPLAY</code> set. To choose yourself, run <code>opensre account login --paste-code</code>, or <code>--no-paste-code</code> to keep the browser redirect. The code works once, only in the terminal that started the sign-in, and expires five minutes after it is shown. Paste it only into a terminal you started yourself, and never send it to anyone. Connecting GitHub works the same way over SSH.</p>
+
+<h2 id="step-3-run-the-health-check">Step 3 — Run the health check<a class="anchor" href="#step-3-run-the-health-check" aria-label="Link to section">#</a></h2>
+
+<p>Before asking the agent anything, run the diagnostic. It surfaces setup issues in one screen:</p>
+
+<pre><code class="language-bash">opensre doctor</code></pre>
+
+<p>On a fresh, unsigned-in machine it reports something like this — the output below is the real result from the run for this tutorial, with the colour codes stripped:</p>
+
+<pre><code class="language-plaintext">OpenSRE Doctor
+  ✓  python             Python 3.13.18
+  ⚠  env_file           .env not found
+  ⚠  llm_provider       provider=anthropic, auth missing (ANTHROPIC_API_KEY is not configured.)
+  ⚠  integrations       /home/hatch/.opensre/integrations.json not found — run 'opensre integrations setup'
+  ⚠  agent_capabilities network requests is unavailable in this environment (probe returned unavailable)
+  ✓  buzz_cli           not configured (optional)
+  ✓  version            0.1.2026.11.18+main.29d9ba6
+  4 warnings — fix and rerun opensre doctor</code></pre>
+
+<p>Read the warnings in order. <code>.env not found</code> is expected on a fresh install — the file holds provider keys and integration settings, and you do not need one if you signed in. <code>llm_provider … auth missing</code> is the same story: it means no provider key is configured, which is fine on the signed-in path, where the hosted model is used instead. <code>integrations … not found</code> is the prompt to do Step 5. The <code>agent_capabilities</code> warning is specific to this sandbox — raw network access is blocked here, so the agent cannot make direct network requests; on a normal machine that line does not appear, and configured integrations cover outbound HTTP anyway. A clean run after sign-in and integration setup should show the first three lines green and the version line unchanged. If <code>doctor</code> reports a problem you do not understand, fix what it names and rerun it — that loop is the intended use.</p>
+
+<h2 id="step-4-your-first-cicd-analysis">Step 4 — Your first CI/CD analysis<a class="anchor" href="#step-4-your-first-cicd-analysis" aria-label="Link to section">#</a></h2>
+
+<p>The first time the interactive shell opens, it asks what OpenSRE should do first. Pick the CI/CD analysis of one of your repositories. It reads the last 30 days of GitHub Actions history and reports how reliable your CI is and how much developer time it costs. It needs GitHub access — connect it in the OpenSRE app through OAuth or its token-entry form, and run <code>opensre account login</code> to load that connection on the machine. If the connection is missing, the flow offers the app setup link. Type <code>/demo</code> to open the menu again at any time, or start with <code>opensre --skip-onboarding</code> to skip it and go straight to the prompt.</p>
+
+<p>Inside the shell, describe the problem in plain language — that is the interface. The shell accepts questions about incidents, slow deploys, and failing checks, and it calls the tools it needs while it works. The slash commands are the control surface: <code>/help</code> lists commands, <code>/status</code> shows the current setup, <code>/effort</code> changes reasoning effort, <code>/cost</code> shows spend, <code>/sessions</code> and <code>/resume</code> manage sessions, <code>/compact</code> shortens the context, <code>/new</code> starts fresh, and <code>/exit</code> closes the shell. Ctrl+C cancels an in-flight turn without losing session state. The shell needs a TTY — it will not open through a pipe or a CI job, which is what the headless command in Step 6 is for.</p>
+
+<p>Once you are signed in, the one-shot form of a question is:</p>
+
+<pre><code class="language-bash">opensre ask "why did checkout latency increase today?"</code></pre>
+
+<p>That example is from the project's own FAQ. OpenSRE reasons across your connected systems, calling the tools it needs, and prints the answer. Each run is saved as a resumable session unless you pass <code>--ephemeral</code>, and a finished run prints a session ID you can follow up on with <code>opensre ask --resume &lt;session-id&gt; "…" </code>.</p>
+
+<h2 id="step-5-connect-your-stack">Step 5 — Connect your stack<a class="anchor" href="#step-5-connect-your-stack" aria-label="Link to section">#</a></h2>
+
+<p>OpenSRE connects to more than 60 tools and services. The ones that matter first are the ones your incidents live in: GitHub for the CI history, your observability platform for the logs and metrics, and Slack or Telegram for the summary. Set each one up by name:</p>
+
+<pre><code class="language-bash">opensre integrations setup github
+opensre integrations setup datadog
+opensre integrations setup slack</code></pre>
+
+<p>Then verify the connections actually work:</p>
+
+<pre><code class="language-bash">opensre integrations verify
+opensre integrations verify datadog</code></pre>
+
+<p>The setup command accepts one service name — the full list, verified from <code>opensre integrations setup --help</code> on the installed binary, is: alertmanager, aws, betterstack, coralogix, datadog, grafana, honeycomb, mariadb, mongodb_atlas, slack, opensearch, rds, vercel, github, gitlab, sentry, mongodb, discord, postgresql, twilio, azure_sql, incident_io, signoz, jenkins, tracer, telegram, whatsapp, mysql, dagster, redis, pagerduty, tempo, posthog_mcp, sentry_mcp, groundcover, smtp, temporal, helm, posthog, rocketchat, servicenow, railway, azure, kubernetes, buzz, new_relic, google_docs, and neon. The full catalogue is wider than that list — Grafana covers Loki, Mimir, and Tempo; AWS covers S3, Lambda, EKS, EC2, CloudTrail, and Bedrock; the database set includes ClickHouse, MySQL, Snowflake, RDS, Supabase, and Neon; the data-platform set includes Airflow, Kafka, Prefect, RabbitMQ, Dagster, and Temporal; and the incident set includes PagerDuty, Jira, Alertmanager, incident.io, and ServiceNow.</p>
+
+<p>One precedence rule matters: integrations connected in the web app are also used by every signed-in shell and CLI, and they take precedence over local setup for the same service. So connect a service once in the app and every signed-in machine picks it up; use local setup for services only one machine needs. Inside the shell, the same commands work with a slash: <code>/integrations setup &lt;service&gt;</code>, <code>/integrations list</code>, <code>/integrations verify</code>.</p>
+
+<h2 id="step-6-run-it-headless">Step 6 — Run it headless from a script or a CI job<a class="anchor" href="#step-6-run-it-headless" aria-label="Link to section">#</a></h2>
+
+<p><code>opensre ask</code> is the headless form: one agent turn, print the response, exit. The read-only tasks — the CI reliability analysis and the health scan — run headless as they are. Fixing a PR or scheduling an agent uses tools that need approval, and a headless run has nobody to approve, so you authorize the tool the task uses, for that run only:</p>
+
+<pre><code class="language-bash">opensre ask "fix the failing checks on PR 412" --allowed-tool github_push</code></pre>
+
+<p>Each <code>--allowed-tool</code> covers one tool; a task that needs two takes the flag twice. A machine that is not signed in needs <code>LLM_PROVIDER</code> and a provider key plus a GitHub token in the environment. The flag names are verified from <code>opensre ask --help</code> on the installed binary; the tool names themselves come from the task — an unknown tool name is rejected before the agent starts, so a typo fails fast instead of failing mid-run. The full option set is:</p>
+
+<pre><code class="language-bash">opensre ask --help</code></pre>
+
+<pre><code class="language-plaintext">Usage: opensre ask [OPTIONS] PROMPT
+  Run one configured OpenSRE agent request and exit.
+Options:
+  --allowed-tool TOOL             Authorize a registered tool for this invocation. Repeat as needed.
+  --dangerously-bypass-approvals  Authorize every approval-gated tool for this invocation.
+  -i, --context-file PATH         Attach a UTF-8 text file as untrusted context. Repeat as needed.
+  --resume SESSION                Continue a previous ask session by ID or unambiguous prefix.
+  --ephemeral                     Do not persist this invocation or print a resumable session ID.
+  -h, --help                      Show this message and exit.</code></pre>
+
+<p>Three details from the docs are worth building into any script. First, JSON output: put the global <code>--json</code> option before <code>ask</code> — <code>opensre --json ask "…"</code> — and you get one JSON object with <code>status</code>, <code>response</code>, <code>session_id</code>, <code>questions</code>, <code>denied_tools</code>, and <code>error</code>. Second, exit codes: <code>0</code> the agent completed, <code>1</code> setup or agent execution failed, <code>2</code> invalid arguments, <code>3</code> a tool required approval and was denied, <code>4</code> the agent needs structured user input (resume the returned session with the answer), <code>130</code> interrupted with SIGINT, <code>143</code> terminated with SIGTERM. Third, context files: attach an alert, a log excerpt, or a deployment note with <code>-i</code> — up to 16 files, each up to 64 KiB, 128 KiB combined, UTF-8 only; files are treated as untrusted context, not operator instructions, so review them for secrets before running. Set <code>OPENSRE_PROMPT_LOG_DISABLED=1</code> to disable prompt and response logging, including for ephemeral requests.</p>
+
+<p>Do not use <code>--dangerously-bypass-approvals</code> casually. It authorizes every approval-gated tool for that invocation, and the root <code>-y</code> flag does not authorize agent tools — the bypass flag is the only way to do it headless, and it belongs only in a trusted environment where the prompt and the connected integrations are controlled. The flag does not bypass operating-system permissions or sandboxing.</p>
+
+<p>Finally, here is what happens if you run <code>ask</code> with no auth at all — no sign-in, no provider key. This is the exact output from the run for this tutorial:</p>
+
+<pre><code class="language-bash">opensre ask "why did the checkout-api deploy fail?"</code></pre>
+
+<pre><code class="language-plaintext">No API key is set for anthropic. Run `opensre login anthropic` to add one, or `opensre onboard` to rerun setup. To use the OpenSRE-hosted model instead, sign in with `opensre account login`.</code></pre>
+
+<p>The command exits with status <code>1</code> before the agent runs and prints the command that fixes the setup. That is the behaviour to expect on a fresh machine, and it is also the fastest way to confirm your install is healthy: if you see this message, the binary works and only the auth is missing.</p>
+
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to section">#</a></h2>
+
+<p>When a CI run fails, an alert arrives, or you ask a question, OpenSRE runs the same six-step loop:</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/opensre-ci-cd-reliability-agent-tutorial/img3.webp" alt="Four connected stages: a warning over a pipeline, a magnifying glass over logs, a wrench over a code branch, and a green checkmark over a pull request"><figcaption>AI-generated diagram of the loop: a failed run is detected, the cause is investigated, a fix is prepared, and the checks go green.</figcaption></figure>
+
+<ol>
+<li><b>Fetches</b> the relevant context: failing checks and CI logs, recent commits and deploys, and correlated logs, metrics, and traces.</li>
+<li><b>Masks</b> sensitive identifiers, optionally, before any external LLM call.</li>
+<li><b>Reasons</b> across your connected systems in a tool-calling loop, testing hypotheses and separating CI-caused failures from code-caused ones — a flaky runner is not a broken test, and fixing the wrong one wastes the next hour.</li>
+<li><b>Answers</b> with an evidence-linked response in the conversation.</li>
+<li><b>Fixes</b> the cause and pushes it to the PR branch for you to review, or suggests next steps and, optionally, executes remediation actions.</li>
+<li><b>Posts</b> a summary directly to Slack, PagerDuty, or Telegram — no context switching.</li>
+</ol>
+
+<p>The CI side has five capabilities, and the table is the honest way to pick between them:</p>
+
+<table>
+<thead><tr><th>Capability</th><th>Reads</th><th>Writes</th><th>Runs where</th></tr></thead>
+<tbody>
+<tr><td>CI reliability analysis</td><td>30 days of Actions runs for one repository</td><td>A report in the shell</td><td>Your machine</td></tr>
+<tr><td>Health scan</td><td>Open PRs and branch heads across your organizations</td><td>Nothing</td><td>Your machine</td></tr>
+<tr><td>Fix a PR</td><td>Failing checks and logs of one PR or branch</td><td>A commit on the PR branch, or a fresh repair branch</td><td>Your machine</td></tr>
+<tr><td>Reliability agent</td><td>The last 7 days, every weekday morning</td><td>A report in the shell inbox</td><td>Your machine, as a scheduled loop</td></tr>
+<tr><td>Repair loop</td><td>One PR's failing checks</td><td>Up to three repair pushes within ten minutes</td><td>Your machine, or the hosted gateway</td></tr>
+</tbody>
+</table>
+
+<p>Where the results go: analysis reports print in the shell, and the scheduled agent also saves the raw figures under <code>~/.opensre/ci_reliability_reports/</code>. A repair pushes to the pull request's own branch and reports the commit and the check results; <code>/loops show &lt;task-id&gt;</code> prints a finished repair's report with its evidence links. The banner's <b>CI/CD fixes</b> counter shows how many distinct repairs pushed checks that passed.</p>
+
+<h2 id="when-to-use-this-vs-the-alternatives">When to use this vs the alternatives<a class="anchor" href="#when-to-use-this-vs-the-alternatives" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>Managed incident platforms (PagerDuty, incident.io, and the like).</b> They page well and they cost per seat, per month, forever. OpenSRE is the self-hosted, open-source complement: it does the investigation and the fix, on your infrastructure, with your models. It also talks to those platforms — PagerDuty and incident.io are integrations, not competitors — so the usual shape is OpenSRE investigating and the platform you already pay for still doing the paging.</li>
+<li><b>Asking a plain LLM chat about a failed build.</b> A chat has no repo, no CI history, and no tools: you paste the log, it guesses. OpenSRE fetches the failing checks, the recent commits, and the correlated logs itself, and it can act on what it finds. The difference is the context it gathers before it answers, and the fix it can push after.</li>
+<li><b>GitHub's own failure summaries and re-runs.</b> They tell you that a check failed, and re-running sometimes makes it pass. They do not separate a CI-caused failure from a code-caused one, they do not correlate the failure with a deploy, and they do not open a fix. Use the re-run button when you already know the failure is flaky; use OpenSRE when you do not know why it failed.</li>
+<li><b>Writing your own failure-handling scripts.</b> A script can grep a log for a known string and re-run a job. It cannot test a hypothesis it has not been told about, and every new failure mode is another branch in the script. OpenSRE's tool-calling loop is the general version of that script — slower to set up, but it handles the failure you did not predict. Keep the script for the one failure you see every week; use the agent for the rest.</li>
+<li><b>The self-hosted gateway, for teams.</b> If the CLI is not enough, the same repository deploys as a Docker image in <code>web</code>, <code>gateway</code>, or <code>scheduler</code> mode, with <code>LLM_PROVIDER</code> and a provider key. The OpenSRE Cloud managed gateway is the hosted version: an organization admin provisions it in the web app, and signed-in shell users can check, start, or stop it without handling infrastructure credentials locally. There is also a gateway AMI and systemd path (<code>make build-gateway-image</code>, then <code>make deploy-gateway</code>) for a Telegram-only gateway. Bring your own provider key here: set <code>LLM_PROVIDER</code> to anthropic, openai, openrouter, trustedrouter, deepseek, gemini, bedrock, or azure, plus the matching key — for example <code>ANTHROPIC_API_KEY</code> when <code>LLM_PROVIDER=anthropic</code>.</li>
+</ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+
+<p>OpenSRE does one thing: it turns a red CI check from a notification into an investigation with an outcome. The verified part of this tutorial is the ground floor — the installer runs clean, the binary reports its version and its setup state, and the unauthenticated error tells you exactly what to run next. The part that makes it worth your time is the layer above that: a signed-in shell that reads 30 days of your Actions history and tells you what unreliable CI is costing, a headless command with real exit codes and JSON output that fits into the CI job it is watching, and a repair loop that pushes a fix to the branch instead of leaving the failure for the next person. The honest boundary is the alpha label and the account: core workflows are usable but not yet fully stable, and the agent itself needs your signed-in account or your provider key. Install it, run <code>doctor</code>, sign in, and point it at the repository whose CI you trust least.</p>
+
+<h2 id="how-this-tutorial-was-verified">How this tutorial was verified<a class="anchor" href="#how-this-tutorial-was-verified" aria-label="Link to section">#</a></h2>
+
+<p>Every install and CLI command in this tutorial was run on a Linux x86_64 VM on November 21, 2026, against the repository at commit <code>29d9ba6</code> (4,439 commits, 227 releases). The installer was run with the <code>-gh</code> flag; it downloaded the 150.4 MB Linux x86_64 tarball from the <code>main-build</code> release, verified the checksum, and installed OpenSRE v0.1.2026.11.18+main.29d9ba6 (Python 3.13.18). <code>opensre --version</code>, <code>opensre version</code>, <code>opensre --help</code>, <code>opensre ask --help</code>, <code>opensre integrations --help</code>, <code>opensre integrations setup --help</code>, <code>opensre login --help</code>, <code>opensre doctor</code>, <code>opensre account status</code>, and the unauthenticated <code>opensre ask</code> were all run, and their output is quoted verbatim above. Star, fork, commit, release, and creation-date figures are from the GitHub repository page, read the same day; the install command, sign-in flow, demo menu, headless exit codes, context-file limits, and CI capability table are from the project's README and docs (quickstart, FAQ, headless CLI, and CI/CD overview pages, updated between September 28 and November 11, 2026). What was not run here: no live agent turn, no CI/CD demo analysis, and no repair loop — each needs a signed-in OpenSRE account, a connected GitHub account, or a provider key, and this tutorial had none of those. No account was created, no key was used, and no code was changed in any repository. The welcome-screen screenshot is the project's own docs image, from an older build (v0.1.2026.9.18).</p>
+
+<section class="sources" aria-label="Sources"><h2>Sources</h2><ul>
+<li><a href="https://github.com/Tracer-Cloud/opensre" rel="nofollow">Tracer-Cloud/opensre — GitHub repository (README, stars, commits, releases)</a></li>
+<li><a href="https://www.opensre.com/" rel="nofollow">OpenSRE — homepage</a></li>
+<li><a href="https://www.opensre.com/docs/getting-started/quickstart" rel="nofollow">OpenSRE Docs — Quickstart</a></li>
+<li><a href="https://www.opensre.com/docs/guides/faq" rel="nofollow">OpenSRE Docs — FAQ</a></li>
+<li><a href="https://www.opensre.com/docs/guides/headless-cli" rel="nofollow">OpenSRE Docs — Headless CLI</a></li>
+<li><a href="https://www.opensre.com/docs/cicd/overview" rel="nofollow">OpenSRE Docs — CI/CD with OpenSRE</a></li>
+</ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="opensre-ci-cd-reliability-agent-tutorial"></div><div class="comments" data-comments="opensre-ci-cd-reliability-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/inkling-2-mini-local-run-tutorial/"><span class="chip">Tutorials</span><h3>Run Thinking Machines’ Inkling 2 Mini on your laptop: the looped-transformer local setup</h3><div class="meta">Senior Technology Writer · November 20, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/minimax-m31-flash-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill</h3><div class="meta">Senior Technology Writer · November 20, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/hy4-flash-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Tencent Hy4 Flash: 1M-token context, reasoning modes, and the open-weights deployment</h3><div class="meta">Tutorials &amp; Reviews Lead · November 20, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/inference-optimisation-skill-local-llm-speed-tutorial/"><span class="chip">Tutorials</span><h3>Speed up your local LLM server: hands-on with inference-optimisation-skill</h3><div class="meta">Tutorials &amp; Reviews Lead · November 20, 2026 · 17 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an LLM API key to use OpenSRE?</h3><p>No, if you sign in. Signing in activates the OpenSRE-hosted model, so the interactive shell and opensre ask work without any provider key. The key path exists for machines that are not signed in: set LLM_PROVIDER and the matching provider key, for example ANTHROPIC_API_KEY with LLM_PROVIDER=anthropic.</p><h3>Do I need a GitHub account?</h3><p>Yes for the CI work. The hosted model, Slack and Telegram answers, and hosted-gateway prompts all wait for a connected GitHub account. Connect it in the OpenSRE web app, then choose “I’ve connected GitHub, continue” in the shell. The CI/CD demo reads your repository’s last 30 days of GitHub Actions history.</p><h3>What does OpenSRE cost?</h3><p>The software is free under Apache-2.0. The hosted model comes with the free account sign-in. If you use the bring-your-own-provider path instead, the provider bills you at its own rates. Telemetry is first-party analytics plus Sentry, and it is opt-out with OPENSRE_NO_TELEMETRY=1.</p><h3>Is OpenSRE stable enough to use?</h3><p>It is public alpha. The README says core workflows are usable for early exploration but not yet fully stable, and that APIs and integrations may evolve. Treat it as a tool to try on a real repository, not as infrastructure to bet a release on.</p><h3>Does OpenSRE change my code without asking?</h3><p>No. A repair is pushed to the pull request’s branch — or a fresh repair branch — for you to review. In headless runs, tools that mutate state are denied by default and need an explicit --allowed-tool flag for that run. Read-only tools run automatically.</p><h3>Can I run it with my own model instead of the hosted one?</h3><p>Yes. Account-independent CLI workflows support Anthropic, OpenAI, OpenRouter, TrustedRouter, DeepSeek, Gemini, Bedrock, Azure OpenAI, and CLI-backed providers through LLM_PROVIDER plus the provider’s API key. You can also self-host the repository’s Docker image in web, gateway, or scheduler mode.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/chrome-devtools-mcp-coding-agents-tutorial/">Give your coding agent a browser: hands-on with chrome-devtools-mcp</a></li><li><a href="/articles/ffmpeg-skill-coding-agent-video-editor-tutorial/">Give your coding agent a video editor: hands-on with ffmpeg-skill</a></li><li><a href="/articles/coral-agent-gateway-custom-tools-tutorial/">Coral hands-on: give your coding agent a gateway that writes its own tools</a></li><li><a href="/articles/pyrit-ai-red-teaming-tutorial/">Red-team your own chatbot: hands-on with Microsoft's PyRIT</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google's ADK: researcher, writer, and guardrails, end to end</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
