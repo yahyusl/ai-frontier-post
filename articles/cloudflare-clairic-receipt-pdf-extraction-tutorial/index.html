@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Extract structured data from receipts and PDFs with Cloudflare Clairic — AI Frontier Post</title>
+<meta name="description" content="Cloudflare’s Clairic turns receipts, invoices, and PDFs into typed values — merchant, total, line items — with a confidence score on every field. Here’s the full workflow, from your first API call to a batch script that processes a whole folder into a CSV.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Extract structured data from receipts and PDFs with Cloudflare Clairic">
+<meta property="og:description" content="Cloudflare’s Clairic turns receipts, invoices, and PDFs into typed values — merchant, total, line items — with a confidence score on every field. Here’s the full workflow, from your first API call to a batch script that processes a whole folder into a CSV.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-21">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Extract structured data from receipts and PDFs with Cloudflare Clairic", "description": "Cloudflare’s Clairic turns receipts, invoices, and PDFs into typed values — merchant, total, line items — with a confidence score on every field. Here’s the full workflow, from your first API call to a batch script that processes a whole folder into a CSV.", "datePublished": "2026-11-21", "dateModified": "2026-11-21", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/"}, "image": "https://aifrontierpost.com/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Why use Clairic instead of asking a frontier LLM for JSON?", "acceptedAnswer": {"@type": "Answer", "text": "Three reasons: the answers are typed values, not generated text, so a digit cannot be misread while it is being written out; every answer carries a confidence score and a null probability, so you can route low-confidence fields to a human mechanically; and text answers come with character-offset spans, so you can highlight the evidence in the source document. It is also far cheaper and faster for this one job, because it charges only for input tokens and answers in a single pass."}}, {"@type": "Question", "name": "What happens when a field isn’t in the document?", "acceptedAnswer": {"@type": "Answer", "text": "It comes back null, with p_null near 1. Read value, never guess: the guess field shows what the model would have picked if forced, and the null machinery exists precisely so it isn’t forced. A null is a correct answer when the field is absent — log it, don’t retry it."}}, {"@type": "Question", "name": "How much does it cost to process a batch of receipts?", "acceptedAnswer": {"@type": "Answer", "text": "At the promotional price of $0.10 per million input tokens (until December 1, 2026), Cloudflare’s documented invoice example uses 655 input tokens — about fifteen thousand such invoices per dollar. Workers AI also includes a daily free allowance of 10,000 Neurons. The batch script in step 6 prints its token usage and cost at the end of every run, so you see the real number before the bill arrives."}}]}</script></head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Extract structured data from receipts and PDFs with Cloudflare Clairic</h1>
+<p class="lede">Cloudflare’s Clairic turns receipts, invoices, and PDFs into typed values — merchant, total, line items — with a confidence score on every field. Here’s the full workflow, from your first API call to a batch script that processes a whole folder into a CSV.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 21, 2026 · 11 min read</span></span></div><div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Clairic is Cloudflare’s extraction model, open-weight since November 18, 2026: you declare a schema of typed fields and it returns one typed value per field — a span, a number, a date, or a list of line-item rows — with a confidence score and a null probability, in one pass and for input tokens only. This guide covers the first curl call, receipt photos, multi-page PDFs, and a batch script that turns a folder of receipts into a CSV with a human review queue.</div><ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>Two models: <code>@cf/cloudflare/clairic</code> (27B) and <code>@cf/cloudflare/clairic-flash</code> (9B), both with a 65,536-token context window and zero data retention. Promotional pricing of $0.10 per million input tokens runs until December 1, 2026; after that Clairic is $0.24/M and flash stays at $0.10/M, with no output-token charge.</li><li>A request is a <code>state</code> plus a map of typed <code>fields</code> — text, number, date, time, datetime, duration, list, estimate, forecast (plus boolean, enum, object, compute). Every scalar answer carries <code>value</code>, <code>confidence</code>, <code>p_null</code>, and a character-offset <code>span</code>.</li><li>Up to four images or PDF pages per request; images go in as <code>data:</code> URLs, PDFs as base64 objects in <code>documents</code>. Each embedded input is limited to 4 MiB, 8 MiB combined; remote URLs are refused.</li><li>Line items come back as rows: a <code>list</code> whose <code>items</code> is an <code>object</code> with a <code>properties</code> map keeps each description, quantity, and price together.</li><li>The batch script in step 6 was run offline against a stub shaped exactly like the documented API response; the live calls in this guide are verified against Cloudflare’s documentation, not a live account.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/cover.webp" alt="Close-up of a Swiss restaurant receipt showing line items, total CHF 54.50, and VAT"><figcaption>Swiss mountain-restaurant receipt, 2007. Photo by Audrius Meskauskas, CC BY-SA 3.0, via Wikimedia Commons (cropped to 16:9).</figcaption></figure>
+<div class="article-body"><p>Receipts, invoices, and contracts are where most "AI extraction" projects quietly die. The usual approach — paste the document into a frontier model and ask for JSON — works until it doesn't: a digit gets misread while the model generates it, the output isn't valid JSON, a field comes back plausible but wrong, and there is no way to trace any value back to the page it came from. So teams build layers around the model: schema validation, retries, spot checks, and a human review queue for the cases they can catch.</p>
+<p>Cloudflare's Clairic, which went open-weight on November 18, 2026, is built for exactly this job and nothing else. It is not a chat model. You hand it a <em>state</em> — text, up to four images, or PDF pages — plus a map of typed <em>fields</em>, and it returns one typed value per field: a span of the source text, a number with the decimals you asked for, a date in ISO form, a list, or an estimate with an 80% interval. Every answer carries a confidence score and a null probability, so you can decide mechanically which fields to trust and which ones need a human. It answers in a single parallel pass, typically in under a second, and it charges only for input tokens — there is no output-token bill at all.</p>
+<p>This tutorial builds the whole workflow end to end: your first extraction call, a receipt photo with line items, a multi-page PDF, and a batch script that turns a folder of receipts into a CSV with a review queue for the fields that need a second look. Everything here is verified against Cloudflare's own documentation and model card; the code was run offline against a stub shaped exactly like the documented API response, and the one live fact you need — your own account credentials — is covered in step 1.</p>
+<h2 id="what-you-ll-need">What you&#x27;ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>A free Cloudflare account.</strong> No credit card is needed for the free plan. Workers AI includes a daily free allowance of 10,000 Neurons, which covers experimentation; beyond that, Clairic costs $0.10 per million input tokens until December 1, 2026 (a promotional price — after that, Clairic is $0.24 per million and Clairic-flash stays at $0.10). Because there is no output-token charge, a typical invoice call costs a fraction of a cent: Cloudflare's own documented example uses 655 input tokens, which works out to roughly fifteen thousand such invoices per dollar at the promotional price.</li>
+<li><strong>Your account ID and a Workers AI API token</strong> (step 1 shows where both live).</li>
+<li><strong>Python 3.11 or later and the <code>requests</code> library</strong> (<code>pip install requests</code>) for the batch script. The first two steps need nothing but <code>curl</code>.</li>
+<li><strong>A receipt photo or a PDF</strong> to extract from. If you don't have one handy, the Swiss mountain-restaurant receipt in this tutorial's cover photo is a good test image: it is on Wikimedia Commons under CC BY-SA, and it is the same photo independent testers have run through Clairic — receipt number 4572, total CHF 54.50, VAT 7.6% (CHF 3.85), euro equivalent 36.33.</li></ul>
+<p>Two model IDs matter. <strong>Clairic</strong> (<code>@cf/cloudflare/clairic</code>) is the 27B flagship, built on Qwen3.8-27B; <strong>Clairic-flash</strong> (<code>@cf/cloudflare/clairic-flash</code>) is the 9B version. Both have a 65,536-token context window and zero data retention. On Cloudflare's own internal evals — self-reported, treat them as directional — the new Clairic got 335 of 336 fresh text fields right (the October preview got 295) and all 576 synthetic receipt fields (the preview got 369). Latency is sub-second: for fresh text fields Cloudflare measured p50/p95 of 358/736&nbsp;ms for Clairic and 155/328&nbsp;ms for Clairic-flash; for image fields, 453/976&nbsp;ms and 305/605&nbsp;ms.</p>
+<h2 id="1-get-your-account-id-and-api-token">1. Get your account ID and API token<a class="anchor" href="#1-get-your-account-id-and-api-token" aria-label="Link to section">#</a></h2>
+<p>Sign in at <a href="https://dash.cloudflare.com/">dash.cloudflare.com</a>, then open <strong>AI → Workers AI → Use REST API</strong>. That page shows your account ID and has a <strong>Create a Workers AI API Token</strong> button. The token is shown only once, so save it immediately. (The account ID is also the long string in the dashboard URL right after <code>dash.cloudflare.com/</code>.)</p>
+<p>Export both into your shell — every example in this tutorial reads them from the environment, so the token never lands in a file or a shell history entry:</p>
+<pre><code class="language-bash">export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+export CLOUDFLARE_API_TOKEN="your-api-token"</code></pre>
+<p>If you build the token by hand instead of using the dashboard button, it needs both <code>Workers AI - Read</code> and <code>Workers AI - Edit</code> permissions. The dashboard button handles that for you.</p>
+<h2 id="2-your-first-extraction-one-curl-call">2. Your first extraction: one curl call<a class="anchor" href="#2-your-first-extraction-one-curl-call" aria-label="Link to section">#</a></h2>
+<p>A Clairic request has three parts: a <code>model</code>, a <code>state</code> (the text to read), and a <code>fields</code> map (what to pull out of it). Each field names a type and, optionally, plain-language <code>instructions</code> that say what the value means. There is no prompt engineering here — the schema <em>is</em> the request.</p>
+<p>This call reads a short invoice. The numbers are chosen so you can check the answers by hand: 12 reams at $6.40 is $76.80, plus $15.00 delivery is $91.80, and net-30 terms from November 3 land the due date on December 3.</p>
+<pre><code class="language-bash">curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/cloudflare/clairic \
+  -X POST \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -d '{
+    "model": "clairic",
+    "state": "Invoice INV-88412 from Acme Paper Co., issued 2026-11-03, net 30. 12 reams at $6.40 each, delivery $15.00. Contact: Sam Okafor.",
+    "fields": {
+      "invoice_number": { "type": "text" },
+      "due_date": { "type": "date", "instructions": "Issue date plus the net payment days" },
+      "total": { "type": "number", "decimals": 2, "unit": "USD", "instructions": "Amount due including delivery" },
+      "contacts": { "type": "list", "items": "text" },
+      "po_number": { "type": "text", "instructions": "Purchase order number" }
+    }
+  }'</code></pre>
+<p>Swap <code>@cf/cloudflare/clairic</code> for <code>@cf/cloudflare/clairic-flash</code> (and <code>"model": "clairic-flash"</code> in the body) to run the 9B model instead. The response comes back under <code>result.answers</code>, one entry per field:</p>
+<pre><code class="language-json">{
+  "model": "clairic",
+  "answers": {
+    "invoice_number": {"type": "text", "p_null": 3.8e-10, "span": [8, 17],
+                       "guess": "INV-88412", "confidence": 1, "value": "INV-88412"},
+    "due_date": {"type": "date", "p_null": 1.9e-08, "guess": "2026-12-03",
+                 "confidence": 0.9999, "value": "2026-12-03"},
+    "total": {"type": "number", "p_null": 2.3e-08, "guess": 91.8,
+              "confidence": 0.9999, "value": 91.8},
+    "contacts": {"type": "list", "value": ["Sam Okafor"],
+                 "spans": [[116, 126]], "confidence": 0.9999},
+    "po_number": {"type": "text", "p_null": 1, "span": [8, 16],
+                  "guess": "INV-88412", "confidence": 0.9995, "value": null}
+  },
+  "truncated": false,
+  "usage": {"state_tokens": 61, "image_tokens": 0, "schema_tokens": 472,
+            "input_tokens": 655, "output_tokens": 0, "passes": 3}
+}</code></pre>
+<p>Three things to notice. First, <code>total</code> and <code>due_date</code> are <em>computed</em>, not copied: neither 91.80 nor 2026-12-03 appears anywhere in the invoice text — Clairic did the arithmetic and the date math in the same pass. Second, <code>po_number</code> comes back <code>null</code> instead of a plausible-looking guess, because the invoice has no PO number. Third, the usage block shows where the tokens go: in Cloudflare's documented example of this same shape of call, the state was 61 tokens but the schema was 472 — most of what you pay for is the field definitions, not the document. (Your own call reports its own counts; the answers and spans above are for the invoice in this tutorial.) Asking for thirty fields costs about the same as asking for three, so don't skimp on the schema.</p>
+<p>If your app already runs on Cloudflare, the same call from inside a Worker needs no token at all — the AI binding handles auth:</p>
+<pre><code class="language-typescript">export interface Env {
+  AI: Ai;
+}
+
+export default {
+  async fetch(request, env): Promise&lt;Response&gt; {
+    const response = await env.AI.run("@cf/cloudflare/clairic", {
+      model: "clairic",
+      state: "Invoice INV-88412 from Acme Paper Co., issued 2026-11-03, net 30. 12 reams at $6.40 each, delivery $15.00. Contact: Sam Okafor.",
+      fields: {
+        invoice_number: { type: "text" },
+        due_date: { type: "date", instructions: "Issue date plus the net payment days" },
+        total: { type: "number", decimals: 2, unit: "USD", instructions: "Amount due including delivery" },
+        contacts: { type: "list", items: "text" },
+      },
+    });
+    return Response.json(response);
+  },
+} satisfies ExportedHandler&lt;Env&gt;;</code></pre>
+<h2 id="3-read-the-response-like-a-skeptic">3. Read the response like a skeptic<a class="anchor" href="#3-read-the-response-like-a-skeptic" aria-label="Link to section">#</a></h2>
+<p>Every scalar answer carries four things worth understanding before you trust it in production:</p>
+<ul><li><strong><code>value</code></strong> — the answer, typed exactly as you declared it (a number with your decimals, a date in ISO form, or <code>null</code>).</li><li><strong><code>confidence</code></strong> — the model's probability that the value is right. Treat it as a calibrated score, not a vibe: set a threshold (0.90 is a good starting point) and route everything below it to a human.</li><li><strong><code>p_null</code></strong> — the probability that the input doesn't determine the value at all. When <code>p_null</code> is near 1, the field is genuinely absent, and <code>value</code> is <code>null</code>.</li><li><strong><code>guess</code> and <code>span</code></strong> — what the model would have picked, and the character offsets of the exact source text it came from. For text fields, the span lets you highlight the evidence in the original document — something an LLM's JSON output can never give you.</li></ul>
+<p>The <code>po_number</code> answer above is the case that matters most. Its <code>guess</code> is "INV-88412" with confidence 0.9995 — the model is <em>very</em> confident about that string — but <code>p_null</code> is 1, so <code>value</code> is <code>null</code>. Read <code>value</code>, never <code>guess</code>: the guess is what the model would say if forced, and the whole point of the null machinery is that it isn't forced.</p>
+<p>Two more fields to check on every response: <code>truncated</code> (true means the input was cut to fit the 65,536-token context — split the document and retry) and <code>usage.passes</code> (how many parallel passes the server ran; fields that don't fit beside the state in one pass are split across passes that each see the whole input, then merged). If a field depends on the current date — "due in 30 days", "last Tuesday" — set <code>reference_date</code> to an ISO date, or add a line such as <code>Today: 2026-11-21</code> to the state.</p>
+<h2 id="4-a-receipt-photo-line-items-as-rows">4. A receipt photo: line items as rows<a class="anchor" href="#4-a-receipt-photo-line-items-as-rows" aria-label="Link to section">#</a></h2>
+<p>Text is the easy case. The interesting one is a photo: a crumpled receipt, a phone snapshot at an angle, faded print. Clairic takes up to four images per request, sent as <code>data:</code> URLs in an <code>images</code> array — raw base64 without the prefix is rejected, so include the <code>data:image/jpeg;base64,</code> header. Each embedded input is limited to 4&nbsp;MiB, and all inputs together to 8&nbsp;MiB; remote URLs are not accepted, so download the image first if it lives somewhere else.</p>
+<p>Here is the same Swiss receipt from the cover photo, sent with a schema that asks for the header fields plus one row per line item. The line-item trick is a <code>list</code> whose <code>items</code> is an <code>object</code> with a <code>properties</code> map — Clairic returns one row per item, keeping each description, quantity, and price together:</p>
+<pre><code class="language-python">import base64
+import requests
+
+ACCOUNT_ID = "your-account-id"
+AUTH_TOKEN = "your-api-token"
+
+with open("receipt.jpg", "rb") as f:
+    data_url = "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
+
+response = requests.post(
+    f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/cloudflare/clairic",
+    headers={"Authorization": f"Bearer {AUTH_TOKEN}"},
+    json={
+        "model": "clairic",
+        "state": "Read the attached receipt.",
+        "images": [data_url],
+        "fields": {
+            "merchant": {"type": "text", "instructions": "The merchant name."},
+            "receipt_number": {"type": "text", "instructions": "The receipt number."},
+            "purchased_at": {"type": "datetime", "instructions": "Date and time of purchase."},
+            "total": {"type": "number", "decimals": 2, "instructions": "Total amount paid."},
+            "tax": {"type": "number", "decimals": 2, "instructions": "VAT or sales tax amount."},
+            "line_items": {
+                "type": "list",
+                "items": {"type": "object", "properties": {
+                    "description": {"type": "text"},
+                    "quantity": {"type": "number"},
+                    "price": {"type": "number", "decimals": 2},
+                }},
+                "instructions": "One row per purchased item, in printed order.",
+            },
+        },
+    },
+    timeout=60,
+)
+print(response.json()["result"]["answers"])</code></pre>
+<p>When an independent tester ran this exact photo through Clairic, it returned the merchant (Berghotel Grosse Scheidegg), receipt number 4572, total CHF 54.50, VAT 7.6% and CHF 3.85, the euro equivalent of 36.33, both lattes as line items, and the date, time, and server's name — and correctly returned <code>null</code> for the tip, with <code>p_null</code> 0.991, because there is no tip on the bill. That was the October preview endpoint; the November model scores higher on the same kind of receipt fields in Cloudflare's own evals (576 of 576, up from 369).</p>
+<p>Two practical notes. First, images and PDF pages share the four-item limit, so a four-page invoice costs the same budget as four photos. Second, if a photo comes out sideways, pass a <code>rotation</code> of 0, 90, 180, or 270 degrees clockwise (applied after EXIF orientation) rather than re-shooting it.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/img2.webp" alt="Close-up of a faded supermarket receipt showing line items, total, and tax"><figcaption>A faded supermarket receipt from Alexander's, Manchester, New Hampshire (CC0, via Wikimedia Commons; cropped). Faded print and abbreviations are exactly the cases where a confidence score earns its keep.</figcaption></figure>
+<h2 id="5-a-multi-page-pdf-one-call">5. A multi-page PDF: one call<a class="anchor" href="#5-a-multi-page-pdf-one-call" aria-label="Link to section">#</a></h2>
+<p>Since the November 18 update, Clairic reads PDFs too. A PDF goes in the <code>documents</code> array as a base64 object — the same shape as the images array, but for documents:</p>
+<pre><code class="language-python">import base64
+import requests
+
+with open("invoice.pdf", "rb") as f:
+    pdf_b64 = base64.b64encode(f.read()).decode()
+
+response = requests.post(
+    f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/cloudflare/clairic",
+    headers={"Authorization": f"Bearer {AUTH_TOKEN}"},
+    json={
+        "model": "clairic",
+        "state": "Read the attached invoice PDF.",
+        "documents": [{"content_type": "application/pdf", "base64": pdf_b64}],
+        "fields": {
+            "vendor": {"type": "text", "instructions": "The invoice vendor."},
+            "invoice_number": {"type": "text"},
+            "issued": {"type": "date"},
+            "total": {"type": "number", "decimals": 2},
+            "line_items": {
+                "type": "list",
+                "items": {"type": "object", "properties": {
+                    "description": {"type": "text"},
+                    "quantity": {"type": "number"},
+                    "price": {"type": "number", "decimals": 2},
+                }},
+                "instructions": "One row per line item, in printed order.",
+            },
+        },
+    },
+    timeout=60,
+)</code></pre>
+<p>You can ask for the supplier, the line items, and the total in one request even when they appear on different pages — the model reads across pages. The four-item limit counts rendered PDF pages together with images, so a five-page PDF needs two calls (pages 1–4, then page 5), or a split beforehand. And the 4&nbsp;MiB per-input limit applies to the PDF itself, so compress scanned PDFs before sending them; a phone scan at 150&nbsp;dpi is usually plenty for printed text.</p>
+<h2 id="6-batch-a-whole-folder-into-a-csv">6. Batch a whole folder into a CSV<a class="anchor" href="#6-batch-a-whole-folder-into-a-csv" aria-label="Link to section">#</a></h2>
+<p>One receipt at a time is a demo. The real workflow is a folder of receipts and a spreadsheet at the end, with a review queue for the fields that need a human. The script below does that: one Clairic call per file, values flattened into a CSV row, and anything below a confidence threshold — or returned as <code>null</code> — written to <code>review.json</code> instead of being silently trusted.</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+&quot;&quot;&quot;Extract structured fields from a folder of receipts and PDFs with
+Cloudflare Clairic (Workers AI).
+
+Usage:
+    export CLOUDFLARE_ACCOUNT_ID=...
+    export CLOUDFLARE_API_TOKEN=...      # Workers AI API token
+    python3 extract_receipts.py receipts/ --out results.csv
+
+Each file gets one Clairic call. Images (.jpg/.jpeg/.png/.webp) go in the
+`images` array as data URLs; PDFs go in the `documents` array as base64.
+Fields below a confidence threshold (or returned as null) are flagged in
+review.json instead of being silently trusted.
+&quot;&quot;&quot;
+import argparse
+import base64
+import csv
+import json
+import os
+import sys
+from pathlib import Path
+
+import requests
+
+MODEL_CLAIRIC = &quot;@cf/cloudflare/clairic&quot;
+MODEL_FLASH = &quot;@cf/cloudflare/clairic-flash&quot;
+MAX_BYTES = 4 * 1024 * 1024  # Clairic&#x27;s per-input limit: 4 MiB
+
+IMAGE_EXTS = {&quot;.jpg&quot;, &quot;.jpeg&quot;, &quot;.png&quot;, &quot;.webp&quot;}
+PDF_EXTS = {&quot;.pdf&quot;}
+
+# The receipt schema: one typed field per fact. Clairic returns one typed
+# value per field, plus a confidence score and a null probability.
+RECEIPT_FIELDS = {
+    &quot;merchant&quot;: {&quot;type&quot;: &quot;text&quot;,
+                 &quot;instructions&quot;: &quot;The merchant or business name.&quot;},
+    &quot;receipt_number&quot;: {&quot;type&quot;: &quot;text&quot;,
+                       &quot;instructions&quot;: &quot;The receipt or invoice number.&quot;},
+    &quot;purchased_at&quot;: {&quot;type&quot;: &quot;datetime&quot;,
+                     &quot;instructions&quot;: &quot;Date and time of the purchase.&quot;},
+    &quot;total&quot;: {&quot;type&quot;: &quot;number&quot;, &quot;decimals&quot;: 2,
+              &quot;instructions&quot;: &quot;Total amount paid, including tax.&quot;},
+    &quot;tax&quot;: {&quot;type&quot;: &quot;number&quot;, &quot;decimals&quot;: 2,
+            &quot;instructions&quot;: &quot;Sales tax or VAT amount.&quot;},
+    &quot;payment_method&quot;: {&quot;type&quot;: &quot;text&quot;,
+                       &quot;instructions&quot;: &quot;How the purchase was paid.&quot;},
+    &quot;line_items&quot;: {
+        &quot;type&quot;: &quot;list&quot;,
+        &quot;items&quot;: {&quot;type&quot;: &quot;object&quot;, &quot;properties&quot;: {
+            &quot;description&quot;: {&quot;type&quot;: &quot;text&quot;},
+            &quot;quantity&quot;: {&quot;type&quot;: &quot;number&quot;},
+            &quot;price&quot;: {&quot;type&quot;: &quot;number&quot;, &quot;decimals&quot;: 2},
+        }},
+        &quot;instructions&quot;: &quot;One row per purchased item, in printed order.&quot;,
+    },
+}
+
+
+def build_payload(path: Path, fields: dict, reference_date: str | None) -&gt; dict:
+    &quot;&quot;&quot;One Clairic request body for a single file.&quot;&quot;&quot;
+    raw = path.read_bytes()
+    if len(raw) &gt; MAX_BYTES:
+        raise ValueError(f&quot;{path.name} is {len(raw)} bytes, over Clairic&#x27;s &quot;
+                         f&quot;4 MiB per-input limit&quot;)
+    payload: dict = {
+        &quot;model&quot;: &quot;clairic&quot;,
+        &quot;state&quot;: f&quot;Read the attached receipt ({path.name}).&quot;,
+        &quot;fields&quot;: fields,
+    }
+    if reference_date:
+        payload[&quot;reference_date&quot;] = reference_date
+    suffix = path.suffix.lower()
+    if suffix in IMAGE_EXTS:
+        mime = {&quot;jpg&quot;: &quot;image/jpeg&quot;, &quot;jpeg&quot;: &quot;image/jpeg&quot;,
+                &quot;png&quot;: &quot;image/png&quot;, &quot;webp&quot;: &quot;image/webp&quot;}[suffix.lstrip(&quot;.&quot;)]
+        data_url = f&quot;data:{mime};base64,&quot; + base64.b64encode(raw).decode()
+        payload[&quot;images&quot;] = [data_url]
+    elif suffix in PDF_EXTS:
+        payload[&quot;documents&quot;] = [{&quot;content_type&quot;: &quot;application/pdf&quot;,
+                                 &quot;base64&quot;: base64.b64encode(raw).decode()}]
+    else:
+        raise ValueError(f&quot;unsupported file type: {path.suffix}&quot;)
+    return payload
+
+
+def extract(path: Path, account_id: str, token: str, model: str,
+            fields: dict, reference_date: str | None) -&gt; dict:
+    url = (f&quot;https://api.cloudflare.com/client/v4/accounts/{account_id}&quot;
+           f&quot;/ai/run/{model}&quot;)
+    resp = requests.post(
+        url,
+        headers={&quot;Authorization&quot;: f&quot;Bearer {token}&quot;},
+        json=build_payload(path, fields, reference_date),
+        timeout=60,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    if not body.get(&quot;success&quot;, True):
+        raise RuntimeError(f&quot;Workers AI error: {body.get(&#x27;errors&#x27;)}&quot;)
+    return body[&quot;result&quot;]
+
+
+def flatten(answers: dict, min_confidence: float) -&gt; tuple[dict, list[str]]:
+    &quot;&quot;&quot;Pull plain values out of Clairic&#x27;s answers; list fields that need
+    a human look (low confidence, or null where a value was expected).&quot;&quot;&quot;
+    row, needs_review = {}, []
+    for name, ans in answers.items():
+        value = ans.get(&quot;value&quot;)
+        row[name] = json.dumps(value) if isinstance(value, (list, dict)) else value
+        confidence = ans.get(&quot;confidence&quot;)
+        if value is None:
+            needs_review.append(f&quot;{name}: null (p_null={ans.get(&#x27;p_null&#x27;)})&quot;)
+        elif confidence is not None and confidence &lt; min_confidence:
+            needs_review.append(f&quot;{name}: confidence {confidence:.2f} &quot;
+                                f&quot;&lt; {min_confidence}&quot;)
+    return row, needs_review
+
+
+def main() -&gt; int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(&quot;folder&quot;, type=Path,
+                    help=&quot;folder of receipt images / PDFs&quot;)
+    ap.add_argument(&quot;--out&quot;, default=&quot;results.csv&quot;,
+                    help=&quot;CSV of extracted values (default: results.csv)&quot;)
+    ap.add_argument(&quot;--review&quot;, default=&quot;review.json&quot;,
+                    help=&quot;JSON of fields to check by hand&quot;)
+    ap.add_argument(&quot;--model&quot;, default=MODEL_CLAIRIC,
+                    choices=[MODEL_CLAIRIC, MODEL_FLASH],
+                    help=&quot;Clairic (27B) or Clairic-flash (9B)&quot;)
+    ap.add_argument(&quot;--fields&quot;, type=Path,
+                    help=&quot;JSON file with a custom field schema&quot;)
+    ap.add_argument(&quot;--min-confidence&quot;, type=float, default=0.90,
+                    help=&quot;flag fields below this confidence (default 0.90)&quot;)
+    ap.add_argument(&quot;--reference-date&quot;, default=None,
+                    help=&quot;ISO date anchoring relative dates, e.g. 2026-11-21&quot;)
+    args = ap.parse_args()
+
+    account_id = os.environ.get(&quot;CLOUDFLARE_ACCOUNT_ID&quot;)
+    token = os.environ.get(&quot;CLOUDFLARE_API_TOKEN&quot;)
+    if not account_id or not token:
+        print(&quot;Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN first.&quot;,
+              file=sys.stderr)
+        return 2
+    fields = (json.loads(args.fields.read_text()) if args.fields
+              else RECEIPT_FIELDS)
+    files = sorted(p for p in args.folder.iterdir()
+                   if p.suffix.lower() in IMAGE_EXTS | PDF_EXTS)
+    if not files:
+        print(f&quot;No receipt images or PDFs in {args.folder}&quot;, file=sys.stderr)
+        return 1
+
+    review: dict[str, list[str]] = {}
+    rows, total_tokens = [], 0
+    for path in files:
+        try:
+            result = extract(path, account_id, token, args.model,
+                             fields, args.reference_date)
+        except Exception as exc:  # noqa: BLE001 - keep the batch going
+            print(f&quot;{path.name}: FAILED ({exc})&quot;, file=sys.stderr)
+            review[path.name] = [f&quot;request failed: {exc}&quot;]
+            continue
+        if result.get(&quot;truncated&quot;):
+            print(f&quot;{path.name}: WARNING - input truncated&quot;, file=sys.stderr)
+        row, flags = flatten(result[&quot;answers&quot;], args.min_confidence)
+        row[&quot;file&quot;] = path.name
+        rows.append(row)
+        total_tokens += result.get(&quot;usage&quot;, {}).get(&quot;input_tokens&quot;, 0)
+        if flags:
+            review[path.name] = flags
+        print(f&quot;{path.name}: total={row.get(&#x27;total&#x27;)} &quot;
+              f&quot;merchant={row.get(&#x27;merchant&#x27;)} &quot;
+              f&quot;({&#x27;REVIEW&#x27; if flags else &#x27;ok&#x27;})&quot;)
+
+    fieldnames = [&quot;file&quot;] + list(fields)
+    with open(args.out, &quot;w&quot;, newline=&quot;&quot;) as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(rows)
+    Path(args.review).write_text(json.dumps(review, indent=2))
+    print(f&quot;\n{len(rows)} files -&gt; {args.out} &quot;
+          f&quot;({total_tokens} input tokens, &quot;
+          f&quot;${total_tokens * 0.10 / 1_000_000:.4f} at promo pricing)&quot;)
+    print(f&quot;{len(review)} file(s) need review -&gt; {args.review}&quot;)
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())</code></pre>
+<p>Run it against a folder of receipt photos and PDFs:</p>
+<pre><code class="language-bash">export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+export CLOUDFLARE_API_TOKEN="your-api-token"
+python3 extract_receipts.py receipts/ --out results.csv
+python3 extract_receipts.py receipts/ --out results.csv --model @cf/cloudflare/clairic-flash --min-confidence 0.95</code></pre>
+<p>The second invocation shows the two knobs you will actually turn. <code>--model</code> switches to Clairic-flash, the 9B model: roughly twice as fast and, after the promotional period ends on December 1, less than half the price. <code>--min-confidence</code> raises the bar for what counts as trustworthy — 0.95 is the right setting once you have measured your own error rate on a sample you checked by hand.</p>
+<p>Three design choices in the script are worth copying into your own pipeline. First, the 4&nbsp;MiB check happens <em>before</em> the request, so an oversized scan fails fast with a clear message instead of a cryptic API error. Second, a failed file never kills the batch — it lands in the review queue with the error attached, and the run continues. Third, the script prints its token usage and cost at the end, so the price of a 500-receipt month is a number you have seen, not a surprise on the invoice.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/img3.webp" alt="Diagram of the extraction workflow: a receipt or PDF goes into Clairic, which returns typed values with confidence scores"><figcaption>The workflow in one picture: a document goes in, typed values with confidence scores come out, and low-confidence fields go to a human review queue. Diagram by AI Frontier Post.</figcaption></figure>
+<h2 id="7-estimates-and-forecasts-when-the-answer-isn-t-printed">7. Estimates and forecasts: when the answer isn&#x27;t printed<a class="anchor" href="#7-estimates-and-forecasts-when-the-answer-isn-t-printed" aria-label="Link to section">#</a></h2>
+<p>Extraction is the headline, but Clairic also answers questions the document doesn't state outright. An <code>estimate</code> field declares a range (<code>min</code>, <code>max</code>, <code>step</code>) and returns a distribution — a median with an 80% interval from p10 to p90. A <code>forecast</code> field adds a <code>horizon</code> and an <code>interval</code> and returns one estimate per future step. Both need bounds; that is what makes the answer a value instead of a guess.</p>
+<pre><code class="language-python">response = requests.post(
+    f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/cloudflare/clairic",
+    headers={"Authorization": f"Bearer {AUTH_TOKEN}"},
+    json={
+        "model": "clairic",
+        "state": "Daily demand for the last seven days: 120, 135, 128, 142, 150, 138, 145.",
+        "fields": {
+            "next_day": {"type": "estimate", "min": 0, "max": 300},
+            "next_three_days": {
+                "type": "forecast", "min": 0, "max": 300,
+                "horizon": 3, "interval": "day",
+            },
+        },
+        "options": {"include_quantiles": True},
+    },
+    timeout=60,
+)</code></pre>
+<p>Use estimates for the questions that have no printed answer — how many days until this invoice is paid, what the repair will cost, how much traffic tomorrow brings — and read the interval, not just the median. A median of 30 days with a p10–p90 of 21–38 is a planning input; a median on its own is a false sense of precision. Forecasts are basic — one estimate per step, up to 64 steps — so treat them as a cheap baseline, not a forecasting system.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Four ways to get structured data out of a document, and the one-line rule for each:</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Use it when</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Clairic (27B)</strong></td><td>Accuracy matters most; receipts, invoices, contracts; you want spans and confidence scores</td><td>$0.24/M input tokens after Dec 1, 2026; ~2× the latency of flash</td></tr><tr><td><strong>Clairic-flash (9B)</strong></td><td>High volume or latency-sensitive work; most fields are easy to read</td><td>Slightly lower accuracy on hard fields; check your own error rate first</td></tr><tr><td><strong>Frontier LLM in JSON mode</strong></td><td>The document needs reasoning, not just reading — ambiguous terms, cross-references, judgment calls</td><td>Output tokens on every field; no spans; no calibrated confidence; digits can be misgenerated</td></tr><tr><td><strong>OCR + regex/rules</strong></td><td>One fixed form, thousands of identical copies, zero tolerance for model variance</td><td>Breaks on every layout change; no dates, no arithmetic, no estimates</td></tr></tbody></table></div>
+<p>The honest default for most teams is a cascade, and it is the pattern Cloudflare itself suggests: Clairic pulls the typed values out, a decision model rules on them, and an LLM writes the reply only if words are needed. Run the easy 95% of documents through Clairic-flash, route the low-confidence fields to a human, and reserve the frontier model for the documents where the answer genuinely requires judgment. Measure the error rate on a hand-checked sample before you commit to any of the four — the confidence threshold that fits your documents is a number you find, not one you assume.</p>
+<p>One more option, for teams that can't send documents to a hosted API at all: both models are open-weight on Hugging Face (<code>Cloudflare/clairic</code> and <code>Cloudflare/clairic-flash</code>, Apache-2.0) with a Python helper that runs the same request shape locally on a CUDA GPU. The API and the local path take the same <code>state</code> / <code>fields</code> input, so a schema you develop against Workers AI ports directly to a self-hosted deployment.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Document extraction stops being a prompting problem the moment the model answers with typed values instead of text. Clairic's deal is simple: you declare the schema, it returns one typed value per field with a confidence score and a null probability, and it charges only for input tokens. The workflow that makes that useful in practice is not the API call — it is the review queue: a confidence threshold, a <code>null</code> check, and a human for the fields that fall below the bar. Build the schema once, batch the folder, read the review queue every morning, and the receipts take care of themselves.</p>
+<p><em>Sources: the <a href="https://blog.cloudflare.com/open-clairic">Cloudflare announcement</a> (open-weight Clairic and Clairic-flash, November 18, 2026; pricing, latency, and eval tables), the <a href="https://developers.cloudflare.com/workers-ai/models/clairic">Clairic model page</a> and <a href="https://developers.cloudflare.com/workers-ai/models/clairic-flash">Clairic-flash model page</a> (API schemas, REST and Worker examples, $0.10/M promotional pricing until December 1, 2026), the <a href="https://huggingface.co/Cloudflare/clairic">Clairic model card on Hugging Face</a> (open weights, local run, image/PDF input format, field types), the <a href="https://blog.cloudflare.com/clairic-extraction-model">preview announcement</a> (typed-field semantics, estimate/forecast behavior), and an <a href="https://medium.com/@ishank.iandroid/cloudflare-clairic-extract-typed-json-from-text-and-receipt-photos-on-workers-ai-139a93c3f00b">independent test of the preview endpoint</a> on the Swiss receipt photo used in this tutorial. The batch script was run offline against a stub shaped exactly like the documented API response; the live API calls in this guide are verified against Cloudflare's documentation, not against a live account.</em></p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="cloudflare-clairic-receipt-pdf-extraction-tutorial"></div><div class="comments" data-comments="cloudflare-clairic-receipt-pdf-extraction-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/docling-pdf-markdown-rag-tutorial/"><span class="chip">Tutorials</span><h3>From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</h3><div class="meta">October 27, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/flux-2-dev-cloudflare-workers-ai-tutorial/"><span class="chip">Tutorials</span><h3>Run FLUX.2 [dev] without a GPU: serverless image generation on Cloudflare Workers AI</h3><div class="meta">November 21, 2026 · 28 min read</div></a><a class="rel-card" href="/articles/firecrawl-ai-agent-web-access-tutorial/"><span class="chip">Tutorials</span><h3>Give your AI agent the live web: search, scrape, and crawl with Firecrawl — hands-on</h3><div class="meta">November 19, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/minicpm-ocr-parse-documents-locally-tutorial/"><span class="chip">Tutorials</span><h3>Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR</h3><div class="meta">October 31, 2026 · 8 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Why use Clairic instead of asking a frontier LLM for JSON?</h3><p>Three reasons: the answers are typed values, not generated text, so a digit cannot be misread while it is being written out; every answer carries a confidence score and a null probability, so you can route low-confidence fields to a human mechanically; and text answers come with character-offset spans, so you can highlight the evidence in the source document. It is also far cheaper and faster for this one job, because it charges only for input tokens and answers in a single pass.</p><h3>What happens when a field isn’t in the document?</h3><p>It comes back null, with p_null near 1. Read value, never guess: the guess field shows what the model would have picked if forced, and the null machinery exists precisely so it isn’t forced. A null is a correct answer when the field is absent — log it, don’t retry it.</p><h3>How much does it cost to process a batch of receipts?</h3><p>At the promotional price of $0.10 per million input tokens (until December 1, 2026), Cloudflare’s documented invoice example uses 655 input tokens — about fifteen thousand such invoices per dollar. Workers AI also includes a daily free allowance of 10,000 Neurons. The batch script in step 6 prints its token usage and cost at the end of every run, so you see the real number before the bill arrives.</p></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
