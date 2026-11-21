@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Put Claude Code on autopilot: the complete GitHub Action tutorial — AI Frontier Post</title>
+<meta name="description" content="Claude Code’s GitHub Action hit v1.0 on November 19. Set up @claude mentions, automated PR reviews, and issue triage — every workflow validated with actionlint before you commit it.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/claude-code-github-action-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Put Claude Code on autopilot: the complete GitHub Action tutorial">
+<meta property="og:description" content="Claude Code’s GitHub Action hit v1.0 on November 19. Set up @claude mentions, automated PR reviews, and issue triage — every workflow validated with actionlint before you commit it.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/claude-code-github-action-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/claude-code-github-action-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-21">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Put Claude Code on autopilot: the complete GitHub Action tutorial", "description": "Claude Code’s GitHub Action hit v1.0 on November 19. Set up @claude mentions, automated PR reviews, and issue triage — every workflow validated with actionlint before you commit it.", "datePublished": "2026-11-21", "dateModified": "2026-11-21", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/claude-code-github-action-tutorial/"}, "image": "https://aifrontierpost.com/articles/claude-code-github-action-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an Anthropic API key, or can I use my Claude subscription?", "acceptedAnswer": {"@type": "Answer", "text": "Either works. An API key goes in as a secret named ANTHROPIC_API_KEY and is passed as the anthropic_api_key input. A subscription works through claude setup-token, which prints a long-lived OAuth token: store it as CLAUDE_CODE_OAUTH_TOKEN and pass it as claude_code_oauth_token. Note the /install-github-app quickstart only supports direct API users."}}, {"@type": "Question", "name": "Why doesn’t my CI run on the commits Claude pushes?", "acceptedAnswer": {"@type": "Answer", "text": "Commits pushed with GitHub’s default GITHUB_TOKEN deliberately do not trigger other workflows. Install the Claude GitHub App so the action authenticates with an app token — pushes made with that token do trigger your CI."}}, {"@type": "Question", "name": "How much will this cost?", "acceptedAnswer": {"@type": "Answer", "text": "You pay Anthropic’s API rates for the tokens each run uses, or your subscription’s usage with an OAuth token. Bound it with --max-turns, a per-workflow --model (Haiku for triage, Sonnet for review), and timeout-minutes. GitHub Actions minutes are free for public repositories; on private repos they draw on your plan’s allowance."}}]}</script></head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Put Claude Code on autopilot: the complete GitHub Action tutorial</h1>
+<p class="lede">Claude Code’s GitHub Action hit v1.0 on November 19. Set up @claude mentions, automated PR reviews, and issue triage — every workflow validated with actionlint before you commit it.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 21, 2026 · 13 min read</span></span></div><div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Claude Code’s GitHub Action hit v1.0 on November 19, 2026. One action, two modes: mention <code>@claude</code> and it works your issue, or set a <code>prompt</code> and it reviews every PR and triages every issue on its own. This guide builds all three workflows, validated with actionlint before you commit them.</div><ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li>Version 1.0 went generally available on November 19, 2026 (v1.0.286 the next day); the repo has roughly 10,000 stars, is MIT-licensed, and declares 41 inputs.</li><li>The action detects its own mode from one input: no <code>prompt</code> means interactive @claude mentions; a <code>prompt</code> means automation on any event.</li><li>This guide builds three workflows: a @claude mention responder, an automated PR review, and issue triage — all three pass actionlint 1.7.10 with zero findings.</li><li>Cost is bounded by <code>--max-turns</code>, a per-workflow <code>--model</code>, <code>timeout-minutes</code>, and concurrency groups — never by hoping the run is short.</li><li>Fork PRs are fenced by default (<code>restrict_untrusted_prs</code>), and <code>allowed_non_write_users: "*"</code> is the sharp edge: minimal permissions only, never with write access.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/claude-code-github-action-tutorial/cover.webp" alt="Illustration of a robot assistant reviewing a pull request on a large screen"><figcaption>Illustration generated by AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Claude Code spent its first year in the terminal. You typed, it edited, you reviewed. That loop works, but it only runs while you're at the keyboard — the moment a teammate opens a pull request at 11pm or a user files an issue on a Saturday, the agent is asleep.</p>
+<p>The official GitHub Action moves Claude Code into your repository's automation. It answers <code>@claude</code> mentions in issues and pull requests, reviews every PR that opens, triages new issues, and fixes failing CI — all on GitHub's runners, with the same model and tools you'd use locally. Version 1.0 went generally available on November 19, 2026, and the action was already at v1.0.286 a day later, with roughly 10,000 stars on the repository and commits landing daily. This guide sets it up end to end: the mention responder, an automated PR review, and issue triage, with every workflow validated before you commit it.</p>
+<h2 id="1-what-youll-need">1. What you&#x27;ll need<a class="anchor" href="#1-what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li>A GitHub repository you administer. Admin rights are required to install the GitHub App and add secrets. Use a low-stakes repo for your first run — a side project, not production.</li>
+<li>An Anthropic API key (from the Anthropic Console) <em>or</em> a Claude Pro, Max, or Team subscription. The API key is the simple path; the subscription path uses a long-lived OAuth token instead, covered in step 2.</li>
+<li>About 30 minutes. No local installs are needed for the workflows themselves — they run on GitHub-hosted runners. You will need <code>git</code> to commit the workflow files.</li>
+</ul>
+<p>Cost: you pay Anthropic's API rates for the tokens Claude uses on each run, or your subscription's usage if you authenticate with an OAuth token. GitHub Actions minutes are free for public repositories; on private repos they draw on your plan's monthly allowance. The cost controls in step 6 are what keep a busy repo from surprising you.</p>
+<h2 id="2-two-modes-one-input">2. Two modes, one input<a class="anchor" href="#2-two-modes-one-input" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-code-github-action-tutorial/img2.webp" alt="Diagram of the two ways the action starts: a mention in a comment, or a scheduled or event trigger"><figcaption>One action, two triggers: a human mentions @claude, or an event starts the run. Illustration generated by AI Frontier Post.</figcaption></figure>
+<p>The v1 action has no mode switch. It detects the mode itself from a single input, <code>prompt</code>:</p>
+<ul>
+<li><strong>Interactive mode — no <code>prompt</code>.</strong> The action waits for the trigger phrase, <code>@claude</code> by default, in an issue or PR comment, a PR review, or the title or body of a newly opened issue. It can also start from a label (<code>claude</code> by default) or when a specific user is assigned. Claude replies in a comment it keeps updating as it works, and commits it makes land on a branch named like <code>claude/issue-42-&lt;timestamp&gt;</code>, pushed as <code>claude[bot]</code>.</li>
+<li><strong>Automation mode — <code>prompt</code> set.</strong> Claude runs on whatever event starts the workflow: a pull request opening, a schedule, a failed check. By default its results go to the workflow run log, not a comment — if you want findings on the PR, the prompt has to say so and the tools to post them have to be allowed. The PR review in step 4 shows exactly how.</li>
+</ul>
+<p>Everything else is configuration. The action declares 41 inputs — auth, triggers, tools, permissions, outputs — but you will use about six of them. The three inputs that change what a run can do are <code>prompt</code> (the instruction), <code>claude_args</code> (CLI flags such as <code>--model</code>, <code>--max-turns</code>, and <code>--allowedTools</code>), and the auth input, <code>anthropic_api_key</code> or <code>claude_code_oauth_token</code>. The rest are guardrails, and step 7 explains the ones that matter.</p>
+<p>One thing the action does not do: it never merges branches, rebases, or force-pushes. It creates and pushes commits only. Merging stays a human decision — or a separate workflow's job.</p>
+<h2 id="3-install-the-app-and-store-the-secret">3. Install the app and store the secret<a class="anchor" href="#3-install-the-app-and-store-the-secret" aria-label="Link to section">#</a></h2>
+<p>The fastest path is the one Anthropic documents: open Claude Code in your terminal inside the repository and run <code>/install-github-app</code>. It walks you through installing the Claude GitHub App and creating the secret, then opens a pull request with the workflow files. You must be a repository admin, and this path is only for direct Anthropic API users — Bedrock, Vertex, and Foundry setups use their own docs.</p>
+<p>Do it by hand when you want to understand what the installer did, or when the repo already has workflows you don't want overwritten:</p>
+<ol>
+<li>Install the Claude GitHub App from <code>github.com/apps/claude</code> onto the repository. The app needs Contents, Issues, and Pull requests permissions, read and write.</li>
+<li>In the repository, go to Settings → Secrets and variables → Actions → New repository secret. Name it <code>ANTHROPIC_API_KEY</code> and paste your Anthropic API key as the value. Never write the key into a workflow file — secrets are the only place it belongs.</li>
+<li>Using a subscription instead of an API key? Run <code>claude setup-token</code> in your terminal. It prints a long-lived OAuth token without saving it; store that as a secret named <code>CLAUDE_CODE_OAUTH_TOKEN</code> and pass it as the <code>claude_code_oauth_token</code> input instead of the API key. The token is tied to your subscription, so its usage bills like your normal Claude Code sessions.</li>
+</ol>
+<p>Why the app matters, not just the secret: commits the action pushes with the default <code>GITHUB_TOKEN</code> do not trigger other workflows. That means your CI would silently skip every fix Claude pushes. The app's token does trigger them. If you set this up with the token alone and your tests never run on Claude's branches, this is the cause — install the app.</p>
+<h2 id="4-the-claude-mention-responder">4. The @claude mention responder<a class="anchor" href="#4-the-claude-mention-responder" aria-label="Link to section">#</a></h2>
+<p>Create <code>.github/workflows/claude.yml</code>. This is the repository's own example workflow, plus three additions from the action's cost guidance: a 30-minute job timeout, a concurrency group so two mentions on the same issue queue instead of racing, and a turn cap.</p>
+<pre><code>name: Claude Code
+
+# Workflow 1 — Interactive mode: answer @claude mentions in issues and PRs.
+# With no `prompt` input, the action waits for the trigger phrase and replies
+# in a comment it keeps updating. Source: anthropics/claude-code-action
+# examples/claude.yml (v1.0.286), plus a job timeout, a per-issue concurrency
+# group, and a turn cap from the action&#x27;s cost guidance.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == &#x27;issue_comment&#x27; &amp;&amp; contains(github.event.comment.body, &#x27;@claude&#x27;)) ||
+      (github.event_name == &#x27;pull_request_review_comment&#x27; &amp;&amp; contains(github.event.comment.body, &#x27;@claude&#x27;)) ||
+      (github.event_name == &#x27;pull_request_review&#x27; &amp;&amp; contains(github.event.review.body, &#x27;@claude&#x27;)) ||
+      (github.event_name == &#x27;issues&#x27; &amp;&amp; (contains(github.event.issue.body, &#x27;@claude&#x27;) || contains(github.event.issue.title, &#x27;@claude&#x27;)))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # lets Claude read CI results on PRs
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --max-turns 20
+            --model sonnet</code></pre>
+<p>Four details deserve attention:</p>
+<ul>
+<li><strong>The <code>if:</code> is load-bearing.</strong> Without it, the job starts a runner on <em>every</em> comment, review, and issue, and the action itself decides there's nothing to do. The condition checks the trigger phrase in the right field for each event type — <code>github.event.comment.body</code> for comments, <code>github.event.review.body</code> for reviews, the issue's body or title for new issues. Copy it verbatim; a missing clause is the most common reason the action "never runs."</li>
+<li><strong>Permissions are the narrowest that work for this mode.</strong> <code>contents: write</code> lets Claude push branches; <code>pull-requests: write</code> and <code>issues: write</code> let it comment; <code>id-token: write</code> supports the action's OIDC authentication path; <code>actions: read</code> lets Claude read CI results on PRs so it can discuss a failing check instead of guessing.</li>
+<li><strong><code>anthropics/claude-code-action@v1</code> is a floating major tag.</strong> It tracks the latest v1 release (v1.0.286 at the time of writing). Pinning to a full release tag is the conservative choice for a repo where you want to review upgrades; the floating tag is the choice the official examples use.</li>
+<li><strong><code>claude_args</code> carries the CLI flags.</strong> <code>--max-turns 20</code> caps the session at twenty agentic turns, and <code>--model sonnet</code> picks the model by alias — <code>sonnet</code>, <code>opus</code>, <code>haiku</code>, and <code>fable</code> are all valid, or pass a full model ID. Both flags are documented in the CLI reference; the v0.x inputs they replace (<code>max_turns</code>, <code>model</code>, <code>allowed_tools</code>) no longer exist, so workflows copied from older tutorials will fail — see troubleshooting.</li>
+</ul>
+<p>Before committing, validate the file. I checked all three workflows in this guide with actionlint 1.7.10 (zero findings) and confirmed every input name against the action's <code>action.yml</code> — do the same for yours:</p>
+<pre><code>actionlint .github/workflows/claude.yml
+# expect: no output, exit code 0</code></pre>
+<h2 id="5-test-it-like-a-reviewer-would">5. Test it like a reviewer would<a class="anchor" href="#5-test-it-like-a-reviewer-would" aria-label="Link to section">#</a></h2>
+<p>Commit the workflow, push, and open an issue in the repo. In a comment, write something the action has to actually do — not a greeting, a task:</p>
+<pre><code>@claude add a CONTRIBUTING.md that explains how to run the tests
+and what the commit message convention is. Read the repo first;
+don't invent tooling we don't have.</code></pre>
+<p>What you should see, in order: the workflow run starts under Actions; Claude posts a comment on the issue and updates it as it works; a branch appears named like <code>claude/issue-1-&lt;timestamp&gt;</code>; a pull request is opened from that branch, authored by <code>claude[bot]</code>, with the new file. Open the PR and check the content against the repo — the instruction to read the repo first is there because an agent with no constraints will happily document a test runner you don't use.</p>
+<p>If nothing happens at all, don't edit the workflow yet. Check Actions → the workflow run list first: if no run started, the <code>if:</code> gate or the app installation is the problem. If a run started and failed, the log names the cause — the six usual ones are in the troubleshooting section.</p>
+<h2 id="6-automated-pr-reviews">6. Automated PR reviews on every pull request<a class="anchor" href="#6-automated-pr-reviews" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/claude-code-github-action-tutorial/img3.webp" alt="Diagram of a pull request flowing through a robot reviewer and coming out as an approval comment"><figcaption>The review workflow: a PR opens, Claude reads the diff, and findings land as inline comments. Illustration generated by AI Frontier Post.</figcaption></figure>
+<p>The mention responder waits to be asked. This workflow doesn't: it runs on every pull request and reviews the diff. Create <code>.github/workflows/claude-pr-review.yml</code>. It is adapted from the action's own PR review example — same prompt shape, same tool allowlist, same progress-tracking flag.</p>
+<pre><code>name: Claude PR Review
+
+# Workflow 2 — Automation mode: review every pull request automatically.
+# With `prompt` set, the action runs on the event itself instead of waiting
+# for a mention, and posts its findings on the PR. Adapted from
+# anthropics/claude-code-action examples/pr-review-comprehensive.yml (v1.0.286):
+# same prompt shape, same gh-based tool allowlist, same track_progress flag.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Review PR with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Progress tracking: one comment with checkboxes, updated as
+          # the review proceeds, marked complete when it finishes.
+          track_progress: true
+
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request. Focus on, in order:
+            1. Correctness — logic errors, wrong assumptions, broken edge cases.
+            2. Security — injection, auth gaps, secrets, unsafe deserialization.
+            3. Tests — missing coverage for the changed behavior.
+            4. Performance — obvious hot paths, N+1 queries, unbounded loops.
+
+            Post one inline comment per real finding, with the file and line.
+            Skip style nits and praise. If you find nothing above nit level,
+            post a single top-level comment saying the PR looks good and why.
+
+          claude_args: |
+            --max-turns 15
+            --model sonnet
+            --allowedTools &quot;Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)&quot;</code></pre>
+<p>Three things make this workflow work where a naive "review this PR" prompt fails:</p>
+<ul>
+<li><strong>The prompt tells Claude where the output goes.</strong> Automation mode defaults to the run log, so the prompt explicitly says to post one inline comment per real finding and a single top-level comment when there's nothing to say. Without that sentence, the review exists only in a log nobody reads.</li>
+<li><strong><code>--allowedTools</code> grants exactly the GitHub access the prompt needs.</strong> <code>Bash(gh pr comment:*)</code>, <code>Bash(gh pr diff:*)</code>, and <code>Bash(gh pr view:*)</code> let Claude read the diff and post comments — and nothing else. The <code>gh</code> CLI ships preinstalled on GitHub-hosted runners. Notice the permissions above are narrower than the mention workflow's: <code>contents: read</code>, because a reviewer should not be pushing commits.</li>
+<li><strong><code>track_progress: true</code> turns the run into something you can watch.</strong> Claude posts a tracking comment with progress checkboxes and updates it as the review proceeds, instead of going silent for ten minutes and then dumping a wall of comments.</li>
+</ul>
+<p>The prompt's ordering is deliberate: correctness first, security second, tests third, performance fourth — and "skip style nits and praise" last. A review bot that comments on formatting is a bot your team mutes within a week. If your repo has a review checklist, add it to the prompt; the action accepts a long one. The official examples also include variants that review only changed paths or only PRs from first-time contributors — worth copying once the basic version is running.</p>
+<h2 id="7-issue-triage-that-runs-for-anyone">7. Issue triage that runs for anyone<a class="anchor" href="#7-issue-triage-that-runs-for-anyone" aria-label="Link to section">#</a></h2>
+<p>Issues come from strangers. By default the action ignores anyone without write access — a sensible default, and a problem for triage, which exists precisely for issues from people outside the team. This workflow opts into that, with the smallest permissions that work. Create <code>.github/workflows/claude-triage.yml</code>:</p>
+<pre><code>name: Claude Issue Triage
+
+# Workflow 3 — Automation mode: label and acknowledge every new issue.
+# Runs on issues opened by anyone, including people without write access,
+# so it needs the action&#x27;s allowed_non_write_users input plus an explicit
+# github_token. Keep this workflow&#x27;s permissions minimal: it only reads the
+# repo and writes issue labels/comments. See the article&#x27;s security section
+# before copying the `allowed_non_write_users: &quot;*&quot;` line into a real repo.
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Triage issue with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE NUMBER: ${{ github.event.issue.number }}
+
+            Triage this issue. First run `gh label list` and use ONLY labels
+            that already exist in this repo — never invent a label. Then:
+            1. Add the 1-3 labels that best describe the issue (area, kind,
+               and severity if those label families exist).
+            2. Post one short comment: what the issue is asking for in one
+               sentence, plus the single most useful next step for a
+               maintainer (a question to ask, a file to look at, or a
+               duplicate to check). Do not close the issue.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: &quot;*&quot;
+          claude_args: |
+            --max-turns 10
+            --model haiku
+            --allowedTools &quot;Bash(gh label list),Bash(gh issue edit:*),Bash(gh issue comment:*)&quot;</code></pre>
+<p>Two decisions in this file are worth copying deliberately, not accidentally:</p>
+<ul>
+<li><strong><code>--model haiku</code>.</strong> Triage is a classification task: read the issue, pick labels, write one sentence. The smallest model does it well at a fraction of the cost, and <code>--max-turns 10</code> bounds the run further. Save Sonnet for the review workflow, where judgment matters.</li>
+<li><strong>The prompt forbids inventing labels.</strong> It makes Claude run <code>gh label list</code> first and use only labels that already exist. Without that sentence, the model will cheerfully create <code>needs-triage-urgent-v2</code> on your repo — and the action will let it, because <code>gh issue edit</code> is in the allowlist.</li>
+</ul>
+<p>Read the security note on <code>allowed_non_write_users: "*"</code> in the next section before you copy this workflow into a real repository. It is the one input in this guide that trades safety for convenience, and the action's own documentation says so.</p>
+<h2 id="8-keep-the-bill-small">8. Keep the bill small: turns, models, timeouts<a class="anchor" href="#8-keep-the-bill-small" aria-label="Link to section">#</a></h2>
+<p>An unattended agent with an API key and no limits is a billing incident waiting for a busy week. Four controls, all visible in the workflows above, bound the cost:</p>
+<ul>
+<li><strong><code>--max-turns</code> is the spend cap that matters most.</strong> A mention responder at 20 turns and a review at 15 turns will finish real tasks and stop real runaways. Raise it only for a specific workflow that demonstrably needs more, never globally.</li>
+<li><strong>Pick the model per workflow, not per repo.</strong> Haiku for triage and labeling, Sonnet for reviews and implementation, Opus only when a task has genuinely stumped the cheaper models. The alias form (<code>--model sonnet</code>) is stable across releases; full model IDs change, and a pinned ID from an old tutorial will eventually stop resolving.</li>
+<li><strong><code>timeout-minutes</code> bounds the runner, not just the model.</strong> Thirty minutes for interactive and review work, ten for triage. A run that hits the timeout is a run you can investigate; a run with no timeout is a run that burns tokens until GitHub's six-hour job limit kills it.</li>
+<li><strong>Concurrency groups stop duplicate work.</strong> Two mentions on the same issue queue behind one group instead of running twice. For the review workflow, consider <code>cancel-in-progress: true</code> on the PR's group so a new push cancels the stale review of the old diff — but only if your team is comfortable with a review disappearing mid-write.</li>
+</ul>
+<p>What you can't bound from inside the workflow is the API key itself: set a spend limit on the Anthropic API key in the Console, and check the first week's usage before you enable the action on a high-traffic repo.</p>
+<h2 id="9-security-checklist">9. Security checklist: least privilege, forks, and prompt injection<a class="anchor" href="#9-security-checklist" aria-label="Link to section">#</a></h2>
+<p>Putting an agent with an API key on a public issue tracker is a security decision, not just a productivity one. The action ships with sane defaults — verify them rather than trusting them:</p>
+<ul>
+<li><strong>Fork pull requests are fenced by default.</strong> <code>allow_fork_prs</code> defaults to <code>true</code>, so the action will run on a fork's PR — but <code>restrict_untrusted_prs</code> also defaults to <code>true</code>, which denies commands that commonly run code from the checkout (package managers, test runners, shells) on PRs from authors without write access, even if <code>claude_args</code> allows them. Leave both defaults alone unless you have a specific reason and have read the action's security doc.</li>
+<li><strong><code>allowed_non_write_users: "*"</code> is the sharp edge.</strong> It lets anyone trigger a run that holds your API key. The action's own description warns that it best-effort scrubs secrets from subprocess environments when this is set, and that this reduces but does not eliminate prompt injection risk — only use it for workflows with very limited permissions and validate all outputs. The triage workflow qualifies: it can only read the repo and write labels and comments. Never pair that input with <code>contents: write</code> or a broad <code>--allowedTools</code>.</li>
+<li><strong>Never let untrusted content reach a shell.</strong> An issue body is attacker-controlled text. A prompt that tells Claude to "follow the instructions in the issue" plus a tool allowlist that includes <code>Bash</code> is a prompt-injection hole: the issue can instruct the agent to exfiltrate the secret from the environment. Keep the tool allowlist in automation workflows to the <code>gh</code> subcommands the job needs, and never grant bare <code>Bash</code> in a workflow triggered by outsiders.</li>
+<li><strong>Commit signing is available and off by default.</strong> <code>use_commit_signing: true</code> signs Claude's commits with GitHub's commit signature verification, so a forged <code>claude[bot]</code> commit is detectable. Turn it on for any repo where commit provenance matters.</li>
+<li><strong>Keep the key out of logs.</strong> The action has a <code>show_full_output</code> input that dumps all Claude messages, including tool results, into the run log — which is publicly visible on public repos. It defaults to <code>false</code>. Leave it there except when debugging a private repo.</li>
+</ul>
+<h2 id="10-troubleshooting">10. Troubleshooting: the six failures you&#x27;ll actually hit<a class="anchor" href="#10-troubleshooting" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Nothing happens when you comment <code>@claude</code>.</strong> Check three things in order: the app is installed on this repository (not just the org), Actions is enabled for the repo, and the comment matches the <code>if:</code> gate — the phrase must be in the comment body for <code>issue_comment</code>, the review body for <code>pull_request_review</code>, or the issue title or body for new issues. A mention in a PR description won't trigger it.</li>
+<li><strong>The run fails on an input name from an old tutorial.</strong> v1 removed the v0.x inputs: <code>mode</code>, <code>direct_prompt</code>, <code>override_prompt</code>, <code>custom_instructions</code>, <code>model</code>, <code>allowed_tools</code>, <code>disallowed_tools</code>, <code>anthropic_model</code>, <code>trigger_phrase</code>, and <code>timeout_minutes</code>. Everything now goes through <code>prompt</code> and <code>claude_args</code>. The action's migration guide maps each one.</li>
+<li><strong>Claude pushes a fix and your CI never runs on it.</strong> The workflow used the default <code>GITHUB_TOKEN</code> instead of the app's token. Install the Claude GitHub App — pushes made with its token trigger downstream workflows; pushes made with <code>GITHUB_TOKEN</code> deliberately do not.</li>
+<li><strong>The review exists only in the run log.</strong> That's automation mode's default. The prompt must instruct Claude to post its findings, and <code>claude_args</code> must allow the tools that post them — <code>Bash(gh pr comment:*)</code> in workflow 2. A prompt that says "review this PR" without a posting instruction produces a review nobody sees.</li>
+<li><strong>The run ends mid-task with no error.</strong> You hit <code>--max-turns</code>. The action stops the session when the cap is reached, successfully or not. Raise the cap for that workflow, or split the prompt into a smaller task — a review that needs 40 turns is usually a review whose scope is too broad.</li>
+<li><strong>The triage workflow labels things wrong on day one.</strong> It can only choose from labels that exist, and a repo with three labels gets three-label triage. Seed the label set first — <code>bug</code>, <code>feature</code>, <code>docs</code>, <code>question</code>, plus area labels for your codebase — then let the workflow use them.</li>
+</ul>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>The mention responder</strong> — start here. It's the lowest-risk automation: a human asks, Claude acts, a human reviews the PR. Use it for implementation tasks, questions about the codebase, and small fixes. Every repo with Claude Code users should have it.</li>
+<li><strong>Automated PR review</strong> — add it once the responder works. It's the highest-value automation for a team that reviews a lot of code, and the easiest to tune: the prompt is the review checklist, and every complaint from the team is a prompt edit. Keep the tool allowlist narrow and the model on Sonnet.</li>
+<li><strong>Issue triage</strong> — add it when new issues arrive faster than maintainers read them. It pays off on public repos with real inbound volume. Skip it on a quiet repo; the triage comment on your one issue a month will look like a bot talking to itself.</li>
+<li><strong>None of them</strong> — if the repo's value is in human judgment (a design doc repo, a legal repo), or if nobody will read the reviews, an agent that comments on everything is noise. The action is a force multiplier for maintainers, not a replacement for them.</li>
+</ul>
+<p>The pattern that wins in practice is layered: the responder handles the work people ask for, the review workflow handles the work nobody asked for but everyone needs, and triage keeps the front door tidy. Each workflow has its own permissions, its own model, and its own turn cap — tune them independently, and disable any one of them by deleting its file.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Start with the mention responder this week. It takes one secret, one workflow file, and one test comment to prove the loop works — and from that point, every other automation in this guide is a variation on the same three inputs: <code>prompt</code>, <code>claude_args</code>, and the auth token. Add the PR review next, then triage, each with its own permissions and its own model. Validate every workflow with actionlint before you commit it, keep the tool allowlists as narrow as the job allows, and remember the hierarchy: the action automates, the permission system secures, and you still merge.</p>
+<p>An agent that works while you sleep is worth having. An agent that works while you sleep, with a turn cap, a narrow allowlist, and a human holding the merge button, is worth trusting.</p>
+<p><em>Sources: the <a href="https://github.com/anthropics/claude-code-action">claude-code-action repository</a> (action.yml inputs and defaults, example workflows, README, usage and security docs; v1.0.286, November 20, 2026), the <a href="https://docs.claude.com/en/docs/claude-code/cli-reference">Claude Code CLI reference</a> (<code>--max-turns</code>, <code>--model</code>, <code>--allowedTools</code>, <code>claude setup-token</code>), and the <a href="https://github.com/anthropics/claude-code-action/releases">release history</a> (v1.0 GA November 19, 2026). All three workflows in this guide were validated with actionlint 1.7.10 and PyYAML, and every input name was checked against the action's source. The live GitHub run is the reader's verification step — step 5 tells you exactly what to look for.</em></p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="claude-code-github-action-tutorial"></div><div class="comments" data-comments="claude-code-github-action-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/claude-code-plugins-official-directory-tutorial/"><span class="chip">Tutorials</span><h3>Turn Claude Code into a plugin-powered teammate: a hands-on guide to Anthropic&#x27;s official plugin directory</h3><div class="meta">October 18, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/claude-code-hooks-complete-guide/"><span class="chip">Tutorials</span><h3>Claude Code hooks: the complete hands-on guide to deterministic agent control</h3><div class="meta">September 28, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/claude-knowledge-work-plugins-tutorial/"><span class="chip">Tutorials</span><h3>Anthropic&#x27;s knowledge-work-plugins: turn Claude Code into a role-specialist, hands-on</h3><div class="meta">September 27, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/build-agent-skill-claude-skill-md-tutorial/"><span class="chip">Tutorials</span><h3>Teach Claude your workflow: build an Agent Skill with SKILL.md</h3><div class="meta">September 25, 2026 · 13 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an Anthropic API key, or can I use my Claude subscription?</h3><p>Either works. An API key goes in as a secret named ANTHROPIC_API_KEY and is passed as the anthropic_api_key input. A subscription works through claude setup-token, which prints a long-lived OAuth token: store it as CLAUDE_CODE_OAUTH_TOKEN and pass it as claude_code_oauth_token. Note the /install-github-app quickstart only supports direct API users.</p><h3>Why doesn’t my CI run on the commits Claude pushes?</h3><p>Commits pushed with GitHub’s default GITHUB_TOKEN deliberately do not trigger other workflows. Install the Claude GitHub App so the action authenticates with an app token — pushes made with that token do trigger your CI.</p><h3>How much will this cost?</h3><p>You pay Anthropic’s API rates for the tokens each run uses, or your subscription’s usage with an OAuth token. Bound it with --max-turns, a per-workflow --model (Haiku for triage, Sonnet for review), and timeout-minutes. GitHub Actions minutes are free for public repositories; on private repos they draw on your plan’s allowance.</p></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
