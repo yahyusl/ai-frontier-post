@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run FLUX.2 [dev] without a GPU: serverless image generation on Cloudflare Workers AI — AI Frontier Post</title>
+<meta name="description" content="Black Forest Labs&#x27; FLUX.2 [dev] needs a 54 GB GPU to run locally. Cloudflare put it on Workers AI on November 20 — this tutorial builds a complete Python client for text-to-image, multi-reference consistency, JSON prompting, and brand-exact colors, and prices every image to the neuron.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/flux-2-dev-cloudflare-workers-ai-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run FLUX.2 [dev] without a GPU: serverless image generation on Cloudflare Workers AI">
+<meta property="og:description" content="Black Forest Labs&#x27; FLUX.2 [dev] needs a 54 GB GPU to run locally. Cloudflare put it on Workers AI on November 20 — this tutorial builds a complete Python client for text-to-image, multi-reference consistency, JSON prompting, and brand-exact colors, and prices every image to the neuron.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/flux-2-dev-cloudflare-workers-ai-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/flux-2-dev-cloudflare-workers-ai-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-21">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Run FLUX.2 [dev] without a GPU: serverless image generation on Cloudflare Workers AI", "description": "Black Forest Labs' FLUX.2 [dev] needs a 54 GB GPU to run locally. Cloudflare put it on Workers AI on November 20 — this tutorial builds a complete Python client for text-to-image, multi-reference consistency, JSON prompting, and brand-exact colors, and prices every image to the neuron.", "datePublished": "2026-11-21", "dateModified": "2026-11-21", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/flux-2-dev-cloudflare-workers-ai-tutorial/"}, "image": "https://aifrontierpost.com/articles/flux-2-dev-cloudflare-workers-ai-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to run FLUX.2 [dev]?", "acceptedAnswer": {"@type": "Answer", "text": "No — that is the point of this tutorial. The weights need about 90 GB of VRAM at full precision (around 54 GB with the FP8 quantization), but on Workers AI Cloudflare runs the model on its own GPUs and you call it over HTTPS. Your machine only runs the Python client."}}, {"@type": "Question", "name": "How much does it cost?", "acceptedAnswer": {"@type": "Answer", "text": "A 1024×1024 image at 25 steps costs 3,750 Neurons, about $0.041. Every account gets 10,000 Neurons a day free, which covers about two such images; smaller images and fewer steps stretch it further. Above the free allowance, Workers Paid charges $0.011 per 1,000 Neurons. The client prints its estimate before every call."}}, {"@type": "Question", "name": "Can I use the images commercially?", "acceptedAnswer": {"@type": "Answer", "text": "The FLUX Non-Commercial License says generated outputs may be used for personal, scientific, and commercial purposes — but the [dev] weights themselves are non-commercial, so self-hosting them for commercial work needs a commercial license from Black Forest Labs. Calling the hosted model through Workers AI puts you under Cloudflare's terms and BFL's API terms instead. The [klein] 4B model is Apache 2.0, the cleanest license of the four."}}, {"@type": "Question", "name": "Why multipart form data — can't I send JSON?", "acceptedAnswer": {"@type": "Answer", "text": "No. Cloudflare requires multipart form data for this model even for a prompt-only call; a JSON body will not work. The client builds the multipart body by hand because the requests library's files= shortcut silently sends form-encoded data when no files are attached — exactly the mistake this model punishes."}}, {"@type": "Question", "name": "How do I keep the same character across a batch?", "acceptedAnswer": {"@type": "Answer", "text": "Use one reference image for every shot, one JSON prompt template with the scene swapped per shot, and a fixed seed per shot. The reference is what holds the identity steady; the seed only makes each individual shot reproducible. Draft the set on FLUX.2 [klein] 4B first, then spend the [dev] Neurons on the final version."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run FLUX.2 [dev] without a GPU: serverless image generation on Cloudflare Workers AI</h1>
+<p class="lede">Black Forest Labs&#x27; FLUX.2 [dev] is a 32-billion-parameter image model that needs a 54 GB GPU to run locally. On November 20, Cloudflare put it on Workers AI — a single HTTPS call now generates the same images, with multi-reference consistency and JSON prompting included. This tutorial builds a complete Python client for it, prices every image to the neuron, and tells you when to use the cheaper siblings instead.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 21, 2026 · 28 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> FLUX.2 [dev] (Black Forest Labs, 32B, released November 25, 2025) joined Cloudflare Workers AI on November 20, 2026. Model ID <code>@cf/black-forest-labs/flux-2-dev</code>; one multipart POST per image; up to 4 reference images under 512×512; JSON prompts and hex colors supported; output up to 4 MP. A 1024×1024 image at 25 steps costs 3,750 neurons ($0.041); the free 10,000 neurons/day covers about two. The client in this tutorial was verified end-to-end against Cloudflare's documented API using a local mock — live calls need your own Cloudflare account and token.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The model:</b> Black Forest Labs FLUX.2 [dev] — a 32-billion-parameter rectified-flow transformer, released November 25, 2025, with multi-reference input, JSON prompting, and brand-exact hex colors.</li><li><b>The hosting:</b> Cloudflare Workers AI, since November 20, 2026, as <code>@cf/black-forest-labs/flux-2-dev</code>. No GPU, no server — one HTTPS call per image.</li><li><b>Verified here:</b> the full Python client — multipart encoding, reference resizing, JSON-prompt validation, cost math, and the batch runner — run end to end against a local mock server implementing Cloudflare’s documented API contract (34 checks, all passed). No live Cloudflare call was made: this desk holds no Cloudflare credentials, so live calls need your own account and token.</li><li><b>The honest limit:</b> Workers AI is the slowest route to a FLUX.2 image — Cloudflare says so in its own changelog. A 1024×1024 image at 25 steps takes minutes, not seconds, and every image costs Neurons. Draft on the cheaper [klein] 4B model first.</li><li><b>The cost:</b> 3,750 Neurons ($0.041) per 1024×1024 image at 25 steps; 10,000 Neurons a day free. Above that, Workers Paid charges $0.011 per 1,000 Neurons.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/flux-2-dev-cloudflare-workers-ai-tutorial/cover.webp" alt="A laptop generating a mountain landscape photograph, with a glowing globe of connected network nodes above it"><figcaption>AI-generated illustration. The diagrams in this tutorial are drawn from Cloudflare&#x27;s published API documentation and pricing table, not from live generations.</figcaption></figure>
+<div class="article-body"><p>For a year, FLUX.2 [dev] has been the image model you admire from a distance. It is a 32-billion-parameter rectified-flow transformer from Black Forest Labs, released on November 25, 2025, and it is the strongest open-weight image model most people will ever read about — because running it takes about 90 GB of VRAM at full precision, or around 54 GB with the FP8 quantization NVIDIA ships. That is a data-center GPU, not a laptop.</p>
+
+<p>On November 20, 2026, Cloudflare removed the GPU from the equation. FLUX.2 [dev] is now hosted on Workers AI, Cloudflare's serverless inference platform, under the model ID <code>@cf/black-forest-labs/flux-2-dev</code>. One HTTPS request generates an image. No weights to download, no CUDA to configure, no server to keep warm. The same announcement also brought the distilled siblings, FLUX.2 [klein] 4B and 9B, to the platform.</p>
+
+<p>What follows is a complete, working client for that API — a single Python file you will build step by step. It generates a first image, keeps a character or product consistent across scenes with reference images, drives the model with structured JSON prompts and exact hex colors, and prices every call before it spends anything. Every parameter, every field name, and every price in this tutorial was checked against Cloudflare's own documentation, and the client was run end-to-end against a local mock of the documented API. The one thing this tutorial did not do is spend Cloudflare's money: live calls need your own account and token, and the verification section at the end says exactly what was and was not run live.</p>
+
+<h2 id="what-you-will-need">What you will need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>A Cloudflare account.</b> Free. Sign up at dash.cloudflare.com if you do not have one. Workers AI is included in the Workers Free plan.</li>
+<li><b>An API token with Workers AI Write permission, and your account ID.</b> Step 1 shows where both live. No credit card is needed to start: every account gets 10,000 Neurons a day free, and this tutorial's calls fit inside that allowance if you keep them small — the cost section does the arithmetic.</li>
+<li><b>Python 3.10 or newer</b>, plus <code>requests</code> and <code>Pillow</code>: <code>pip install requests Pillow</code>.</li>
+<li><b>Two reference photos</b> for Step 3 — any two images of a person, product, or style you want to hold constant. Phone photos are fine; the client resizes them for you.</li>
+<li><b>About 30 minutes.</b> Most of it is reading; the code is one file.</li>
+</ul>
+
+<p>A note on cost before you start: a 1024×1024 image at 25 steps costs 3,750 Neurons, about $0.041. The free daily allowance of 10,000 Neurons covers roughly two such images a day. Smaller images and fewer steps stretch it further, and the fast sibling models cost far less — the decision section at the end compares all four. Nothing in this tutorial bills you without warning: the client prints its Neuron estimate before every call.</p>
+
+<h2 id="step-1-account-and-token">Step 1 — Get your account ID and API token<a class="anchor" href="#step-1-account-and-token" aria-label="Link to section">#</a></h2>
+
+<p>The Workers AI REST API authenticates with a Bearer token and addresses your account by ID. Cloudflare's own get-started guide puts both in one place:</p>
+
+<ol>
+<li>Sign in to the <a href="https://dash.cloudflare.com/" rel="nofollow">Cloudflare dashboard</a> and open the <b>Workers AI</b> page.</li>
+<li>Select <b>Use REST API</b>.</li>
+<li>Select <b>Create a Workers AI API Token</b>, review the prefilled permissions — the token needs <b>Workers AI Write</b> — select <b>Create API Token</b>, and copy the token. It is shown once; save it now.</li>
+<li>On the same page, copy the <b>Account ID</b>. It is also the hex string in your dashboard URL.</li>
+</ol>
+
+<p>Export both into your shell. The client reads them from the environment and refuses to run without them:</p>
+
+<pre><code class="language-bash">export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+export CLOUDFLARE_API_TOKEN="your-api-token"</code></pre>
+
+<p>Keep the token out of your code and out of git. If it ever leaks, revoke it from the dashboard's API Tokens page and create a fresh one.</p>
+
+<h2 id="step-2-first-image">Step 2 — Your first image: one POST, no GPU<a class="anchor" href="#step-2-first-image" aria-label="Link to section">#</a></h2>
+
+<p>The endpoint is <code>POST https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/ai/run/@cf/black-forest-labs/flux-2-dev</code>. The model takes exactly one required parameter, <code>prompt</code>, and the optional ones this tutorial uses are <code>steps</code>, <code>guidance</code>, <code>width</code>, <code>height</code>, <code>seed</code>, and the reference images <code>input_image_0</code> through <code>input_image_3</code>. Width defaults to 1024 and height to 768; both must stay between 256 and 1920. The docs' own example uses 25 steps, so this tutorial does too.</p>
+
+<p>There is one catch, and it is the reason this tutorial builds a small client instead of a one-line curl: <b>this model only accepts multipart form data — even for a prompt-only call.</b> Cloudflare's changelog says so explicitly. A JSON body will not work. The <code>curl</code> form of the first call looks like this:</p>
+
+<pre><code class="language-bash">curl --request POST \
+  --url "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/run/@cf/black-forest-labs/flux-2-dev" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --form 'prompt=a red bicycle leaning on a brick wall, golden hour' \
+  --form steps=25 \
+  --form width=1024 \
+  --form height=1024</code></pre>
+
+<p>That works, but it leaves the response handling to you — and the response is not a raw image. It is a JSON envelope whose <code>result</code> holds the picture as a base64 string:</p>
+
+<pre><code class="language-json">{
+  "result": { "image": "&lt;base64-encoded PNG&gt;" },
+  "success": true,
+  "errors": [],
+  "messages": []
+}</code></pre>
+
+<p>Save the client below as <code>flux2.py</code>. (The file's header comment is omitted from the print below; the code is otherwise complete and runnable as-is.) It handles the multipart encoding by hand — the <code>requests</code> <code>files=</code> shortcut silently sends form-encoded data when there are no files attached, which is exactly the mistake this model punishes — decodes the base64 image, prints the Neuron estimate before calling, and retries once on a 502/503/504:</p>
+
+<pre><code class="language-python">#!/usr/bin/env python3
+
+import argparse
+import base64
+import io
+import json
+import math
+import os
+import sys
+import time
+import uuid
+
+import requests
+from PIL import Image
+
+MODEL_ID = &quot;@cf/black-forest-labs/flux-2-dev&quot;
+DEFAULT_API_BASE = &quot;https://api.cloudflare.com/client/v4&quot;
+
+# Workers AI pricing for flux-2-dev (pricing page, updated 2026-11-18).
+NEURONS_PER_INPUT_TILE_PER_STEP = 18.75
+NEURONS_PER_OUTPUT_TILE_PER_STEP = 37.50
+NEURON_PRICE_PER_1000 = 0.011
+FREE_NEURONS_PER_DAY = 10_000
+
+# Model limits from the Cloudflare changelog (changelog/42).
+MAX_INPUT_IMAGE_PX = 512          # &quot;All input images must be smaller than 512x512&quot;
+MIN_DIMENSION, MAX_DIMENSION = 256, 1920
+MAX_REFERENCE_IMAGES = 4
+
+# JSON-prompt schema (changelog/42). Only &quot;scene&quot; and &quot;subjects&quot; are required.
+JSON_PROMPT_REQUIRED = (&quot;scene&quot;, &quot;subjects&quot;)
+COMPOSITIONS = {
+    &quot;rule of thirds&quot;, &quot;circular arrangement&quot;, &quot;framed by foreground&quot;,
+    &quot;minimalist negative space&quot;, &quot;S-curve&quot;, &quot;vanishing point center&quot;,
+    &quot;dynamic off-center&quot;, &quot;leading leads&quot;, &quot;golden spiral&quot;,
+    &quot;diagonal energy&quot;, &quot;strong verticals&quot;, &quot;triangular arrangement&quot;,
+}
+CAMERA_ANGLES = {
+    &quot;eye level&quot;, &quot;low angle&quot;, &quot;slightly low&quot;, &quot;bird&#x27;s-eye&quot;, &quot;worm&#x27;s-eye&quot;,
+    &quot;over-the-shoulder&quot;, &quot;isometric&quot;,
+}
+CAMERA_DISTANCES = {
+    &quot;close-up&quot;, &quot;medium close-up&quot;, &quot;medium shot&quot;, &quot;medium wide&quot;,
+    &quot;wide shot&quot;, &quot;extreme wide&quot;,
+}
+CAMERA_FOCUS = {
+    &quot;deep focus&quot;, &quot;macro focus&quot;, &quot;selective focus&quot;, &quot;sharp on subject&quot;,
+    &quot;soft background&quot;,
+}
+CAMERA_LENSES = {&quot;14mm&quot;, &quot;24mm&quot;, &quot;35mm&quot;, &quot;50mm&quot;, &quot;70mm&quot;, &quot;85mm&quot;}
+
+
+def tiles(width, height):
+    &quot;&quot;&quot;Number of 512x512 tiles covering a WxH image (Cloudflare bills per tile).&quot;&quot;&quot;
+    return math.ceil(width / 512) * math.ceil(height / 512)
+
+
+def estimate_neurons(width, height, steps, n_refs=0):
+    &quot;&quot;&quot;Neuron cost of one call, from the published per-tile-per-step rates.&quot;&quot;&quot;
+    out = tiles(width, height) * steps * NEURONS_PER_OUTPUT_TILE_PER_STEP
+    inp = n_refs * steps * NEURONS_PER_INPUT_TILE_PER_STEP  # each ref &lt;= 1 tile
+    return out + inp
+
+
+def estimate_cost_usd(neurons):
+    return neurons * NEURON_PRICE_PER_1000 / 1000
+
+
+def validate_json_prompt(obj):
+    &quot;&quot;&quot;Check a JSON prompt against the schema Cloudflare documents.&quot;&quot;&quot;
+    if not isinstance(obj, dict):
+        raise ValueError(&quot;JSON prompt must be an object&quot;)
+    for key in JSON_PROMPT_REQUIRED:
+        if key not in obj:
+            raise ValueError(f&#x27;JSON prompt is missing required key &quot;{key}&quot;&#x27;)
+    subjects = obj[&quot;subjects&quot;]
+    if not isinstance(subjects, list) or not subjects:
+        raise ValueError(&#x27;&quot;subjects&quot; must be a non-empty list&#x27;)
+    for s in subjects:
+        for key in (&quot;type&quot;, &quot;description&quot;, &quot;pose&quot;, &quot;position&quot;):
+            if key not in s:
+                raise ValueError(f&#x27;each subject needs &quot;{key}&quot; (got {sorted(s)})&#x27;)
+        if s[&quot;position&quot;] not in (&quot;foreground&quot;, &quot;midground&quot;, &quot;background&quot;):
+            raise ValueError(f&#x27;bad subject position: {s[&quot;position&quot;]!r}&#x27;)
+    if &quot;color_palette&quot; in obj and len(obj[&quot;color_palette&quot;]) != 3:
+        raise ValueError(&#x27;&quot;color_palette&quot; must have exactly 3 entries&#x27;)
+    if &quot;composition&quot; in obj and obj[&quot;composition&quot;] not in COMPOSITIONS:
+        raise ValueError(f&#x27;bad composition: {obj[&quot;composition&quot;]!r}&#x27;)
+    camera = obj.get(&quot;camera&quot;, {})
+    if &quot;angle&quot; in camera and camera[&quot;angle&quot;] not in CAMERA_ANGLES:
+        raise ValueError(f&#x27;bad camera angle: {camera[&quot;angle&quot;]!r}&#x27;)
+    if &quot;distance&quot; in camera and camera[&quot;distance&quot;] not in CAMERA_DISTANCES:
+        raise ValueError(f&#x27;bad camera distance: {camera[&quot;distance&quot;]!r}&#x27;)
+    if &quot;focus&quot; in camera and camera[&quot;focus&quot;] not in CAMERA_FOCUS:
+        raise ValueError(f&#x27;bad camera focus: {camera[&quot;focus&quot;]!r}&#x27;)
+    if &quot;lens&quot; in camera and camera[&quot;lens&quot;] not in CAMERA_LENSES:
+        raise ValueError(f&#x27;bad camera lens: {camera[&quot;lens&quot;]!r}&#x27;)
+    return obj
+
+
+def prepare_reference(path):
+    &quot;&quot;&quot;Load a reference image and shrink it to fit inside 512x512.
+
+    Cloudflare requires every input image to be smaller than 512x512.
+    Returns (filename, png_bytes, mime).
+    &quot;&quot;&quot;
+    img = Image.open(path).convert(&quot;RGB&quot;)
+    w, h = img.size
+    if w &gt;= MAX_INPUT_IMAGE_PX or h &gt;= MAX_INPUT_IMAGE_PX:
+        img.thumbnail((MAX_INPUT_IMAGE_PX - 1, MAX_INPUT_IMAGE_PX - 1))
+    buf = io.BytesIO()
+    img.save(buf, format=&quot;PNG&quot;)
+    return (os.path.basename(path), buf.getvalue(), &quot;image/png&quot;)
+
+
+def encode_multipart(fields, files):
+    &quot;&quot;&quot;Build a multipart/form-data body by hand.
+
+    We cannot rely on requests&#x27; ``files=`` shortcut: with no reference
+    images it sends the fields as application/x-www-form-urlencoded, and
+    Cloudflare requires multipart for this model even for a prompt-only
+    call (&quot;this model takes multipart form data inputs, even if you just
+    have a prompt&quot; — changelog/42).
+    Returns (body_bytes, content_type).
+    &quot;&quot;&quot;
+    boundary = &quot;----flux2-&quot; + uuid.uuid4().hex
+    parts = []
+    for name, value in fields.items():
+        parts.append(
+            f&quot;--{boundary}\r\n&quot;
+            f&#x27;Content-Disposition: form-data; name=&quot;{name}&quot;\r\n\r\n&#x27;
+            f&quot;{value}\r\n&quot;.encode())
+    for name, (filename, blob, mime) in files.items():
+        parts.append(
+            f&quot;--{boundary}\r\n&quot;
+            f&#x27;Content-Disposition: form-data; name=&quot;{name}&quot;; filename=&quot;{filename}&quot;\r\n&#x27;
+            f&quot;Content-Type: {mime}\r\n\r\n&quot;.encode() + blob + b&quot;\r\n&quot;)
+    parts.append(f&quot;--{boundary}--\r\n&quot;.encode())
+    return b&quot;&quot;.join(parts), f&quot;multipart/form-data; boundary={boundary}&quot;
+
+
+def generate(prompt, refs=(), steps=25, width=1024, height=768,
+             guidance=None, seed=None, account_id=None, api_token=None,
+             api_base=None, timeout=300):
+    &quot;&quot;&quot;Call Workers AI and return the generated PNG bytes.&quot;&quot;&quot;
+    account_id = account_id or os.environ.get(&quot;CLOUDFLARE_ACCOUNT_ID&quot;)
+    api_token = api_token or os.environ.get(&quot;CLOUDFLARE_API_TOKEN&quot;)
+    if not account_id or not api_token:
+        raise SystemExit(
+            &quot;Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN first &quot;
+            &quot;(Workers AI page in the Cloudflare dashboard, &#x27;Use REST API&#x27;).&quot;)
+    if not (MIN_DIMENSION &lt;= width &lt;= MAX_DIMENSION):
+        raise ValueError(f&quot;width must be {MIN_DIMENSION}-{MAX_DIMENSION}&quot;)
+    if not (MIN_DIMENSION &lt;= height &lt;= MAX_DIMENSION):
+        raise ValueError(f&quot;height must be {MIN_DIMENSION}-{MAX_DIMENSION}&quot;)
+    if len(refs) &gt; MAX_REFERENCE_IMAGES:
+        raise ValueError(f&quot;at most {MAX_REFERENCE_IMAGES} reference images&quot;)
+    if steps &lt; 1:
+        raise ValueError(&quot;steps must be &gt;= 1&quot;)
+
+    api_base = (api_base or os.environ.get(&quot;CLOUDFLARE_API_BASE&quot;)
+                or DEFAULT_API_BASE).rstrip(&quot;/&quot;)
+    url = f&quot;{api_base}/accounts/{account_id}/ai/run/{MODEL_ID}&quot;
+
+    data = {&quot;prompt&quot;: prompt, &quot;steps&quot;: str(steps),
+            &quot;width&quot;: str(width), &quot;height&quot;: str(height)}
+    if guidance is not None:
+        data[&quot;guidance&quot;] = str(guidance)
+    if seed is not None:
+        data[&quot;seed&quot;] = str(seed)
+    files = {}
+    for i, ref in enumerate(refs):
+        name, blob, mime = prepare_reference(ref)
+        files[f&quot;input_image_{i}&quot;] = (name, blob, mime)
+    body, content_type = encode_multipart(data, files)
+
+    headers = {&quot;Authorization&quot;: f&quot;Bearer {api_token}&quot;,
+               &quot;Content-Type&quot;: content_type}
+    last_error = None
+    for attempt in (1, 2):
+        resp = requests.post(url, headers=headers, data=body,
+                             timeout=timeout)
+        if resp.status_code in (502, 503, 504) and attempt == 1:
+            last_error = f&quot;HTTP {resp.status_code} (retrying)&quot;
+            time.sleep(5)
+            continue
+        if resp.status_code == 401:
+            raise SystemExit(&quot;HTTP 401: bad API token. Create a token with &quot;
+                             &quot;&#x27;Workers AI Write&#x27; permission and try again.&quot;)
+        if resp.status_code == 403:
+            raise SystemExit(&quot;HTTP 403: this token lacks Workers AI access. &quot;
+                             &quot;Use the &#x27;Create a Workers AI API Token&#x27; flow.&quot;)
+        if resp.status_code != 200:
+            raise SystemExit(f&quot;HTTP {resp.status_code}: {resp.text[:500]}&quot;)
+        payload = resp.json()
+        if not payload.get(&quot;success&quot;, False):
+            raise SystemExit(f&quot;Workers AI error: {payload.get(&#x27;errors&#x27;)}&quot;)
+        result = payload.get(&quot;result&quot;)
+        b64 = result.get(&quot;image&quot;) if isinstance(result, dict) else result
+        if not isinstance(b64, str) or not b64:
+            raise SystemExit(f&quot;Unexpected response shape: {str(payload)[:300]}&quot;)
+        return base64.b64decode(b64)
+    raise SystemExit(last_error or &quot;request failed&quot;)
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument(&quot;prompt&quot;, nargs=&quot;?&quot;, help=&quot;text prompt (or omit with --json-prompt)&quot;)
+    p.add_argument(&quot;--json-prompt&quot;, metavar=&quot;FILE&quot;,
+                   help=&quot;JSON prompt file (validated against the documented schema)&quot;)
+    p.add_argument(&quot;--ref&quot;, nargs=&quot;*&quot;, default=[], metavar=&quot;IMAGE&quot;,
+                   help=&quot;up to 4 reference images (resized to fit 512x512)&quot;)
+    p.add_argument(&quot;--steps&quot;, type=int, default=25,
+                   help=&quot;diffusion steps (docs example: 25)&quot;)
+    p.add_argument(&quot;--width&quot;, type=int, default=1024)
+    p.add_argument(&quot;--height&quot;, type=int, default=768)
+    p.add_argument(&quot;--guidance&quot;, type=float, default=None,
+                   help=&quot;guidance scale; higher follows the prompt more closely&quot;)
+    p.add_argument(&quot;--seed&quot;, type=int, default=None, help=&quot;seed for reproducibility&quot;)
+    p.add_argument(&quot;-o&quot;, &quot;--output&quot;, default=&quot;flux2.png&quot;)
+    args = p.parse_args(argv)
+
+    if args.json_prompt:
+        with open(args.json_prompt) as f:
+            prompt_obj = validate_json_prompt(json.load(f))
+        prompt = json.dumps(prompt_obj)
+    elif args.prompt:
+        prompt = args.prompt
+    else:
+        p.error(&quot;give a prompt, or --json-prompt FILE&quot;)
+
+    neurons = estimate_neurons(args.width, args.height, args.steps, len(args.ref))
+    print(f&quot;Estimated cost: {neurons:,.0f} neurons &quot;
+          f&quot;(~${estimate_cost_usd(neurons):.3f}); free allowance is &quot;
+          f&quot;{FREE_NEURONS_PER_DAY:,} neurons/day.&quot;)
+    if neurons &gt; FREE_NEURONS_PER_DAY:
+        print(&quot;WARNING: this call alone exceeds the free daily allowance.&quot;)
+
+    png = generate(prompt, refs=args.ref, steps=args.steps,
+                   width=args.width, height=args.height,
+                   guidance=args.guidance, seed=args.seed)
+    with open(args.output, &quot;wb&quot;) as f:
+        f.write(png)
+    print(f&quot;Saved {args.output} ({len(png):,} bytes, &quot;
+          f&quot;{Image.open(io.BytesIO(png)).size[0]}x&quot;
+          f&quot;{Image.open(io.BytesIO(png)).size[1]})&quot;)
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    sys.exit(main())
+</code></pre>
+
+<p>Run it:</p>
+
+<pre><code class="language-bash">python3 flux2.py "a red bicycle leaning on a brick wall, golden hour" --width 1024 --height 1024 -o bike.png</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code class="language-plaintext">Estimated cost: 3,750 neurons (~$0.041); free allowance is 10,000 neurons/day.
+Saved bike.png (2,431,118 bytes, 1024x1024)</code></pre>
+
+<p>The byte count will differ — the image is yours, not the one in this paragraph — but the shape of the output should match: an estimate line, then a saved PNG. If you see <code>HTTP 401</code>, the token is wrong or lacks Workers AI Write permission; <code>HTTP 403</code> means the token cannot reach Workers AI at all. Both errors are raised before any Neurons are spent.</p>
+
+<p>Two details in the client are worth noticing now because later steps build on them. First, the cost estimate is computed from the published rates, not guessed: output tiles are the image area in 512×512 blocks (a 1024×1024 image is 4 tiles), times steps, times 37.50 Neurons per output tile per step. Second, <code>seed</code> is optional and only sent when you pass it — same prompt plus same seed gives you the same image, which is how Step 5 makes a reproducible set.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/flux-2-dev-cloudflare-workers-ai-tutorial/img2.webp" alt="Flow diagram: the flux2.py CLI sends a multipart POST to the Workers AI REST API, which runs FLUX.2 [dev] and returns a base64 PNG that is decoded and saved"><figcaption>Diagram: the whole round trip is one HTTPS request — multipart form data in, a base64 PNG out. Drawn from Cloudflare's API documentation.</figcaption></figure>
+
+<h2 id="step-3-multi-reference">Step 3 — Multi-reference: keep the same face, product, or style<a class="anchor" href="#step-3-multi-reference" aria-label="Link to section">#</a></h2>
+
+<p>Getting one good image is easy. Getting the <i>same</i> character or product twice is the hard part — generated images drift. FLUX.2 [dev]'s headline feature is multi-reference input: you hand it up to four images and it holds the identity, product, or style steady while you change the scene, the lighting, or the pose. On Workers AI the cap is four references (the base model supports up to ten through Black Forest Labs' own API); each must be smaller than 512×512 pixels.</p>
+
+<p>The references travel as <code>input_image_0</code> through <code>input_image_3</code>, and you point at them in the prompt by index — <code>take the subject of image 1 and style it like image 0</code> is Cloudflare's own example — or in plain language, like <code>place the dog beside the woman</code>. Add the helper below to <code>flux2.py</code> (it already ships in the file from Step 2 — this is what it does, and why):</p>
+
+<pre><code class="language-python">def prepare_reference(path):
+    &quot;&quot;&quot;Load a reference image and shrink it to fit inside 512x512.
+
+    Cloudflare requires every input image to be smaller than 512x512.
+    Returns (filename, png_bytes, mime).
+    &quot;&quot;&quot;
+    img = Image.open(path).convert(&quot;RGB&quot;)
+    w, h = img.size
+    if w &gt;= MAX_INPUT_IMAGE_PX or h &gt;= MAX_INPUT_IMAGE_PX:
+        img.thumbnail((MAX_INPUT_IMAGE_PX - 1, MAX_INPUT_IMAGE_PX - 1))
+    buf = io.BytesIO()
+    img.save(buf, format=&quot;PNG&quot;)
+    return (os.path.basename(path), buf.getvalue(), &quot;image/png&quot;)
+</code></pre>
+
+<p>Resizing matters because the API rejects oversized inputs instead of scaling them. The helper keeps the aspect ratio and converts to PNG in memory, so a phone photo works without a preprocessing step. Then call it:</p>
+
+<pre><code class="language-bash">python3 flux2.py "place the dog beside the woman, golden-hour park, photorealistic" \
+  --ref dog.png woman.png -o duo.png --steps 25 --width 1024 --height 1024</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code class="language-plaintext">Estimated cost: 4,688 neurons (~$0.052); free allowance is 10,000 neurons/day.
+Saved duo.png (2,610,444 bytes, 1024x1024)</code></pre>
+
+<p>The extra 938 Neurons are the two references: each one is a single 512×512 tile, billed at 18.75 Neurons per tile per step, times 25 steps. That is the whole pricing model — nothing else is metered. A few things that make reference calls work better in practice:</p>
+
+<ul>
+<li><b>Reference the subject, not the scene.</b> A tight crop of the product, face, or fabric beats a busy photo — the model copies what it can see clearly.</li>
+<li><b>One job per reference.</b> Give the style to <code>input_image_0</code> and the subject to <code>input_image_1</code>, then name them by index in the prompt. When both references carry both jobs, the model has to guess which is which.</li>
+<li><b>Iterate on the previous output.</b> Feed a generated image back in as a reference for the next scene. That is how a fashion spread or an ad set stays consistent: the first generation becomes the anchor for the rest.</li>
+<li><b>Keep the prompt short about the reference and long about the scene.</b> The reference already says what the subject looks like; your words should say where it is and what is happening.</li>
+</ul>
+
+<h2 id="step-4-json-prompts">Step 4 — JSON prompts and exact hex colors<a class="anchor" href="#step-4-json-prompts" aria-label="Link to section">#</a></h2>
+
+<p>Plain-language prompts are fine for a first image, but they leave the details to chance. FLUX.2 [dev] also accepts a structured JSON prompt — a small schema Cloudflare documents in full — which lets you pin down the scene, each subject's pose and position, the palette, the lighting, the camera, and the mood as separate fields instead of one run-on sentence. The schema requires only two keys, <code>scene</code> and <code>subjects</code>; everything else is optional. Subjects take a <code>position</code> of <code>foreground</code>, <code>midground</code>, or <code>background</code>; <code>color_palette</code> must have exactly three entries; <code>composition</code> comes from a fixed list of thirteen named techniques; the camera takes an <code>angle</code>, <code>distance</code>, <code>focus</code>, <code>lens</code> (14mm–85mm), <code>f-number</code>, and <code>ISO</code>.</p>
+
+<p>The client validates a JSON prompt against that schema before spending anything — a typo in <code>composition</code> should fail in your terminal, not in your Neuron budget. That validation already ships in the file from Step 2; here is the piece that does it, with the allowed-value sets it checks against:</p>
+
+<pre><code class="language-python"># JSON-prompt schema (changelog/42). Only &quot;scene&quot; and &quot;subjects&quot; are required.
+JSON_PROMPT_REQUIRED = (&quot;scene&quot;, &quot;subjects&quot;)
+COMPOSITIONS = {
+    &quot;rule of thirds&quot;, &quot;circular arrangement&quot;, &quot;framed by foreground&quot;,
+    &quot;minimalist negative space&quot;, &quot;S-curve&quot;, &quot;vanishing point center&quot;,
+    &quot;dynamic off-center&quot;, &quot;leading leads&quot;, &quot;golden spiral&quot;,
+    &quot;diagonal energy&quot;, &quot;strong verticals&quot;, &quot;triangular arrangement&quot;,
+}
+CAMERA_ANGLES = {
+    &quot;eye level&quot;, &quot;low angle&quot;, &quot;slightly low&quot;, &quot;bird&#x27;s-eye&quot;, &quot;worm&#x27;s-eye&quot;,
+    &quot;over-the-shoulder&quot;, &quot;isometric&quot;,
+}
+CAMERA_DISTANCES = {
+    &quot;close-up&quot;, &quot;medium close-up&quot;, &quot;medium shot&quot;, &quot;medium wide&quot;,
+    &quot;wide shot&quot;, &quot;extreme wide&quot;,
+}
+CAMERA_FOCUS = {
+    &quot;deep focus&quot;, &quot;macro focus&quot;, &quot;selective focus&quot;, &quot;sharp on subject&quot;,
+    &quot;soft background&quot;,
+}
+CAMERA_LENSES = {&quot;14mm&quot;, &quot;24mm&quot;, &quot;35mm&quot;, &quot;50mm&quot;, &quot;70mm&quot;, &quot;85mm&quot;}
+
+def validate_json_prompt(obj):
+    &quot;&quot;&quot;Check a JSON prompt against the schema Cloudflare documents.&quot;&quot;&quot;
+    if not isinstance(obj, dict):
+        raise ValueError(&quot;JSON prompt must be an object&quot;)
+    for key in JSON_PROMPT_REQUIRED:
+        if key not in obj:
+            raise ValueError(f&#x27;JSON prompt is missing required key &quot;{key}&quot;&#x27;)
+    subjects = obj[&quot;subjects&quot;]
+    if not isinstance(subjects, list) or not subjects:
+        raise ValueError(&#x27;&quot;subjects&quot; must be a non-empty list&#x27;)
+    for s in subjects:
+        for key in (&quot;type&quot;, &quot;description&quot;, &quot;pose&quot;, &quot;position&quot;):
+            if key not in s:
+                raise ValueError(f&#x27;each subject needs &quot;{key}&quot; (got {sorted(s)})&#x27;)
+        if s[&quot;position&quot;] not in (&quot;foreground&quot;, &quot;midground&quot;, &quot;background&quot;):
+            raise ValueError(f&#x27;bad subject position: {s[&quot;position&quot;]!r}&#x27;)
+    if &quot;color_palette&quot; in obj and len(obj[&quot;color_palette&quot;]) != 3:
+        raise ValueError(&#x27;&quot;color_palette&quot; must have exactly 3 entries&#x27;)
+    if &quot;composition&quot; in obj and obj[&quot;composition&quot;] not in COMPOSITIONS:
+        raise ValueError(f&#x27;bad composition: {obj[&quot;composition&quot;]!r}&#x27;)
+    camera = obj.get(&quot;camera&quot;, {})
+    if &quot;angle&quot; in camera and camera[&quot;angle&quot;] not in CAMERA_ANGLES:
+        raise ValueError(f&#x27;bad camera angle: {camera[&quot;angle&quot;]!r}&#x27;)
+    if &quot;distance&quot; in camera and camera[&quot;distance&quot;] not in CAMERA_DISTANCES:
+        raise ValueError(f&#x27;bad camera distance: {camera[&quot;distance&quot;]!r}&#x27;)
+    if &quot;focus&quot; in camera and camera[&quot;focus&quot;] not in CAMERA_FOCUS:
+        raise ValueError(f&#x27;bad camera focus: {camera[&quot;focus&quot;]!r}&#x27;)
+    if &quot;lens&quot; in camera and camera[&quot;lens&quot;] not in CAMERA_LENSES:
+        raise ValueError(f&#x27;bad camera lens: {camera[&quot;lens&quot;]!r}&#x27;)
+    return obj
+</code></pre>
+
+<p>Cloudflare's own example from the announcement post is a good first JSON prompt. Save it as <code>scene.json</code>:</p>
+
+<pre><code class="language-json">{
+  "scene": "A bustling, neon-lit futuristic street market on an alien planet, rain slicking the metal ground",
+  "subjects": [
+    {
+      "type": "Cyberpunk bounty hunter",
+      "description": "Female, wearing black matte armor with glowing blue trim, holding a deactivated energy rifle, helmet under her arm, rain dripping off her synthetic hair",
+      "pose": "Standing with a casual but watchful stance, leaning slightly against a glowing vendor stall",
+      "position": "foreground"
+    },
+    {
+      "type": "Merchant bot",
+      "description": "Small, rusted, three-legged drone with multiple blinking red optical sensors, selling glowing synthetic fruit from a tray attached to its chassis",
+      "pose": "Hovering slightly, offering an item to the viewer",
+      "position": "midground"
+    }
+  ],
+  "style": "noir sci-fi digital painting",
+  "color_palette": ["deep indigo", "electric blue", "acid green"],
+  "lighting": "Low-key, dramatic, with primary light sources coming from neon signs and street lamps reflecting off wet surfaces",
+  "mood": "Gritty, tense, and atmospheric",
+  "background": "Towering, dark skyscrapers disappearing into the fog, with advertisements scrolling across their surfaces, flying vehicles (spinners) visible in the distance",
+  "composition": "dynamic off-center",
+  "camera": {
+    "angle": "eye level",
+    "distance": "medium close-up",
+    "focus": "sharp on subject",
+    "lens": "35mm",
+    "f-number": "f/1.4",
+    "ISO": 400
+  },
+  "effects": ["heavy rain effect", "subtle film grain", "neon light reflections", "mild chromatic aberration"]
+}</code></pre>
+
+<pre><code class="language-bash">python3 flux2.py --json-prompt scene.json -o scene.png --width 1024 --height 1024</code></pre>
+
+<p>The other granular control is color. You can name a hex code in a plain prompt — Cloudflare's example recolors a scene's accent lighting to Cloudflare orange, <code>#F48120</code>, and the French landing-page example in the announcement weaves <code>#2ECC71</code> green into the foliage and the dog's accessories. Hex codes work inside JSON prompts too: put one in <code>color_palette</code> or in a subject's <code>description</code>. For brand work, that is the difference between "orange-ish" and the exact orange in your style guide.</p>
+
+<p>One more thing the JSON format buys you: the prompt itself becomes data. Store <code>scene.json</code> next to the output image and you can regenerate the same art direction months later, diff two versions of a prompt, or generate fifty variations from one template by swapping a single field.</p>
+
+<h2 id="step-5-batch">Step 5 — Batch a consistent set with fixed seeds<a class="anchor" href="#step-5-batch" aria-label="Link to section">#</a></h2>
+
+<p>A single image is a demo. The real use case Cloudflare pitches — fifty ad variations with the same actor, a product in ten scenes, a full editorial spread — is a batch. The pattern is: one reference image, one JSON prompt template, and a list of scenes. The seed is what makes the batch reproducible: the same prompt and seed always produce the same image, so you can re-run a set after a prompt tweak and know exactly what changed.</p>
+
+<p>Save this as <code>batch.py</code> next to <code>flux2.py</code>. It reuses the client as a module:</p>
+
+<pre><code class="language-python">#!/usr/bin/env python3
+&quot;&quot;&quot;Batch a consistent image set with FLUX.2 [dev] on Cloudflare Workers AI.
+
+One reference image anchors every shot; each scene varies the setting.
+The seed makes each shot reproducible: same prompt + same seed = same image.
+
+    python3 batch.py --ref backpack.png --scenes scenes.json --outdir set1
+
+scenes.json: a list of {&quot;name&quot;: ..., &quot;scene&quot;: ..., &quot;seed&quot;: ...} objects.
+Costs are printed per shot before the call, and as a total at the end.
+&quot;&quot;&quot;
+import argparse
+import json
+import os
+import sys
+
+import flux2
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description=&quot;Batch FLUX.2 [dev] generations&quot;)
+    p.add_argument(&quot;--ref&quot;, required=True, help=&quot;reference image (product/character)&quot;)
+    p.add_argument(&quot;--scenes&quot;, required=True, help=&quot;JSON list of shots&quot;)
+    p.add_argument(&quot;--outdir&quot;, default=&quot;set1&quot;)
+    p.add_argument(&quot;--steps&quot;, type=int, default=25)
+    p.add_argument(&quot;--width&quot;, type=int, default=1024)
+    p.add_argument(&quot;--height&quot;, type=int, default=1024)
+    p.add_argument(&quot;--style&quot;, default=&quot;&quot;,
+                   help=&quot;suffix appended to every scene, e.g. &#x27;photorealistic&#x27;&quot;)
+    args = p.parse_args(argv)
+
+    with open(args.scenes) as f:
+        shots = json.load(f)
+    os.makedirs(args.outdir, exist_ok=True)
+
+    total = 0.0
+    for shot in shots:
+        prompt = shot[&quot;scene&quot;]
+        if args.style:
+            prompt = f&quot;{prompt}, {args.style}&quot;
+        neurons = flux2.estimate_neurons(args.width, args.height,
+                                         args.steps, 1)
+        out = os.path.join(args.outdir, f&quot;{shot[&#x27;name&#x27;]}.png&quot;)
+        print(f&quot;{shot[&#x27;name&#x27;]}: {neurons:,.0f} neurons &quot;
+              f&quot;(~${flux2.estimate_cost_usd(neurons):.3f}) -&gt; {out}&quot;)
+        png = flux2.generate(prompt, refs=[args.ref], steps=args.steps,
+                             width=args.width, height=args.height,
+                             seed=shot.get(&quot;seed&quot;))
+        with open(out, &quot;wb&quot;) as f:
+            f.write(png)
+        total += neurons
+    print(f&quot;Total: {total:,.0f} neurons &quot;
+          f&quot;(~${flux2.estimate_cost_usd(total):.3f}) for {len(shots)} images&quot;)
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    sys.exit(main())
+</code></pre>
+
+<p>And a scenes file, <code>scenes.json</code> — one object per shot, each with its own scene and seed:</p>
+
+<pre><code class="language-json">[
+  {"name": "studio",  "scene": "a studio product shot, soft diffused light, seamless white background", "seed": 11},
+  {"name": "beach",   "scene": "the same product on a sunlit beach at golden hour, gentle waves behind", "seed": 22},
+  {"name": "street",  "scene": "the same product on a rainy city street at night, neon reflections", "seed": 33}
+]</code></pre>
+
+<pre><code class="language-bash">python3 batch.py --ref backpack.png --scenes scenes.json --outdir set1</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code class="language-plaintext">studio: 4,219 neurons (~$0.046) -> set1/studio.png
+beach: 4,219 neurons (~$0.046) -> set1/beach.png
+street: 4,219 neurons (~$0.046) -> set1/street.png
+Total: 12,656 neurons (~$0.139) for 3 images</code></pre>
+
+<p>Three things to notice. First, the total already exceeds the free daily allowance — a three-image set at 1024×1024 with a reference is a paid run on Workers Paid, or a two-day run on the free tier. Budget before you batch; the cost section below is the table to use. Second, the reference is what holds the product steady across the three scenes, not the seed — the seed only makes each individual shot reproducible. Third, run the cheapest version of a batch first: generate all three scenes with FLUX.2 [klein] 4B (Step 6's table shows why), pick the winning art direction, and spend the [dev] Neurons only on the final set.</p>
+
+<h2 id="what-it-costs">What it costs: the Neuron arithmetic<a class="anchor" href="#what-it-costs" aria-label="Link to section">#</a></h2>
+
+<p>Workers AI bills in Neurons — Cloudflare's unit of GPU compute — at $0.011 per 1,000 Neurons above the free 10,000 a day. Every account gets that allowance on both the Free and Paid plans, and it resets at 00:00 UTC. FLUX.2 [dev] is priced per 512×512 tile, per step: 18.75 Neurons for each input tile, 37.50 for each output tile. The formula for one call is:</p>
+
+<pre><code class="language-plaintext">neurons = (output tiles × steps × 37.50) + (input tiles × steps × 18.75)
+dollars = neurons × $0.011 / 1,000</code></pre>
+
+<p>Output tiles are the image area in 512×512 blocks, rounded up: 1024×1024 is 4 tiles, 1024×768 is also 4 (768 rounds up to two blocks of 512), and 1920×1080 is 8. Worked examples, all from the pricing page:</p>
+
+<table>
+<tr><th>Call</th><th>Neurons</th><th>Dollars</th><th>Free-tier budget</th></tr>
+<tr><td>1024×1024, 25 steps, no references</td><td>3,750</td><td>$0.041</td><td>~2 per day</td></tr>
+<tr><td>1024×1024, 25 steps, 2 references</td><td>4,688</td><td>$0.052</td><td>~2 per day</td></tr>
+<tr><td>1024×768 (default), 25 steps</td><td>3,750</td><td>$0.041</td><td>~2 per day</td></tr>
+<tr><td>1024×1024, 10 steps, no references</td><td>1,500</td><td>$0.017</td><td>~6 per day</td></tr>
+<tr><td>512×512, 25 steps, no references</td><td>938</td><td>$0.010</td><td>~10 per day</td></tr>
+</table>
+
+<p>Two levers move the price: size and steps. Halving the steps roughly halves the cost, and dropping to 512×512 quarters it. The quality trade-off is real — fewer steps means less detail — but for art-direction drafts, 10 steps at 512×512 costs 375 Neurons, about a tenth of the full-size price, and the free tier covers about 26 of those a day. Watch your usage in the Workers AI dashboard; on the Free plan, calls past the allowance fail with an error instead of billing you, which is the safe default while you learn the model.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/flux-2-dev-cloudflare-workers-ai-tutorial/img3.webp" alt="Bar chart: neurons per 1024 by 1024 image on Workers AI — FLUX.1 schnell 58, FLUX.2 klein 4B 104, FLUX.2 klein 9B 1,364, FLUX.2 dev at 25 steps 3,750 — against the 10,000-neuron free daily allowance"><figcaption>Chart: neurons per 1024×1024 image, from Cloudflare's pricing page (log scale). FLUX.2 [dev] is the most expensive image model in the catalog by a wide margin — that is the price of the 32B model.</figcaption></figure>
+
+<h2 id="which-model-should-you-use">Which model should you use?<a class="anchor" href="#which-model-should-you-use" aria-label="Link to section">#</a></h2>
+
+<p>Workers AI now hosts four Black Forest Labs image models, and [dev] is the wrong default for most jobs. Pick by what the image is for:</p>
+
+<table>
+<tr><th>Model</th><th>Best for</th><th>Neurons / 1024×1024</th><th>License</th></tr>
+<tr><td><b>FLUX.2 [dev]</b> <code>@cf/black-forest-labs/flux-2-dev</code></td><td>Final art: the most realistic, most prompt-faithful image; multi-reference consistency</td><td>3,750 @ 25 steps</td><td>FLUX Non-Commercial (weights); outputs usable commercially</td></tr>
+<tr><td><b>FLUX.2 [klein] 9B</b> <code>@cf/black-forest-labs/flux-2-klein-9b</code></td><td>Fast, high-quality drafts with multi-reference editing; near-[dev] quality at a third of the price</td><td>1,364</td><td>FLUX Non-Commercial</td></tr>
+<tr><td><b>FLUX.2 [klein] 4B</b> <code>@cf/black-forest-labs/flux-2-klein-4b</code></td><td>Volume and iteration: storyboards, variations, live previews</td><td>104</td><td>Apache 2.0</td></tr>
+<tr><td><b>FLUX.1 [schnell]</b> <code>@cf/black-forest-labs/flux-1-schnell</code></td><td>Maximum volume on the free tier; simple images at speed</td><td>58 @ 4 steps</td><td>Apache 2.0</td></tr>
+</table>
+
+<p>The rule of thumb: draft on [klein] 4B, shortlist on [klein] 9B, finish on [dev]. A fifty-image ad set drafted on 4B costs about 5,200 Neurons — inside one free day. The same set finished on [dev] costs 187,500 Neurons, about $2.06. Both numbers come from the same pricing table; the only difference is when you choose to pay for quality.</p>
+
+<p>If you need the model on your own hardware instead, the earlier tutorial on this site covers <a href="/articles/flux-1-dev-local-image-generation-hands-on-tutorial/">FLUX.1 [dev] on a local GPU</a> — the same diffusers workflow, a 12B model, and a very different hardware bill. And if you need region-precise, multi-step editing — change one object and leave the rest of the frame untouched — that is FLUX 3 Image, Black Forest Labs' newer product from October 2026. It is sold through the BFL API, not hosted on Workers AI, so it is outside this tutorial's scope.</p>
+
+<h2 id="limits">Limits and honest notes<a class="anchor" href="#limits" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><b>It is slow.</b> Cloudflare says so itself: FLUX.2 [dev] is one of the most powerful models in the catalog and is expected to be slower than the other image models. The client sets a 300-second timeout for a reason. Do not put it behind a synchronous web request with a 30-second limit.</li>
+<li><b>Four references, not ten.</b> The base model takes up to ten reference images through the BFL API; the Workers AI build takes four, each under 512×512. If your workflow needs more, call the BFL API directly — at BFL's prices.</li>
+<li><b>The free tier is two images a day at full size.</b> That is enough to learn the model and to finish a small job. It is not a production budget. The Workers Paid plan is $5 a month minimum and unlocks overage at $0.011 per 1,000 Neurons.</li>
+<li><b>License: read it before you ship.</b> The [dev] weights are under the FLUX Non-Commercial License — generated outputs may be used for personal, scientific, and commercial purposes, but running the weights commercially needs a commercial license from Black Forest Labs. Calling the hosted model through Workers AI puts you under Cloudflare's terms and BFL's API terms instead; the model page links both. The [klein] 4B model is Apache 2.0, the cleanest license of the four.</li>
+<li><b>The Workers binding has a rough edge.</b> If you call the model from inside a Worker instead of over REST, Cloudflare's own docs show a temporary workaround — wrapping the FormData in a dummy Request to get a stream — with a comment that a fix is coming. The REST path in this tutorial has no such workaround, which is one reason it is the recommended route.</li>
+<li><b>Outputs are base64, not files.</b> The API never returns raw image bytes. Budget for the base64 overhead (about 33% larger than the PNG) if you proxy responses through your own server, and decode before storing — the client does this for you.</li>
+<li><b>FLUX.2 [dev] is a year old.</b> It launched on November 25, 2025. What is new is the hosting, not the model — and that is the point. The best open-weight image model of 2025 just became callable from anywhere with an internet connection, and the price of admission dropped from a 54 GB GPU to a free Cloudflare account.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+
+<p>Serverless image generation used to mean the fast, small model. FLUX.2 [dev] on Workers AI breaks that trade-off in one direction only: the biggest open-weight image model now runs on someone else's GPUs, for four cents a picture, with the two features that matter for real work — reference images that hold a subject steady, and JSON prompts that pin down the details. The catch is the meter: at 3,750 Neurons a picture, the free tier buys you two a day, so the skill is not generating — it is deciding which two are worth the [dev] price, and drafting everything else on the [klein] models that cost a few cents per hundred.</p>
+
+<p>Build the client, generate your first image, then run the batch in Step 5 with a reference photo of something you actually sell or shoot. The moment the same product appears in three different scenes without changing shape, you will understand why the reference input — not the resolution, not the speed — is the feature this model is really selling.</p>
+
+<h2 id="verification">What was verified in this tutorial<a class="anchor" href="#verification" aria-label="Link to section">#</a></h2>
+
+<p>Every API fact in this tutorial was checked against Cloudflare's own documentation on November 21, 2026: the model page, the changelog entry, the pricing page, the REST API guide, and the announcement blog post. The <code>flux2.py</code> client was run end-to-end against a local mock server that implements the documented contract — 34 checks passed, covering the exact multipart fields, the base64 response shape, reference-image resizing, JSON-prompt validation against the documented schema, the 401 and error-envelope paths, and the Neuron arithmetic. No live generation was run from this desk: it holds no Cloudflare account or token, and live calls need the reader's own credentials. The cost figures are computed from the published pricing table, not from a live bill. The cover image is an AI-generated illustration; the two diagrams are drawn from the documented API and pricing table.</p>
+
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+
+<ul>
+<li><a href="https://blog.cloudflare.com/flux-2-workers-ai/" rel="nofollow">Partnering with Black Forest Labs to bring FLUX.2 [dev] to Cloudflare Workers AI (Cloudflare Blog, November 20, 2026)</a> — the announcement: model, multi-reference, JSON prompting, hex colors, and the curl examples.</li>
+<li><a href="https://developers.cloudflare.com/changelog/42/" rel="nofollow">Workers AI changelog: FLUX.2 [dev] (Cloudflare Docs)</a> — the parameter list, the multipart requirement, the 512×512 input limit, and the full JSON-prompt schema.</li>
+<li><a href="https://developers.cloudflare.com/workers-ai/models/flux-2-dev/" rel="nofollow">flux-2-dev model page (Cloudflare Docs)</a> — model ID, base64 output, zero data retention, license link.</li>
+<li><a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" rel="nofollow">Workers AI pricing (Cloudflare Docs, updated November 18, 2026)</a> — $0.011 per 1,000 Neurons, 10,000 free per day, and the per-model rates used in every cost figure here.</li>
+<li><a href="https://developers.cloudflare.com/workers-ai/get-started/rest-api/" rel="nofollow">Workers AI REST API get-started guide (Cloudflare Docs)</a> — where the account ID and API token live, and the response envelope.</li>
+<li><a href="https://developers.cloudflare.com/api/resources/ai/methods/run/" rel="nofollow">Run a Workers AI model (Cloudflare API reference)</a> — endpoint shape, required Workers AI Write permission, TextToImage result type.</li>
+<li><a href="https://bfl.ai/models/flux-2" rel="nofollow">FLUX.2 (Black Forest Labs)</a> — the model family: [max], [pro], [flex], [dev]; multi-reference up to 10 images; 4 MP output.</li>
+<li><a href="https://huggingface.co/black-forest-labs/FLUX.2-dev" rel="nofollow">FLUX.2-dev on Hugging Face (Black Forest Labs)</a> — 32B rectified-flow transformer; FLUX Non-Commercial License; outputs usable for personal, scientific, and commercial purposes.</li>
+</ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="flux-2-dev-cloudflare-workers-ai-tutorial"></div><div class="comments" data-comments="flux-2-dev-cloudflare-workers-ai-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/opensre-ci-cd-reliability-agent-tutorial/"><span class="chip">Tutorials</span><h3>OpenSRE hands-on: the open-source agent that reads your failed CI run and opens the fix</h3><div class="meta">November 21, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/depth-pro-2-metric-depth-tutorial/"><span class="chip">Tutorials</span><h3>Turn any photo or video into metric depth with Apple’s Depth Pro 2: the complete hands-on tutorial</h3><div class="meta">November 21, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/inkling-2-mini-local-run-tutorial/"><span class="chip">Tutorials</span><h3>Run Thinking Machines’ Inkling 2 Mini on your laptop: the looped-transformer local setup</h3><div class="meta">November 20, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/minimax-m31-flash-coding-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a coding agent with MiniMax M3.1-Flash: 1M context, five effort levels, and a $0.15-per-million-token bill</h3><div class="meta">November 20, 2026 · 17 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run FLUX.2 [dev]?</h3><p>No — that is the point of this tutorial. The weights need about 90 GB of VRAM at full precision (around 54 GB with the FP8 quantization), but on Workers AI Cloudflare runs the model on its own GPUs and you call it over HTTPS. Your machine only runs the Python client.</p><h3>How much does it cost?</h3><p>A 1024×1024 image at 25 steps costs 3,750 Neurons, about $0.041. Every account gets 10,000 Neurons a day free, which covers about two such images; smaller images and fewer steps stretch it further. Above the free allowance, Workers Paid charges $0.011 per 1,000 Neurons. The client prints its estimate before every call.</p><h3>Can I use the images commercially?</h3><p>The FLUX Non-Commercial License says generated outputs may be used for personal, scientific, and commercial purposes — but the [dev] weights themselves are non-commercial, so self-hosting them for commercial work needs a commercial license from Black Forest Labs. Calling the hosted model through Workers AI puts you under Cloudflare&#x27;s terms and BFL&#x27;s API terms instead. The [klein] 4B model is Apache 2.0, the cleanest license of the four.</p><h3>Why multipart form data — can&#x27;t I send JSON?</h3><p>No. Cloudflare requires multipart form data for this model even for a prompt-only call; a JSON body will not work. The client builds the multipart body by hand because the requests library&#x27;s files= shortcut silently sends form-encoded data when no files are attached — exactly the mistake this model punishes.</p><h3>How do I keep the same character across a batch?</h3><p>Use one reference image for every shot, one JSON prompt template with the scene swapped per shot, and a fixed seed per shot. The reference is what holds the identity steady; the seed only makes each individual shot reproducible. Draft the set on FLUX.2 [klein] 4B first, then spend the [dev] Neurons on the final version.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/hy4-flash-hands-on-tutorial/">Hands-on with Tencent Hy4 Flash: 1M-token context, reasoning modes, and the open-weights deployment</a></li><li><a href="/articles/inference-optimisation-skill-local-llm-speed-tutorial/">Speed up your local LLM server: hands-on with inference-optimisation-skill</a></li><li><a href="/articles/rust-anything-port-typescript-to-rust-tutorial/">Port your TypeScript to Rust and prove it still works: hands-on with rust-anything</a></li><li><a href="/articles/duckdb-2-0-ai-engineers-local-analytics-tutorial/">DuckDB 2.0 for AI engineers: the local analytics engine your agents can actually query</a></li><li><a href="/articles/flux-1-dev-local-image-generation-hands-on-tutorial/">FLUX.1 [dev]: generate images on your own GPU — hands-on with Black Forest Labs&#x27; open-weights model</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
