@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a realtime voice agent with OpenAI GPT Live 1.1 — AI Frontier Post</title>
+<meta name="description" content="Build a working voice agent with OpenAI GPT Live 1.1: WebSocket client, live transcripts, delegated tools, and standby billing that cuts idle minutes to $0.02.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/gpt-live-1-1-realtime-voice-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a realtime voice agent with OpenAI GPT Live 1.1">
+<meta property="og:description" content="Build a working voice agent with OpenAI GPT Live 1.1: WebSocket client, live transcripts, delegated tools, and standby billing that cuts idle minutes to $0.02.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/gpt-live-1-1-realtime-voice-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/gpt-live-1-1-realtime-voice-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-22">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a realtime voice agent with OpenAI GPT Live 1.1", "description": "Build a working voice agent with OpenAI GPT Live 1.1: WebSocket client, live transcripts, delegated tools, and standby billing that cuts idle minutes to $0.02.", "datePublished": "2026-11-22", "dateModified": "2026-11-22", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/gpt-live-1-1-realtime-voice-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/gpt-live-1-1-realtime-voice-agent-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "For the live runs, yes \u2014 the model only replies with OPENAI_API_KEY set. A 30-second test costs about $0.03 of voice time plus a few cents of backend tokens. The mock server in step 8 lets you verify every line of the client first, including the session payload, the tool-call flow, and the reply audio, without any key at all."}}, {"@type": "Question", "name": "Why doesn't standby apply to the WebSocket client in this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "Standby is a WebRTC-only billing state: OpenAI pauses inference when a WebRTC session goes quiet. WebSocket sessions bill the active rate for every second. The session fields are identical \u2014 wake_policy and idle_timeout_s \u2014 so the same configuration carries over when you ship the browser version in step 7."}}, {"@type": "Question", "name": "Can GPT-Live call my tools directly?", "acceptedAnswer": {"@type": "Answer", "text": "No. GPT-Live delegates to a backend \u2014 a Responses model you configure, or your own agent under client delegation \u2014 and the backend requests the tool. Your application executes the function, checks permissions and confirmations, and returns the result through response.item.create. GPT-Live never runs your code or sees your credentials."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a realtime voice agent with OpenAI GPT Live 1.1</h1>
+<p class="lede">GPT Live 1.1 is in the API, and its headline feature is not the voice — it&#x27;s the billing: idle minutes now cost $0.02 instead of $0.05. Here&#x27;s how to build a working voice agent on it, end to end.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 22, 2026 · 19 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> GPT Live 1.1 splits a voice agent in two: the voice model runs the conversation, a backend model you choose does the reasoning and tool calls. This tutorial builds a restaurant booking assistant end to end — WebSocket client, live transcripts, a delegated availability check — and shows the two session fields that cut idle minutes from $0.05 to $0.02.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Connect:</b> <code>wss://api.openai.com/v1/live/sessions</code> with a Bearer key; send <code>session.start</code> with the full configuration, then wait for <code>session.started</code> before streaming audio.</li><li><b>Pricing:</b> voice time is $0.05 a minute active and $0.02 a minute on standby, billed per second; the backend model and tools are billed separately.</li><li><b>Audio asymmetry:</b> input appends carry base64 PCM in a field called <code>audio</code>; output deltas carry it in a field called <code>delta</code>. Both are raw mono PCM16 at 24 kHz — no WAV headers.</li><li><b>Tool flow:</b> the backend's function call arrives inside a <code>response.event</code> envelope; execute it, return the result with <code>response.item.create</code>, then send <code>response.create</code> to resume the backend.</li><li><b>Standby is WebRTC-only:</b> set <code>wake_policy.type</code> to <code>speech</code> and <code>idle_timeout_s</code> to 5–60 seconds; the server emits <code>session.paused</code> and <code>session.resumed</code> around the quiet stretch.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/gpt-live-1-1-realtime-voice-agent-tutorial/cover.webp" alt="A person speaking into a phone, sound waves flowing into a glowing voice-AI panel" loading="lazy"><figcaption>A live voice agent: speech in, speech out, tools in the background. Image: AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>On November 19, OpenAI put GPT-Live-1.1 in its API — the full-duplex voice model that has powered ChatGPT Plus and Pro voice since October 15. The version bump is the least interesting part. The interesting part is standby: idle WebRTC sessions now bill at $0.02 a minute instead of $0.05, a 60% cut on every minute a voice agent spends waiting. And voice agents spend most of a call waiting — a customer reading out a confirmation code, a form being filled in, a human doing work on their side of the line.</p>
+<p>This tutorial builds a working voice agent end to end. You will create a restaurant booking assistant that takes a spoken request, hands the real work to a backend model, runs a function tool to check table availability, and speaks the answer — all over one WebSocket. Every request shape comes from OpenAI's Live API reference, and the client is tested against a mock server, so you can verify every line before you spend a cent.</p>
+<p>By the end you will have a Python client that opens a Live session, streams audio in, saves the spoken reply to a WAV file, prints live transcripts, and executes a delegated tool call — plus the exact session fields standby needs in a browser deployment.</p>
+<h2 id="1-how-gpt-live-works">1. How GPT-Live works<a class="anchor" href="#1-how-gpt-live-works" aria-label="Link to section">#</a></h2>
+<p>GPT-Live splits a voice agent into two layers. The voice layer — the <code>gpt-live-1.1</code> model — runs the spoken conversation: it listens while it speaks, so a caller can interrupt mid-sentence, and it decides when a request needs real work. The backend does that work: reasoning, lookups, and tool calls. While the backend runs, the voice layer keeps talking, so the caller hears an acknowledgment instead of dead air.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/gpt-live-1-1-realtime-voice-agent-tutorial/img2.webp" alt="Architecture diagram: the caller talks to the GPT-Live 1.1 voice layer, which delegates to a gpt-6-luna backend, which calls the check_availability tool"><figcaption>GPT-Live runs the conversation; a backend model runs the work. Diagram: AI Frontier Post.</figcaption></figure>
+<p>You choose where the backend lives when you create the session, and the choice is fixed for that session:</p>
+<div class="table-wrap"><table><thead><tr><th>Delegation mode</th><th>Backend runs</th><th>Use it when</th></tr></thead><tbody><tr><td><strong>Responses delegation</strong></td><td>An OpenAI Responses model you pick, hosted by OpenAI</td><td>You want GPT-Live to manage the backend requests and return results to the conversation</td></tr><tr><td><strong>Client delegation</strong></td><td>Any model, agent, or service your application runs</td><td>You need your own workflow, multiple backends, or to review results before they reach the caller</td></tr></tbody></table></div>
+<p>Either way, your application owns permissions, confirmations, business records, and task state. GPT-Live never executes your tools itself — it asks, your code runs them, and the result comes back through the session.</p>
+<p>What changed in 1.1: OpenAI says the model transcribes speech more accurately, holds a steadier accent and voice across languages, follows instructions more reliably, and completes delegated tasks more reliably than GPT-Live-1. OpenAI has published no benchmark numbers for those claims, so treat them as vendor claims until you measure them on your own calls. The concrete, checkable change is standby, covered in step 7.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>An OpenAI API key</strong> from a project with API access. Keep it on your server — never ship it in frontend code. The Live WebSocket takes it as a <code>Bearer</code> header.</li><li><strong>Python 3.11 or newer</strong> and the <code>websockets</code> package (<code>pip install websockets</code>). The client uses only the standard library besides that.</li><li><strong>A WAV file to speak with</strong> — mono PCM16 at 24 kHz. Step 8 shows how to generate a test file; for a real call, record your microphone at 24 kHz or resample with ffmpeg.</li><li><strong>A few cents of credit.</strong> Voice time is $0.05 a minute active and $0.02 a minute on standby, billed per second. A 30-second test session costs about $0.03 of voice time, plus a few cents of backend tokens for the <code>gpt-6-luna</code> model used here.</li></ul>
+<p>One decision before you start: this tutorial connects over WebSocket from a Python server. That is the easiest path to a working agent you can test from a terminal. The browser path uses WebRTC instead, and standby — the billing feature — only applies to WebRTC sessions. Step 7 shows the exact fields for that deployment, so you get both: a working agent today, and the cheaper idle rate when you ship the browser version.</p>
+<h2 id="2-create-the-session">2. Create the session<a class="anchor" href="#2-create-the-session" aria-label="Link to section">#</a></h2>
+<p>Connect to <code>wss://api.openai.com/v1/live/sessions</code> with your API key in the <code>Authorization</code> header. The first thing you send is <code>session.start</code> — the whole session configuration in one event. Wait for <code>session.started</code> before sending audio; it returns the session ID, an expiry timestamp, and the resolved configuration.</p>
+<p>Here is the configuration for the booking assistant, exactly as the client sends it. The model, the voice prompt, the audio format, and the delegation mode are all chosen here — the model, voice, audio format, and delegation mode cannot be changed mid-session, so get them right at startup.</p>
+<pre><code class="language-python">SESSION = {
+    "model": "gpt-live-1.1",
+    "instructions": VOICE_INSTRUCTIONS,   # see step 6 for the full text
+    "audio": {
+        "format": {"type": "audio/pcm", "rate": 24000},
+        "output": {"voice": "marin"},
+    },
+    "delegation": {
+        "type": "responses",
+        "responses": {
+            "model": "gpt-6-luna",
+            "instructions": BACKEND_INSTRUCTIONS,
+            "tools": [CHECK_AVAILABILITY_TOOL],  # see step 5
+            "tool_choice": "auto",
+            "parallel_tool_calls": False,
+            "max_output_tokens": 1024,
+        },
+    },
+}</code></pre>
+<p>Field by field:</p>
+<ul><li><strong><code>model</code></strong> — required. <code>gpt-live-1.1</code> is the current voice model; switching from <code>gpt-live-1</code> is a model-name swap, but it requires a new session.</li><li><strong><code>instructions</code></strong> — the voice prompt: role, speaking style, and when to ask the backend for help. Up to 16,384 tokens.</li><li><strong><code>audio.format</code></strong> — WebSocket only. <code>audio/pcm</code> at 24,000 Hz applies to input and output alike for the session. WebRTC negotiates its format during connection setup, so leave this out of WebRTC requests.</li><li><strong><code>audio.output.voice</code></strong> — the default voice is <code>marin</code>. GPT-Live also offers named voices such as <code>quartz</code>, <code>vesper</code>, <code>willow</code>, <code>gleam</code>, and <code>brise</code>.</li><li><strong><code>delegation</code></strong> — <code>type: "responses"</code> hands the backend to the Responses model in <code>delegation.responses</code>. Omit it or set it to <code>null</code> and you get client delegation instead. The backend <code>model</code> is required; <code>max_output_tokens</code> must be at least 16 when set.</li></ul>
+<p>Two limits worth knowing now: the session holds a 128,000-token default context window, and startup history (<code>input</code>) accepts up to 128 messages and 8,192 combined tokens.</p>
+<h2 id="3-stream-audio-in-capture-audio-out">3. Stream audio in, capture audio out<a class="anchor" href="#3-stream-audio-in-capture-audio-out" aria-label="Link to section">#</a></h2>
+<p>Audio goes over the same WebSocket as the JSON events. Input is base64-encoded raw PCM — no WAV header — sent as <code>session.input_audio.append</code> events. Chunk it into 100 ms frames (4,800 bytes at 24 kHz mono 16-bit) and pace the sends in real time, or the model receives the whole file at once and the turn timing breaks.</p>
+<pre><code class="language-python">FRAME_BYTES = 4800  # 100 ms of mono PCM16 at 24 kHz
+
+def load_wav_frames(path):
+    """Read a mono PCM16 24 kHz WAV and split it into 100 ms frames."""
+    with wave.open(path, "rb") as wav:
+        if wav.getnchannels() != 1:
+            raise ValueError(f"{path}: expected mono audio")
+        if wav.getsampwidth() != 2:
+            raise ValueError(f"{path}: expected 16-bit samples")
+        if wav.getframerate() != 24000:
+            raise ValueError(f"{path}: expected 24 kHz")
+        pcm = wav.readframes(wav.getnframes())
+    return [pcm[i:i + FRAME_BYTES] for i in range(0, len(pcm), FRAME_BYTES)]
+
+async def stream_audio(ws, frames, state):
+    """Send the WAV in 100 ms frames, paced in real time."""
+    await state.started.wait()  # only after session.started
+    for i, frame in enumerate(frames):
+        await ws.send(json.dumps({
+            "type": "session.input_audio.append",
+            "event_id": f"audio_{i}",
+            "audio": base64.b64encode(frame).decode("ascii"),
+        }))
+        await asyncio.sleep(0.1)</code></pre>
+<p>The reply comes back as <code>session.output_audio.delta</code> events. Watch the field name — this is the one asymmetry that bites everyone the first time: input appends carry their audio in a field called <code>audio</code>, but output deltas carry theirs in a field called <code>delta</code>. Decode each delta in delivery order and append it to a buffer; at the end, write it out as a WAV with the same format.</p>
+<pre><code class="language-python">elif etype == "session.output_audio.delta":
+    # Field is "delta", not "audio" (input appends use "audio").
+    state.audio_out += base64.b64decode(event["delta"])</code></pre>
+<p>Output audio deltas on the primary WebSocket have no timing fields and no audio-done event — keep playback separate from transcript timing, and treat the byte stream as one continuous reply.</p>
+<h2 id="4-read-the-conversation-as-it-happens">4. Read the conversation as it happens<a class="anchor" href="#4-read-the-conversation-as-it-happens" aria-label="Link to section">#</a></h2>
+<p>Everything the session does arrives as server events on the same socket. The five you need in a first agent:</p>
+<ul><li><strong><code>session.input_transcript.delta</code> / <code>session.output_transcript.delta</code></strong> — text fragments for the caller and the assistant, each with <code>start_ms</code> and <code>end_ms</code> on the session timeline. Append fragments exactly as received, preserving spaces. There is no event that marks a completed turn, so your application decides how to group them for display — and because GPT-Live is full duplex, update the two speakers' captions independently.</li><li><strong><code>session.delegation.created</code></strong> — fires when GPT-Live hands work to the backend. It carries metadata (<code>id</code>, <code>target</code>, <code>response_id</code>), not the task text; use the transcript and your application state to know what was asked.</li><li><strong><code>session.usage.updated</code></strong> — cumulative audio usage: <code>seconds</code>, <code>active_seconds</code>, and <code>paused_seconds</code>. This is where standby shows up in your own numbers.</li><li><strong><code>session.closed</code></strong> — the terminal event, with the close <code>reason</code> (<code>close_requested</code>, <code>expired</code>, <code>content</code>, <code>remote_hangup</code>, <code>connection_lost</code>) and final usage. A connection closing without this event does not confirm successful finalization.</li><li><strong><code>error</code></strong> — includes <code>client_event_id</code> when the error belongs to one of your commands, so you can match it to the send that caused it.</li></ul>
+<p>The receive loop is a single dispatch. Muting is a command, not a disconnect: send <code>session.input_audio.mute</code> to stop the model hearing input without ending the session, and wait for <code>session.input_audio.muted</code> before treating it as accepted.</p>
+<pre><code class="language-python">async def receive_loop(ws, state):
+    """Read server events until the session closes."""
+    async for raw in ws:
+        await handle_event(ws, state, json.loads(raw))
+        if state.closed:
+            return</code></pre>
+<p>When the session ends — either the time budget runs out or you send <code>session.close</code> — wait for <code>session.closed</code> before writing out the reply file, so the final usage figures land first.</p>
+<h2 id="5-give-it-a-backend-that-does-real-work">5. Give it a backend that does real work<a class="anchor" href="#5-give-it-a-backend-that-does-real-work" aria-label="Link to section">#</a></h2>
+<p>The voice model is deliberately kept out of the business logic. The backend model — <code>gpt-6-luna</code> here, <code>gpt-6-sol</code> for heavier tasks — receives the conversation context, reasons, and picks tools. Your application still runs the custom functions, checks permissions, and returns results. Register the tool in the delegation config:</p>
+<pre><code class="language-python">CHECK_AVAILABILITY_TOOL = {
+    "type": "function",
+    "name": "check_availability",
+    "description": "Check which tables are free on a given date and party size.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "date": {"type": "string", "description": "Date as YYYY-MM-DD."},
+            "party_size": {"type": "integer", "description": "Number of guests."},
+            "time": {"type": "string", "description": "Preferred time, e.g. '19:30'."},
+        },
+        "required": ["date", "party_size"],
+        "additionalProperties": False,
+    },
+    "strict": False,
+}
+
+# In-memory table book for the demo. A real agent queries the booking system.
+AVAILABILITY = {
+    ("2026-11-27", 2): ["18:00", "19:30", "21:00"],
+    ("2026-11-27", 4): ["18:30", "20:00"],
+    ("2026-11-28", 2): ["19:00", "20:30"],
+}
+
+def check_availability(date, party_size, time=None):
+    slots = AVAILABILITY.get((date, party_size), [])
+    if time:
+        slots = [s for s in slots if s == time]
+    return json.dumps({"date": date, "party_size": party_size,
+                       "available_slots": slots})</code></pre>
+<p>When the backend wants a tool, the call arrives wrapped in a <code>response.event</code> envelope: the outer event carries the <code>delegation_id</code>, and the nested event is a Responses streaming event. Collect completed calls from nested <code>response.output_item.done</code> events — the finished item carries <code>call_id</code>, <code>name</code>, and <code>arguments</code>. An arguments-done event alone is not enough to identify the call, and the forwarded lifecycle snapshots (including <code>response.completed</code>) carry empty output arrays, so read the individual output-item events.</p>
+<pre><code class="language-python">async def handle_function_call(ws, state, item):
+    """Execute a delegated function call and return its result."""
+    call_id, name = item["call_id"], item["name"]
+    args = json.loads(item["arguments"])
+    output = check_availability(**args) if name == "check_availability" \
+        else json.dumps({"error": f"unknown tool {name}"})
+    state.tool_calls += 1
+    await ws.send(json.dumps({
+        "type": "response.item.create",
+        "event_id": f"tool_result_{state.tool_calls}",
+        "item": {"type": "function_call_output",
+                 "call_id": call_id, "output": output},
+    }))
+    # Appending an item alone does not resume the backend; continue it.
+    await ws.send(json.dumps({
+        "type": "response.create",
+        "event_id": f"continue_{state.tool_calls}",
+    }))</code></pre>
+<p>Three rules govern this flow. First, submit a result for <em>every</em> pending call, then send <code>response.create</code> — appending the item alone does not resume the backend, and missing results produce a <code>tool_outputs_required</code> error. Second, match results to calls with <code>call_id</code>. Third, the Live <code>response.create</code> uses the backend configuration stored in the session; it does not accept a standalone Responses request body. Hosted tools — web search, file search, Code Interpreter, hosted shell, image generation — can also be registered in <code>delegation.responses.tools</code>, and Responses runs those itself without your code.</p>
+<p>If your session config is invalid, Live validates Responses settings asynchronously after startup: <code>session.started</code> does not wait for validation, so listen for an <code>error</code> with code <code>responses_validation_failed</code> and fix the setting with <code>session.update</code>. The session stays open while you correct it.</p>
+<h2 id="6-prompt-it-properly">6. Prompt it properly<a class="anchor" href="#6-prompt-it-properly" aria-label="Link to section">#</a></h2>
+<p>GPT-Live needs two prompts, and they do different jobs. The voice prompt (<code>session.instructions</code>) covers the assistant's role, speaking style, and when to ask the backend for help. The backend prompt (<code>delegation.responses.instructions</code>) holds the procedures, business rules, and tool workflows. Keep detailed instructions with the backend; keep the voice prompt short and conversational.</p>
+<p>OpenAI's prompting guide supplies a template for <code>gpt-live-1.1</code>. Keep its three policy headings and customize the text beneath them:</p>
+<pre><code class="language-text">You are Aria, a calm, friendly voice assistant for Bistro Lumiere,
+a neighbourhood restaurant. Speak warmly and naturally, at an unhurried pace.
+Be clear and direct, not overly cheerful.
+
+Backchannel policy: Use moderate backchannels. Acknowledge naturally without
+competing with the main response.
+
+Interruption policy: Stop speaking when the user interrupts. Listen to what
+they say.
+
+Delegation policy:
+Backend tools:
+- Appointments: check table availability and hold a table.
+Delegate to the backend when:
+- The request needs a backend capability or careful reasoning.
+- A correction changes work already requested.
+Do not delegate when:
+- You can answer from the conversation or a still-current result.
+- You need a brief clarification to understand the request.
+Delegate to the backend before giving an answer that depends on backend work.
+Do not guess the result while waiting.</code></pre>
+<p>Two details matter. First, the plain-language "Delegate to the backend" wording is the 1.1 form — GPT-Live-1 used special tokens for the same instruction, so if you are migrating a 1.0 prompt, replace them. Second, describe the backend's capabilities in plain language in the voice prompt, but put the function names and tool schemas in the backend configuration (step 5) — the voice model uses the description to decide <em>when</em> to delegate, the backend uses the schema to decide <em>how</em>.</p>
+<p>Mid-call, you can steer the conversation without starting a new session: <code>session.instructions.append</code> adds trusted instructions, <code>session.thinking.append</code> adds silent factual context, and <code>session.commentary.append</code> supplies information for the model to say aloud. Each takes plain-string content of up to 500 tokens and a <code>delegation_id</code> — use <code>null</code> for session-wide context. A transcript-based guardrail, for example, can append an instruction to redirect the conversation while speech continues.</p>
+<h2 id="7-cut-the-idle-bill-with-standby">7. Cut the idle bill with standby<a class="anchor" href="#7-cut-the-idle-bill-with-standby" aria-label="Link to section">#</a></h2>
+<p>Standby is the one part of this release that changes your bill rather than your code path. When a WebRTC session goes quiet for a configured stretch, OpenAI pauses inference but keeps the connection, the session ID, and the conversation history. Speech wakes it again. Two session fields do the work:</p>
+<pre><code class="language-json">{
+  "model": "gpt-live-1.1",
+  "wake_policy": {"type": "speech", "vad_threshold": 0.6},
+  "idle_timeout_s": 30,
+  "instructions": "Wait for the caller to speak before you respond."
+}</code></pre>
+<ul><li><strong><code>wake_policy.type: "speech"</code></strong> — inference waits for voice activity before starting, and restarts on speech after each pause.</li><li><strong><code>idle_timeout_s</code></strong> — a whole number from 5 to 60. After that many seconds without an input or output transcript, the server emits <code>session.paused</code> and the session drops to the standby rate. Omit it and inference stays active after the first wake until the session ends.</li><li><strong><code>wake_policy.vad_threshold</code></strong> — optional, 0 to 1, default 0.5. Higher values need stronger evidence of speech, which cuts accidental wake-ups from background noise but can miss a quiet voice. It applies at the first wake and after every pause.</li></ul>
+<figure class="inline-art"><img class="story-image" src="/articles/gpt-live-1-1-realtime-voice-agent-tutorial/img3.webp" alt="Timeline of a 30-minute call: 10 active minutes, 20 standby minutes at $0.02 a minute, then active again — $0.90 instead of $1.50"><figcaption>A 30-minute support call with 20 idle minutes costs $0.90 with standby instead of $1.50. Diagram: AI Frontier Post.</figcaption></figure>
+<p>The arithmetic is straightforward. Take a 30-minute support session with ten minutes of real conversation and twenty minutes of quiet: kept active the whole time, it costs 30 × $0.05 = $1.50. With the quiet time in standby, it costs 10 × $0.05 + 20 × $0.02 = $0.90 — 40% cheaper overall, since the 60% applies to the idle minutes, not the whole call. Both rates are billed per second, and backend model and tool usage is billed separately either way.</p>
+<p>Three caveats before wiring it up. First, standby applies to WebRTC sessions only — the WebSocket client in this tutorial bills the active rate for every second, quiet or not, so treat standby as a deployment decision, not a code change. Second, OpenAI warns the first reply after a short utterance may be slower coming out of standby, so measure the resume delay against your latency budget. Third, the microphone track must stay active during standby: the idle timer measures silence, not a muted microphone, and muting still bills at the active rate.</p>
+<h2 id="8-test-it-without-spending-a-dollar">8. Test it without spending a dollar<a class="anchor" href="#8-test-it-without-spending-a-dollar" aria-label="Link to section">#</a></h2>
+<p>The client in this tutorial was verified against a local mock server that replays a canned Live session — it asserts the <code>session.start</code> payload (model, audio format, delegation, tool registration), then sends transcript deltas, a function call, reply audio, usage, and <code>session.closed</code>, and checks that the client answers the tool call correctly. That verifies every line of the client except the live handshake with OpenAI, which needs your key.</p>
+<p>Run the same test yourself:</p>
+<pre><code class="language-bash">pip install websockets
+python3 make_test_wav.py        # 2 s of 440 Hz sine, mono PCM16 24 kHz
+python3 mock_live_server.py &amp;   # replays a canned session on ws://127.0.0.1:8765
+OPENAI_API_KEY="sk-test-dummy" python3 live_voice_agent.py \
+    --wav question.wav --seconds 8 --url ws://127.0.0.1:8765 --out reply.wav</code></pre>
+<p>Expected output: the session starts, the caller transcript reads "Do you have a table for two on Friday?", the tool runs <code>check_availability</code> and returns the 19:30 slot, the assistant replies "Yes, Friday at 7:30 works. Shall I hold it?", and <code>reply.wav</code> holds the mock reply audio. Then swap the dummy key for a real one, drop the <code>--url</code> flag, and point <code>--wav</code> at a real recording:</p>
+<pre><code class="language-bash">export OPENAI_API_KEY="sk-..."
+python3 live_voice_agent.py --wav question.wav --seconds 30</code></pre>
+<p>A 30-second live test costs about $0.03 of voice time plus the backend tokens. If the session fails to start, the first thing to check is the <code>error</code> event: a <code>responses_validation_failed</code> code means the delegation config needs fixing, not the connection.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Choice</th><th>Pick this</th><th>Pick the other</th></tr></thead><tbody><tr><td><strong>GPT-Live vs. a chained pipeline</strong> (STT → LLM → TTS)</td><td>Natural turn-taking matters: interruptions, backchannels, and talking over each other are the product</td><td>You need full control over each stage, custom voices per stage, or an on-premise component</td></tr><tr><td><strong>Responses vs. client delegation</strong></td><td>Your workflow fits the Responses tools and settings; you want OpenAI to manage the backend loop</td><td>You need your own agent harness, multiple backends, or to validate results before the caller hears them</td></tr><tr><td><strong>WebSocket vs. WebRTC</strong></td><td>Server-side agent, terminal testing, telephony gateways, or any non-browser client</td><td>Browser or mobile app — and it is the only transport that gets standby billing</td></tr><tr><td><strong><code>gpt-6-luna</code> vs. <code>gpt-6-sol</code> backend</strong></td><td><code>gpt-6-luna</code> for routine lookups and tool routing</td><td><code>gpt-6-sol</code> when the backend task itself needs heavier reasoning</td></tr></tbody></table></div>
+<h2 id="production-checklist">Production checklist<a class="anchor" href="#production-checklist" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Keys stay server-side.</strong> The browser path creates the session on your server and hands the browser an ephemeral key — the project key never reaches the client.</li><li><strong>Cap every session.</strong> A time budget (the <code>--seconds</code> flag here) plus the <code>session.usage.updated</code> events give you a cost kill-switch before a runaway call does.</li><li><strong>Validate before you execute.</strong> The backend proposes the tool call; your code checks permissions and required confirmations, then runs it. GPT-Live speaks the result — it never sees your credentials.</li><li><strong>Handle the async validation error.</strong> <code>responses_validation_failed</code> arrives after <code>session.started</code>; correct the setting with <code>session.update</code> instead of restarting the call.</li><li><strong>Respect the immutable fields.</strong> Model, instructions, audio, and delegation mode are set at startup. <code>session.update</code> only changes the Responses delegation settings — to switch modes, start a new session.</li><li><strong>Plan for the standby resume.</strong> If you ship on WebRTC with standby on, test the first-reply delay after a pause against your latency budget, and keep the microphone track live.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>GPT-Live-1.1's real change is architectural, not cosmetic: the voice model runs the conversation and a backend you choose does the work, over one WebSocket and one session configuration. Build the client in the order this tutorial did — session first, audio second, transcripts third, tools last — and test it against a mock before you spend anything. Then, when you ship the browser version, turn on standby: two fields, <code>wake_policy</code> and <code>idle_timeout_s</code>, and the quiet minutes that used to cost $0.05 each cost $0.02.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://developers.openai.com/api/docs/changelog" rel="nofollow">OpenAI API changelog</a> — November 19, 2026 entry: <code>gpt-live-1.1</code> in the API and standby for GPT-Live-1 and GPT-Live-1.1 WebRTC sessions.</li><li><a href="https://developers.openai.com/api/docs/guides/live" rel="nofollow">OpenAI API docs — Getting started with GPT-Live</a> — the two-layer architecture, delegation modes, and the WebRTC quickstart.</li><li><a href="https://developers.openai.com/api/docs/guides/live-conversations" rel="nofollow">OpenAI API docs — Managing GPT-Live sessions</a> — configuration fields, voice options, transcript deltas, and the standby configuration.</li><li><a href="https://developers.openai.com/api/docs/guides/live-delegation" rel="nofollow">OpenAI API docs — Delegation and tools in GPT-Live</a> — Responses delegation config, the tool-result flow, and validation errors.</li><li><a href="https://developers.openai.com/api/docs/guides/live-prompting" rel="nofollow">OpenAI API docs — Prompting GPT-Live</a> — the instruction template and the 1.1 delegation wording.</li><li><a href="https://developers.openai.com/api/reference/resources/live/primary-websocket" rel="nofollow">OpenAI API reference — Live primary WebSocket</a> — the <code>session.start</code> payload, event shapes, and the <code>audio</code> vs. <code>delta</code> field asymmetry.</li><li><a href="/articles/openai-gpt-live-1-1-api-standby-billing/">AI Frontier Post — OpenAI ships GPT-Live-1.1 to the API — and idle voice sessions now cost 60% less</a> — our news coverage of the release, November 22, 2026.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="gpt-live-1-1-realtime-voice-agent-tutorial"></div><div class="comments" data-comments="gpt-live-1-1-realtime-voice-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/claude-sonnet-5-5-effort-playbook-tutorial/"><span class="chip">Tutorials</span><h3>Migrate to Claude Sonnet 5.5: the effort-levels playbook — measure every level, fix the five breaking changes, and pay per finished task</h3><div class="meta">November 22, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/pydantic-ai-v2-hardening-production-tutorial/"><span class="chip">Tutorials</span><h3>Harden your Pydantic AI agent for production: capabilities, fallbacks, and guardrails in v2.71</h3><div class="meta">November 22, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/cloudflare-clairic-receipt-pdf-extraction-tutorial/"><span class="chip">Tutorials</span><h3>Extract structured data from receipts and PDFs with Cloudflare Clairic</h3><div class="meta">November 21, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/rust-anything-port-typescript-to-rust-tutorial/"><span class="chip">Tutorials</span><h3>Port your TypeScript to Rust and prove it still works: hands-on with rust-anything</h3><div class="meta">November 20, 2026 · 21 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to follow this tutorial?</h3><p>For the live runs, yes — the model only replies with OPENAI_API_KEY set. A 30-second test costs about $0.03 of voice time plus a few cents of backend tokens. The mock server in step 8 lets you verify every line of the client first, including the session payload, the tool-call flow, and the reply audio, without any key at all.</p><h3>Why doesn&#x27;t standby apply to the WebSocket client in this tutorial?</h3><p>Standby is a WebRTC-only billing state: OpenAI pauses inference when a WebRTC session goes quiet. WebSocket sessions bill the active rate for every second. The session fields are identical — wake_policy and idle_timeout_s — so the same configuration carries over when you ship the browser version in step 7.</p><h3>Can GPT-Live call my tools directly?</h3><p>No. GPT-Live delegates to a backend — a Responses model you configure, or your own agent under client delegation — and the backend requests the tool. Your application executes the function, checks permissions and confirmations, and returns the result through response.item.create. GPT-Live never runs your code or sees your credentials.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/build-voice-agent-weekend/">Build a voice agent in a weekend: STT, LLM, TTS</a></li><li><a href="/articles/elevenlabs-voice-agent-tutorial/">Build a voice agent with ElevenLabs: from first call to a working website widget</a></li><li><a href="/articles/lampline-self-hosted-voice-agents-phone-tutorial/">Build a phone agent on your own machine: a hands-on guide to Lampline</a></li><li><a href="/articles/openai-gpt-live-1-1-api-standby-billing/">OpenAI ships GPT-Live-1.1 to the API — and idle voice sessions now cost 60% less</a></li><li><a href="/articles/gemini-computer-use-api-tutorial/">Build your own browser agent with Gemini Computer Use: the complete hands-on tutorial</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
