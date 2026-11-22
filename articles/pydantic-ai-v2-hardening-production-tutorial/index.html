@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Harden your Pydantic AI agent for production: capabilities, fallbacks, and guardrails in v2.71 — AI Frontier Post</title>
+<meta name="description" content="Pydantic AI 2.71 shipped on November 18 with capabilities, model fallback, and a harness full of guardrails. This guide hardens a support-ticket agent with all of them — every step run with no API key.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/pydantic-ai-v2-hardening-production-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Harden your Pydantic AI agent for production: capabilities, fallbacks, and guardrails in v2.71">
+<meta property="og:description" content="Pydantic AI 2.71 shipped on November 18 with capabilities, model fallback, and a harness full of guardrails. This guide hardens a support-ticket agent with all of them — every step run with no API key.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/pydantic-ai-v2-hardening-production-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/pydantic-ai-v2-hardening-production-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-22">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Harden your Pydantic AI agent for production: capabilities, fallbacks, and guardrails in v2.71", "description": "Pydantic AI 2.71 shipped on November 18 with capabilities, model fallback, and a harness full of guardrails. This guide hardens a support-ticket agent with all of them \u2014 every step run with no API key.", "datePublished": "2026-11-22", "dateModified": "2026-11-22", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/pydantic-ai-v2-hardening-production-tutorial/"}, "image": "https://aifrontierpost.com/articles/pydantic-ai-v2-hardening-production-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key to follow this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No. Every runnable step uses TestModel or FunctionModel stand-ins, and ALLOW_MODEL_REQUESTS=False blocks any real request. Only the final step needs a provider key, and it is marked as documented, not run."}}, {"@type": "Question", "name": "What is the difference between ModelFallback and RetryOnModelErrors?", "acceptedAnswer": {"@type": "Answer", "text": "RetryOnModelErrors asks the same model again when a request fails with a transient error such as a 503 or a rate limit. ModelFallback moves the request to a different model when the first one fails, refuses, or is cut off. Use both: each model in the fallback chain gets its own retry attempts."}}, {"@type": "Question", "name": "Is the harness safe to use in production?", "acceptedAnswer": {"@type": "Answer", "text": "The harness is on 0.x releases, so its API can change between minors \u2014 pin pydantic-ai-harness==0.71.0 and read the release notes before upgrading. The core capabilities (Capability, ModelFallback, RetryOnModelErrors) are the stable foundation; treat the harness as the guardrail layer on top."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Harden your Pydantic AI agent for production: capabilities, fallbacks, and guardrails in v2.71</h1>
+<p class="lede">Pydantic AI 2.71 turns a typed, testable agent into one that survives the real world. This guide takes a support-ticket triage agent and hardens it layer by layer — capabilities, model fallback, retries, and harness guardrails — with every step run and verified using no API key.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 22, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Pydantic AI 2.71.0 (November 18, 2026) adds the pieces a production agent needs: capabilities that bundle behavior, ModelFallback for dead or refusing models, RetryOnModelErrors for transient failures, and a harness with Goal verification, Permissions, ToolBridge, and WrapUpAtLimits. This tutorial applies all of them to one support-ticket agent, with every step executed against deterministic stand-in models and no API key.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Pinned and verified:</b> <code>pydantic-ai==2.71.0</code> and <code>pydantic-ai-harness==0.71.0</code>, both released November 18, 2026. Every code block in this guide was executed against those versions.</li><li><b>ModelFallback default:</b> it moves on for <code>ModelAPIError</code>, <code>ContentFilterError</code>, and <code>OutputTokenLimitExceeded</code>. Each model tried is an attempt inside one request step, and <code>failed_attempts</code> records the chain.</li><li><b>Retry is not fallback:</b> <code>RetryOnModelErrors</code> retries only transient errors (rate limit, unavailable, server, connection). A plain <code>ModelAPIError</code> is not retried by default.</li><li><b>Harness guardrails:</b> <code>Goal</code> refuses to end the run until a verifier accepts the answer; <code>Permissions</code> deny rules never execute the tool; <code>WrapUpAtLimits</code> answers instead of raising <code>UsageLimitExceeded</code>.</li><li><b>No API key needed:</b> every runnable step uses the framework’s own test models. The real-model step is documented, not run.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/pydantic-ai-v2-hardening-production-tutorial/cover.webp" alt="A central agent console routing support tickets through guarded gates: a fallback switch, a retry loop, and a permission checkpoint with a shield" loading="lazy"><figcaption>An agent console with its guardrails: fallback, retry, and permission checks. Image: AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Pydantic AI shipped version 2.71.0 on November 18, 2026, and it changes what the framework is for. The 2.0 release in June made agents typed and testable; 2.71 is the release that makes them survivable. The new capabilities system lets you bundle instructions, tools, and hooks into reusable units. <code>ModelFallback</code> moves a request to another model when the first one fails, refuses, or runs out of tokens. And the companion harness package adds the guardrails production agents need: a completion check that refuses to let a run end early, permission rules that keep dangerous tools out of the model's reach, and a budget-aware wrap-up that answers instead of crashing when the tokens run out.</p>
+<p>This tutorial is the production sequel to our earlier guide, which built a typed, testable support-ticket agent. We will take that same agent — it triages tickets into refunds, retries, and escalations — and harden it, layer by layer, until it can survive a dead provider, a refusing model, a blank answer, a transient outage, an unguarded refund, and a blown budget. Every step runs with no API key and no network: deterministic stand-in models play the part of real providers, and a safety switch blocks any accidental real request. The last step shows how to point the finished agent at a real model.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or later.</strong> The examples were run on Python 3.12.</li><li><strong>Two packages, pinned:</strong> <code>pydantic-ai==2.71.0</code> and <code>pydantic-ai-harness==0.71.0</code>. Pin both — the harness is on 0.x releases and its API can change between minors.</li><li><strong>No API key, no account, no cost.</strong> Every runnable step uses the framework's own test models. You will need a provider key only for the final step, and that step is marked as documented, not run.</li><li><strong>About 45 minutes.</strong> Each step is a file you can run, with the exact output shown.</li></ul>
+<h2 id="step-1-install">Step 1: Install and pin the versions<a class="anchor" href="#step-1-install" aria-label="Link to section">#</a></h2>
+<p>Create a virtual environment and install the two pinned packages:</p>
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install "pydantic-ai==2.71.0" "pydantic-ai-harness==0.71.0"</code></pre>
+<p>Confirm the versions before going further — everything in this guide was verified against them:</p>
+<pre><code class="language-bash">python -c "import pydantic_ai; print(pydantic_ai.__version__)"
+pip show pydantic-ai-harness | grep ^Version</code></pre>
+<pre><code class="language-text">2.71.0
+Version: 0.71.0</code></pre>
+<p>One safety habit for the whole tutorial: every demo file in this guide sets <code>models.ALLOW_MODEL_REQUESTS = False</code> at the top. That is the framework's own kill-switch — with it set, any attempt to make a real provider request raises immediately instead of going to the network. The stand-in models below never need it, but the switch means a typo can never cost you an API bill.</p>
+<h2 id="step-2-baseline">Step 2: The baseline agent, still keyless<a class="anchor" href="#step-2-baseline" aria-label="Link to section">#</a></h2>
+<p>Start from the agent our earlier guide built. It triages support tickets: given a customer and their orders, it returns one validated <code>TicketAction</code> — refund, retry, or escalate — with an amount in cents and a reason. Save this as <code>triage.py</code>:</p>
+<pre><code class="language-python">"""Support-ticket triage agent: tools, deps, and a validated output type.
+
+Every run in this file works with no API key: the runs override the model
+with TestModel / FunctionModel, and ALLOW_MODEL_REQUESTS=False blocks any
+accidental real request.
+"""
+from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext, models
+
+models.ALLOW_MODEL_REQUESTS = False
+
+
+@dataclass
+class SupportDeps:
+    """Everything the tools need, injected per run (never baked into prompts)."""
+
+    customer_id: str
+    orders: dict[str, str]  # order_id -&gt; status, e.g. {'ord_1': 'failed'}
+
+
+class TicketAction(BaseModel):
+    """The only shape this agent is allowed to return."""
+
+    action: Literal['refund', 'retry', 'escalate']
+    amount_cents: int = Field(ge=0, le=20_000)
+    reason: str
+
+
+agent = Agent(
+    deps_type=SupportDeps,
+    output_type=TicketAction,
+    instructions=(
+        'Triage support tickets. Refund failed orders under $200, '
+        'retry transient failures, escalate everything else.'
+    ),
+)
+
+
+@agent.tool
+def order_status(ctx: RunContext[SupportDeps], order_id: str) -> str:
+    """Return the status of an order."""
+    return ctx.deps.orders.get(order_id, 'unknown')
+
+
+@agent.tool
+def customer_tier(ctx: RunContext[SupportDeps]) -> str:
+    """Return the customer tier."""
+    return 'pro'
+
+
+DEPS = SupportDeps(customer_id='cus_123', orders={'ord_1': 'failed'})</code></pre>
+<p>Notice what is missing: the <code>Agent</code> has no model. In 2.71 the provider is created eagerly, so <code>Agent('openai:gpt-6.1-sol')</code> raises an error unless <code>OPENAI_API_KEY</code> is set. Building the agent without a model string and supplying the model per run keeps the file importable and runnable with no key at all — the pattern every step below uses.</p>
+<p>Run it with the built-in test model, which calls every tool and returns a dummy-but-valid output:</p>
+<pre><code class="language-python">from pydantic_ai.models.test import TestModel
+from triage import SupportDeps, agent
+
+deps = SupportDeps(customer_id='cus_123', orders={'ord_1': 'failed'})
+with agent.override(model=TestModel()):
+    result = agent.run_sync('My order ord_1 never arrived. Fix it.', deps=deps)
+print(result.output)
+print(result.usage)</code></pre>
+<pre><code class="language-text">action='refund' amount_cents=0 reason='a'
+RunUsage(input_tokens=118, output_tokens=23, requests=2, tool_calls=2)</code></pre>
+<p>Read that output honestly: <code>amount_cents=0</code> and <code>reason='a'</code> are placeholder values. The test model proves the plumbing — both tools ran, the output validated against <code>TicketAction</code>, and the usage was tracked — not the judgment. Real judgment arrives in Step 7. What matters here is the shape: a typed output, injected dependencies, and a run you can execute a hundred times for free. Everything after this step hardens that shape.</p>
+<h2 id="step-3-capability">Step 3: Bundle the refund policy into a capability<a class="anchor" href="#step-3-capability" aria-label="Link to section">#</a></h2>
+<p>Before 2.0, configuring an agent meant threading arguments through the <code>Agent</code> constructor: instructions here, model settings there, a toolset somewhere else. A <strong>capability</strong> is the replacement — a reusable, composable unit that bundles related behavior into one object you pass via <code>capabilities=[...]</code>. Capabilities can provide tools, lifecycle hooks, instructions, model settings, and model selection, and they compose with each other.</p>
+<p>The simplest way to define one is the declarative <code>Capability</code> class: give it an id, a description the model uses to decide when it applies, and instructions. Tools attach with decorators. Save this as <code>capability.py</code> — a scripted stand-in model calls the capability's tool, then answers:</p>
+<pre><code class="language-python">"""Capability: bundle the refund policy into one reusable unit."""
+from pydantic_ai import Agent, ModelMessage, ModelResponse, TextPart, ToolCallPart, models
+from pydantic_ai.capabilities import Capability
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+models.ALLOW_MODEL_REQUESTS = False
+
+refunds = Capability(
+    id='refunds',
+    description='Use for refund eligibility and refund status.',
+    instructions='Always confirm the order ID before issuing a refund.',
+)
+
+
+@refunds.tool_plain
+def refund_status(order_id: str) -&gt; str:
+    """Look up the refund status for an order."""
+    return f'Order {order_id}: refund issued on 2026-05-01.'
+
+
+def script(messages: list[ModelMessage], info: AgentInfo) -&gt; ModelResponse:
+    responses = sum(1 for m in messages if m.kind == 'response')
+    if responses == 0:
+        return ModelResponse(parts=[ToolCallPart('refund_status', {'order_id': 'ord_1'})])
+    return ModelResponse(parts=[TextPart('Refund confirmed for ord_1.')])
+
+
+agent = Agent(
+    FunctionModel(script, model_name='cap-model'),
+    instructions='You are a support agent.',
+    capabilities=[refunds],
+)
+
+result = agent.run_sync('What is the refund status of order ord_1?')
+print(result.output)</code></pre>
+<pre><code class="language-text">Refund confirmed for ord_1.</code></pre>
+<p>A capability can also be loaded on demand: pass <code>defer_loading=True</code> and it stays collapsed to a one-line catalog entry until the model loads it — the same mechanism the harness uses for agent skills. That keeps the prompt small when a capability's tools are only occasionally relevant. For behavior beyond instructions, tools, and toolsets — lifecycle hooks, model settings, native tools — subclass <code>AbstractCapability</code> instead.</p>
+<p>The point of this step is organizational, and it pays off immediately: every capability that follows — fallback, retry, goal, permissions — attaches to the agent the same way, in the same list. Your agent's production behavior becomes a legible list of named parts rather than a constructor full of scattered arguments.</p>
+<h2 id="step-4-fallback">Step 4: Survive a dead, refusing, or rambling model<a class="anchor" href="#step-4-fallback" aria-label="Link to section">#</a></h2>
+<p>The most useful capability in 2.71 is <code>ModelFallback</code>. It attempts other models when the one serving a request fails, or returns a response you reject. The chain starts from the model selected for the step, then tries the capability's models in order. By default it moves on when a request raises <code>ModelAPIError</code>, when a model refuses, and when the output is cut off by the token limit — <code>fallback_on</code> defaults to <code>(ModelAPIError, ContentFilterError, OutputTokenLimitExceeded)</code>.</p>
+<p>Save this as <code>fallback.py</code>. Three deterministic stand-ins play three providers: one is down, one refuses, one answers with a blank — and the backup answers:</p>
+<pre><code class="language-python">"""ModelFallback: a dead primary, a refusing model, a blank answer, a backup."""
+from pydantic_ai import (
+    Agent,
+    ModelAPIError,
+    ModelMessage,
+    ModelResponse,
+    TextPart,
+    models,
+)
+from pydantic_ai.capabilities import ModelFallback
+from pydantic_ai.exceptions import ContentFilterError, OutputTokenLimitExceeded
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.usage import RequestUsage
+
+models.ALLOW_MODEL_REQUESTS = False
+
+
+def down(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    raise ModelAPIError('primary', 'Service unavailable')
+
+
+def refuse(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    return ModelResponse(
+        parts=[],
+        finish_reason='content_filter',
+        provider_details={'refusal': "I can't help with that request."},
+    )
+
+
+def blank(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    return ModelResponse(
+        parts=[TextPart('\n\n')],
+        usage=RequestUsage(input_tokens=60, output_tokens=100),
+    )
+
+
+def complete(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    return ModelResponse(
+        parts=[TextPart('The capital of France is Paris.')],
+        usage=RequestUsage(input_tokens=60, output_tokens=8),
+    )
+
+
+def is_blank(response: ModelResponse) -> bool:
+    return not response.tool_calls and not (response.text or '').strip()
+
+
+agent = Agent(
+    FunctionModel(down, model_name='primary'),
+    capabilities=[
+        ModelFallback(
+            FunctionModel(refuse, model_name='refuser'),
+            FunctionModel(blank, model_name='blank'),
+            FunctionModel(complete, model_name='backup'),
+            fallback_on=[
+                ModelAPIError,
+                ContentFilterError,
+                OutputTokenLimitExceeded,
+                is_blank,
+            ],
+        )
+    ],
+)
+
+result = agent.run_sync('What is the capital of France?')
+print(result.output)
+print(result.usage)
+for attempt in result.response.failed_attempts or []:
+    print(attempt.model_name, attempt.outcome, attempt.usage)</code></pre>
+<pre><code class="language-text">The capital of France is Paris.
+RunUsage(input_tokens=176, output_tokens=108, requests=1)
+primary error None
+refuser rejected RequestUsage(input_tokens=56)
+blank rejected RequestUsage(input_tokens=60, output_tokens=100)</code></pre>
+<p>Three details in that output are worth understanding. First, the blank answer is rejected by the <code>is_blank</code> response handler — a function that takes a <code>ModelResponse</code> and returns whether to reject it. Handlers can be sync or async, and you can mix exception types and response handlers in <code>fallback_on</code>. Second, the run counts as one request (<code>requests=1</code>) even though three models were tried: each model is an <em>attempt</em> within the same step, so <code>UsageLimits.request_limit</code> bounds steps, not models tried. The rejected responses' tokens still count toward usage. Third, <code>failed_attempts</code> records every model the chain moved on from, with its outcome — the audit trail you want when a user asks why the answer came from the backup.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/pydantic-ai-v2-hardening-production-tutorial/img2.svg" alt="Diagram: the ModelFallback chain tries a primary that errors, a refuser, and a blank answer before the backup answers" loading="lazy"><figcaption>The fallback chain: three failed attempts inside one request step, then the backup answers. Diagram: AI Frontier Post.</figcaption></figure>
+<p>Two options change the behavior in ways you will use. <code>sticky=True</code> keeps a conversation on the model that answered, instead of going back to the first model at the next step — that keeps hitting the same provider's prompt cache and stops every step waiting on a model that is failing. And to have a refusal <em>end</em> the run instead of falling back, opt out with <code>fallback_on=(ModelAPIError, OutputTokenLimitExceeded)</code>: an empty refusal then raises <code>ContentFilterError</code>, and one with text becomes the run's output. If every model fails or is rejected, <code>ModelFallback</code> raises a <code>FallbackExceptionGroup</code> with every exception plus a count of rejected responses — a loud, diagnosable failure instead of a silent wrong answer.</p>
+<p>One caveat, straight from the docs: a <em>streamed</em> refusal or cut-off response is not fallen back from. It is only known once it has been streamed, so it is accepted as-is. If you stream, catch the refusal and run again with another model passed as <code>model=</code>.</p>
+<h2 id="step-5-retry">Step 5: Retry the same model before you abandon it<a class="anchor" href="#step-5-retry" aria-label="Link to section">#</a></h2>
+<p>Falling back is not retrying. A dropped connection or a 503 from an overloaded provider is usually fixed by waiting a second and asking the same model again — moving to another model throws away the prompt cache the first request built and can answer differently at a different price. <code>RetryOnModelErrors</code> handles the transient case: it attempts the same model again when a request fails with a transient error. By default it retries <code>ModelRateLimitError</code>, <code>ModelUnavailableError</code>, <code>ModelServerError</code>, and <code>ModelConnectionError</code>, up to <code>max_attempts=3</code>, waiting an exponentially growing, jittered delay between attempts.</p>
+<p>Save this as <code>retry.py</code> — a stand-in that fails twice with a transient 503, then answers:</p>
+<pre><code class="language-python">"""RetryOnModelErrors: the same model, tried again on transient failures."""
+from pydantic_ai import Agent, ModelMessage, ModelResponse, TextPart, models
+from pydantic_ai.capabilities import RetryOnModelErrors
+from pydantic_ai.exceptions import ModelUnavailableError
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+models.ALLOW_MODEL_REQUESTS = False
+
+calls = {'n': 0}
+
+
+def flaky(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    calls['n'] += 1
+    if calls['n'] &lt; 3:
+        raise ModelUnavailableError('flaky', 'Transient 503')
+    return ModelResponse(parts=[TextPart('Recovered on try 3.')])
+
+
+agent = Agent(
+    FunctionModel(flaky, model_name='flaky'),
+    capabilities=[RetryOnModelErrors()],
+)
+
+result = agent.run_sync('Hello?')
+print(result.output)
+print('model calls:', calls['n'])</code></pre>
+<pre><code class="language-text">Recovered on try 3.
+model calls: 3</code></pre>
+<p>Note what the default retry set does <em>not</em> include: a plain <code>ModelAPIError</code> is not retried. If your provider raises a generic API error for a transient failure, name it explicitly with <code>retry_on=[ModelAPIError]</code> — or better, map it to the specific subclass. With a <code>ModelFallback</code> in the same capabilities list, each model in the chain gets its own <code>max_attempts</code> attempts, whatever order the two capabilities are listed in: the request is retried on one model, and falls back to the next once its attempts are used up. Retried attempts are recorded in <code>failed_attempts</code> with <code>kind='retry'</code>, distinct from fallbacks.</p>
+<h2 id="step-6-guardrails">Step 6: Harness guardrails — Goal, Permissions, ToolBridge, WrapUpAtLimits<a class="anchor" href="#step-6-guardrails" aria-label="Link to section">#</a></h2>
+<p>Core capabilities make the agent resilient. The harness — <code>pydantic-ai-harness==0.71.0</code>, imported as <code>pydantic_ai_harness</code> — makes it governable. Four of its capabilities cover the failure modes that actually cause production incidents: an agent that declares success too early, one that runs a tool it should never have touched, one whose tool list breaks the prompt cache, and one that burns the whole budget and dies with no answer. Each is one entry in the same <code>capabilities=[...]</code> list.</p>
+<h3>Goal: don&#x27;t let the run end until the answer is actually complete</h3>
+<p><code>Goal</code> keeps an unattended agent working until a caller-defined completion check accepts its final answer. You supply the goal text and an async <code>verify(ctx, output)</code> callable; it returns <code>None</code> to accept, or a nonempty string describing what remains. Save this as <code>goal.py</code> — the verifier rejects a refund with an empty reason, and the model tries again:</p>
+<pre><code class="language-python">"""Goal: the run cannot end until the verifier accepts the answer."""
+from pydantic_ai import Agent, ModelMessage, ModelResponse, RunContext, ToolCallPart, models
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai_harness import Goal
+
+from triage import SupportDeps, TicketAction, DEPS
+
+models.ALLOW_MODEL_REQUESTS = False
+
+
+async def verify_ticket(ctx: RunContext[SupportDeps], output: object) -&gt; str | None:
+    action = TicketAction.model_validate(output)
+    if not action.reason.strip():
+        return 'The reason must explain the decision in a sentence.'
+    if action.action == 'refund' and action.amount_cents &gt; 20_000:
+        return 'Refunds above $200 must be escalated, not refunded.'
+    return None
+
+
+def script(messages: list[ModelMessage], info: AgentInfo) -&gt; ModelResponse:
+    n = sum(1 for m in messages if m.kind == 'response')
+    payload = (
+        {'action': 'refund', 'amount_cents': 4999, 'reason': ''}
+        if n == 0
+        else {
+            'action': 'refund',
+            'amount_cents': 4999,
+            'reason': 'Order failed; refund under $200 policy.',
+        }
+    )
+    return ModelResponse(parts=[ToolCallPart('final_result', payload)])
+
+
+agent = Agent(
+    FunctionModel(script, model_name='goal-model'),
+    deps_type=SupportDeps,
+    output_type=TicketAction,
+    retries={'output': 3},
+    capabilities=[
+        Goal(
+            goal='Triage the ticket with a refund under $200 or escalate it, with a one-sentence reason.',
+            verify=verify_ticket,
+        )
+    ],
+)
+
+result = agent.run_sync('My order ord_1 never arrived.', deps=DEPS)
+print(result.output)</code></pre>
+<pre><code class="language-text">action='refund' amount_cents=4999 reason='Order failed; refund under $200 policy.'</code></pre>
+<p>The verifier ran twice: the first answer was rejected for its empty reason, and the second passed. Set <code>Agent(retries={'output': n})</code> to bound these continuations — rejections share the output retry budget, and exhausting it raises <code>UnexpectedModelBehavior</code> rather than returning an unverified answer. Define completion using evidence you trust: a model declaring success is not proof that files were written or tests passed. Keep verifiers read-only and idempotent, and perform irreversible commits only after <code>agent.run()</code> returns an accepted result — <code>Goal</code> does not roll back tool calls.</p>
+<h3>Permissions: deny the refund tool, keep the run alive</h3>
+<p><code>Permissions</code> asks before file writes and shell commands by mode, and lets rules allow, ask about, or deny tool calls. A denied call never executes: the model receives a failure message and keeps working. Add this to the triage agent — a rule that denies <code>issue_refund</code> while everything else stays allowed:</p>
+<pre><code class="language-python">"""Permissions: a deny rule stops the refund tool, not the run."""
+from pydantic_ai import Agent, ModelMessage, ModelResponse, RunContext, ToolCallPart, models
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai_harness import Permissions
+from pydantic_ai_harness.permissions import PermissionRule
+
+from triage import SupportDeps, TicketAction, DEPS
+
+models.ALLOW_MODEL_REQUESTS = False
+
+
+def script(messages: list[ModelMessage], info: AgentInfo) -&gt; ModelResponse:
+    responses = sum(1 for m in messages if m.kind == 'response')
+    if responses == 0:
+        return ModelResponse(
+            parts=[ToolCallPart('issue_refund', {'order_id': 'ord_1', 'amount_cents': 4999})]
+        )
+    return ModelResponse(
+        parts=[
+            ToolCallPart(
+                'final_result',
+                {'action': 'escalate', 'amount_cents': 0, 'reason': 'Refund blocked by policy; escalate.'},
+            )
+        ]
+    )
+
+
+agent = Agent(
+    deps_type=SupportDeps,
+    output_type=TicketAction,
+    instructions='Triage support tickets.',
+    capabilities=[
+        Permissions(
+            rules=[
+                PermissionRule(
+                    'deny',
+                    tools='issue_refund',
+                    reason='Refunds need a human approver.',
+                )
+            ]
+        )
+    ],
+)
+
+
+@agent.tool
+def order_status(ctx: RunContext[SupportDeps], order_id: str) -&gt; str:
+    """Return the status of an order."""
+    return ctx.deps.orders.get(order_id, 'unknown')
+
+
+@agent.tool
+def issue_refund(ctx: RunContext[SupportDeps], order_id: str, amount_cents: int) -&gt; str:
+    """Issue a refund for an order."""
+    return f'Refunded {amount_cents} for {order_id}.'
+
+
+result = agent.run_sync(
+    'My order ord_1 never arrived. Refund it.',
+    deps=DEPS,
+    model=FunctionModel(script, model_name='perm-model'),
+)
+print(result.output)</code></pre>
+<pre><code class="language-text">action='escalate' amount_cents=0 reason='Refund blocked by policy; escalate.'</code></pre>
+<p>The refund tool never executed — zero calls — and the run still completed with a valid answer. The model saw this tool result for its blocked call: <em>“A permission rule denied this tool call, so it did not run. Do not retry it. Reason: Refunds need a human approver.”</em> When several rules match a call, <code>deny</code> beats <code>ask</code>, which beats <code>allow</code>. A call the rules <em>ask</em> about raises <code>ApprovalRequired</code> and joins the run's deferred approval flow, where a <code>HandleDeferredToolCalls</code> handler can put it to a person inline. Use deny rules for the tools that must never run unattended — refunds, deletes, deploys — and ask rules for the ones a human should see first.</p>
+<h3>ToolBridge: keep the tool list fixed behind three tools</h3>
+<p>Every tool you add changes the tool definitions at the head of the prompt, which breaks the prompt cache on the next request. <code>ToolBridge</code> fixes that by replacing the agent's tools with three whose definitions never change — <code>tool_search</code>, <code>tool_describe</code>, and <code>tool_call</code> — while the real tools sit behind them. A tool added, removed, or changed mid-run changes what <code>tool_search</code> finds, not the definitions sent to the provider:</p>
+<pre><code class="language-python">from pydantic_ai import Agent
+from pydantic_ai_harness import ToolBridge
+
+agent = Agent(
+    'anthropic:claude-fable-5-2',
+    instructions='Triage support tickets.',
+    capabilities=[ToolBridge()],
+)</code></pre>
+<p>With the bridge in place, the model searches for the tool it needs, reads its schema, then calls it through <code>tool_call</code> with the arguments as a JSON string. The snippet above names a real model, so it needs <code>ANTHROPIC_API_KEY</code> set to run — see Step 7 for the key setup. Use the bridge when the tool population is large or changes during a run — several MCP servers, for example — on providers with no cache-safe way to reveal a tool mid-run. Tools that need approval or run outside the agent stay native, so approval requests still name the real tool.</p>
+<h3>WrapUpAtLimits: answer now instead of dying at the budget</h3>
+<p>Usage limits are the last line of defense, and by default they raise <code>UsageLimitExceeded</code> — the run dies with no answer at all. <code>WrapUpAtLimits</code> changes the ending: when the limits leave room for only one more model request, that request is made the last, with <code>tool_choice='none'</code> and an instruction to answer now. Save this as <code>wrapup.py</code> — a model that would keep calling tools forever, stopped after two requests with an answer:</p>
+<pre><code class="language-python">"""WrapUpAtLimits: a final answer instead of UsageLimitExceeded."""
+from pydantic_ai import (
+    Agent,
+    ModelMessage,
+    ModelResponse,
+    RunContext,
+    ToolCallPart,
+    UsageLimits,
+    models,
+)
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai_harness import WrapUpAtLimits
+
+from triage import SupportDeps, TicketAction, DEPS
+
+models.ALLOW_MODEL_REQUESTS = False
+
+
+def loopy(messages: list[ModelMessage], info: AgentInfo) -&gt; ModelResponse:
+    # Request 1: keep working. Request 2 is the wrap-up request
+    # (request_limit=2), so answer now instead of calling another tool.
+    responses = sum(1 for m in messages if m.kind == 'response')
+    if responses == 0:
+        return ModelResponse(parts=[ToolCallPart('order_status', {'order_id': 'ord_1'})])
+    return ModelResponse(
+        parts=[
+            ToolCallPart(
+                'final_result',
+                {'action': 'escalate', 'amount_cents': 0, 'reason': 'Could not resolve within budget; escalate.'},
+            )
+        ]
+    )
+
+
+agent = Agent(
+    FunctionModel(loopy, model_name='loopy'),
+    deps_type=SupportDeps,
+    output_type=TicketAction,
+    instructions='Triage support tickets.',
+    capabilities=[WrapUpAtLimits()],
+)
+
+
+@agent.tool
+def order_status(ctx: RunContext[SupportDeps], order_id: str) -&gt; str:
+    """Return the status of an order."""
+    return ctx.deps.orders.get(order_id, 'unknown')
+
+
+result = agent.run_sync(
+    'My order ord_1 never arrived.',
+    deps=DEPS,
+    usage_limits=UsageLimits(request_limit=2),
+)
+print(result.output)
+print(result.usage)</code></pre>
+<pre><code class="language-text">action='escalate' amount_cents=0 reason='Could not resolve within budget; escalate.'
+RunUsage(input_tokens=142, output_tokens=24, requests=2, tool_calls=1)</code></pre>
+<p>Two things to note. First, <code>usage_limits</code> is a per-run argument — pass it to <code>run_sync</code>, not to the <code>Agent</code> constructor, which does not accept it. Second, the wrap-up only returns an answer the <code>Goal</code> accepts if you combine the two: a wrap-up answer still goes through the goal check, and if the verifier rejects it with no request left, the run raises <code>UsageLimitExceeded</code> anyway.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/pydantic-ai-v2-hardening-production-tutorial/img3.svg" alt="Diagram: the hardened agent stack — typed output, refunds capability, fallback and retry, harness guardrails, tools" loading="lazy"><figcaption>The hardened stack: each layer handles one failure mode, and the agent is the same triage agent from Step 2. Diagram: AI Frontier Post.</figcaption></figure>
+<h2 id="step-7-real-model">Step 7: Point it at a real model<a class="anchor" href="#step-7-real-model" aria-label="Link to section">#</a></h2>
+<p>Everything above runs with no key. To run the same agent against a real provider, set the key and name the model — one line changes:</p>
+<pre><code class="language-bash">export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GOOGLE_API_KEY="..."</code></pre>
+<pre><code class="language-python">agent = Agent(
+    'openai:gpt-6.1-sol',          # or 'anthropic:claude-fable-5-2'
+    deps_type=SupportDeps,          # or 'google:gemini-4-neon'
+    output_type=TicketAction,
+    instructions='Triage support tickets. ...',
+    capabilities=[...],             # every capability from Steps 3-6, unchanged
+)</code></pre>
+<p>This step is documented, not run: no provider key is available in the environment this guide was verified in, and a tutorial should never ask you to trust a live call it did not make. What was verified is that all three model strings resolve — <code>openai:gpt-6.1-sol</code>, <code>anthropic:claude-fable-5-2</code>, and <code>google:gemini-4-neon</code> (Gemini 4 Neon support on <code>GoogleModel</code> arrived with 2.71) — and that the keys above are the ones each provider reads. Two behaviors change with a real model: the fallback chain starts costing real money on every attempt, including rejected ones, and a streamed refusal or cut-off is accepted as-is rather than fallen back from, so prefer non-streamed runs when fallback matters. The harness also gains two helpers worth adding once you are live: <code>ReportRemainingBudget</code>, which tells the model on every request how much of its budget is left, and <code>SpendLimits</code>, which enforces cross-window dollar budgets.</p>
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<p>Not every agent needs every layer. Match the capability to the failure you actually expect:</p>
+<div class="table-wrap"><table><thead><tr><th>Failure you expect</th><th>Use this</th><th>Skip it when</th></tr></thead><tbody><tr><td>Provider outage, refusal, or cut-off answer</td><td><code>ModelFallback</code></td><td>You have one provider and no second model to fall back to</td></tr><tr><td>Transient 503 / rate limit / dropped connection</td><td><code>RetryOnModelErrors</code></td><td>Failures are deterministic — retrying a bad request three times is just slower failure</td></tr><tr><td>Agent declares success too early</td><td><code>Goal</code> with a deterministic verifier</td><td>A human reads every answer before anything happens</td></tr><tr><td>Agent might run a destructive tool</td><td><code>Permissions</code> deny rules</td><td>The agent has no write tools at all</td></tr><tr><td>Large or changing tool catalog breaks caching</td><td><code>ToolBridge</code></td><td>Fewer than ~10 tools that never change mid-run</td></tr><tr><td>Run dies at the budget with no answer</td><td><code>WrapUpAtLimits</code> + <code>UsageLimits</code></td><td>Runs are short and bounded by construction</td></tr><tr><td>Same behavior needed in several agents</td><td>A <code>Capability</code> bundle</td><td>One-off behavior used by exactly one agent</td></tr></tbody></table></div>
+<p>The default production stack is the one this tutorial built: <code>Capability</code> for shared behavior, <code>ModelFallback</code> plus <code>RetryOnModelErrors</code> for model resilience, <code>Goal</code> for completion, <code>Permissions</code> for safety, and <code>WrapUpAtLimits</code> for the budget. Add <code>ToolBridge</code> when the tool count grows.</p>
+<h2 id="gotchas">Gotchas worth knowing before you ship<a class="anchor" href="#gotchas" aria-label="Link to section">#</a></h2>
+<ul><li><strong>The provider is created eagerly.</strong> In 2.71, <code>Agent('openai:gpt-6.1-sol')</code> raises a <code>UserError</code> at construction time if <code>OPENAI_API_KEY</code> is not set. Build keyless agents with no model string and supply the model per run, as Step 2 does.</li><li><strong><code>usage_limits</code> is per-run, not per-agent.</strong> Passing it to the <code>Agent</code> constructor raises <code>TypeError</code>. Put it on <code>run_sync</code> / <code>run</code>.</li><li><strong>Retry is not fallback.</strong> <code>RetryOnModelErrors</code> retries only <code>ModelRateLimitError</code>, <code>ModelUnavailableError</code>, <code>ModelServerError</code>, and <code>ModelConnectionError</code> by default. A plain <code>ModelAPIError</code> is not retried — name it in <code>retry_on</code> if your provider raises it for transient failures.</li><li><strong>Fallback does not apply to streamed refusals or cut-offs.</strong> They are accepted as streamed. Catch them and re-run with another model if fallback matters for your use case.</li><li><strong><code>final_result</code> is framework plumbing.</strong> It is the name of the structured-output tool the framework creates. The test scripts above call it to script exact outputs; application code should never call it directly.</li><li><strong>The harness is 0.x.</strong> Its API may change between minor releases — the release notes carry migration guidance when it does. Pin the version and read the notes before upgrading.</li><li><strong>Rejections cost money.</strong> Every attempt that produced a response, including rejected ones, counts toward the run's usage and is checked against token and cost limits before the next attempt.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>A demo agent needs one model and one happy path. A production agent needs a plan for every way the happy path breaks — and in Pydantic AI 2.71, that plan is a list of capabilities, not a rewrite. Bundle shared behavior into a <code>Capability</code>. Put a second model behind the first with <code>ModelFallback</code> and give the first model its retries with <code>RetryOnModelErrors</code>. Refuse to end the run until a verifier accepts the answer with <code>Goal</code>. Deny the tools that must never run unattended with <code>Permissions</code>. Hide a growing tool catalog behind <code>ToolBridge</code>, and make sure the budget ends with an answer, not an exception, with <code>WrapUpAtLimits</code>. Each layer is a few lines, each is independently testable with no API key, and together they turn the typed, testable agent from our earlier guide into one you can leave running unattended. That is the whole point of the 2.71 release — and the whole point of this tutorial.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<p><em>Sources: the <a href="https://ai.pydantic.dev/capabilities/" rel="nofollow">Pydantic AI capabilities index</a> (the <code>Capability</code> class, the full harness catalog, and the <code>Agent(capabilities=[...])</code> pattern), the <a href="https://pydantic.dev/docs/ai/capabilities/model-fallback/" rel="nofollow">Model Fallback documentation</a> (default <code>fallback_on</code>, response handlers, <code>sticky=True</code>, streaming caveats, and the runnable <code>FunctionModel</code> examples this tutorial adapts), the <a href="https://pydantic.dev/docs/ai/harness/goal/" rel="nofollow">Goal documentation</a> (verifier contract, output retries, and durable execution), the <a href="https://pydantic.dev/docs/ai/harness/tool-bridge/" rel="nofollow">Tool Bridge documentation</a> (<code>tool_search</code> / <code>tool_describe</code> / <code>tool_call</code> semantics), <a href="https://pypi.org/project/pydantic-ai/" rel="nofollow">PyPI: pydantic-ai 2.71.0</a> and <a href="https://pypi.org/project/pydantic-ai-harness/" rel="nofollow">PyPI: pydantic-ai-harness 0.71.0</a> (both released November 18, 2026), and the <a href="https://github.com/pydantic/pydantic-ai/releases/tag/v2.71.0" rel="nofollow">v2.71.0 release notes</a> (PeerConnection rename, gateway providers, and the new harness controls). Every code block in this tutorial was executed against the pinned versions with deterministic stand-in models; the live-model step is documented, not run, and says so.</em></p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="pydantic-ai-v2-hardening-production-tutorial"></div><div class="comments" data-comments="pydantic-ai-v2-hardening-production-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/pydantic-ai-typed-testable-agents-tutorial/"><span class="chip">Tutorials</span><h3>Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key</h3><div class="meta">October 27, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/google-adk-multi-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a multi-agent research team with Google's ADK: researcher, writer, and guardrails, end to end</h3><div class="meta">November 18, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/chatkit-agents-sdk-support-agent-tutorial/"><span class="chip">Tutorials</span><h3>Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</h3><div class="meta">November 17, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/inspect-ai-eval-framework-tutorial/"><span class="chip">Tutorials</span><h3>Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute's framework</h3><div class="meta">October 1, 2026 · 12 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key to follow this tutorial?</h3><p>No. Every runnable step uses TestModel or FunctionModel stand-ins, and ALLOW_MODEL_REQUESTS=False blocks any real request. Only the final step needs a provider key, and it is marked as documented, not run.</p><h3>What is the difference between ModelFallback and RetryOnModelErrors?</h3><p>RetryOnModelErrors asks the same model again when a request fails with a transient error such as a 503 or a rate limit. ModelFallback moves the request to a different model when the first one fails, refuses, or is cut off. Use both: each model in the fallback chain gets its own retry attempts.</p><h3>Is the harness safe to use in production?</h3><p>The harness is on 0.x releases, so its API can change between minors — pin pydantic-ai-harness==0.71.0 and read the release notes before upgrading. The core capabilities (Capability, ModelFallback, RetryOnModelErrors) are the stable foundation; treat the harness as the guardrail layer on top.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/pydantic-ai-typed-testable-agents-tutorial/">Build typed, testable AI agents with Pydantic AI: tools, structured output, and tests that run without an API key</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google's ADK: researcher, writer, and guardrails, end to end</a></li><li><a href="/articles/chatkit-agents-sdk-support-agent-tutorial/">Ship a support agent on your own site: ChatKit and the OpenAI Agents SDK</a></li><li><a href="/articles/inspect-ai-eval-framework-tutorial/">Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute's framework</a></li><li><a href="/articles/openai-agents-sdk-multi-agent-tutorial/">Build a working multi-agent system with the OpenAI Agents SDK: tools, handoffs, guardrails, and offline tests</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
