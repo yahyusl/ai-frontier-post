@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge — AI Frontier Post</title>
+<meta name="description" content="Stop vibe-checking your RAG app. DeepEval 4.3.4 turns output quality into pytest tests — faithfulness, answer relevancy, contextual precision, and custom G-Eval criteria — scored by a local Ollama model, with no API key and no data leaving your machine.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge">
+<meta property="og:description" content="Stop vibe-checking your RAG app. DeepEval 4.3.4 turns output quality into pytest tests — faithfulness, answer relevancy, contextual precision, and custom G-Eval criteria — scored by a local Ollama model, with no API key and no data leaving your machine.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-23">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge", "description": "Stop vibe-checking your RAG app. DeepEval 4.3.4 turns output quality into pytest tests — faithfulness, answer relevancy, contextual precision, and custom G-Eval criteria — scored by a local Ollama model, with no API key and no data leaving your machine.", "datePublished": "2026-11-23", "dateModified": "2026-11-23", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/"}, "image": "https://aifrontierpost.com/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an OpenAI API key to use DeepEval?", "acceptedAnswer": {"@type": "Answer", "text": "No. The default judge is an OpenAI model, but pointing DeepEval at a local Ollama model — deepeval set-ollama --model=qwen3:8b, or an OllamaModel passed to each metric — removes the key entirely. Everything in this tutorial runs locally with no account."}}, {"@type": "Question", "name": "How big a judge model do I need?", "acceptedAnswer": {"@type": "Answer", "text": "qwen3:8b is the smallest I would trust with real scoring. My sandbox run used a 0.5-billion-parameter stand-in, and it hallucinated verdicts, returned unparseable structured output, and scored correct answers 0.00. A judge has to follow multi-step instructions and return valid JSON; below 8B, that stops being reliable."}}, {"@type": "Question", "name": "Why did my metric return a score of None?", "acceptedAnswer": {"@type": "Answer", "text": "The judge's output failed schema validation even after DeepEval retried it, so the metric recorded no score. The usual cause is a judge too small or too unconstrained to produce the structured output the metric needs — the fix is a stronger judge, not a different threshold. Check .deepeval/.latest_run_full.json for the error field on the affected test case."}}, {"@type": "Question", "name": "Can I use a frontier model as the judge instead?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The same model= argument that takes an OllamaModel instance also takes a hosted model name when the provider's API key is configured — you change one argument, not the suite. That is the right call when the scores gate a production deploy."}}, {"@type": "Question", "name": "Can this run in CI?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. deepeval test run is pytest under the hood and exits non-zero when any metric misses its threshold, so it works as a merge gate. Keep the suite small and the judge fast: my 7-test suite took about 8 minutes on a CPU-only VM, and nearly all of that was judge time."}}, {"@type": "Question", "name": "Does DeepEval send my data anywhere?", "acceptedAnswer": {"@type": "Answer", "text": "The evals themselves run locally and need no login; an optional Confident AI login sends traces and test runs to their hosted platform. I did observe DeepEval attempting to upload anonymous telemetry during runs — the evals completed normally when the telemetry endpoint was unreachable."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</h1>
+<p class="lede">Stop vibe-checking your RAG app. DeepEval 4.3.4 turns output quality into pytest tests — faithfulness, answer relevancy, contextual precision, and custom G-Eval criteria — scored by a local Ollama model, with no API key and no data leaving your machine.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 23, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Stop vibe-checking your RAG app. DeepEval 4.3.4 turns output quality into pytest tests — faithfulness, answer relevancy, contextual precision, and custom G-Eval criteria — scored by a local Ollama model. This tutorial builds the full suite: a toy RAG app, a golden dataset, four metrics plus a custom G-Eval check, and a local judge. One hard lesson included: a judge that is too small hallucinates verdicts, so use qwen3:8b at minimum and always read the reasons.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>DeepEval 4.3.4</b> (November 11, 2026) treats evals like pytest: write test cases, attach metrics, run <code>deepeval test run</code>. No login or API key is needed when the judge is local.</li><li><b>One command makes Ollama the judge:</b> <code>deepeval set-ollama --model=qwen3:8b</code>. But every metric still needs <code>model=judge</code> passed explicitly — a bare metric fails with a missing-parameter error in 4.3.4.</li><li><b>Four metrics cover a RAG app:</b> contextual precision and recall for the retriever; faithfulness and answer relevancy for the generator; G-Eval for anything custom.</li><li><b>Real demo run:</b> 7 tests, 459 seconds, 1 passed — contextual precision 1.0, faithfulness 0.0, answer relevancy 0.67, GEval 0.0. The failures were the stand-in judge's, not the app's: a 0.5B model hallucinated verdicts and returned unparseable output.</li><li><b>Keep a fail-on-purpose test in the repo:</b> a planted hallucination that scores 0.00 proves the suite can detect the failure it exists to detect.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/cover.webp" alt="A magnifying glass inspects glowing answer cards flowing out of a document pipeline while a small robot judge holds a checklist"><figcaption>AI-generated illustration: the local judge inspecting RAG answers against their retrieved context.</figcaption></figure>
+<div class="article-body"><p>Your RAG app answers in fluent, confident sentences. Some of those sentences are grounded in your documents; some are invented. From the outside, the two look identical — and "read a few answers and see if they feel right" stops working the moment your corpus grows past a few dozen documents, or your users start asking questions you did not anticipate.</p>
+<p>The fix is to stop vibe-checking and start measuring: turn output quality into tests that run in CI and fail the build when the app regresses. DeepEval is the most direct way to do that in Python. It is an open-source framework (Apache 2.0, about 19,600 stars on GitHub) from Confident AI that treats LLM evaluation like pytest: you write test cases, attach research-backed metrics, and run <code>deepeval test run</code>. This tutorial builds a complete RAG eval suite end to end — a small RAG app, a golden dataset, four metrics plus a custom G-Eval check, and a local Ollama model as the judge. No API key, no data leaving your machine, and every command below was run to produce the numbers in this article.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> DeepEval 4.3.4 requires Python 3.10+; I ran everything below on Python 3.12.</li><li><strong>Ollama, with the qwen3:8b model.</strong> Ollama is free and runs on macOS, Windows, and Linux. The model is a 5.2&nbsp;GB download and needs roughly 8&nbsp;GB of free RAM; it runs on CPU, slowly — a GPU helps, but nothing here requires one.</li><li><strong>DeepEval 4.3.4</strong>, released November 11, 2026. Install it with <code>pip install -U deepeval</code>.</li><li><strong>About 30 minutes.</strong> No API keys, no accounts, no GPU. One timing note from my run: a 7-test suite took 7 minutes 40 seconds on a small CPU-only VM, and nearly all of that was judge calls — the judge&#x27;s speed dominates the runtime, not DeepEval.</li></ul>
+<h2 id="1-install-deepeval-and-ollama-pull-the-judge">1. Install DeepEval and Ollama, pull the judge<a class="anchor" href="#1-install-deepeval-and-ollama-pull-the-judge" aria-label="Link to section">#</a></h2>
+<p>Start with a fresh virtual environment and install DeepEval:</p>
+<pre><code class="language-bash">python -m venv .venv
+source .venv/bin/activate
+pip install -U deepeval
+deepeval --version</code></pre>
+<p>You should see <code>4.3.4</code>. Next, install Ollama — on macOS <code>brew install ollama</code>, on Linux <code>curl -fsSL https://ollama.com/install.sh | sh</code>, on Windows the installer from ollama.com — then pull the judge model and confirm it is there:</p>
+<pre><code class="language-bash">ollama pull qwen3:8b
+ollama list</code></pre>
+<p>Two choices in that command are deliberate. First, <strong>qwen3:8b is the smallest judge I would trust with real scoring.</strong> Smaller models are faster and cheaper, but a judge has to follow multi-step instructions and return structured verdicts reliably — Section 8 shows what happens when it cannot. Second, the model name matters to DeepEval: its known-models table includes <code>qwen3:8b</code> (along with about 110 other tags). A tag outside that table, such as <code>qwen2.5:0.5b</code>, will break when a metric asks the model what it supports. Stick with <code>qwen3:8b</code>.</p>
+<h2 id="2-point-deepeval-at-the-local-judge">2. Point DeepEval at the local judge<a class="anchor" href="#2-point-deepeval-at-the-local-judge" aria-label="Link to section">#</a></h2>
+<p>By default DeepEval&#x27;s judge is an OpenAI model, which means an API key and data leaving your machine. One command switches the default to your local Ollama server:</p>
+<pre><code class="language-bash">deepeval set-ollama --model=qwen3:8b
+deepeval diagnose</code></pre>
+<p>The first command prints a confirmation and writes three settings into a <code>.deepeval/.deepeval</code> keystore file inside your project directory: <code>OLLAMA_MODEL_NAME=qwen3:8b</code>, <code>USE_LOCAL_MODEL=True</code>, and <code>LOCAL_MODEL_BASE_URL=http://localhost:11434/</code>. The second command, <code>deepeval diagnose</code>, prints the effective configuration and where each setting came from — run it whenever a judge is not behaving, because it shows the winning source for every setting. To undo the change later, run <code>deepeval unset-ollama</code>.</p>
+<p>Now create one judge object and reuse it for every metric:</p>
+<pre><code class="language-python">from deepeval.models import OllamaModel
+
+judge = OllamaModel(
+    model="qwen3:8b",
+    base_url="http://localhost:11434",
+    temperature=0,
+)</code></pre>
+<p>Temperature 0 matters: a judge that samples randomly gives you a different verdict every run, and an eval suite that cannot reproduce its own results is worse than no suite. Keep the judge deterministic and let the thresholds do the deciding.</p>
+<p>One gotcha I verified the hard way: <strong>a metric built with no <code>model</code> argument does not pick up the Ollama default.</strong> The docs&#x27; phrasing suggests <code>set-ollama</code> makes Ollama "the default judge for every metric," but in DeepEval 4.3.4 a bare <code>FaithfulnessMetric()</code> fails immediately:</p>
+<pre><code class="language-text">deepeval.errors.DeepEvalError: LocalModel is missing a required parameter.
+Set LOCAL_MODEL_NAME in your environment or pass model.</code></pre>
+<p>What <code>set-ollama</code> actually buys you is that <code>OllamaModel()</code> with no arguments picks up <code>qwen3:8b</code> from the keystore — I verified that call works. But metrics still need the judge passed explicitly, as <code>model=judge</code>. Pass it everywhere, and you will never see that error.</p>
+<h2 id="3-build-the-toy-rag-app-under-test">3. Build the toy RAG app under test<a class="anchor" href="#3-build-the-toy-rag-app-under-test" aria-label="Link to section">#</a></h2>
+<p>You need an app whose outputs you control, so build a deliberately small one: eight short documents about DeepEval itself (facts taken from its documentation), an embeddings model to retrieve the relevant ones, and the local model to write the answer. Eight documents is enough to make retrieval non-trivial and small enough to debug by reading. Save this as <code>rag_app.py</code>:</p>
+<pre><code class="language-python">import json
+
+import numpy as np
+from ollama import Client
+from sentence_transformers import SentenceTransformer
+
+DOCS = [
+    "G-Eval is a DeepEval metric for evaluating LLM output against any "
+    "custom criteria you write in plain English, with human-like accuracy.",
+    "The Faithfulness metric checks whether the claims in the model's actual "
+    "output are supported by the retrieval context.",
+    "The Answer Relevancy metric checks whether the actual output addresses "
+    "the input question.",
+    "The Contextual Precision metric measures whether the relevant retrieved "
+    "chunks are ranked above the irrelevant ones.",
+    "The Contextual Recall metric measures whether the retrieval context "
+    "contains all the information needed to produce the expected answer.",
+    "The Hallucination metric detects whether the model's output invents "
+    "facts that are not present in the retrieval context.",
+    "DeepEval plugs into pytest. You write test functions that build an "
+    "LLMTestCase and call assert_test with a list of metrics, then run "
+    "deepeval test run from the project root.",
+    "DeepEval can use a local Ollama model as the judge instead of a hosted "
+    "API. Run deepeval set-ollama --model=&lt;name&gt; to make Ollama the "
+    "default judge for every metric.",
+]
+
+EMBED_MODEL = "BAAI/bge-small-en-v1.5"
+GENERATOR_MODEL = "qwen3:8b"
+TOP_K = 3
+
+SYSTEM_PROMPT = (
+    "You answer questions using ONLY the context below. "
+    "Answer in one or two short sentences. "
+    "If the context does not contain the answer, say exactly: I don't know."
+)
+
+
+def retrieve(question, embedder, doc_embeddings):
+    query = embedder.encode(
+        ["Represent this sentence for searching relevant passages: " + question],
+        normalize_embeddings=True,
+    )[0]
+    scores = doc_embeddings @ query
+    idx = np.argsort(-scores)[:TOP_K]
+    return [DOCS[i] for i in idx]
+
+
+def generate_answer(question, contexts):
+    client = Client(host="http://localhost:11434")
+    context_block = "
+
+".join(f"- {c}" for c in contexts)
+    resp = client.chat(
+        model=GENERATOR_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Context:
+{context_block}
+
+Question: {question}
+Answer:",
+            },
+        ],
+        options={"temperature": 0, "num_predict": 150},
+    )
+    return resp.message.content.strip()
+
+
+def rag_answer(question):
+    embedder = SentenceTransformer(EMBED_MODEL)
+    doc_embeddings = embedder.encode(DOCS, normalize_embeddings=True)
+    contexts = retrieve(question, embedder, doc_embeddings)
+    return {"contexts": contexts, "answer": generate_answer(question, contexts)}
+
+
+if __name__ == "__main__":
+    result = rag_answer("What does the Faithfulness metric check?")
+    print(result["answer"])</code></pre>
+<p>Three details deserve a sentence each. The query prefix <code>Represent this sentence for searching relevant passages:</code> is part of the bge model&#x27;s contract — it was trained with that instruction, and retrieval quality drops without it. The system prompt&#x27;s "using ONLY the context" plus "say exactly: I don&#x27;t know" is the cheapest hallucination control you own: a RAG app that cannot say "I don&#x27;t know" will invent an answer instead. And the generator runs through the same Ollama client the judge uses, which keeps the whole demo on one local server — the app under test and the judge are separate roles, even though they share a model.</p>
+<p>Install the two extra packages (<code>pip install sentence-transformers ollama</code>), then run the file. You should get a grounded one-sentence answer, something like "Whether the claims in the answer are supported by the retrieved context." If the answer instead rambles or ignores the context, fix the prompt before you build evals around it — an eval suite cannot save an app whose basic loop is broken.</p>
+<h2 id="4-write-the-goldens">4. Write the goldens<a class="anchor" href="#4-write-the-goldens" aria-label="Link to section">#</a></h2>
+<p>Every DeepEval metric consumes an <code>LLMTestCase</code>: one row of your golden dataset. The fields are the whole game — each metric needs a specific subset, so fill in everything you have:</p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What it holds</th><th>Needed by</th></tr></thead><tbody><tr><td><code>input</code></td><td>The user&#x27;s question</td><td>Nearly every metric</td></tr><tr><td><code>actual_output</code></td><td>What your app returned</td><td>Nearly every metric</td></tr><tr><td><code>expected_output</code></td><td>The ideal answer, if you have one</td><td>GEval correctness checks, contextual recall</td></tr><tr><td><code>retrieval_context</code></td><td>The chunks your retriever returned</td><td>Faithfulness, contextual precision and recall</td></tr></tbody></table></div>
+<p>Five goldens are enough to learn the workflow; a real suite starts at 20 to 50, drawn from real user questions and real failures. Write the expected outputs yourself, from the documents — they are the ground truth the metrics judge against, so a sloppy expected output corrupts every score downstream. Save these in the test file, next to the tests:</p>
+<pre><code class="language-python">GOLDENS = [
+    {
+        "question": "What does the Faithfulness metric check?",
+        "expected_output": "Whether the claims in the answer are supported "
+        "by the retrieved context.",
+    },
+    {
+        "question": "How do I run my DeepEval test files?",
+        "expected_output": "Run deepeval test run from the project root; "
+        "it collects and runs eval files like pytest.",
+    },
+    {
+        "question": "How do I make a local Ollama model the judge for all my metrics?",
+        "expected_output": "Run deepeval set-ollama --model=&lt;model name&gt;.",
+    },
+    {
+        "question": "What is the difference between contextual precision and contextual recall?",
+        "expected_output": "Precision measures whether relevant chunks are ranked "
+        "above irrelevant ones; recall measures whether the retrieved context "
+        "contains all the information needed for the expected answer.",
+    },
+    {
+        "question": "What is G-Eval used for?",
+        "expected_output": "Evaluating LLM output against custom criteria "
+        "written in plain English.",
+    },
+]</code></pre>
+<h2 id="5-the-scorecard-four-rag-metrics-plus-g-eval">5. The scorecard: four RAG metrics plus G-Eval<a class="anchor" href="#5-the-scorecard-four-rag-metrics-plus-g-eval" aria-label="Link to section">#</a></h2>
+<p>Four metrics form the standard RAG scorecard, and they split cleanly into retriever problems versus generator problems. Add a G-Eval check for anything the four do not cover — in this case, plain correctness against the expected answer.</p>
+<div class="table-wrap"><table><thead><tr><th>Metric</th><th>What it catches</th><th>Fix it by</th></tr></thead><tbody><tr><td><strong>Contextual Precision</strong></td><td>Relevant chunks ranked below irrelevant ones</td><td>Adding a reranker</td></tr><tr><td><strong>Contextual Recall</strong></td><td>Retriever missed chunks the answer needed</td><td>Better chunking or embeddings</td></tr><tr><td><strong>Faithfulness</strong></td><td>Generator contradicted the retrieved context</td><td>Stricter prompt, lower temperature</td></tr><tr><td><strong>Answer Relevancy</strong></td><td>Answer drifted off the question</td><td>Prompt or model change</td></tr></tbody></table></div>
+<p>Every metric scores from 0 to 1, and its <code>threshold</code> decides pass or fail. The default threshold is 0.5; I use 0.7 for the RAG metrics because a RAG answer that is only half-grounded is not shippable. Save this as <code>test_rag_eval.py</code>:</p>
+<pre><code class="language-python">import pytest
+
+from deepeval import assert_test
+from deepeval.metrics import (
+    AnswerRelevancyMetric,
+    ContextualPrecisionMetric,
+    FaithfulnessMetric,
+    GEval,
+)
+from deepeval.models import OllamaModel
+from deepeval.test_case import LLMTestCase, SingleTurnParams
+
+from rag_app import rag_answer
+
+judge = OllamaModel(model="qwen3:8b", base_url="http://localhost:11434", temperature=0)
+
+
+@pytest.mark.parametrize("golden", GOLDENS, ids=[g["question"][:40] for g in GOLDENS])
+def test_rag_answer_is_faithful_and_relevant(golden):
+    result = rag_answer(golden["question"])
+    test_case = LLMTestCase(
+        input=golden["question"],
+        actual_output=result["answer"],
+        expected_output=golden["expected_output"],
+        retrieval_context=result["contexts"],
+    )
+    assert_test(
+        test_case,
+        [
+            FaithfulnessMetric(threshold=0.7, model=judge),
+            AnswerRelevancyMetric(threshold=0.7, model=judge),
+        ],
+    )
+
+
+def test_retrieval_ranks_relevant_chunks_first():
+    golden = GOLDENS[3]  # precision vs recall question
+    result = rag_answer(golden["question"])
+    test_case = LLMTestCase(
+        input=golden["question"],
+        actual_output=result["answer"],
+        expected_output=golden["expected_output"],
+        retrieval_context=result["contexts"],
+    )
+    assert_test(
+        test_case, [ContextualPrecisionMetric(threshold=0.7, model=judge)]
+    )
+
+
+def test_geval_correctness():
+    golden = GOLDENS[0]
+    result = rag_answer(golden["question"])
+    test_case = LLMTestCase(
+        input=golden["question"],
+        actual_output=result["answer"],
+        expected_output=golden["expected_output"],
+    )
+    correctness = GEval(
+        name="Correctness",
+        criteria="Determine if the 'actual output' is correct based on the 'expected output'.",
+        evaluation_params=[
+            SingleTurnParams.ACTUAL_OUTPUT,
+            SingleTurnParams.EXPECTED_OUTPUT,
+        ],
+        threshold=0.5,
+        model=judge,
+    )
+    assert_test(test_case, [correctness])</code></pre>
+<p>Two things to notice. First, every metric gets <code>model=judge</code> — the gotcha from Step 2, applied consistently. Second, the test functions are ordinary pytest: <code>parametrize</code> turns each golden into its own test, so a failure names the exact question that failed instead of hiding it inside a loop. If you would rather run evals without pytest, the same metrics work through <code>evaluate()</code> — I verified this call returns the same scores as the pytest run:</p>
+<pre><code class="language-python">from deepeval import evaluate
+
+results = evaluate(
+    test_cases=[test_case],
+    metrics=[AnswerRelevancyMetric(threshold=0.7, model=judge)],
+)
+for r in results.test_results:
+    for data in r.metrics_data:
+        print(f"{data.name}: score={data.score} success={data.success}")
+        print(f"  reason: {data.reason}")</code></pre>
+<figure class="inline-art"><img class="story-image" src="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/img2.webp" alt="Flow diagram of the eval loop: corpus, retrieve top-3, generate answer, build an LLMTestCase, score with DeepEval metrics, and get a pytest verdict"><figcaption>The eval loop: corpus → retrieval → generation → test case → metrics → verdict. The same Ollama server generates the answers and judges them.</figcaption></figure>
+<h2 id="6-run-it-and-read-the-output">6. Run it, and read the output<a class="anchor" href="#6-run-it-and-read-the-output" aria-label="Link to section">#</a></h2>
+<p>From the project root:</p>
+<pre><code class="language-bash">deepeval test run test_rag_eval.py</code></pre>
+<p>DeepEval collects and runs your eval files the same way pytest would, and a metric scoring below its threshold fails the test — the exit code is 1 when anything fails, so it slots straight into CI as a gate. Results are also saved as JSON at <code>.deepeval/.latest_run_full.json</code>, with every score, reason, and threshold per test case.</p>
+<p>Here is what my run actually produced. One honest caveat first: my sandbox could not run an 8&nbsp;GB judge model, so the scores below come from a 0.5-billion-parameter stand-in judge (Qwen2.5-0.5B-Instruct) served through a local stub that speaks Ollama&#x27;s API. The DeepEval code is identical to what is printed above; only the weights behind the judge differ. Section 8 explains why that matters — and why the numbers below are still worth reading.</p>
+<div class="table-wrap"><table><thead><tr><th>Test</th><th>Metric</th><th>Score</th><th>Verdict</th></tr></thead><tbody><tr><td>Faithfulness question</td><td>Faithfulness</td><td>0.00</td><td>Fail</td></tr><tr><td>Faithfulness question</td><td>Answer Relevancy</td><td>0.67</td><td>Fail</td></tr><tr><td>Run test files</td><td>Faithfulness / Relevancy</td><td>None / None</td><td>Fail</td></tr><tr><td>Ollama judge question</td><td>Faithfulness</td><td>0.50</td><td>Fail</td></tr><tr><td>Ollama judge question</td><td>Answer Relevancy</td><td>0.67</td><td>Fail</td></tr><tr><td>Precision vs recall</td><td>Faithfulness / Relevancy</td><td>None / None</td><td>Fail</td></tr><tr><td>G-Eval question</td><td>Faithfulness / Relevancy</td><td>None / None</td><td>Fail</td></tr><tr><td>Retrieval ranking</td><td>Contextual Precision</td><td>1.00</td><td><strong>Pass</strong></td></tr><tr><td>Correctness</td><td>GEval</td><td>0.00</td><td>Fail</td></tr></tbody></table></div>
+<p>Seven tests, 459 seconds, one pass. The summary line reads <code>Pass Rate: 14.29% | Passed: 1 | Failed: 6</code>. Before you conclude the RAG app is broken, look at what the one pass and the failures actually mean: the retrieval half of the pipeline is fine — contextual precision scored a clean 1.0 with a sensible reason ("the retrieval context provides relevant chunks that are ranked above irrelevant ones"). The generator half is where the scores collapse, and the collapse is the judge&#x27;s fault, not the app&#x27;s. The answers were good; the verdicts were not. That is exactly what Section 8 is about — but first, the most useful test in the file: the one that is supposed to fail.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/img3.webp" alt="Bar chart of the demo run scores: faithfulness 0.00, answer relevancy 0.67, contextual precision 1.00, GEval correctness 0.00, against a 0.7 threshold"><figcaption>The demo run’s actual scores. Three of five cases returned no score at all — the 0.5B stand-in judge’s structured output failed validation. Use qwen3:8b for real scoring.</figcaption></figure>
+<h2 id="7-watch-it-fail-on-purpose">7. Watch it fail on purpose<a class="anchor" href="#7-watch-it-fail-on-purpose" aria-label="Link to section">#</a></h2>
+<p>A suite you have never seen fail is a suite you cannot trust. Prove the machinery catches a real hallucination by feeding it one by hand — an answer that contradicts the retrieved context. Save this as <code>test_rag_eval_fail_demo.py</code> and run it on its own:</p>
+<pre><code class="language-python">from deepeval import assert_test
+from deepeval.metrics import FaithfulnessMetric
+from deepeval.models import OllamaModel
+from deepeval.test_case import LLMTestCase
+
+judge = OllamaModel(model="qwen3:8b", base_url="http://localhost:11434", temperature=0)
+
+
+def test_hallucinated_answer_fails_faithfulness():
+    test_case = LLMTestCase(
+        input="What does the Faithfulness metric check?",
+        actual_output="Faithfulness checks whether the answer was generated "
+        "by GPT-4o, and it requires an OpenAI API key to run.",
+        retrieval_context=[
+            "The Faithfulness metric checks whether the claims in the model's "
+            "actual output are supported by the retrieval context.",
+            "DeepEval can use a local Ollama model as the judge instead of a "
+            "hosted API. Run deepeval set-ollama --model=&lt;name&gt; to make "
+            "Ollama the default judge for every metric.",
+        ],
+    )
+    assert_test(test_case, [FaithfulnessMetric(threshold=0.7, model=judge)])</code></pre>
+<p>The answer is wrong in two checkable ways: faithfulness has nothing to do with GPT-4o, and no API key is needed when the judge is local. The run fails as designed — Faithfulness 0.00, exit code 1 — which is the suite doing its job. Keep a test like this in your repo permanently. Every time you change the judge model or a metric version, it is the first thing that tells you whether the suite can still detect the failure it exists to detect.</p>
+<h2 id="8-your-evals-are-only-as-good-as-your-judge">8. Your evals are only as good as your judge<a class="anchor" href="#8-your-evals-are-only-as-good-as-your-judge" aria-label="Link to section">#</a></h2>
+<p>Now the uncomfortable part of my run. The answers my RAG app produced were good — the first one matched its expected output almost word for word. The judge still scored it 0.00 on faithfulness, and its reason was fiction: it claimed a contradiction about "Albert Einstein winning the Nobel Prize in Physics," a claim that appears nowhere in the test case. The same hallucinated Einstein showed up in the fail-demo verdict too. Three other test cases came back with no score at all — the judge&#x27;s structured output failed validation even after DeepEval retried it, so the metric recorded <code>None</code>. And GEval scored a correct answer 0.00.</p>
+<p>None of that is DeepEval&#x27;s fault. Every mechanism worked: the metrics ran, the scores were computed, the thresholds were enforced, the failures were reported as pytest failures with reasons attached. What failed was the judge. A 0.5-billion-parameter model cannot reliably follow the multi-step instructions these metrics send it — extract claims, verify each against the context, return valid JSON — so it confabulates verdicts and mangles the JSON. The 0.5B stand-in was a sandbox constraint, not a recommendation.</p>
+<p>The practical rules that follow from this:</p>
+<ul><li><strong>Use qwen3:8b as the minimum local judge.</strong> It is the smallest model in DeepEval&#x27;s known-models table that has enough headroom to follow judge instructions. Anything smaller is a smoke test for your wiring, not a source of scores.</li><li><strong>For high-stakes scoring, use a frontier model as the judge.</strong> The same <code>model=</code> argument takes a hosted model name when the provider key is configured — you change one argument, not the suite.</li><li><strong>Always read the reason, never just the score.</strong> Every metric returns a written reason for its verdict. When the reason cites evidence that is not in the test case, the verdict is worthless no matter what number is attached to it.</li><li><strong>Calibrate the judge before trusting the suite.</strong> Run the fail-demo and a few hand-checked cases first. If the judge cannot tell a good answer from a planted hallucination, fix the judge — not the app, not the thresholds.</li></ul>
+<p>One more verification note, for completeness: my first attempt at the sandbox stand-in served the <em>base</em> Qwen2.5-0.5B model instead of the instruct-tuned one, and it rambled for 48 seconds repeating the chat template back at me. Judge duty is chat duty — instruct-tuned models only.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>DeepEval is not the only open-source eval framework, and the right one depends on what you are scoring:</p>
+<div class="table-wrap"><table><thead><tr><th>Framework</th><th>Best for</th><th>Shape of the work</th></tr></thead><tbody><tr><td><strong>DeepEval</strong></td><td>Regression suites for RAG apps, chatbots, and agents in Python</td><td>Pytest tests; 50+ ready-made metrics; local or hosted judge</td></tr><tr><td><strong>Ragas</strong></td><td>RAG-only scoring, when retrieval and generation are all you measure</td><td>RAG-specific metrics; pairs naturally with LangChain</td></tr><tr><td><strong>promptfoo</strong></td><td>Comparing prompts and models side by side, plus red teaming</td><td>Config-file matrices; assertions per cell; no test code</td></tr><tr><td><strong>Inspect AI</strong></td><td>Benchmark-style evals and agents in sandboxes</td><td>Eval logs and scorers; built for frontier-model evaluation</td></tr></tbody></table></div>
+<p>They overlap deliberately — Ragas metrics and DeepEval metrics cover similar RAG ground, and you can mix them. The deciding factor is usually where your tests already live: if your team writes pytest, DeepEval&#x27;s shape wins; if your team compares prompts in a config file, promptfoo&#x27;s does. What matters is having a suite at all, with a judge you have calibrated, rather than which logo is on it.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<ol><li><strong>Evals are tests.</strong> A golden dataset plus thresholds turns "the answers feel off" into a failing build with a named question and a written reason.</li><li><strong>Four metrics cover a RAG app.</strong> Contextual precision and recall for the retriever; faithfulness and answer relevancy for the generator; GEval for anything custom.</li><li><strong>The judge is the whole game.</strong> A weak judge hallucinates verdicts — mine invented an Einstein contradiction. Use qwen3:8b at minimum, and read the reasons.</li><li><strong>Fail on purpose, once.</strong> A planted hallucination that scores 0.00 proves the suite can detect the failure it exists to detect. Keep that test forever.</li><li><strong>Local is free and private.</strong> Ollama plus DeepEval runs the entire suite with no API key and no data leaving your machine — the only cost is the judge&#x27;s time.</li></ol>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://deepeval.com/docs/getting-started" rel="nofollow">DeepEval 5-min Quickstart</a> — installation, first test run, agent evaluation, and production traces (docs updated November 18, 2026).</li><li><a href="https://pypi.org/project/deepeval/" rel="nofollow">deepeval on PyPI</a> — version 4.3.4, released November 11, 2026; requires Python 3.10+.</li><li><a href="https://github.com/confident-ai/deepeval" rel="nofollow">DeepEval on GitHub</a> — Apache 2.0, about 19,600 stars.</li><li><a href="https://ollama.com/library/qwen3:8b" rel="nofollow">qwen3:8b on the Ollama library</a> — 5.2&nbsp;GB download.</li><li><a href="https://ollama.com/" rel="nofollow">Ollama</a> — local model server; install via Homebrew, the Linux install script, or the Windows installer.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="deepeval-rag-evaluation-local-ollama-judge-tutorial"></div><div class="comments" data-comments="deepeval-rag-evaluation-local-ollama-judge-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/inspect-ai-eval-framework-tutorial/"><span class="chip">Tutorials</span><h3>Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute's framework</h3><div class="meta">October 1, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/red-team-your-evals-reward-hacking-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your evals: catch reward hacking in your LLM judges, hands-on</h3><div class="meta">September 29, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/agent-evals-tutorial/"><span class="chip">Tutorials</span><h3>Testing agents: task-based evals for tool-using models</h3><div class="meta">September 19, 2026 · 7 min read</div></a><a class="rel-card" href="/articles/llm-evals-practical-guide/"><span class="chip">Tutorials</span><h3>Write Your First LLM Eval: A Practical Guide</h3><div class="meta">August 2, 2026 · 7 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an OpenAI API key to use DeepEval?</h3><p>No. The default judge is an OpenAI model, but pointing DeepEval at a local Ollama model — deepeval set-ollama --model=qwen3:8b, or an OllamaModel passed to each metric — removes the key entirely. Everything in this tutorial runs locally with no account.</p><h3>How big a judge model do I need?</h3><p>qwen3:8b is the smallest I would trust with real scoring. My sandbox run used a 0.5-billion-parameter stand-in, and it hallucinated verdicts, returned unparseable structured output, and scored correct answers 0.00. A judge has to follow multi-step instructions and return valid JSON; below 8B, that stops being reliable.</p><h3>Why did my metric return a score of None?</h3><p>The judge's output failed schema validation even after DeepEval retried it, so the metric recorded no score. The usual cause is a judge too small or too unconstrained to produce the structured output the metric needs — the fix is a stronger judge, not a different threshold. Check .deepeval/.latest_run_full.json for the error field on the affected test case.</p><h3>Can I use a frontier model as the judge instead?</h3><p>Yes. The same model= argument that takes an OllamaModel instance also takes a hosted model name when the provider's API key is configured — you change one argument, not the suite. That is the right call when the scores gate a production deploy.</p><h3>Can this run in CI?</h3><p>Yes. deepeval test run is pytest under the hood and exits non-zero when any metric misses its threshold, so it works as a merge gate. Keep the suite small and the judge fast: my 7-test suite took about 8 minutes on a CPU-only VM, and nearly all of that was judge time.</p><h3>Does DeepEval send my data anywhere?</h3><p>The evals themselves run locally and need no login; an optional Confident AI login sends traces and test runs to their hosted platform. I did observe DeepEval attempting to upload anonymous telemetry during runs — the evals completed normally when the telemetry endpoint was unreachable.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/colbert-late-interaction-retrieval-tutorial/">Late-interaction retrieval with ColBERT: beat BM25 and retire your reranker — measured end-to-end</a></li><li><a href="/articles/arize-phoenix-agent-observability-tutorial/">See what your AI agent actually did: hands-on with Arize Phoenix observability</a></li><li><a href="/articles/fine-tune-embeddings-domain-retrieval/">Fine-tune embeddings for your domain: contrastive training that measurably improves retrieval</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
