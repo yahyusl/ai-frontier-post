@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>GLM-5.4 hands-on: run Z.ai&#x27;s new vision coding model inside Claude Code — AI Frontier Post</title>
+<meta name="description" content="Z.ai&#x27;s GLM-5.4 landed on November 23 with vision input, a million-token context, and 50% more weekly quota. Here&#x27;s the full setup — Claude Code, the Vision MCP server, effort controls, and the credit math — verified against Z.ai&#x27;s own docs.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/glm-5-4-hands-on-claude-code-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="GLM-5.4 hands-on: run Z.ai&#x27;s new vision coding model inside Claude Code">
+<meta property="og:description" content="Z.ai&#x27;s GLM-5.4 landed on November 23 with vision input, a million-token context, and 50% more weekly quota. Here&#x27;s the full setup — Claude Code, the Vision MCP server, effort controls, and the credit math — verified against Z.ai&#x27;s own docs.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/glm-5-4-hands-on-claude-code-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/glm-5-4-hands-on-claude-code-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-23">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "GLM-5.4 hands-on: run Z.ai's new vision coding model inside Claude Code", "description": "Z.ai's GLM-5.4 landed on November 23 with vision input, a million-token context, and 50% more weekly quota. Here's the full setup — Claude Code, the Vision MCP server, effort controls, and the credit math — verified against Z.ai's own docs.", "datePublished": "2026-11-23", "dateModified": "2026-11-23", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/glm-5-4-hands-on-claude-code-tutorial/"}, "image": "https://aifrontierpost.com/articles/glm-5-4-hands-on-claude-code-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need the Coding Plan, or can I call GLM-5.4 pay-as-you-go?", "acceptedAnswer": {"@type": "Answer", "text": "The plan is the only route Z.ai documents right now, and no pay-as-you-go price for GLM-5.4 has been published. Third-party gateways carry it — AIHubMix lists coding-glm-5.4 at $0.06 per million uncached input tokens, $0.015 cached, and $0.22 output — but those are gateway prices, not Z.ai's."}}, {"@type": "Question", "name": "Why do some Z.ai docs still show GLM-5.3-Flash as the default?", "acceptedAnswer": {"@type": "Answer", "text": "The Claude Code tool page lags the launch; the model-switch page is the current authority. Set glm-5.4[1m] explicitly in ~/.claude/settings.json and verify with /status inside a session."}}, {"@type": "Question", "name": "Is GLM-5.4 open weights? Can I run it locally?", "acceptedAnswer": {"@type": "Answer", "text": "No. As of November 23, Z.ai has published no weights, no open-weight schedule, and no parameter count for GLM-5.4. It is available through the Coding Plan and third-party gateways only. The closest local option in the family is GLM-5.3-Flash, covered in our Project Maya guide."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>GLM-5.4 hands-on: run Z.ai&#x27;s new vision coding model inside Claude Code</h1>
+<p class="lede">Z.ai&#x27;s flagship coding model can finally see. GLM-5.4 rolled out to every GLM Coding Plan subscriber on November 23 with vision input, a million-token context, and 50% more weekly quota — while costing fewer credits per token than its predecessor. Here&#x27;s the full setup, verified against Z.ai&#x27;s own docs.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 23, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Z.ai&#x27;s GLM-5.4 landed November 23 with vision input, a million-token context, and 50% more weekly quota on the same Coding Plan. This tutorial wires it into Claude Code — subscribe, key, helper, model switch — then uses the screenshot-to-code flow, the Vision MCP server, the /effort control, and the direct Python API, with the credit math worked out.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Vision is new.</b> GLM-5.3 was a text-only flagship; GLM-5.4 takes images alongside code — screenshots of bugs, UI mockups, whiteboard photos.</li><li><b>1M context.</b> Select <code>glm-5.4[1m]</code> in Claude Code (<code>glm-5.4</code> elsewhere) and set <code>CLAUDE_CODE_AUTO_COMPACT_WINDOW</code> to 1000000, or sessions compact early.</li><li><b>Cheaper credits.</b> GLM-5.4 costs 4.6 / 1.1 / 16 credits per token against GLM-5.3's 6.9 / 1.7 / 24 — the same plan buys about 50% more tokens a week.</li><li><b>Two endpoints, not one.</b> Claude Code needs <code>api.z.ai/api/anthropic</code>; OpenAI-compatible tools use <code>api.z.ai/api/coding/paas/v4</code>. The wrong one fails, or never draws down your quota.</li><li><b>Cautious, not fast.</b> The first independent benchmark (KingBench 4) scored it 55.3% — 7th of 19, highest open model — but the run took 431 minutes. Best used as a reviewer or planner.</li><li><b>Not disclosed yet.</b> No official benchmarks, parameter count, pay-as-you-go price, or open-weight schedule as of November 23. A ~700B parameter figure is unconfirmed.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/glm-5-4-hands-on-claude-code-tutorial/cover.webp" alt="A glowing code editor window beside a stylized robotic eye looking at a login-form screenshot, connected by a beam of light"><figcaption>AI-generated illustration: code on one side, a seeing eye on the other — GLM-5.4 adds vision to the Coding Plan flagship.</figcaption></figure>
+<div class="article-body"><p>Z.ai's flagship coding model can finally see. GLM-5.4 rolled out to every GLM Coding Plan subscriber on November 23, and it changes the deal in three concrete ways: the flagship now takes images alongside code, it runs with a million-token context window, and weekly quotas rise 50% over GLM-5.3 — while costing <em>fewer</em> credits per token than its predecessor. This tutorial gets you from zero to a working GLM-5.4 setup inside Claude Code, then shows you how to use the two features that actually matter: vision and the million-token window.</p>
+<p>Everything below is verified against Z.ai's own developer documentation as it stood on November 23, 2026 — the model-switch guide, the quick-start, the plan overview, and the Vision MCP server docs. Where the docs lag the launch (and in one place they do), this tutorial says so instead of papering over it.</p>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>A GLM Coding Plan subscription.</strong> Lite is $18 a month, Pro $80, Max $168. All three tiers get the same models — GLM-5.4, GLM-5.3 and GLM-5.3-Flash — only the quota differs. There is no free tier for the plan, and no pay-as-you-go price for GLM-5.4 has been published yet.</li><li><strong>Node.js 18 or newer</strong> for Claude Code. The Vision MCP server in Step 5 needs Node.js 22 or newer.</li><li><strong>Claude Code</strong>, installed globally with npm. No Anthropic subscription is needed — the plan replaces Anthropic's backend entirely.</li><li><strong>A project to work on.</strong> Any repo with real code will do; the vision and long-context steps work best on something you already know, so you can judge the output.</li></ul>
+<p>Budget about 30 minutes for setup and the first task. No GPU, no model download, no Hugging Face account: GLM-5.4 is API-only as of today, with no published open weights.</p>
+<h2 id="1-subscribe-and-get-your-coding-plan-key">1. Subscribe and get your Coding Plan key<a class="anchor" href="#1-subscribe-and-get-your-coding-plan-key" aria-label="Link to section">#</a></h2>
+<p>Register or log in at <a href="https://z.ai/model-api" target="_blank" rel="noopener nofollow">z.ai/model-api</a>, then subscribe at <a href="https://z.ai/subscribe" target="_blank" rel="noopener nofollow">z.ai/subscribe</a>. Pick the tier by quota, not by model access — every tier runs GLM-5.4. Lite gives you 2,000 credits per 5 hours and 10,000 per week; Pro gives 12,000 and 60,000; Max gives 28,000 and 140,000. The credit math is in the costing section below, but as a rough guide, Lite covers serious evening-and-weekend use and Pro covers daily professional use.</p>
+<p>Once subscribed, create your API key under <strong>Personal Coding Plan &gt; Plan Overview</strong> (individual plans) or <strong>Team Coding Plan &gt; My Plan</strong> (team plans), at <a href="https://z.ai/manage-apikey/apikey-list" target="_blank" rel="noopener nofollow">z.ai/manage-apikey/apikey-list</a>. Copy it once and store it like a password.</p>
+<p>The detail that trips people up: Z.ai now manages three key types separately — Individual Plan, Team Plan, and the standard pay-as-you-go model API — and they are <strong>not interchangeable</strong>. A pay-as-you-go key will not draw down your plan quota, and a plan key will not work against the standard API. If a call fails with an auth error, check which key you pasted before anything else. Z.ai subscriptions are non-refundable once purchased, so start on Lite unless you already know your usage.</p>
+<h2 id="2-install-claude-code-and-point-it-at-zai">2. Install Claude Code and point it at Z.ai<a class="anchor" href="#2-install-claude-code-and-point-it-at-zai" aria-label="Link to section">#</a></h2>
+<p>Install Claude Code globally, then move into your project:</p>
+<pre><code class="language-bash"># Install Claude Code (Node.js 18+; macOS users should install Node via nvm
+# to avoid permission problems)
+npm install -g @anthropic-ai/claude-code
+
+# Navigate to your project
+cd your-awesome-project</code></pre>
+<p>Now point Claude Code at Z.ai instead of Anthropic. The fastest route is Z.ai's own guided helper, which installs the tool, writes the config, and sets up the MCP servers for you:</p>
+<pre><code class="language-bash">npx @z_ai/coding-helper</code></pre>
+<p>Follow the on-screen prompts and paste your Coding Plan key when asked. The helper is the route Z.ai recommends, and it removes the one real footgun in this setup: the endpoint. Claude Code speaks the Anthropic protocol, so it needs the Anthropic-compatible endpoint, <code>https://api.z.ai/api/anthropic</code> — not the OpenAI-compatible one. Paste the wrong endpoint and the tool either fails opaquely or, worse, works without drawing down your plan quota.</p>
+<p>If you prefer to wire it by hand, the three endpoints are:</p>
+<div class="table-wrap"><table><thead><tr><th>Protocol</th><th>Base URL</th><th>Used by</th></tr></thead><tbody><tr><td>Anthropic Messages</td><td><code>https://api.z.ai/api/anthropic</code></td><td>Claude Code, Goose</td></tr><tr><td>OpenAI Chat Completions</td><td><code>https://api.z.ai/api/coding/paas/v4</code></td><td>Cline, Roo Code, Kilo Code, OpenAI clients</td></tr><tr><td>OpenAI Responses</td><td><code>https://api.z.ai/api/v1</code></td><td>Codex</td></tr></tbody></table></div>
+<p>On first launch, Claude Code asks whether to use your API key — say yes — then asks for permission to access the files in your folder. Grant it. You are now running Claude Code with GLM as the engine, with the same terminal UI, tools, and permission system as the Anthropic version.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/glm-5-4-hands-on-claude-code-tutorial/img2.webp" alt="Diagram of the four setup moves: subscribe to the GLM Coding Plan, get a Coding Plan key, connect Claude Code with the coding helper, and switch to the glm-5.4[1m] model"><figcaption>Diagram: four moves from zero to GLM-5.4 — subscribe, get a Coding Plan key, connect the tool, switch the model. The Claude Code endpoint is api.z.ai/api/anthropic; the OpenAI-compatible endpoint is api.z.ai/api/coding/paas/v4.</figcaption></figure>
+<h2 id="3-switch-to-glm-54-and-verify-it">3. Switch to GLM-5.4[1m] and verify it<a class="anchor" href="#3-switch-to-glm-54-and-verify-it" aria-label="Link to section">#</a></h2>
+<p>Depending on when you set up, your config may still point at GLM-5.3-Flash — Z.ai's Claude Code tool page still lists it as the default, and the model-switch page is the newer authority. Set the model explicitly. Open <code>~/.claude/settings.json</code> and add or replace the <code>env</code> block:</p>
+<pre><code class="language-json">{
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1000000",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-5.4[1m]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5.4[1m]",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.4[1m]"
+  }
+}</code></pre>
+<p>Do not replace the whole file if it already has other fields — only add or update these keys. The three model slots all take the same value because GLM-5.4 is a single model; the Haiku/Sonnet/Opus split is Claude Code's way of asking for fast, standard, and heavy work, and Z.ai maps all three to the flagship. The <code>[1m]</code> suffix selects the million-token variant, and <code>CLAUDE_CODE_AUTO_COMPACT_WINDOW</code> tells Claude Code to compact the conversation at a million tokens instead of its much smaller default. Without that line, the long context is available but the session still compacts early.</p>
+<p>Verify the switch before doing real work:</p>
+<pre><code class="language-bash">claude</code></pre>
+<p>Then type <code>/status</code> inside the session and check two things: the settings source shows your <code>~/.claude/settings.json</code>, and the model shows <code>glm-5.4</code> or <code>glm-5.4[1m]</code>. If the model still shows a 5.3 variant, close every Claude Code window, open a fresh terminal, and relaunch — a stale session is the usual cause. If Claude Code reports that the model with the <code>[1m]</code> suffix does not exist, upgrade Claude Code to the latest version (<code>claude update</code>; Z.ai has verified compatibility with 2.0.14) and try again.</p>
+<h2 id="4-your-first-real-task">4. Your first real task<a class="anchor" href="#4-your-first-real-task" aria-label="Link to section">#</a></h2>
+<p>Start with something small and checkable, so you learn the model's character before trusting it with anything big. Z.ai's own quick-start suggests a login form; use it as the shakedown task:</p>
+<pre><code class="language-bash">Please create a React component containing a user login form</code></pre>
+<p>Then, in the same session, ask for the two things that separate a demo from a deliverable:</p>
+<pre><code class="language-bash">Now add validation for the email and password fields, and write a test
+that covers the empty-email, invalid-email, and wrong-password cases.
+Run the tests and fix anything that fails.</code></pre>
+<p>Read the diff before accepting it — this is the habit the whole tutorial assumes. Then try the second shape of real work, debugging, with a concrete error instead of a vague complaint:</p>
+<pre><code class="language-bash">My API request returns a 404 error. Please help me check the code.</code></pre>
+<p>Two things to notice on this first run. First, GLM-5.4 is thorough to a fault: the first independent benchmark run, KingBench 4, scored it 55.3% — seventh of 19 models, and the highest-placed open model — but the run took 431 minutes and 1,128 steps, against 109 minutes for Gemini 4 Neon, burning about 1.04 million tokens. The benchmarker called it "the most cautious model I have ever used": it checks and re-checks its work and catches bugs and security flaws other models miss. Expect longer, more deliberate sessions than you get from a faster model, and treat that as a feature when the work is a review or a plan, not a race. Second, the model defaults to maximum thinking effort, which is the next step's subject.</p>
+<h2 id="5-use-the-vision-screenshots-to-code">5. Use the vision: screenshots to code<a class="anchor" href="#5-use-the-vision-screenshots-to-code" aria-label="Link to section">#</a></h2>
+<p>Vision is the headline change: GLM-5.3 shipped as a text-only flagship while its lighter sibling already accepted images, so a screenshot of a bug, a sketch of an interface, or a photo of a whiteboard had nowhere to go. GLM-5.4 closes that gap, and there are two ways to use it.</p>
+<p><strong>The direct way.</strong> In Claude Code, paste or attach the image and describe what you want. A broken layout is the canonical case: take a screenshot of the page, save it into your project directory, and ask:</p>
+<pre><code class="language-bash">This screenshot shows our checkout page on a 390px-wide phone. The
+payment button overlaps the order summary. Find the CSS causing it and
+fix it, then tell me what changed and why.</code></pre>
+<p><strong>The MCP way.</strong> The Coding Plan also ships a Vision MCP Server — an exclusive local MCP server that gives any MCP-compatible client seven vision tools: <code>ui_to_artifact</code> (turn UI screenshots into code, prompts, or specs), <code>extract_text_from_screenshot</code>, <code>diagnose_error_screenshot</code>, <code>understand_technical_diagram</code>, <code>analyze_data_visualization</code>, <code>ui_diff_check</code> (compare two UI shots for drift), and <code>image_analysis</code>, plus <code>video_analysis</code> for local or remote clips up to 8 MB in MP4, MOV, or M4V. Install it with one command (Node.js 22 or newer required):</p>
+<pre><code class="language-bash">claude mcp add -s user zai-mcp-server --env Z_AI_API_KEY=<redacted> Z_AI_MODE=ZAI</code></pre>
+<p>Replace the placeholder with your Coding Plan key. If you already have an older version installed, clear the npx cache or append <code>@latest</code> to <code>@z_ai/mcp-server</code> to force the newest version — the docs call out version 0.1.2 or newer for the current vision capability.</p>
+<p>One quirk worth knowing: in Claude Code, pasting an image directly into the client does <em>not</em> call the MCP server — the client transcodes the image and calls the model interface directly. The documented best practice is to place the image in a local directory and invoke the server by name or path in the conversation, for example <code>What does demo.png describe?</code> or, for the screenshot-to-code flow, <code>Turn login-mock.png into a React component using ui_to_artifact</code>. The MCP tools also cost credits — each call is charged at the MCP output multiplier — so prefer the direct paste for one-off looks and the MCP tools for repeatable jobs like UI diff checks and error diagnosis.</p>
+<h2 id="6-work-the-million-token-context">6. Work the million-token context<a class="anchor" href="#6-work-the-million-token-context" aria-label="Link to section">#</a></h2>
+<p>The <code>[1m]</code> variant exists for one job: holding a whole repository in a single session. Use it for the tasks that used to force you to paste files in by hand:</p>
+<pre><code class="language-bash">Map this codebase for me: list every module, what it depends on, and
+which three files I would need to change to add a new payment provider.
+Do not edit anything yet — just the map.</code></pre>
+<p>Then keep the same session going and ask the follow-up that only works with the full context loaded:</p>
+<pre><code class="language-bash">Now implement the new payment provider following the pattern you found,
+and show me the exact places where the existing code assumes there is
+only one provider.</code></pre>
+<p>A million-token window only helps if the model can find what matters inside it, and long-context retrieval is exactly where GLM-5.4 is least proven — there are no official benchmarks yet, and the KingBench run suggests the model compensates for uncertainty by re-checking its work, which is slow and token-hungry at this scale. Two habits keep it honest: ask for the map before the implementation, so you can see what it actually found, and keep the auto-compact window at 1,000,000 (Step 3) so a long session does not silently summarize away the context you loaded.</p>
+<h2 id="7-dial-the-effort-with-effort">7. Dial the effort with /effort<a class="anchor" href="#7-dial-the-effort-with-effort" aria-label="Link to section">#</a></h2>
+<p>GLM-5.4 defaults to maximum thinking effort inside Claude Code — deep reasoning on every request, which is why the benchmark runs were so slow. Type <code>/effort</code> in a session to switch levels. The mapping, from Z.ai's docs:</p>
+<div class="table-wrap"><table><thead><tr><th>What you set</th><th>Actual level</th><th>When to use it</th></tr></thead><tbody><tr><td>Default (nothing set)</td><td>max</td><td>Complex features, architecture, security review</td></tr><tr><td><code>reasoning_effort</code> medium / high</td><td>high</td><td>Ordinary feature work — the balance point</td></tr><tr><td><code>reasoning_effort</code> minimal / light / low</td><td>low</td><td>Trivial edits, renames, formatting</td></tr><tr><td>Thinking disabled</td><td>low</td><td>Still performs lightweight thinking; not a different model</td></tr></tbody></table></div>
+<p>The independent KingBench run found High to be the balance point for this model, and its caution has a sharp edge at the top end: on High and Max settings, one security test hit a 180-second timeout, against 95 seconds on Medium. Practical rule: leave max on for planning, reviews, and anything you cannot easily verify yourself; drop to high for the bulk of feature work; drop to low only for mechanical edits where the diff is trivially checkable. Explicit effort beats the thinking toggle, which beats the default — so set it per task, not once and forever.</p>
+<h2 id="8-call-glm-54-from-python">8. Call GLM-5.4 from Python<a class="anchor" href="#8-call-glm-54-from-python" aria-label="Link to section">#</a></h2>
+<p>Not every job belongs in an agent harness. For scripts, batch jobs, and your own tooling, call the model directly through the OpenAI-compatible coding endpoint — the same endpoint Cline uses. The pattern is Z.ai's documented OpenAI SDK pattern with the new model name:</p>
+<pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.z.ai/api/coding/paas/v4",
+    api_key="YOUR_CODING_PLAN_KEY",  # Coding Plan key, not a pay-as-you-go key
+)
+
+response = client.chat.completions.create(
+    model="glm-5.4",
+    messages=[
+        {"role": "user", "content": "Write a Python function that parses a CSV of "
+         "server logs and returns the five most frequent 5xx error paths."}
+    ],
+)
+print(response.choices[0].message.content)</code></pre>
+<p>Vision works the same way — the chat-completion API accepts multimodal input, so pass the image as a base64 data URL alongside the text:</p>
+<pre><code class="language-python">import base64
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.z.ai/api/coding/paas/v4",
+    api_key="YOUR_CODING_PLAN_KEY",
+)
+
+with open("broken-layout.png", "rb") as f:
+    image_b64 = base64.b64encode(f.read()).decode()
+
+response = client.chat.completions.create(
+    model="glm-5.4",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What is wrong with this page layout, "
+             "and which CSS rule causes it?"},
+            {"type": "image_url", "image_url": {
+                "url": f"data:image/png;base64,{image_b64}"}},
+        ],
+    }],
+)
+print(response.choices[0].message.content)</code></pre>
+<p>Keep the key out of the code — read it from an environment variable in anything you commit. And remember the key-type rule from Step 1: this endpoint expects the Coding Plan key; the standard pay-as-you-go key belongs to the general API at <code>https://api.z.ai/api/paas/v4/</code>.</p>
+<h2 id="what-it-actually-costs">What it actually costs<a class="anchor" href="#what-it-actually-costs" aria-label="Link to section">#</a></h2>
+<p>The plan charges credits, not dollars per token. The formula for GLM-5.4, from the plan overview:</p>
+<pre><code class="language-text">credits = (input tokens x 4.6 + cached input tokens x 1.1
+           + output tokens x 16) / 10,000</code></pre>
+<p>That is the quiet reason the "50% more quota" claim is real: GLM-5.3 cost 6.9 / 1.7 / 24 on the same formula, so every token of GLM-5.4 is about a third cheaper in credits. Worked example — one long session with 100,000 uncached input tokens, 900,000 cached input tokens (your repo, re-read across turns), and 50,000 output tokens:</p>
+<pre><code class="language-text">(100,000 x 4.6 + 900,000 x 1.1 + 50,000 x 16) / 10,000
+= (460,000 + 990,000 + 800,000) / 10,000
+= 225 credits</code></pre>
+<p>On Lite's 10,000 weekly credits that is roughly 44 such sessions a week; on Pro's 60,000 it is roughly 266. Two multipliers matter in practice. First, the cache: at a 95% cache-hit rate Z.ai estimates Lite at 72–146 million tokens a week for GLM-5.4, against 48–97 million for GLM-5.3 — the 1.5x ratio is the quota increase, stated in tokens. Second, off-peak hours cost half the standard credit rate; peak hours are Monday to Friday, 14:00–18:00 Singapore time (UTC+8). Long sessions scheduled outside that window effectively double your quota.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/glm-5-4-hands-on-claude-code-tutorial/img3.webp" alt="Bar chart comparing weekly token allowance at a 95 percent cache-hit rate: GLM-5.4 gives Lite 146 million, Pro 870 million and Max 2,028 million tokens, against 97, 580 and 1,352 million for GLM-5.3"><figcaption>Chart: weekly token allowance at a 95% cache-hit rate (Z.ai estimates, off-peak maximum). GLM-5.4's cheaper credit multipliers — 4.6 / 1.1 / 16 against GLM-5.3's 6.9 / 1.7 / 24 — are what turn the same plan into about 50% more tokens.</figcaption></figure>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p><strong>Claude Code or Cline?</strong> Claude Code is the default: the Anthropic-compatible endpoint, the <code>[1m]</code> model name, the <code>/effort</code> control, and the Vision MCP server all assume it. Use Cline (or Roo Code, Kilo Code) if you live in VS Code and want the agent beside your editor — same plan, same key, the OpenAI-compatible endpoint, model <code>glm-5.4</code>, "Support Images" checked, context window set to 1,000,000. Use the direct Python API when the job is a script, not a session.</p>
+<p><strong>GLM-5.4 or GLM-5.3-Flash?</strong> The Flash model is cheaper per token (2.3 / 0.56 / 8 credits) and already had vision. Reach for it for high-volume, low-stakes work — bulk refactors, doc generation, first drafts. Reach for GLM-5.4 when the task needs judgment: architecture, debugging, security review, and anything where a missed bug costs more than the tokens saved.</p>
+<p><strong>GLM-5.4 or Claude Sonnet 5.5?</strong> On the evidence available today, Sonnet 5.5 is the stronger all-round coder and the one to use when your time is the expensive input — but it costs real money per token, while the GLM plan is a flat $18 a month. The honest setup for most developers is both: Sonnet for the work that needs the best judgment, GLM-5.4 as the high-volume lane for implementation, review passes, and long-context repo work. The KingBench result points the same way — GLM-5.4's caution makes it a natural reviewer and planner, the roles where checking twice is the job.</p>
+<h2 id="what-zai-hasnt-told-you-yet">What Z.ai hasn&#x27;t told you yet<a class="anchor" href="#what-zai-hasnt-told-you-yet" aria-label="Link to section">#</a></h2>
+<p>The gaps in the launch are as notable as the features, and they decide whether you should commit to this model or just try it. Z.ai has published no technical introduction, no parameter count, no official benchmark scores, no pay-as-you-go API price, and no open-weight schedule for GLM-5.4. A figure of roughly 700 billion parameters is circulating in secondary coverage, traced to a Morgan Stanley report — Z.ai has not confirmed it, and it should be treated as an unconfirmed report, not a specification. The same applies to the rumored GLM-5.5, described in some coverage as a much larger model due in mid-December: a rumor, not a roadmap.</p>
+<p>The docs themselves are mid-catch-up: the release-notes page still lists GLM-5.3-Flash (August 26) as the newest model, while the model-switch page and the docs index already list GLM-5.4. If a page contradicts this tutorial, trust the model-switch page — it is the one Z.ai updated for the launch — and re-check the release notes in a week. If you need the model outside the plan, the only priced route found at launch was third-party gateways: AIHubMix serves it as <code>coding-glm-5.4</code> at $0.06 per million uncached input tokens, $0.015 cached, and $0.22 output. Those are gateway prices, not Z.ai's, and they say nothing about what Z.ai will eventually charge directly.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>GLM-5.4 is not a new kind of model — it is the same Coding Plan deal with the two missing pieces filled in. Vision turns the plan into something you can point at a broken page; the million-token context turns it into something you can point at a whole repo; and the cheaper credit multipliers turn the same $18 into half as much again. Set it up with the coding helper, switch the model explicitly to <code>glm-5.4[1m]</code>, verify with <code>/status</code>, and give it a review or a plan first — the job its cautious character is best at. The benchmarks and the open weights can wait; the workflow works today.</p>
+<p><b>Sources:</b> <a href="https://docs.z.ai/devpack/latest-model.md" target="_blank" rel="noopener nofollow">Z.ai — How to Switch Models (GLM-5.4)</a>; <a href="https://docs.z.ai/devpack/quick-start.md" target="_blank" rel="noopener nofollow">Z.ai — GLM Coding Plan Quick Start</a>; <a href="https://docs.z.ai/devpack/overview.md" target="_blank" rel="noopener nofollow">Z.ai — GLM Coding Plan Overview (credits and pricing)</a>; <a href="https://docs.z.ai/devpack/tool/claude" target="_blank" rel="noopener nofollow">Z.ai — Claude Code setup</a>; <a href="https://docs.z.ai/devpack/mcp/vision-mcp-server.md" target="_blank" rel="noopener nofollow">Z.ai — Vision MCP Server</a>; <a href="https://docs.z.ai/release-notes/new-released.md" target="_blank" rel="noopener nofollow">Z.ai — Release notes</a>; <a href="/articles/zai-glm-5-4-vision-coding-plan-launch/">our coverage of the GLM-5.4 launch</a>.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="glm-5-4-hands-on-claude-code-tutorial"></div><div class="comments" data-comments="glm-5-4-hands-on-claude-code-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/zai-glm-5-4-vision-coding-plan-launch/"><span class="chip ai-news">AI News</span><h3>Z.ai ships GLM-5.4: vision, a million-token context, and 50% more quota for coding subscribers</h3><div class="meta">Priya Nair · November 23, 2026 · 6 min read</div></a><a class="rel-card" href="/articles/qwen4-max-coding-agent-api-tutorial/"><span class="chip tutorials">Tutorials</span><h3>Qwen4-Max hands-on: build a working coding agent with Alibaba&#x27;s new flagship API</h3><div class="meta">Sofia Almeida · November 16, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/claude-sonnet-5-5-effort-playbook-tutorial/"><span class="chip tutorials">Tutorials</span><h3>Migrate to Claude Sonnet 5.5: the effort-levels playbook — measure every level, fix the five breaking changes, and pay per finished task</h3><div class="meta">Marcus Doyle · November 22, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/mini-swe-agent-coding-agent-tutorial/"><span class="chip tutorials">Tutorials</span><h3>mini-swe-agent hands-on: the 100-line coding agent that ties Claude Code — run it with a free local model</h3><div class="meta">Marcus Doyle · November 21, 2026 · 17 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need the Coding Plan, or can I call GLM-5.4 pay-as-you-go?</h3><p>The plan is the only route Z.ai documents right now, and no pay-as-you-go price for GLM-5.4 has been published. Third-party gateways carry it — AIHubMix lists coding-glm-5.4 at $0.06 per million uncached input tokens, $0.015 cached, and $0.22 output — but those are gateway prices, not Z.ai's.</p><h3>Why do some Z.ai docs still show GLM-5.3-Flash as the default?</h3><p>The Claude Code tool page lags the launch; the model-switch page is the current authority. Set glm-5.4[1m] explicitly in ~/.claude/settings.json and verify with /status inside a session.</p><h3>Is GLM-5.4 open weights? Can I run it locally?</h3><p>No. As of November 23, Z.ai has published no weights, no open-weight schedule, and no parameter count for GLM-5.4. It is available through the Coding Plan and third-party gateways only. The closest local option in the family is GLM-5.3-Flash, covered in our Project Maya guide.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/project-maya-glm-5-3-flash-local-gpu-tutorial/">Run a 321B AI model on your own GPU: a hands-on guide to Project Maya</a></li><li><a href="/articles/claude-code-github-action-tutorial/">Put Claude Code on autopilot: the complete GitHub Action tutorial</a></li><li><a href="/articles/gemini-4-hydrogen-agentic-coding-tutorial/">Build a fast agentic coding loop with Gemini 4 Hydrogen</a></li><li><a href="/articles/canary-token-prompt-theft-tripwire-tutorial/">Catch prompt theft before your users do: build a canary-token tripwire for your LLM app</a></li><li><a href="/articles/pydantic-ai-v2-hardening-production-tutorial/">Harden your Pydantic AI agent for production: capabilities, fallbacks, and guardrails in v2.71</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
