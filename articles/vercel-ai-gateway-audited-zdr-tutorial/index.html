@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop trusting the contract: ship an AI feature on Vercel AI Gateway with Audited ZDR — AI Frontier Post</title>
+<meta name="description" content="Vercel now audits zero-data-retention claims instead of taking providers&#x27; word for it — and runs canary traps that catch any provider reading your prompts. This tutorial wires Audited ZDR into a real AI SDK app: per-request flags, the team-wide toggle, headquarters filtering, and a canary check you can run yourself.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/vercel-ai-gateway-audited-zdr-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop trusting the contract: ship an AI feature on Vercel AI Gateway with Audited ZDR">
+<meta property="og:description" content="Vercel now audits zero-data-retention claims instead of taking providers&#x27; word for it — and runs canary traps that catch any provider reading your prompts. This tutorial wires Audited ZDR into a real AI SDK app: per-request flags, the team-wide toggle, headquarters filtering, and a canary check you can run yourself.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/vercel-ai-gateway-audited-zdr-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/vercel-ai-gateway-audited-zdr-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-23">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Stop trusting the contract: ship an AI feature on Vercel AI Gateway with Audited ZDR","description":"Vercel now audits zero-data-retention claims instead of taking providers' word for it — and runs canary traps that catch any provider reading your prompts. This tutorial wires Audited ZDR into a real AI SDK app: per-request flags, the team-wide toggle, headquarters filtering, and a canary check you can run yourself.","datePublished":"2026-11-23","dateModified":"2026-11-23","author":{"@type":"Person","name":"Priya Nair","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/vercel-ai-gateway-audited-zdr-tutorial/"},"image":"https://aifrontierpost.com/articles/vercel-ai-gateway-audited-zdr-tutorial/cover.webp"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"Stop trusting the contract: ship an AI feature on Vercel AI Gateway with Audited ZDR","description":"Set up Vercel AI Gateway with Audited ZDR: per-request flags, the team-wide toggle, headquarters filtering, and a canary check.","step":[{"@type":"HowToStep","name":"Step 1: Get an AI Gateway key","text":"Create an API key in the AI Gateway dashboard, or use OIDC on Vercel deployments with no key at all; refresh the local token with vercel env pull every 12 hours."},{"@type":"HowToStep","name":"Step 2: Make your first gateway call","text":"Install the AI SDK (ai 7.x, ESM-only) and call generateText with the bare model string anthropic/claude-sonnet-5 and your AI_GATEWAY_API_KEY."},{"@type":"HowToStep","name":"Step 3: Turn on per-request ZDR — and read the receipt","text":"Set zeroDataRetention: true and disallowPromptTraining: true in providerOptions.gateway, then read providerMetadata.gateway for enabledZeroDataRetention and routing.skippedProviderAttempts."},{"@type":"HowToStep","name":"Step 4: Enforce it team-wide (with the escape hatch)","text":"Switch on Zero Data Retention in AI Gateway Settings ($0.10 per 1,000 requests) and create a short-lived exempt key with vercel ai-gateway api-keys create --zdr-exempt for the genuine exceptions."},{"@type":"HowToStep","name":"Step 5: Add headquarters filtering and fallbacks","text":"Restrict routing with headquarters allow/denylists, order preferred providers, add models fallbacks, and tag requests for usage reports."},{"@type":"HowToStep","name":"Step 6: Run your own canary check","text":"Mint a unique URL, deploy a listener that logs any request to it, put the URL inside a prompt sent through the gateway, and watch for hits."},{"@type":"HowToStep","name":"Step 7: Verify in the dashboard — and know what ZDR doesn’t cover","text":"Check Logs, usage, and the model ZDR list in the dashboard; remember provider-run tools, batch jobs, async video, prompt caching, and BYOK keys sit outside or alongside ZDR."}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Audited ZDR mean my prompts never touch a provider's disk?","acceptedAnswer":{"@type":"Answer","text":"It means an independent firm verified that they are never written to durable storage — and that any KV cache stays in volatile memory only for the request. It does not cover tools the provider runs, such as web search or grounding, which run on separate services under their own policies. Read the audit report for the provider you use, not just the badge."}},{"@type":"Question","name":"Do I need a paid Vercel plan to use ZDR?","acceptedAnswer":{"@type":"Answer","text":"Per-request and team-wide ZDR both require a paid account: a Pro or Enterprise plan, or purchased AI Gateway credits. Hobby teams and teams on a Pro trial can use ZDR once they purchase credits. With an active Token Pass you can use per-request ZDR while the pass is active; the team-wide toggle still requires Pro, Enterprise, or purchased credits. Per-request ZDR itself is free — only the team-wide toggle costs $0.10 per 1,000 requests."}},{"@type":"Question","name":"What happens if no provider qualifies for my request?","acceptedAnswer":{"@type":"Answer","text":"The request fails loudly: a 400 with type no_zdr_providers_available if no ZDR provider can serve the model, or a 403 if your team is not eligible for ZDR at all. Failover never silently drops to a non-ZDR provider. That is the intended behavior — pick a different model, or drop the flag for that call."}},{"@type":"Question","name":"Is per-request ZDR enough, or should I flip the team-wide toggle?","acceptedAnswer":{"@type":"Answer","text":"If one workflow handles sensitive data, per-request flags are enough and free. If regulated data flows through every request your team makes, flip the team-wide toggle so a forgotten flag cannot leak data — and create short-lived exempt keys for the genuine exceptions, such as models that retain data on every provider."}},{"@type":"Question","name":"Can I use my own provider keys (BYOK) with ZDR?","acceptedAnswer":{"@type":"Answer","text":"Yes, but the gateway skips your BYOK keys by default when ZDR is enabled, because they operate under your own agreements. Mark a BYOK key as ZDR-compliant in the dashboard to include it in the ZDR routing set. The marking is your responsibility: Vercel has no visibility into your agreements, so confirm your contract covers zero data retention before marking a key."}}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop trusting the contract: ship an AI feature on Vercel AI Gateway with Audited ZDR</h1>
+<p class="lede">Vercel now audits zero-data-retention claims instead of taking providers&#x27; word for it — and runs canary traps that catch any provider reading your prompts. This tutorial wires Audited ZDR into a real AI SDK app: per-request flags, the team-wide toggle, headquarters filtering, and a canary check you can run yourself.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 23, 2026 · 20 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Vercel&#x27;s AI Gateway now verifies zero-data-retention claims with independent audits instead of taking providers&#x27; word for it, and runs canary traps that catch any provider reading your prompts outside inference. This tutorial wires it into a real AI SDK app: per-request ZDR flags, the team-wide toggle, headquarters filtering, and a canary check you can run yourself — with the request path verified against a local capture server and every model ID checked against the gateway&#x27;s public catalog.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem">
+    <li><b>Verified versions:</b> <code>ai</code> 7.0.181, <code>@ai-sdk/gateway</code> 4.0.154, Node 24.22.1.</li>
+    <li><b>The request path ran end to end against a local capture server:</b> the SDK POSTs to <code>{baseURL}/language-model</code> with a Bearer key and sends <code>providerOptions.gateway</code> verbatim — <code>zeroDataRetention</code>, <code>disallowPromptTraining</code>, <code>headquarters</code>, <code>order</code>, <code>tags</code> and <code>user</code> all arrived intact.</li>
+    <li><b>Model IDs checked against the gateway’s public catalog (517 models):</b> <code>anthropic/claude-sonnet-5</code> carries ZDR on every provider serving it.</li>
+    <li><b>Honest scope:</b> no live gateway call was made here — there is no API key on this machine — so the live call, the dashboard toggle, and the provider-metadata examples are verified against Vercel’s own docs, not executed. The canary listener ran locally end to end (hit vs no-hit).</li>
+    <li><b>Why now:</b> Audited ZDR and canary audits were announced November 23, 2026. Launch partners Baseten, Modal, and Wafer have begun audits, with reports expected by December 8, 2026.</li>
+</ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/vercel-ai-gateway-audited-zdr-tutorial/cover.webp" alt="An application sends a glowing stream of data through a shield-shaped gateway to model provider servers, while a magnifier and audit seal inspect the stream"><figcaption>AI-generated illustration: an app&#x27;s data passes through the gateway shield to providers while an independent audit inspects it. No free public image exists for an abstract routing control, so the cover is generated.</figcaption></figure>
+<div class="article-body"><p>Your app sends source code, customer records, and regulated data through inference providers. Until today, the only thing standing between that data and a provider's disk was a contract — a promise, in a PDF, that nobody outside the provider could check. On November 23, Vercel stopped asking you to take that promise on faith: AI Gateway now labels a provider Audited ZDR only after an independent security firm has tested its zero-data-retention claim against the provider's code, infrastructure, and live traffic — and published the report.</p>
+<p>This tutorial wires that guarantee into a real app. You will make your first AI Gateway call with the AI SDK, add per-request zero data retention and read the receipt the gateway returns, flip the team-wide toggle with an escape hatch for the exceptions, add headquarters filtering and fallbacks, and run your own canary check — the same tripwire idea Vercel now runs continuously against its providers. Everything is verified against Vercel's own documentation as it stood on November 23, 2026, and every code block in this tutorial was run or typechecked in a sandbox before publication.</p>
+<h2 id="what-audited-zdr-actually-verifies">What Audited ZDR actually verifies<a class="anchor" href="#what-audited-zdr-actually-verifies" aria-label="Link to section">#</a></h2>
+<p>Zero data retention (ZDR) means the provider does not keep your prompts or completions after the request is done. Until now, that was self-reported: each provider stated its ZDR commitment in its own policy or in its agreement with Vercel, and AI Gateway routed ZDR requests based on that commitment. Vercel's argument for changing this is simple — payment platforms, cloud infrastructure, and most other layers that handle sensitive data have a way to prove their controls to outside parties, and inference should follow the same path.</p>
+<p>To earn the Audited ZDR label, a provider hires an independent security firm, chosen from respected third-party auditors, to test its ZDR policy across the serving path for every model, endpoint, feature, and tool that handles AI Gateway traffic. The audit confirms that customer data is never written or retained on durable storage in any system. "Customer data" is defined broadly: prompts, completions, system prompts, embeddings, files, images and audio, tool and function-call payloads, and any derived data that could identify them. The coverage spans request logs, traces, metrics, crash dumps, prompt caches, abuse monitoring, analytics, backups, support tools, and training, fine-tuning, and evaluation datasets. Once a response is returned to AI Gateway, that content must be deleted from the provider's systems — and where a request uses caching, such as a KV cache, the cache must stay in volatile storage only for the period of the request and never be written to durable storage.</p>
+<p>The audit also confirms four things that a contract alone cannot: that a request marked ZDR never fails over to a non-ZDR endpoint, tool, or feature; that no human or automated process accesses customer data outside handling the request itself; that sub-processors with access comply with all of the above; and that no training on customer data occurs. Auditors verify this by reviewing the inference provider's serving-path source code and infrastructure configuration, then running live tests — sending marked prompts through AI Gateway and searching the provider's logging, caching, and storage systems for any trace of them. Every passing provider publishes the report under the auditor's name, covering scope, methodology, dates, findings, and fix status, with any exceptions disclosed. AI Gateway links directly to the report.</p>
+<p>Baseten, Modal, and Wafer are the launch partners. All three have begun audits, and each provider enters the tier as soon as its report is published — Vercel expects the launch-partner reports by December 8, 2026. That date matters for planning: today you can build on the per-request and team-wide ZDR controls below, and check back in two weeks to route only to providers whose audits are actually published.</p>
+<p>An audit checks a provider's code and infrastructure at a point in time, and production systems change. So Vercel added a second layer the same day: canary audits. Each run mints unique URLs that exist nowhere else, each mapped privately to a specific provider, model, and audit run, and sends prompts containing those URLs through the normal inference path — with ZDR requested for covered providers and non-ZDR pairs included as positive controls. A ZDR provider should never retain, inspect, or crawl prompt content, so a canary URL should never receive a request. Any request to one triggers an investigation into the provider and model involved. Canary checks cannot detect prompts written to disk and never read, so they complement independent code and infrastructure audits rather than replacing them. Step 6 shows you how to run the same tripwire yourself.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/vercel-ai-gateway-audited-zdr-tutorial/img2.webp" alt="Diagram of the Audited ZDR process: marked prompts, code review, trace hunt, public report, plus continuous canary audits between audits"><figcaption>How Audited ZDR works: an independent firm tests the claim against code, infrastructure, and live traffic, then publishes the report. Canary audits keep watching between audits. Diagram by AI Frontier Post.</figcaption></figure>
+<h2 id="what-youll-need">What you&#x27;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><b>A Vercel account with a paid path to ZDR.</b> Per-request and team-wide ZDR both require a paid account: a Pro or Enterprise plan, or purchased AI Gateway credits. Hobby teams and teams on a Pro trial can use ZDR once they purchase credits — free credits do not count. With an active Token Pass you can also use per-request ZDR while the pass is active. Turning on team-wide ZDR in the dashboard still requires a Pro or Enterprise plan or purchased credits.</li>
+<li><b>Node.js 22 or newer.</b> AI SDK 7 requires it. This tutorial was verified on Node 24.22.1.</li>
+<li><b>An AI Gateway API key</b> (Step 1), or a Vercel deployment, where OIDC authentication works with no key at all.</li>
+<li><b>About 45 minutes.</b> No GPU, no model download, no Hugging Face account: the models run on the providers' hardware behind the gateway.</li>
+</ul>
+<h2 id="step-1-get-an-ai-gateway-key">Step 1: Get an AI Gateway key<a class="anchor" href="#step-1-get-an-ai-gateway-key" aria-label="Link to section">#</a></h2>
+<p>Open the <a href="https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai-gateway" rel="nofollow">AI Gateway dashboard</a>, go to API Keys, and create a key for your team. Treat it like any other server-side secret: it authenticates as your team, it can spend your credits, and it never belongs in client-side code or a public repo.</p>
+<p>If you deploy on Vercel, you can skip the key entirely. On Vercel deployments the gateway authenticates with an OIDC token that Vercel injects and refreshes automatically — no key to rotate, nothing to leak. For local development, run <code>vercel env pull</code> to download your project's OIDC token; note that OIDC tokens expire after 12 hours, so pull again before they lapse. If an API key or access token is present in the environment, it always takes precedence over OIDC, even if it is invalid — so do not leave a stale key lying around in <code>.env</code> while debugging auth.</p>
+<h2 id="step-2-make-your-first-gateway-call">Step 2: Make your first gateway call<a class="anchor" href="#step-2-make-your-first-gateway-call" aria-label="Link to section">#</a></h2>
+<p>Create a project directory and install the AI SDK. The SDK is ESM-only, so set <code>"type": "module"</code> in <code>package.json</code> — importing <code>ai</code> from a CommonJS project fails.</p>
+<pre><code class="language-bash">mkdir zdr-demo &amp;&amp; cd zdr-demo
+npm init -y
+npm pkg set type=module
+npm install ai</code></pre>
+<p>Save this as <code>zdr.mjs</code>. It sends one request through the gateway to <code>anthropic/claude-sonnet-5</code> — the model used in Vercel's own ZDR documentation, and one this tutorial checked against the gateway's public model list, where it carries ZDR on every provider serving it.</p>
+<pre><code class="language-javascript">import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: 'anthropic/claude-sonnet-5',
+  prompt: 'Summarize this support ticket in one sentence: the customer was charged twice for the same order.',
+});
+
+console.log(text);</code></pre>
+<p>Set your key and run it:</p>
+<pre><code class="language-bash">export AI_GATEWAY_API_KEY="&lt;redacted&gt;"
+node zdr.mjs</code></pre>
+<p>You should get a one-sentence summary back. Two things are worth noticing before you add anything. First, you passed a bare model string — <code>'anthropic/claude-sonnet-5'</code> — and the SDK resolved it through its default provider, <code>@ai-sdk/gateway</code>. There is no provider package to install and no base URL to configure; the gateway is the default. Second, the gateway passes provider list prices straight through with no markup and no platform fee on inference, so this call costs exactly what the serving provider charges for the tokens.</p>
+<p>One honest note on scope: there is no API key on the machine this tutorial was verified on, so no live gateway call was made here. What was verified instead is everything around the call: the packages install cleanly (<code>ai</code> 7.0.181, <code>@ai-sdk/gateway</code> 4.0.154), the code typechecks against the real SDK types, the model IDs exist in the gateway's public catalog, and — by pointing the SDK at a local capture server — the exact request the SDK sends. That capture is what Step 3 relies on: the flags you set below arrive at the gateway verbatim.</p>
+<h2 id="step-3-turn-on-per-request-zdr">Step 3: Turn on per-request ZDR — and read the receipt<a class="anchor" href="#step-3-turn-on-per-request-zdr" aria-label="Link to section">#</a></h2>
+<p>Per-request ZDR is one field in <code>providerOptions.gateway</code>. Add it to the call from Step 2, along with the no-training filter, which is a separate control: ZDR is about storage, <code>disallowPromptTraining</code> is about whether the provider may train on your prompts. ZDR is a superset — enabling it already covers training opt-out — but setting both makes the intent explicit for anyone reading the code.</p>
+<pre><code class="language-javascript">import { generateText } from 'ai';
+
+const { text, providerMetadata } = await generateText({
+  model: 'anthropic/claude-sonnet-5',
+  prompt: 'Summarize this support ticket in one sentence: the customer was charged twice for the same order.',
+  providerOptions: {
+    gateway: {
+      zeroDataRetention: true,
+      disallowPromptTraining: true,
+    },
+  },
+});
+
+console.log(text);
+
+// The receipt: which providers were skipped, and why.
+const gw = providerMetadata?.gateway;
+console.log('ZDR enforced:', gw?.enabledZeroDataRetention);
+console.log('Skipped providers:', gw?.routing?.skippedProviderAttempts);</code></pre>
+<p>If you write this in TypeScript, add a type guard so a typo fails at compile time instead of silently at runtime:</p>
+<pre><code class="language-typescript">import type { GatewayProviderOptions } from '@ai-sdk/gateway';
+
+providerOptions: {
+  gateway: {
+    zeroDataRetention: true,
+    disallowPromptTraining: true,
+  } satisfies GatewayProviderOptions,
+},</code></pre>
+<p>When ZDR is enforced, a successful response carries <code>enabledZeroDataRetention: true</code> in the gateway metadata, and <code>routing.skippedProviderAttempts</code> lists every provider the gateway removed for ZDR, with the reason. The reasons are specific enough to act on:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Reason</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>zdr_not_supported</code></td><td>The provider does not offer ZDR for this model.</td></tr>
+<tr><td><code>zdr_not_attested</code></td><td>Your BYOK key for this provider is not marked as ZDR-compliant.</td></tr>
+<tr><td><code>zdr_ineligible_model</code></td><td>The model retains data, so no provider can serve it with ZDR.</td></tr>
+</tbody>
+</table></div>
+<p>That last row has a concrete example: the Claude Fable models retain data on every provider, so a ZDR request for one fails outright. That is the design working as intended — ZDR enforcement fails loudly instead of silently routing your data somewhere it will be kept.</p>
+<p>The two failure modes to recognize:</p>
+<ul>
+<li><b>Your team is not eligible for ZDR</b> — the gateway returns a <code>403</code> telling you ZDR requires a paid account and pointing at the credit top-up or plan upgrade. Buy credits or upgrade, then retry; the gateway re-checks payment status before returning the error, so a purchase usually applies to your next request.</li>
+<li><b>No ZDR provider can serve the model</b> — the gateway returns a <code>400</code> with type <code>no_zdr_providers_available</code>, naming the providers it considered. Pick a different model or drop the flag for that call.</li>
+</ul>
+<p>Per-request ZDR costs nothing extra. That is the key pricing fact: the flag is free; only the team-wide toggle (Step 4) carries a per-request fee.</p>
+<h2 id="step-4-enforce-it-team-wide">Step 4: Enforce it team-wide (with the escape hatch)<a class="anchor" href="#step-4-enforce-it-team-wide" aria-label="Link to section">#</a></h2>
+<p>Per-request flags protect the calls you remember to flag. The team-wide toggle protects the ones you forget. Open the <a href="https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai-gateway%2Fsettings" rel="nofollow">AI Gateway Settings tab</a> and switch on <b>Zero Data Retention</b>. From then on, every request your team makes routes only to ZDR-compliant providers — no code changes, no per-call flags, no relying on every developer remembering.</p>
+<p>Team-wide and per-request ZDR work as an OR: if either is enabled, ZDR is enforced for that request. Turning the toggle on even overrides an explicit <code>zeroDataRetention: false</code> in code, so a single careless call cannot opt the team out. Team-wide ZDR costs $0.10 per 1,000 requests, charged on each request the gateway bills — including a request the provider blocks on safety grounds but still charges for. Requests that fail and that the gateway does not bill are not charged.</p>
+<p>There is one deliberate hole in the wall, and you should set it up now rather than when you need it. Some work genuinely needs a model without ZDR — the Claude Fable models are the live example. Team owners can create an API key that is exempt from the team's ZDR-only restriction, with an expiration so the exemption does not outlive the work:</p>
+<pre><code class="language-bash">vercel ai-gateway api-keys create --name escape-hatch --zdr-exempt --expiration 7d</code></pre>
+<p><code>vercel ai-gateway api-keys inspect</code> shows a <code>zdr exempt</code> row for these keys, so you can audit which keys carry the exemption. Give the exempt key a short expiration and a name that says what it is for; an exemption with no expiry is how a temporary workaround becomes a permanent policy hole.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/vercel-ai-gateway-audited-zdr-tutorial/img3.webp" alt="Diagram comparing per-request ZDR set in code and free, with team-wide ZDR set in the dashboard at $0.10 per 1,000 requests"><figcaption>Per-request ZDR is free and scoped to the calls you flag; team-wide ZDR costs $0.10 per 1,000 requests and covers everything. Either one on means ZDR is enforced. Diagram by AI Frontier Post.</figcaption></figure>
+<h2 id="step-5-add-headquarters-filtering-and-fallbacks">Step 5: Add headquarters filtering and fallbacks<a class="anchor" href="#step-5-add-headquarters-filtering-and-fallbacks" aria-label="Link to section">#</a></h2>
+<p>Retention is one half of the compliance question; the other half is who the vendor is. AI Gateway lets you filter routing by the country the provider's parent company is headquartered in — useful when procurement rules say your AI vendors must (or must not) be based in certain countries. It works the same way as ZDR: a team-wide list in AI Gateway settings for Pro and Enterprise teams, or a per-request field on any plan.</p>
+<pre><code class="language-javascript">import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: 'anthropic/claude-sonnet-5',
+  prompt: 'Summarize this support ticket in one sentence: the customer was charged twice for the same order.',
+  providerOptions: {
+    gateway: {
+      zeroDataRetention: true,
+      disallowPromptTraining: true,
+      headquarters: ['US', 'DE'], // allowlist: ISO 3166-1 alpha-2 codes
+      order: ['anthropic'], // try Anthropic first, keep the rest as fallbacks
+      models: ['openai/gpt-6-astra'], // if the primary model fails, try this one
+      tags: ['support-summary'], // filter usage reports by feature
+      user: 'user_123', // attribute spend to one of your users
+    },
+  },
+});</code></pre>
+<p>Three details matter here. First, the headquarters list is either an allowlist or a denylist — never both. Prefix every code with <code>!</code> to exclude countries instead, as in <code>['!US']</code>. Providers without a recorded headquarters country are always excluded, and if no provider for the model is headquartered in an allowed country, the request fails. Second, <code>order</code> expresses a preference, not a restriction: unlisted providers remain available as fallbacks, so a ZDR request still fails over — just only across ZDR providers. Use <code>only</code> instead of <code>order</code> if you want to restrict routing to a named set of providers and nothing else. Third, every option in this block was verified against the installed SDK types (<code>GatewayProviderOptions</code> in <code>@ai-sdk/gateway</code> 4.0.154) and the request the SDK actually sends: pointed at a local capture server, the SDK posted all six fields verbatim in <code>providerOptions.gateway</code>.</p>
+<p>Two more controls sit alongside these. Regional inference pins where a provider runs inference to the US, EU, Australia, or Japan; if the gateway cannot honor the region, the request fails rather than running elsewhere. And private inference connects your own self-hosted or fine-tuned model endpoints to the gateway, called as <code>private/&lt;slug&gt;</code> with the same SDKs, auth, and observability as catalog models. Together with ZDR and headquarters filtering, they cover the three questions a compliance review actually asks: is my data kept, who is the vendor, and where does the compute run.</p>
+<h2 id="step-6-run-your-own-canary-check">Step 6: Run your own canary check<a class="anchor" href="#step-6-run-your-own-canary-check" aria-label="Link to section">#</a></h2>
+<p>Vercel's canary audits are a good idea you can steal for your own stack. The principle is simple: put something in a prompt that only you know, and watch whether anything outside the inference path ever touches it. If it does, something read your prompt. Here is a minimal version — a listener that mints a unique URL and logs every request to it.</p>
+<pre><code class="language-javascript">// canary-server.mjs — run it somewhere with a PUBLIC url, not localhost:
+// a provider cannot reach your laptop, so a localhost canary can never trip.
+import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
+
+const id = randomUUID();
+const canaryUrl = `https://your-public-host.example/canary/${id}`;
+console.log('Canary URL (put this in a prompt, nowhere else):');
+console.log(canaryUrl);
+
+createServer((req, res) =&gt; {
+  console.log(`HIT ${new Date().toISOString()} ${req.url} ua=${req.headers['user-agent'] ?? 'none'}`);
+  res.writeHead(404);
+  res.end('not found\n');
+}).listen(8080, () =&gt; console.log('Listening on :8080 — watching for hits.'));</code></pre>
+<p>Start the server, copy the canary URL, and send it inside a prompt through the gateway — the same <code>generateText</code> call from Step 3, with a prompt like <code>`Summarize this support ticket: ${canaryUrl}`</code>. Then watch the server log. No hit means nothing outside the inference path fetched the URL. A hit means something read the prompt and acted on its contents — stop, find out what, and treat it as an incident, not a curiosity.</p>
+<p>Two honest limits. First, a canary catches reads, not silent writes: a provider could write your prompt to disk and never look at it, and no URL would ever be requested. That is exactly why Vercel says canary audits complement independent audits rather than replacing them — and why your canary is a spot check, not a substitute for the audit reports. Second, the URL must be genuinely unique and unindexed: mint a fresh UUID per check, never reuse one, and never paste it anywhere except the prompt under test. A canary that appears in a log file, a dashboard, or a shared doc is a canary that can trip for innocent reasons.</p>
+<p>The mechanics were verified end to end on this machine: a listener on a local port, one minted URL fetched (hit recorded with timestamp, path, and user agent) and one never fetched (zero hits). The detection logic is three lines of code; the discipline is in keeping the URL secret and the endpoint public.</p>
+<h2 id="step-7-verify-in-the-dashboard">Step 7: Verify in the dashboard — and know what ZDR doesn&#x27;t cover<a class="anchor" href="#step-7-verify-in-the-dashboard" aria-label="Link to section">#</a></h2>
+<p>Open the AI Gateway dashboard and check three things. First, the Logs view: the gateway records request metadata for billing, observability, and debugging — model, provider, token usage, cost, duration — while prompts and responses are immediately and permanently deleted after requests complete. If your team needs even the metadata minimized, body logging can be turned off. Second, the usage and spend views, filterable by the <code>tags</code> and <code>user</code> fields from Step 5, so you can confirm the sensitive workflow is actually routing where you think it is. Third, the provider list for your models: each model page shows which providers offer ZDR, so you can see at a glance whether your model has any ZDR route at all.</p>
+<p>Then read the fine print, because ZDR has edges that will surprise you if you discover them in production:</p>
+<ul>
+<li><b>Tools the provider runs are not covered.</b> Provider-specific web search or grounding runs on a separate service that can process and retain the data you send to the tool, under its own terms. The gateway does not block the request. If your retention requirements are strict, do not send sensitive data to provider-run tools — or check that tool vendor's policy first.</li>
+<li><b>Batch jobs and async video are rejected, not silently downgraded.</b> Providers store batch inputs and results for the lifetime of the batch, so ZDR rejects batch submissions; send synchronous requests instead. Asynchronous video jobs do not support ZDR yet and are rejected the same way.</li>
+<li><b>Prompt caching is not counted as retention.</b> Providers keep repeated prompt data in a short-lived cache — up to 24 hours — so they do not process it again. The gateway does not count that as retaining data. If your definition of zero retention rules out cached data, review the provider's policy before relying on caching.</li>
+<li><b>Your own keys are skipped by default.</b> When ZDR is enabled, the gateway skips your BYOK keys, since they operate under your own agreements with providers. You can mark individual BYOK keys as ZDR-compliant to include them in the ZDR routing set — but that marking is your responsibility, and Vercel has no visibility into your agreements.</li>
+<li><b>Some models can never be ZDR.</b> The Claude Fable models retain data on every provider. A ZDR request for one fails, every time, on every provider. Check the model page before you promise ZDR for a model you have not verified.</li>
+</ul>
+<p>If you do not use the AI SDK, the same flag works in every API format the gateway speaks — Chat Completions, Responses, Anthropic Messages — as <code>providerOptions.gateway.zeroDataRetention</code>. The cURL form, from Vercel's own docs:</p>
+<pre><code class="language-bash">curl --fail-with-body https://ai-gateway.vercel.sh/v1/chat/completions \
+  -H "Authorization: Bearer $AI_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" -d '{
+  "model": "anthropic/claude-sonnet-5",
+  "messages": [{ "role": "user", "content": "Analyze this example business data: revenue grew by 5%." }],
+  "providerOptions": { "gateway": { "zeroDataRetention": true } }
+}'</code></pre>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Situation</th><th>Use this</th></tr></thead>
+<tbody>
+<tr><td>One sensitive workflow inside an otherwise ordinary app</td><td>Per-request <code>zeroDataRetention: true</code> on those calls, plus <code>disallowPromptTraining</code>. Free, and the rest of the app is unaffected.</td></tr>
+<tr><td>Regulated data in every request the team makes</td><td>Team-wide ZDR toggle ($0.10 per 1,000 requests) with short-lived exempt keys for the genuine exceptions.</td></tr>
+<tr><td>Procurement restricts which countries your vendors are based in</td><td>The <code>headquarters</code> allowlist or denylist, per request or team-wide — it composes with ZDR instead of replacing it.</td></tr>
+<tr><td>You need proof, not a promise</td><td>Wait for the Audited ZDR tier: route only to providers whose audit reports are published (launch partners expected by December 8, 2026), and read the report, not the badge.</td></tr>
+<tr><td>You run your own models</td><td>Private inference (<code>private/&lt;slug&gt;</code>) — your endpoints, the gateway's auth, routing, and observability.</td></tr>
+<tr><td>You need a different catalog or pricing model</td><td>Another gateway, such as OpenRouter. Vercel passes provider list prices with no markup, so compare catalogs and retention guarantees, not gateway fees.</td></tr>
+</tbody>
+</table></div>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>A contract is a promise you cannot test. An audit is a test someone else ran, in public, with the report attached — and a canary is a test that keeps running after the auditors go home. Vercel's Audited ZDR moves zero data retention from the first category to the second, and the integration cost is one boolean in your code and one toggle in your dashboard. The failure mode is the point: when no provider qualifies, the request fails loudly instead of routing your data somewhere it will be kept. Set the flag on your sensitive workflows today, flip the team toggle when your plan allows it, and check the launch partners' audit reports when they land on December 8 — then route only to the providers that passed.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="vercel-ai-gateway-audited-zdr-tutorial"></div><div class="comments" data-comments="vercel-ai-gateway-audited-zdr-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/"><span class="chip">Tutorials</span><h3>Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</h3><div class="meta">November 23, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/marketingskills-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Turn your coding agent into a marketer: hands-on with marketingskills&#x27; 53 skills</h3><div class="meta">November 23, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/wshobson-agents-multi-harness-plugins-tutorial/"><span class="chip">Tutorials</span><h3>One plugin collection for every coding agent: hands-on with wshobson/agents</h3><div class="meta">November 23, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/glm-5-4-hands-on-claude-code-tutorial/"><span class="chip">Tutorials</span><h3>GLM-5.4 hands-on: run Z.ai&#x27;s new vision coding model inside Claude Code</h3><div class="meta">November 23, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Does Audited ZDR mean my prompts never touch a provider&#x27;s disk?</h3><p>It means an independent firm verified that they are never written to durable storage — and that any KV cache stays in volatile memory only for the request. It does not cover tools the provider runs, such as web search or grounding, which run on separate services under their own policies. Read the audit report for the provider you use, not just the badge.</p><h3>Do I need a paid Vercel plan to use ZDR?</h3><p>Per-request and team-wide ZDR both require a paid account: a Pro or Enterprise plan, or purchased AI Gateway credits. Hobby teams and teams on a Pro trial can use ZDR once they purchase credits. With an active Token Pass you can use per-request ZDR while the pass is active; the team-wide toggle still requires Pro, Enterprise, or purchased credits. Per-request ZDR itself is free — only the team-wide toggle costs $0.10 per 1,000 requests.</p><h3>What happens if no provider qualifies for my request?</h3><p>The request fails loudly: a 400 with type <code>no_zdr_providers_available</code> if no ZDR provider can serve the model, or a 403 if your team is not eligible for ZDR at all. Failover never silently drops to a non-ZDR provider. That is the intended behavior — pick a different model, or drop the flag for that call.</p><h3>Is per-request ZDR enough, or should I flip the team-wide toggle?</h3><p>If one workflow handles sensitive data, per-request flags are enough and free. If regulated data flows through every request your team makes, flip the team-wide toggle so a forgotten flag cannot leak data — and create short-lived exempt keys for the genuine exceptions, such as models that retain data on every provider.</p><h3>Can I use my own provider keys (BYOK) with ZDR?</h3><p>Yes, but the gateway skips your BYOK keys by default when ZDR is enabled, because they operate under your own agreements. Mark a BYOK key as ZDR-compliant in the dashboard to include it in the ZDR routing set. The marking is your responsibility: Vercel has no visibility into your agreements, so confirm your contract covers zero data retention before marking a key.</p></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
