@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>One toolkit, every speech job, zero cloud: hands-on with sherpa-onnx — AI Frontier Post</title>
+<meta name="description" content="sherpa-onnx runs speech recognition, text-to-speech, and voice activity detection entirely on your CPU — no API key, no GPU, no uploads. I ran Whisper, Piper, and Silero VAD on a small VM: transcription at 0.2× real time, word-perfect on the project’s own test audio, and a full voice-memo pipeline in one script.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/sherpa-onnx-offline-speech-toolkit-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="One toolkit, every speech job, zero cloud: hands-on with sherpa-onnx">
+<meta property="og:description" content="sherpa-onnx runs speech recognition, text-to-speech, and voice activity detection entirely on your CPU — no API key, no GPU, no uploads. I ran Whisper, Piper, and Silero VAD on a small VM: transcription at 0.2× real time, word-perfect on the project’s own test audio, and a full voice-memo pipeline in one script.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/sherpa-onnx-offline-speech-toolkit-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/sherpa-onnx-offline-speech-toolkit-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-24">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "One toolkit, every speech job, zero cloud: hands-on with sherpa-onnx", "description": "sherpa-onnx runs speech recognition, text-to-speech, and voice activity detection entirely on your CPU — no API key, no GPU, no uploads. I ran Whisper, Piper, and Silero VAD on a small VM: transcription at 0.2× real time, word-perfect on the project’s own test audio, and a full voice-memo pipeline in one script.", "datePublished": "2026-11-24", "dateModified": "2026-11-24", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/sherpa-onnx-offline-speech-toolkit-tutorial/"}, "image": "https://aifrontierpost.com/articles/sherpa-onnx-offline-speech-toolkit-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU or an API key to run sherpa-onnx?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything in this tutorial ran on a small CPU-only VM. The models are files you download once — Whisper, Piper, and Silero VAD all run on ONNX Runtime’s CPU provider — and after the downloads, the pipeline works with the network unplugged."}}, {"@type": "Question", "name": "How accurate is Whisper tiny, really?", "acceptedAnswer": {"@type": "Answer", "text": "On clean, read English speech it was word-perfect against the project’s own ground-truth transcripts. Expect errors to creep in with background noise, heavy accents, overlapping speakers, and music — that is when you step up to Whisper base or small, which use the same three files and the same API call."}}, {"@type": "Question", "name": "Can sherpa-onnx do real-time transcription?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. This tutorial uses the offline recognizer, which transcribes whole files. For live audio, the project ships streaming models (Zipformer, Paraformer, SenseVoice) behind an online recognizer, plus microphone examples — the VAD, model loading, and decoding calls stay the same shape."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>One toolkit, every speech job, zero cloud: hands-on with sherpa-onnx</h1>
+<p class="lede">sherpa-onnx runs speech recognition, text-to-speech, and voice activity detection entirely on your CPU — no API key, no GPU, no uploads. I ran Whisper, Piper, and Silero VAD on a small VM: transcription at 0.2× real time, word-perfect on the project’s own test audio, and a full voice-memo pipeline in one script.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 24, 2026 · 13 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> sherpa-onnx packs speech recognition, text-to-speech, and voice activity detection into one offline, CPU-only toolkit. Install it with pip, download three small models, and you get word-perfect transcription at 0.2&times; real time, clean 16 kHz synthesis, and silence stripping — then one script chains all three into a voice-memo pipeline that never touches the network.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> sherpa-onnx 2.0.3, from the next-gen Kaldi team (k2-fsa) — Apache-2.0, 16,191 GitHub stars — bundling ASR, TTS, VAD, speaker diarization, language ID, and more in one ONNX Runtime library with APIs in 12 languages.</li><li><b>Cost:</b> $0. One pip install plus ~192 MB of model files. No account, no API key, no GPU, and no network after the downloads.</li><li><b>Measured transcription:</b> Whisper tiny.en (int8) transcribed 6.62s of audio in 1.40s (RTF 0.212) and 16.71s in 3.21s (RTF 0.192) — word-perfect against the ground truth in both cases.</li><li><b>Measured synthesis and VAD:</b> Piper amy-low generated 5.01s of 16 kHz speech in 1.08s (RTF 0.216); Silero VAD cut a 17.02s clip down to 14.79s of speech.</li><li><b>The pipeline:</b> speech_lab.py chains VAD → Whisper → Piper. A five-second voice memo goes in; a transcript, a cleaned clip, and a spoken reply come out — nothing leaves the machine.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/sherpa-onnx-offline-speech-toolkit-tutorial/cover.webp" alt="A microphone, a sound waveform turning into text, and a speaker — the offline speech pipeline"></figure>
+<div class="article-body"><p>Every speech feature in your apps today probably phones home. Transcription goes to a cloud API, text-to-speech goes to another one, and voice activity detection is a third service with a third API key. Each call costs money, leaks audio, and stops working the moment the network does.</p>
+<p><strong>sherpa-onnx</strong> is the local alternative: one open-source toolkit, from the next-gen Kaldi team (k2-fsa), that runs speech recognition, text-to-speech, voice activity detection, speaker diarization, language identification, and more — entirely on your own CPU, with no account, no API key, and no uploads. It is Apache-2.0 licensed, has over 16,000 GitHub stars, ships Python, C++, Go, Rust, and JavaScript APIs, and runs on everything from a Raspberry Pi to a server.</p>
+<p>I ran it end to end on a small virtual machine with about 1.5 CPUs, 6 GB of RAM, and no GPU — the weakest hardware a tutorial can honestly claim. Whisper transcribed the project's own test audio word-perfect at about 0.2&times; real time. Piper synthesized clean 16 kHz speech at the same speed. Silero VAD stripped the silence out of a 17-second clip. Then I wired all three into one script: a voice memo goes in, a transcript and a spoken reply come out. Every number in this tutorial is measured, not quoted.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> I used Python 3.12.3. No GPU, no CUDA, no Docker.</li><li><strong>About 250 MB of disk</strong> for the library, the three models below, and a few test files.</li><li><strong>ffmpeg</strong> (optional, only for building the VAD test file in step 6 — the pipeline itself never calls it).</li><li><strong>No accounts, no API keys, no network</strong> after the downloads. The total cost is $0, and the models run offline: once the files are on disk, you can unplug the network and everything still works.</li><li><strong>About 15 minutes</strong>, most of it downloads.</li></ul>
+<p>One honest caveat up front: the test audio in this tutorial is clean, read speech — the kind Whisper is best at. Noisy rooms, heavy accents, overlapping speakers, and music will all cost you accuracy, and the smallest Whisper model feels that first. I will show you exactly where the quality knobs are.</p>
+<h2 id="step-1-install-sherpa-onnx">Step 1: Install sherpa-onnx<a class="anchor" href="#step-1-install-sherpa-onnx" aria-label="Link to section">#</a></h2>
+<p>The Python package is <code>sherpa-onnx</code> on PyPI (version 2.0.3 at the time of writing). It is a thin wrapper: the heavy lifting lives in <code>sherpa-onnx-core</code>, a ~11 MB wheel that bundles the compiled library and ONNX Runtime. The examples below also need <code>soundfile</code> for reading and writing WAV files.</p>
+<pre><code class="language-bash">python3 -m venv .venv && source .venv/bin/activate
+python -m pip install sherpa-onnx==2.0.3 soundfile</code></pre>
+<p>Verify the install before going further:</p>
+<pre><code class="language-bash">python -c "import sherpa_onnx, soundfile, numpy; print(sherpa_onnx.__version__ if hasattr(sherpa_onnx, '__version__') else 'sherpa_onnx ok'); print('soundfile', soundfile.__version__); print('numpy', numpy.__version__)"</code></pre>
+<p>On my machine this printed:</p>
+<pre><code class="language-text">sherpa_onnx 2.0.3
+soundfile 0.14.0
+numpy 2.5.5</code></pre>
+<p>Pin the version. sherpa-onnx moves fast — the 2.x line changed the Python API surface (for example, the <code>OfflineRecognizer.from_whisper</code> constructor used below), and unpinned installs are how tutorials silently break six months later.</p>
+<h2 id="step-2-download-three-small-models">Step 2: Download three small models<a class="anchor" href="#step-2-download-three-small-models" aria-label="Link to section">#</a></h2>
+<p>sherpa-onnx is a runtime, not a model. You bring the models, and the project publishes ready-made ones as GitHub release assets. For this tutorial you need three, all free, all Apache-2.0 or MIT licensed:</p>
+<div class="table-wrap"><table><thead><tr><th>Model</th><th>Job</th><th>Download</th><th>Size</th></tr></thead><tbody><tr><td><strong>Whisper tiny.en (int8)</strong></td><td>Speech-to-text</td><td><code>asr-models</code> release</td><td>118 MB tarball</td></tr><tr><td><strong>Silero VAD</strong></td><td>Voice activity detection</td><td><code>asr-models</code> release</td><td>0.64 MB</td></tr><tr><td><strong>Piper en_US-amy-low</strong></td><td>Text-to-speech</td><td><code>tts-models</code> release</td><td>67 MB tarball</td></tr><tr><td><strong>English lexicon</strong></td><td>Pronunciation for Piper</td><td><code>tts-models</code> release</td><td>6.3 MB</td></tr></tbody></table></div>
+<pre><code class="language-bash">mkdir -p models && cd models
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-low.tar.bz2
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/lexicon-en-us.txt
+tar xjf sherpa-onnx-whisper-tiny.en.tar.bz2
+tar xjf vits-piper-en_US-amy-low.tar.bz2
+cd ..</code></pre>
+<p>Two details worth knowing. First, the Whisper tarball contains its own test audio — <code>test_wavs/0.wav</code> and <code>1.wav</code> plus a <code>trans.txt</code> with the ground-truth transcripts — so you can check accuracy without recording anything. Second, the same files are mirrored on Hugging Face (<code>csukuangfj/sherpa-onnx-whisper-tiny.en</code> and <code>csukuangfj/vits-piper-en_US-amy-low</code>) if GitHub releases are blocked on your network.</p>
+<p>After extracting, your layout should look like this:</p>
+<pre><code class="language-text">models/
+  sherpa-onnx-whisper-tiny.en/
+    tiny.en-encoder.int8.onnx   # 12.9 MB
+    tiny.en-decoder.int8.onnx   # 89.9 MB
+    tiny.en-tokens.txt
+    test_wavs/0.wav  test_wavs/1.wav  test_wavs/8k.wav  trans.txt
+  silero_vad.onnx               # 0.64 MB
+  vits-piper-en_US-amy-low/
+    en_US-amy-low.onnx          # 63 MB
+    tokens.txt
+  lexicon-en-us.txt             # 6.3 MB</code></pre>
+<p>Why these three: Whisper tiny.en is the smallest English Whisper (39M parameters, quantized to int8), so it loads fast and runs at a fifth of real time on two CPU cores. Piper&rsquo;s amy-low is a small, natural-sounding English voice, and the lexicon route means pronunciation comes from a text file — no espeak-ng data install, no external phonemizer. Silero VAD is a 0.64 MB model that answers one question well: is anyone speaking right now?</p>
+<figure class="inline-art"><img class="story-image" src="/articles/sherpa-onnx-offline-speech-toolkit-tutorial/img2.webp" alt="Diagram of the sherpa-onnx pipeline: a WAV file enters Silero VAD, speech segments go to Whisper for transcription, and text goes to Piper for spoken output"><figcaption>Diagram drawn for AI Frontier Post: the three models in this tutorial and how they connect.</figcaption></figure>
+<h2 id="step-3-transcribe-real-audio-with-whisper">Step 3: Transcribe real audio with Whisper<a class="anchor" href="#step-3-transcribe-real-audio-with-whisper" aria-label="Link to section">#</a></h2>
+<p>The core call is <code>OfflineRecognizer.from_whisper()</code> — you hand it the encoder, the decoder, and the tokens file, and it handles mel features, decoding, and detokenization internally. This script is adapted from the project&rsquo;s own <code>python-api-examples/offline-whisper-decode-files.py</code>:</p>
+<pre><code class="language-python">import datetime as dt
+import sherpa_onnx
+import soundfile as sf
+
+rec = sherpa_onnx.OfflineRecognizer.from_whisper(
+    encoder="models/sherpa-onnx-whisper-tiny.en/tiny.en-encoder.int8.onnx",
+    decoder="models/sherpa-onnx-whisper-tiny.en/tiny.en-decoder.int8.onnx",
+    tokens="models/sherpa-onnx-whisper-tiny.en/tiny.en-tokens.txt",
+    language="en",
+    task="transcribe",
+)
+
+for wav in ["models/sherpa-onnx-whisper-tiny.en/test_wavs/0.wav",
+            "models/sherpa-onnx-whisper-tiny.en/test_wavs/1.wav"]:
+    audio, sr = sf.read(wav, dtype="float32", always_2d=True)
+    audio = audio[:, 0]  # first channel only
+    t0 = dt.datetime.now()
+    stream = rec.create_stream()
+    stream.accept_waveform(sr, audio)
+    rec.decode_stream(stream)
+    el = (dt.datetime.now() - t0).total_seconds()
+    dur = len(audio) / sr
+    print(f"{wav}: {dur:.2f}s audio in {el:.2f}s (RTF {el/dur:.3f})")
+    print("TEXT:", stream.result.text)</code></pre>
+<p>Run it. On that VM the output was:</p>
+<pre><code class="language-text">test_wavs/0.wav: 6.62s audio in 1.40s (RTF 0.212)
+TEXT: After early nightfall, the yellow lamps would light up here and there the squalid quarter of the brothels.
+test_wavs/1.wav: 16.71s audio in 3.21s (RTF 0.192)
+TEXT: God, as a direct consequence of the sin which man thus punished, had given her a lovely child, whose place was on that same dishonored bosom to connect her parent forever with the race and descent of mortals, and to be finally a blessed soul in heaven.</code></pre>
+<p>Both transcripts match the ground truth in <code>trans.txt</code> word for word — the only differences are casing and punctuation, which Whisper normalizes. RTF (real-time factor) is elapsed time divided by audio duration: 0.2 means a minute of audio takes about 12 seconds to transcribe. Two practical notes: the sample rate does not have to be 16 kHz (sherpa-onnx resamples internally), and <code>task="transcribe"</code> can be swapped for <code>"translate"</code> to get English translations of non-English speech with a multilingual Whisper model.</p>
+<h2 id="step-4-speak-with-piper-tts">Step 4: Speak with Piper TTS<a class="anchor" href="#step-4-speak-with-piper-tts" aria-label="Link to section">#</a></h2>
+<p>Text-to-speech in sherpa-onnx goes through <code>OfflineTts</code>. The VITS config takes the model, the tokens file, and the lexicon — the lexicon is what makes this route simple: pronunciation is looked up in a text file, so there is no espeak-ng install and no system dependency beyond the library itself. This follows the project&rsquo;s <code>test-offline-tts-piper-lexicon.py</code>:</p>
+<pre><code class="language-python">import time
+import sherpa_onnx
+import soundfile as sf
+
+tts = sherpa_onnx.OfflineTts(
+    sherpa_onnx.OfflineTtsConfig(
+        model=sherpa_onnx.OfflineTtsModelConfig(
+            vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+                model="models/vits-piper-en_US-amy-low/en_US-amy-low.onnx",
+                tokens="models/vits-piper-en_US-amy-low/tokens.txt",
+                lexicon="models/lexicon-en-us.txt",
+            ),
+            num_threads=2,
+        ),
+    )
+)
+
+text = "Today as always, men fall into two groups: slaves and free men."
+t0 = time.time()
+gen = sherpa_onnx.GenerationConfig()
+gen.sid = 0
+gen.speed = 1.0
+gen.silence_scale = 0.2
+audio = tts.generate(text, gen)
+el = time.time() - t0
+dur = len(audio.samples) / audio.sample_rate
+print(f"Generated {dur:.2f}s of {audio.sample_rate} Hz audio in {el:.2f}s (RTF {el/dur:.3f})")
+sf.write("tts_out.wav", audio.samples, samplerate=audio.sample_rate, subtype="PCM_16")</code></pre>
+<p>Measured output:</p>
+<pre><code class="language-text">Generated 5.01s of 16000 Hz audio in 1.08s (RTF 0.216)</code></pre>
+<p>The knobs that matter: <code>gen.speed</code> scales the speaking rate (1.0 is normal, larger is faster), <code>gen.silence_scale</code> controls the pauses between sentences (0.2 keeps them short), and <code>gen.sid</code> picks the speaker for multi-speaker models — amy-low is single-speaker, so it stays 0. The output is 16 kHz mono PCM, which is exactly what the Whisper recognizer from step 3 expects. That is not a coincidence; it is what makes the next step work.</p>
+<h2 id="step-5-the-round-trip-prove-it-to-yourself">Step 5: The round trip — prove it to yourself<a class="anchor" href="#step-5-the-round-trip-prove-it-to-yourself" aria-label="Link to section">#</a></h2>
+<p>Before building anything on top of these two models, close the loop: synthesize a sentence with Piper, then transcribe the result with Whisper, and compare. If the pipeline is wired correctly, the sentence comes back intact.</p>
+<pre><code class="language-python">audio2, sr2 = sf.read("tts_out.wav", dtype="float32", always_2d=True)
+stream = rec.create_stream()
+stream.accept_waveform(sr2, audio2[:, 0])
+rec.decode_stream(stream)
+print("LOOPBACK:", stream.result.text)</code></pre>
+<pre><code class="language-text">LOOPBACK: Today as always, men fall into two groups, slaves and free men.
+EXPECTED: Today as always, men fall into two groups: slaves and free men.</code></pre>
+<p>Exact, except for one comma where the original had a colon — Whisper normalizes punctuation, it does not preserve it. That is the honest limit of this check: it proves the audio is intelligible and the two models agree, not that punctuation survives. Keep the loopback in your own projects as a smoke test: if a model upgrade or a config change breaks the round trip, you find out in seconds instead of from users.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/sherpa-onnx-offline-speech-toolkit-tutorial/img3.webp" alt="Bar chart of measured real-time factors: Silero VAD 0.04, Whisper transcription 0.19 to 0.21, Piper synthesis 0.22, pipeline ASR step 0.23"><figcaption>Measured on a small VM with no GPU: every job in this tutorial runs at roughly a fifth of real time, and VAD is faster still. Lower is faster; 1.0 is real time.</figcaption></figure>
+<h2 id="step-6-cut-the-silence-with-vad">Step 6: Cut the silence with VAD<a class="anchor" href="#step-6-cut-the-silence-with-vad" aria-label="Link to section">#</a></h2>
+<p>Real recordings are mostly silence: pauses between sentences, room tone, the two seconds before anyone starts talking. Transcribing silence wastes time and, worse, gives Whisper room to hallucinate words out of noise. Silero VAD fixes that by keeping only the segments where someone is actually speaking. The API is a streaming one — you feed it windows of audio and pop speech segments off as they are detected. Adapted from the project&rsquo;s <code>vad-remove-non-speech-segments-from-file.py</code>:</p>
+<pre><code class="language-python">import numpy as np
+import sherpa_onnx
+import soundfile as sf
+
+samples, sr = sf.read("vad_in.wav", always_2d=True, dtype="float32")
+samples = np.ascontiguousarray(samples[:, 0])
+
+cfg = sherpa_onnx.VadModelConfig()
+cfg.silero_vad.model = "models/silero_vad.onnx"
+cfg.silero_vad.threshold = 0.5
+cfg.silero_vad.min_silence_duration = 0.25
+cfg.silero_vad.min_speech_duration = 0.25
+cfg.silero_vad.max_speech_duration = 5
+cfg.sample_rate = sr
+
+vad = sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=30)
+win = cfg.silero_vad.window_size
+speech = []
+buf = samples
+while len(buf) > win:
+    vad.accept_waveform(buf[:win]); buf = buf[win:]
+    while not vad.empty():
+        speech.extend(vad.front.samples); vad.pop()
+vad.flush()
+while not vad.empty():
+    speech.extend(vad.front.samples); vad.pop()
+speech = np.array(speech, dtype=np.float32)
+sf.write("vad_out.wav", speech, samplerate=sr)</code></pre>
+<p>To test it I built a 17.02-second file with ffmpeg: the 5-second Piper clip from step 4, played twice, with a 2-second silence inserted in the middle. VAD returned 14.79 seconds — the 2-second gap is gone, plus about 0.24 seconds of near-silent padding trimmed from the clip edges. The speech itself is untouched.</p>
+<p>The thresholds are the tuning surface. <code>threshold = 0.5</code> is the speech probability cutoff; raise it if breaths and keyboard clicks are leaking through as speech, lower it if quiet speakers get clipped. <code>min_silence_duration = 0.25</code> is how long a pause must be before it counts as a break, and <code>max_speech_duration = 5</code> caps segment length (past the cap, the detector internally raises the threshold to 0.9 to force a split). For meeting recordings, start with these defaults; for phone audio with long pauses, raise <code>min_silence_duration</code> to 0.5 so a thoughtful pause does not split one sentence into two segments.</p>
+<h2 id="step-7-one-script-the-whole-pipeline">Step 7: One script — the whole pipeline<a class="anchor" href="#step-7-one-script-the-whole-pipeline" aria-label="Link to section">#</a></h2>
+<p>The three pieces compose into a voice-memo pipeline small enough to read in one sitting: VAD strips the silence, Whisper transcribes what remains, Piper speaks a confirmation back. Save this as <code>speech_lab.py</code>:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""speech_lab.py — one script, three sherpa-onnx jobs, zero cloud.
+Usage: python3 speech_lab.py memo.wav
+  1. VAD (silero-vad) strips silence from memo.wav -> memo.speech.wav
+  2. Whisper tiny.en transcribes it -> memo.txt
+  3. Piper amy-low speaks a confirmation -> memo.reply.wav
+All models run locally on CPU. No API key, no network, no GPU.
+"""
+import sys, time
+from pathlib import Path
+import numpy as np
+import sherpa_onnx
+import soundfile as sf
+
+M = "models"
+
+def load_audio(path):
+    data, sr = sf.read(path, always_2d=True, dtype="float32")
+    return np.ascontiguousarray(data[:, 0]), sr
+
+def vad_strip(samples, sr, model):
+    cfg = sherpa_onnx.VadModelConfig()
+    cfg.silero_vad.model = model
+    cfg.silero_vad.threshold = 0.5
+    cfg.silero_vad.min_silence_duration = 0.25
+    cfg.silero_vad.min_speech_duration = 0.25
+    cfg.silero_vad.max_speech_duration = 5
+    cfg.sample_rate = sr
+    vad = sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=30)
+    win = cfg.silero_vad.window_size
+    out, buf = [], samples
+    while len(buf) > win:
+        vad.accept_waveform(buf[:win]); buf = buf[win:]
+        while not vad.empty():
+            out.extend(vad.front.samples); vad.pop()
+    vad.flush()
+    while not vad.empty():
+        out.extend(vad.front.samples); vad.pop()
+    return np.array(out, dtype=np.float32)
+
+def main():
+    src = sys.argv[1]
+    stem = Path(src).stem
+    samples, sr = load_audio(src)
+    print(f"input: {src} ({len(samples)/sr:.2f}s @ {sr} Hz)")
+
+    t0 = time.time()
+    speech = vad_strip(samples, sr, f"{M}/silero_vad.onnx")
+    sf.write(f"{stem}.speech.wav", speech, samplerate=sr, subtype="PCM_16")
+    print(f"VAD: kept {len(speech)/sr:.2f}s of speech in {time.time()-t0:.2f}s")
+
+    rec = sherpa_onnx.OfflineRecognizer.from_whisper(
+        encoder=f"{M}/sherpa-onnx-whisper-tiny.en/tiny.en-encoder.int8.onnx",
+        decoder=f"{M}/sherpa-onnx-whisper-tiny.en/tiny.en-decoder.int8.onnx",
+        tokens=f"{M}/sherpa-onnx-whisper-tiny.en/tiny.en-tokens.txt",
+        language="en", task="transcribe",
+    )
+    t0 = time.time()
+    stream = rec.create_stream()
+    stream.accept_waveform(sr, speech)
+    rec.decode_stream(stream)
+    text = stream.result.text
+    dur = len(speech) / sr
+    print(f"ASR: {time.time()-t0:.2f}s for {dur:.2f}s audio (RTF {(time.time()-t0)/dur:.3f})")
+    print(f"TRANSCRIPT: {text}")
+    Path(f"{stem}.txt").write_text(text + "\n")
+
+    tts = sherpa_onnx.OfflineTts(
+        sherpa_onnx.OfflineTtsConfig(
+            model=sherpa_onnx.OfflineTtsModelConfig(
+                vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+                    model=f"{M}/vits-piper-en_US-amy-low/en_US-amy-low.onnx",
+                    tokens=f"{M}/vits-piper-en_US-amy-low/tokens.txt",
+                    lexicon=f"{M}/lexicon-en-us.txt",
+                ),
+                num_threads=2,
+            ),
+        )
+    )
+    reply = f"Transcription complete. I heard: {text[:120]}"
+    t0 = time.time()
+    gen = sherpa_onnx.GenerationConfig()
+    gen.sid = 0; gen.speed = 1.0; gen.silence_scale = 0.2
+    audio = tts.generate(reply, gen)
+    print(f"TTS: spoke {len(audio.samples)/audio.sample_rate:.2f}s of audio in {time.time()-t0:.2f}s")
+    sf.write(f"{stem}.reply.wav", audio.samples, samplerate=audio.sample_rate, subtype="PCM_16")
+    print(f"done: {stem}.txt, {stem}.speech.wav, {stem}.reply.wav")
+
+if __name__ == "__main__":
+    main()</code></pre>
+<p>Run it on the Piper clip from step 4 — a fair test, since the script has never seen that file as anything but input:</p>
+<pre><code class="language-bash">python3 speech_lab.py tts_out.wav</code></pre>
+<pre><code class="language-text">input: tts_out.wav (5.01s @ 16000 Hz)
+VAD: kept 4.95s of speech in 0.18s -> tts_out.speech.wav
+ASR: 1.12s for 4.95s audio (RTF 0.227)
+TRANSCRIPT: Today as always, men fall into two groups, slaves and free men.
+TTS: spoke 7.31s of audio in 1.91s
+done: tts_out.txt, tts_out.speech.wav, tts_out.reply.wav</code></pre>
+<p>Three files out, zero network calls. The three inference steps took 3.2 seconds combined, and the whole script — model loading included — finished in about 13 seconds. The obvious next steps from here are all small: point step 1 at a microphone instead of a file (the repo ships <code>vad-microphone.py</code> and streaming recognizers for exactly that), write the transcript out as SRT using the token timestamps the recognizer can return (see <code>test-whisper-timestamps.py</code> in the repo&rsquo;s examples — it needs an attention-enabled model and the <code>--enable-token-timestamps</code> flag), or swap the models in the next section.</p>
+<h2 id="which-model-should-you-use">Which model should you use?<a class="anchor" href="#which-model-should-you-use" aria-label="Link to section">#</a></h2>
+<p>The three models above are the smallest sensible choices, not the best ones. What to swap in depends on what you are optimizing for:</p>
+<div class="table-wrap"><table><thead><tr><th>Job</th><th>Start here (this tutorial)</th><th>Step up when&hellip;</th></tr></thead><tbody><tr><td><strong>Transcription</strong></td><td>Whisper tiny.en int8 — 39M params, ~103 MB, RTF 0.2</td><td>Accuracy matters more than speed: Whisper base.en or small, same API, same three files. Real-time streaming: the Zipformer or Paraformer streaming models with the online recognizer.</td></tr><tr><td><strong>Transcription, multilingual</strong></td><td>tiny.en is English-only</td><td>Multilingual Whisper (tiny/base) with <code>language</code> set, or SenseVoice, which the project packages for Chinese, English, Korean, Japanese, and Cantonese.</td></tr><tr><td><strong>Speech synthesis</strong></td><td>Piper amy-low + lexicon — small, no extra deps</td><td>Voice quality: Kokoro, a 320 MB download against Piper&rsquo;s 67 MB; or Matcha, which needs a separate vocoder file. Multi-speaker: VITS models trained on VCTK, selected with <code>sid</code>.</td></tr><tr><td><strong>Silence removal</strong></td><td>Silero VAD — 0.64 MB, threshold 0.5</td><td>Nothing to step up to; tune the thresholds instead. It is the same model the project uses inside its own streaming demos.</td></tr></tbody></table></div>
+<p>Two rules of thumb. First, stay offline: every model in the project&rsquo;s release pages is a file you download once and own — the moment a speech feature needs an account, you have left the thing that makes this toolkit worth using. Second, measure before upgrading: tiny.en was word-perfect on clean speech at 0.2 RTF, and a bigger model only earns its download when your audio proves tiny is not enough. Run the loopback from step 5 against your own recordings before deciding.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Speech AI does not have to be a cloud service. With one <code>pip install</code> and three small model files, sherpa-onnx gives you transcription, synthesis, and voice activity detection that run on a small VM with no GPU, no key, and no network — at about a fifth of real time, with transcripts that matched ground truth word for word on the project&rsquo;s own test audio. The same three calls compose into real tools: a voice-memo transcriber, a subtitle generator, a spoken confirmation loop. Start with tiny.en, Piper amy-low, and Silero VAD; let your own recordings tell you when to step up.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="sherpa-onnx-offline-speech-toolkit-tutorial"></div><div class="comments" data-comments="sherpa-onnx-offline-speech-toolkit-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/fast-anything-rust-port-tutorial/"><span class="chip">Tutorials</span><h3>Port the 5%’s slow: hands-on with fast-anything’s Rust speedup loop</h3><div class="meta">November 24, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/career-ops-ai-job-search-agent-tutorial/"><span class="chip">Tutorials</span><h3>Run your job search like an agent workflow: hands-on with career-ops</h3><div class="meta">November 24, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/claude-ship-pr-review-fix-approve-tutorial/"><span class="chip">Tutorials</span><h3>Claude Ship tutorial: let AI review, fix, and approve your pull requests</h3><div class="meta">November 24, 2026 · 21 min read</div></a><a class="rel-card" href="/articles/vercel-ai-gateway-audited-zdr-tutorial/"><span class="chip">Tutorials</span><h3>Stop trusting the contract: ship an AI feature on Vercel AI Gateway with Audited ZDR</h3><div class="meta">November 23, 2026 · 20 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU or an API key to run sherpa-onnx?</h3><p>No. Everything in this tutorial ran on a small CPU-only VM. The models are files you download once — Whisper, Piper, and Silero VAD all run on ONNX Runtime’s CPU provider — and after the downloads, the pipeline works with the network unplugged.</p><h3>How accurate is Whisper tiny, really?</h3><p>On clean, read English speech it was word-perfect against the project’s own ground-truth transcripts. Expect errors to creep in with background noise, heavy accents, overlapping speakers, and music — that is when you step up to Whisper base or small, which use the same three files and the same API call.</p><h3>Can sherpa-onnx do real-time transcription?</h3><p>Yes. This tutorial uses the offline recognizer, which transcribes whole files. For live audio, the project ships streaming models (Zipformer, Paraformer, SenseVoice) behind an online recognizer, plus microphone examples — the VAD, model loading, and decoding calls stay the same shape.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/sov-transcribe-1-hands-on-tutorial/">Run the new open-weight speech champion yourself: hands-on with Salesforce’s SOV-Transcribe-1</a></li><li><a href="/articles/kitten-tts-2-tiny-voices-hands-on-tutorial/">A 4 MB voice that runs anywhere: hands-on with Kitten-TTS-2 Pico, Nano and Mini</a></li><li><a href="/articles/llamaindex-local-rag-llamacpp-tutorial/">Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud</a></li><li><a href="/articles/k2-horizon-local-run-tutorial/">Run MBZUAI’s K2 Horizon on your own machine: the fully-open fleet from 0.9B to 375B</a></li><li><a href="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/">Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
