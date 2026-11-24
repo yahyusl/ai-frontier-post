@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Port the 5% that's slow: hands-on with fast-anything's Rust speedup loop — AI Frontier Post</title>
+<meta name="description" content="fast-anything finds the few functions where your Python app actually spends its time, has your coding agent port only those to Rust, and proves the port behaves identically on recorded real calls. I ran the full loop on its fuzzy-dedupe example: 20.2 seconds became 269 milliseconds — 75× faster, with 33 out of 33 verification checks passing.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/fast-anything-rust-port-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Port the 5% that&#x27;s slow: hands-on with fast-anything&#x27;s Rust speedup loop">
+<meta property="og:description" content="fast-anything finds the few functions where your Python app actually spends its time, has your coding agent port only those to Rust, and proves the port behaves identically on recorded real calls. I ran the full loop on its fuzzy-dedupe example: 20.2 seconds became 269 milliseconds — 75× faster, with 33 out of 33 verification checks passing.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/fast-anything-rust-port-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/fast-anything-rust-port-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-24">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Port the 5% that's slow: hands-on with fast-anything's Rust speedup loop", "description": "fast-anything finds the few functions where your Python app actually spends its time, has your coding agent port only those to Rust, and proves the port behaves identically on recorded real calls. I ran the full loop on its fuzzy-dedupe example: 20.2 seconds became 269 milliseconds — 75× faster, with 33 out of 33 verification checks passing.", "datePublished": "2026-11-24", "dateModified": "2026-11-24", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/fast-anything-rust-port-tutorial/"}, "image": "https://aifrontierpost.com/articles/fast-anything-rust-port-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need Claude Code to use fast-anything?", "acceptedAnswer": {"@type": "Answer", "text": "No. --agent takes claude, codex, or any command that reads a prompt on stdin, and without it you hand TASK.md to whatever you use, including writing the port yourself, as this tutorial does. Correctness comes from the verify step, which replays recorded and derived calls against the port, not from which agent wrote it."}}, {"@type": "Question", "name": "Will the Rust port change my program's behavior?", "acceptedAnswer": {"@type": "Answer", "text": "Only if verify passes: it replays recorded real calls plus derived edge cases, with the original answering each one, and nothing is enabled until every case matches. The original Python stays in the file, FAST_ANYTHING_DISABLE=1 runs it any time, and fast-anything disable removes the swap."}}, {"@type": "Question", "name": "Why not just rewrite the whole app in Rust?", "acceptedAnswer": {"@type": "Answer", "text": "A full rewrite costs months and moves the entire codebase; fast-anything ports only the functions where time is actually spent, as one-function crates with a shared build cache, each proven identical and reversible on its own."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Port the 5% that's slow: hands-on with fast-anything's Rust speedup loop</h1>
+<p class="lede">fast-anything finds the few functions where your Python app actually spends its time, has your coding agent port only those to Rust, and proves the port behaves identically on recorded real calls. I ran the full loop on its fuzzy-dedupe example: 20.2 seconds became 269 milliseconds — 75× faster, with 33 out of 33 verification checks passing.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 24, 2026 · 13 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> fast-anything finds the few functions where your Python app actually spends its time, has your coding agent port only those to Rust, and proves the port behaves identically on recorded real calls. I ran the full loop on its fuzzy-dedupe example: 20.2 seconds became 269 milliseconds — 75× faster, with 33 out of 33 verification checks passing.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The loop:</b> doctor checks the toolchain, scan finds the hotspot, port records real calls and generates the Rust crate, verify proves the port identical, enable swaps it in, bench measures the whole app interleaved. One command with --agent claude runs it end to end.</li><li><b>Measured here:</b> the fuzzy-dedupe example went from a 20.21s median to 269ms (75×, five interleaved runs each); the function itself went from 19,892.6ms to 221.3ms per call (90×); verify passed 33/33 checks (1 recorded + 7 edge + 25 derived), with byte-identical output.</li><li><b>Only the hotspot moves:</b> the port is one function plus its helpers; the rest of the app stays Python. The swap is one marked block in the source file, removable byte for byte, and FAST_ANYTHING_DISABLE=1 restores the original any time.</li><li><b>What can move:</b> top-level, deterministic functions that take plain data. Scan disqualifies the rest itself — I/O, randomness, and non-plain-data arguments each get a named reason.</li><li><b>The project:</b> fast-anything (EL4CTEO/fast-anything), created November 21, 2026, 3,356 stars and 226 forks in three days, MIT licensed, installable from npm as @el4cteo/fast-anything (0.8.6) or from Cargo.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/fast-anything-rust-port-tutorial/cover.webp" alt="A code editor with one glowing function, an arrow leading to steel gears and a stopwatch"></figure>
+<div class="article-body"><p>Rewriting an app in Rust costs months, minute-long compiles, and gigabytes of <code>target/</code>. Most of the runtime sits in a few functions anyway. That is the whole pitch of <strong>fast-anything</strong>, a small open-source tool that finds those functions, has your coding agent port <em>only them</em> to Rust, proves the port gives the same results on real recorded calls, and swaps it in. One command, fully reversible.</p>
+<p>The project is three days old and already hard to ignore: created on November 21, 2026, it collected 3,356 stars and 226 forks in its first three days, topped the week&rsquo;s list of new AI projects on GitHub, and ships as an npm package, a Cargo install, a Claude Code plugin, and an MCP server. The idea lands because it inverts the usual advice. Instead of &ldquo;rewrite it in Rust,&rdquo; it asks: which 5% is slow, and can we prove the replacement is identical?</p>
+<p>I ran the full loop on the project&rsquo;s own example, a Python fuzzy-dedupe app, on a shared 4-vCPU Linux VM: install, profile, port, verify, enable, benchmark. The app went from a median of 20.21 seconds to 269 milliseconds end to end &mdash; 75&times; faster &mdash; with the output byte-identical and 33 out of 33 verification checks passing. Every command and number below comes from that run.</p>
+<h2 id="1-what-youll-need">1. What you&rsquo;ll need<a class="anchor" href="#1-what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Node.js 22+</strong> for the npm install (or a Rust toolchain for the Cargo install). I used Node v24.22.1.</li><li><strong>A Rust toolchain</strong> via rustup. Ports are compiled with your local toolchain &mdash; I used cargo 1.99.1 and rustc 1.99.1.</li><li><strong>Python 3.10+</strong> for the demo app (I used 3.12.3). The tool also supports JavaScript/TypeScript, Ruby, Java, Kotlin, Go, PHP, C, C++, C#, and R, each through a different bridge.</li><li><strong>A coding agent, or a willingness to write one small Rust function by hand.</strong> The normal flow passes <code>--agent claude</code> (or <code>codex</code>, or any command that reads a prompt on stdin) and the agent writes the port. No signed-in agent was available in this sandbox, so I wrote the port by hand from the generated spec &mdash; and the verification step that follows does not care who wrote it.</li><li><strong>No API key, no account, no cloud.</strong> Everything runs on your machine. The whole exercise costs $0.</li></ul>
+<h2 id="2-step-1-install-and-check-the-toolchain">2. Step 1 &mdash; Install and check the toolchain<a class="anchor" href="#2-step-1-install-and-check-the-toolchain" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">npm i -g @el4cteo/fast-anything      # or: cargo install fast-anything
+fast-anything --version
+fast-anything doctor</code></pre>
+<p>Version 0.8.6 installed cleanly from npm. <code>doctor</code> checks Rust, your runtimes, and your agents, and it is the gate for everything after it:</p>
+<pre><code class="language-text">⚡ fast-anything v0.8.6
+  ✓ cargo    cargo 1.99.1 (5f94df478 2026-08-27)
+  ✓ python   Python 3.12.3
+  ✓ node     v24.22.1
+  · ruby     not found (for Ruby apps (3.3+)): https://ruby-lang.org
+  · java     not found (for Java apps (22+)): https://adoptium.net
+  · go       not found (for Go apps (1.22+)): https://go.dev/dl
+  · php      not found (for PHP apps (8.1+, extension=ffi)): https://php.net
+  ✓ clang    gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  · dotnet   not found (for C# apps (.NET SDK 8+)): https://dot.net
+  · Rscript  not found (for R apps (4.0+)): https://www.r-project.org
+  ✓ bun      1.4.4
+  · deno     not found (to run JS/TS apps on Deno (instead of node)): https://deno.com
+  · claude   not found (--agent claude): https://claude.com/claude-code
+  ✓ codex    codex-cli 0.164.0-alpha.9
+✓ ready to scan
+✓ ready to port</code></pre>
+<p>The missing entries are only needed if you port apps in those languages. For a Python app on this machine, <code>ready to scan</code> and <code>ready to port</code> is the whole requirement.</p>
+<h2 id="3-step-2-profile-before-you-touch-anything">3. Step 2 &mdash; Profile before you touch anything<a class="anchor" href="#3-step-2-profile-before-you-touch-anything" aria-label="Link to section">#</a></h2>
+<p>The demo is the repo&rsquo;s own <code>examples/fuzzy-dedupe</code>: a script that generates 700 customer names with typos and finds near-duplicate pairs. Clone the repo, copy the example somewhere to work in &mdash; fast-anything writes a <code>.fast/</code> directory into the app folder &mdash; and get a baseline first:</p>
+<pre><code class="language-bash">git clone https://github.com/EL4CTEO/fast-anything.git
+cp -r fast-anything/examples/fuzzy-dedupe demo && cd demo
+python3 app.py</code></pre>
+<pre><code class="language-text">700 names, 822 likely duplicate pairs
+  'Noah Msller' ~ 'Noah Müller'
+  'Noah Msller' ~ 'Noah Müller'
+  'Mateo Esposito' ~ 'Matteo Esposito'
+  'Mateo Esposito' ~ 'eatteo Esposito'
+  'Mateo Esposito' ~ 'Mateo Essosito'</code></pre>
+<p>That run took 18.6 seconds of wall time. Keep the output &mdash; it is the correctness target for everything that follows. Now profile:</p>
+<pre><code class="language-bash">fast-anything scan -- python3 app.py</code></pre>
+<pre><code class="language-text">⚡ fast-anything v0.8.6
+▸ profiling python3 app.py
+✓ python3 app.py ran in 75.32s
+
+   #  function                        time                  calls  verdict
+   1  fuzzy.find_duplicates           █████████ 100.0%          1  ✓ port it
+                                    ! calls levenshtein, normalize, they get ported together with it
+   2  app.py:main                     █████████ 100.0%          1  ✗ does I/O: print
+   3  fuzzy.levenshtein               █████████  99.6%    244,650  ↳ ported inside find_duplicates
+   4  app.py:make_names                           0.0%          1  ✗ not deterministic: random.Random
+   5  fuzzy.normalize                             0.0%        700  ↳ ported inside find_duplicates
+
+  → fast-anything port fuzzy.find_duplicates</code></pre>
+<p>Two things to notice. First, the profiled run took 75.32 seconds against the 18.6-second plain run &mdash; profiling overhead is roughly 4&times;, so never compare a profiled time against a plain time. Second, the ranking is doing real judgement, not just sorting by time. <code>find_duplicates</code> owns 100.0% of the runtime and is portable, so it gets the check mark. <code>main</code> is disqualified for doing I/O. <code>make_names</code> is disqualified for using <code>random.Random</code> &mdash; a port has to be deterministic. <code>levenshtein</code>, at 244,650 calls and 99.6% of time, is not ported on its own: it gets ported <em>inside</em> <code>find_duplicates</code>, with <code>normalize</code> alongside it.</p>
+<p>That last point is the design decision the whole tool turns on. fast-anything ports the outermost loop it can, not the tiny function called inside it, so the app crosses into Rust once instead of millions of times. The project&rsquo;s own numbers for porting only the inner <code>levenshtein</code> were 35&times; in one case and 1.9&times; in another, against 116&times; for the outer loop on the same example.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/fast-anything-rust-port-tutorial/img2.webp" alt="Profiler ranking illustration: horizontal bars of decreasing length, one long glowing bar at the top"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+<h2 id="4-step-3-record-real-calls">4. Step 3 &mdash; Record real calls<a class="anchor" href="#4-step-3-record-real-calls" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">fast-anything port fuzzy.find_duplicates</code></pre>
+<pre><code class="language-text">⚡ fast-anything v0.8.6
+▸ running the app again to record real calls to fuzzy.find_duplicates
+✓ recorded 1 real call to fuzzy.find_duplicates (of 1 made)
+✓ Rust crate ready: /var/tmp/acverify/demo/.fast/ports/fuzzy.find_duplicates
+  Have your coding agent follow TASK.md and write src/lib.rs, then:
+  → fast-anything verify fuzzy.find_duplicates</code></pre>
+<p><code>port</code> runs the app once more and records the actual arguments the function received &mdash; here, the full list of 700 names &mdash; up to 500 calls. Then it generates a one-function Rust crate with a <code>TASK.md</code> spec. The crate is minimal on purpose: a <code>Cargo.toml</code> pinning PyO3 0.30 with the <code>abi3-py310</code> feature, a <code>cdylib</code> library target, release settings (<code>opt-level = 3</code>, fat LTO, one codegen unit), and a <code>src/lib.rs</code> stub with the exact signature:</p>
+<pre><code class="language-rust">#[pyfunction]
+#[pyo3(signature = (names, max_distance = 2))]
+fn find_duplicates(names: Vec&lt;String&gt;, max_distance: i64) -&gt; PyResult&lt;Vec&lt;(i64, i64)&gt;&gt; {
+    todo!("port fuzzy.find_duplicates")
+}</code></pre>
+<p><code>TASK.md</code> is the contract the port has to satisfy. It includes the original Python, the two helpers, the recorded call, and the rules: same result for every input including edge cases; Python strings index by Unicode code point, so use <code>.chars()</code>; Python ints don&rsquo;t overflow, so <code>i64</code> is fine; floats compare within 1e-9; where Python raises, raise too; standard library only unless a crate clearly pays off.</p>
+<h2 id="5-step-4-write-the-rust-port">5. Step 4 &mdash; Write the Rust port<a class="anchor" href="#5-step-4-write-the-rust-port" aria-label="Link to section">#</a></h2>
+<p>In the normal flow this is <code>fast-anything go --agent claude -- python app.py</code> and the agent writes the port. Here I wrote it by hand from <code>TASK.md</code> &mdash; no signed-in agent was available &mdash; which is also the honest way to show what the port actually contains. The full implementation:</p>
+<pre><code class="language-rust">use pyo3::prelude::*;
+
+/// Edit distance over Unicode code points, exactly like the Python version.
+fn levenshtein(a: &amp;[char], b: &amp;[char], prev: &amp;mut Vec&lt;i64&gt;, curr: &amp;mut Vec&lt;i64&gt;) -&gt; i64 {
+    // Caller guarantees a.len() &gt;= b.len().
+    prev.clear();
+    prev.extend(0..=(b.len() as i64));
+    for (i, &amp;ca) in a.iter().enumerate() {
+        curr.clear();
+        curr.push(i as i64 + 1);
+        for (j, &amp;cb) in b.iter().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            let v = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
+            curr.push(v);
+        }
+        std::mem::swap(prev, curr);
+    }
+    prev[b.len()]
+}
+
+/// Python " ".join(name.lower().split()): full Unicode lowercase, split on
+/// Unicode whitespace runs, rejoin with single spaces.
+fn normalize(name: &amp;str) -&gt; String {
+    let lower = name.to_lowercase();
+    let mut out = String::with_capacity(lower.len());
+    for (i, word) in lower.split_whitespace().enumerate() {
+        if i &gt; 0 {
+            out.push(' ');
+        }
+        out.push_str(word);
+    }
+    out
+}
+
+#[pyfunction]
+#[pyo3(signature = (names, max_distance = 2))]
+fn find_duplicates(names: Vec&lt;String&gt;, max_distance: i64) -&gt; PyResult&lt;Vec&lt;(i64, i64)&gt;&gt; {
+    // Normalize once, and keep each name as chars once: the pairwise loop
+    // then does no string work at all.
+    let clean: Vec&lt;Vec&lt;char&gt;&gt; = names.iter().map(|n| normalize(n).chars().collect()).collect();
+    let mut pairs: Vec&lt;(i64, i64)&gt; = Vec::new();
+    let mut prev: Vec&lt;i64&gt; = Vec::new();
+    let mut curr: Vec&lt;i64&gt; = Vec::new();
+    for i in 0..clean.len() {
+        for j in (i + 1)..clean.len() {
+            let (a, b) = if clean[i].len() &gt;= clean[j].len() {
+                (&amp;clean[i], &amp;clean[j])
+            } else {
+                (&amp;clean[j], &amp;clean[i])
+            };
+            // Edit distance is at least the length difference: exact filter.
+            if (a.len() as i64 - b.len() as i64).abs() &gt; max_distance {
+                continue;
+            }
+            if levenshtein(a, b, &amp;mut prev, &amp;mut curr) &lt;= max_distance {
+                pairs.push((i as i64, j as i64));
+            }
+        }
+    }
+    Ok(pairs)
+}</code></pre>
+<p>Two exactness decisions matter. First, the Python <code>levenshtein</code> compares characters one code point at a time, so the Rust version works on <code>&amp;[char]</code> slices &mdash; never on bytes, which would split multi-byte characters like <code>ü</code> and <code>ł</code>. Rust&rsquo;s <code>to_lowercase</code> and <code>split_whitespace</code> match Python&rsquo;s <code>lower()</code> and <code>split()</code> on this data, including the accented names in the example. Second, the length-difference filter skips the DP entirely when two names differ in length by more than <code>max_distance</code>. That is exact, not approximate: edit distance can never be smaller than the length difference, so a skipped pair could never have qualified. <code>cargo check</code> passed clean against PyO3 0.30.1.</p>
+<h2 id="6-step-5-verify-prove-it-dont-trust-it">6. Step 5 &mdash; Verify: prove it, don&rsquo;t trust it<a class="anchor" href="#6-step-5-verify-prove-it-dont-trust-it" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">fast-anything verify fuzzy.find_duplicates</code></pre>
+<pre><code class="language-text">⚡ fast-anything v0.8.6
+▸ building fa_fuzzy_find_duplicates (release)
+▸ replaying 1 recorded call against the Rust port
+✓ 33/33 calls give the same result (1 recorded + 7 edge cases + 25 derived)
+✓ fuzzy.find_duplicates per call: 19892.6ms in Python, 221.3ms in Rust: 90× faster
+  → fast-anything enable fuzzy.find_duplicates</code></pre>
+<p>This is the step that justifies the tool. <code>verify</code> release-builds the crate and replays the recorded call against it, then adds derived cases: edge cases (empty input, non-ASCII text, very long input) and shrunk inputs, with the original Python answering each one so there is a ground truth to compare against. All 33 calls &mdash; 1 recorded, 7 edge, 25 derived &mdash; returned the same result. Nothing gets enabled until every case matches, and a port that is correct but slower per call than the original isn&rsquo;t enabled either: calling into Rust costs more than the work saved for tiny functions, and the tool refuses to make you slower.</p>
+<p>The project&rsquo;s own example of why this matters: a port that looked right but compared bytes instead of characters was caught by 148 of 500 recorded calls. That is exactly the bug class my <code>.chars()</code> decision avoids, and it is the reason the verify step exists at all &mdash; a port written by an agent, or by hand, is only as trustworthy as the replay that checks it.</p>
+<h2 id="7-step-6-enable-it-and-measure-the-whole-app">7. Step 6 &mdash; Enable it and measure the whole app<a class="anchor" href="#7-step-6-enable-it-and-measure-the-whole-app" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">fast-anything enable fuzzy.find_duplicates
+python3 app.py</code></pre>
+<p><code>enable</code> appends one marked block to <code>fuzzy.py</code>. It imports the compiled extension from <code>.fast/lib</code> and rebinds the name <code>find_duplicates</code> to the Rust version, falling back to the Python original if the import fails. The original function stays in the file, untouched above the block. Running the app now prints the identical output &mdash; 700 names, 822 pairs, the same five sample pairs. Then the measurement that counts:</p>
+<pre><code class="language-bash">fast-anything bench</code></pre>
+<pre><code class="language-text">⚡ fast-anything v0.8.6
+▸ timing python3 app.py (5 runs each, Python vs Rust, interleaved)
+
+  Python       ████████████████████████ 20.21s
+  Rust         ▍                        269ms
+
+✓ python3 app.py is 75× faster end to end (median of 5, ±2.37s)</code></pre>
+<div class="table-wrap"><table><thead><tr><th></th><th>Median</th><th>Mean</th><th>Min</th><th>Max</th><th>Stddev</th></tr></thead><tbody><tr><td><strong>Python (5 runs)</strong></td><td>20.21s</td><td>19.22s</td><td>16.18s</td><td>22.52s</td><td>2.37s</td></tr><tr><td><strong>Rust port (5 runs)</strong></td><td>269ms</td><td>254ms</td><td>145ms</td><td>362ms</td><td>74ms</td></tr></tbody></table></div>
+<p>That is 75.2&times; end to end, median of five interleaved runs each. Two honest caveats. The project&rsquo;s README reports 116&times; for this same example &mdash; 4.91 seconds to 42 milliseconds &mdash; but on an i5-10500 running Windows 11, not on this shared VM, and their number is the function, not the whole app. My function-level number was 90&times; (19,892.6ms to 221.3ms per call); the end-to-end 75&times; is lower because the app still pays interpreter startup and name generation in Python. And the spread on the Python side (&plusmn;2.37s) is real: a shared VM&rsquo;s timings wander, which is why <code>bench</code> interleaves the runs instead of timing five Python runs and then five Rust runs.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/fast-anything-rust-port-tutorial/img3.webp" alt="Before-and-after illustration: a winding slow path becoming a straight fast track"><figcaption>AI-generated illustration for AI Frontier Post</figcaption></figure>
+<h2 id="8-step-7-ship-the-result">8. Step 7 &mdash; Ship the result<a class="anchor" href="#8-step-7-ship-the-result" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">fast-anything report
+fast-anything status</code></pre>
+<pre><code class="language-text">⚡ fast-anything v0.8.6
+✓ report: /var/tmp/acverify/demo/.fast/report.md
+✓ share card: /var/tmp/acverify/demo/.fast/report.svg
+⚡ fast-anything v0.8.6
+  app: python3 app.py   profiled run: 75.32s
+
+  fuzzy.find_duplicates             ● on (Rust)                 90× per call
+
+  last bench: 20.21s → 269ms (75×)</code></pre>
+<p><code>report</code> writes a Markdown summary and an SVG share card for the pull request &mdash; the before/after numbers, the per-function speedup, and the verification count. The generated report for this run reads, in full: &ldquo;<code>python3 app.py</code> went from <strong>20.21s</strong> to <strong>269ms</strong> (median of 5 runs each, original and Rust interleaved).&rdquo; Reversibility is built in at every step: <code>FAST_ANYTHING_DISABLE=1</code> runs the original Python any time, and <code>fast-anything disable fuzzy.find_duplicates</code> removes the marked block byte for byte. Every port shares one <code>.fast/target</code> cache, which you can delete whenever you like with <code>fast-anything clean</code>.</p>
+<h2 id="9-when-to-use-this-vs-alternatives">9. When to use this vs alternatives<a class="anchor" href="#9-when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>When it wins</th><th>What it costs</th></tr></thead><tbody><tr><td><strong>fast-anything</strong></td><td>A few deterministic, data-crunching functions dominate; you want proof the replacement is identical</td><td>Rust toolchain; one small crate per function; agent or hand-written port</td></tr><tr><td><strong>Full rewrite in Rust</strong></td><td>The whole program is the bottleneck and the team already knows Rust</td><td>Months; minute-long compiles; the entire codebase changes hands</td></tr><tr><td><strong>Cython / Numba</strong></td><td>Numeric loops where annotations or JIT compilation are enough</td><td>Type annotations or JIT warm-up; no behavioral proof step</td></tr><tr><td><strong>PyPy</strong></td><td>Long-running pure-Python programs with no C-extension dependencies</td><td>Compatibility limits; no per-function targeting</td></tr><tr><td><strong>Just optimize the Python</strong></td><td>The algorithm is wrong, not the language (this example is O(n&sup2;) pairwise comparison)</td><td>Often the right first move &mdash; but it caps out where the language does</td></tr></tbody></table></div>
+<p>fast-anything is the wrong tool when the bottleneck is I/O, when the hot function is non-deterministic, or when the function&rsquo;s inputs aren&rsquo;t plain data &mdash; <code>scan</code> will tell you that itself, with a reason per function, which is more useful than a silent failure. It is also the wrong tool for a function so small that the FFI crossing costs more than the work saved; <code>verify</code> measures per-call time and refuses to enable those. And it only ports top-level, deterministic functions that take plain data (numbers, strings, lists, dicts, typed arrays), including ones in the entry script when the main code sits under <code>if __name__ == "__main__":</code>. The MCP server built into the binary (<code>fast-anything mcp</code>, eight tools from <code>fast_scan</code> to <code>fast_report</code>) and the Claude Code plugin cover the same loop from inside an agent session.</p>
+<h2 id="10-the-takeaway">10. The takeaway<a class="anchor" href="#10-the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The loop is short enough to memorize: <code>doctor</code> to check the toolchain, <code>scan</code> to find the hotspot, <code>port</code> to record real calls and generate the crate, <code>verify</code> to prove the port identical on recorded and derived cases, <code>enable</code> to swap it in, <code>bench</code> to measure the whole app interleaved. On the project&rsquo;s own example that loop turned 20.21 seconds into 269 milliseconds, with the output unchanged and the original Python still in the file behind an environment-variable escape hatch.</p>
+<p>The reason the tool is getting attention is not the speedup number. It is the verification step: recorded real calls plus derived edge cases, answered by the original, with nothing enabled until every case matches. Porting to Rust has always been a judgement call about whether the new code still does the same thing. fast-anything turns that judgement into a replay you can run &mdash; and the replay is what makes a 75&times; claim worth believing.</p>
+</div>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="fast-anything-rust-port-tutorial"></div><div class="comments" data-comments="fast-anything-rust-port-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/career-ops-ai-job-search-agent-tutorial/"><span class="chip">Tutorials</span><h3>Run your job search like an agent workflow: hands-on with career-ops</h3><div class="meta">November 24, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/academic-research-skills-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>From research question to submission-ready paper: hands-on with academic-research-skills</h3><div class="meta">November 24, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/claude-ship-pr-review-fix-approve-tutorial/"><span class="chip">Tutorials</span><h3>Claude Ship tutorial: let AI review, fix, and approve your pull requests</h3><div class="meta">November 24, 2026 · 21 min read</div></a><a class="rel-card" href="/articles/vercel-ai-gateway-audited-zdr-tutorial/"><span class="chip">Tutorials</span><h3>Stop trusting the contract: ship an AI feature on Vercel AI Gateway with Audited ZDR</h3><div class="meta">November 23, 2026 · 20 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need Claude Code to use fast-anything?</h3><p>No. --agent takes claude, codex, or any command that reads a prompt on stdin, and without it you hand TASK.md to whatever you use, including writing the port yourself, as this tutorial does. Correctness comes from the verify step, which replays recorded and derived calls against the port, not from which agent wrote it.</p><h3>Will the Rust port change my program's behavior?</h3><p>Only if verify passes: it replays recorded real calls plus derived edge cases, with the original answering each one, and nothing is enabled until every case matches. The original Python stays in the file, FAST_ANYTHING_DISABLE=1 runs it any time, and fast-anything disable removes the swap.</p><h3>Why not just rewrite the whole app in Rust?</h3><p>A full rewrite costs months and moves the entire codebase; fast-anything ports only the functions where time is actually spent, as one-function crates with a shared build cache, each proven identical and reversible on its own.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/rtk-rust-token-killer-cli-tutorial/">RTK: cut your AI agent&#x27;s token burn with a Rust CLI output proxy</a></li><li><a href="/articles/claude-code-hooks-complete-guide/">Claude Code hooks: the complete hands-on guide to deterministic agent control</a></li><li><a href="/articles/prompt-compression-measured-guide/">Cut your prompt tokens in half: a measured guide to prompt compression</a></li><li><a href="/articles/spec-driven-development-spec-kit/">Spec-driven development with GitHub Spec Kit: make your AI agent build what you actually meant</a></li><li><a href="/articles/addy-osmani-agent-skills-tutorial/">Install 25 senior-engineer workflows into your AI coding agent: hands-on with Addy Osmani&#x27;s agent-skills</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
