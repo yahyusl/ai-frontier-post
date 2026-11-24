@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Diagrams that check their own layout: hands-on with open-diagram — AI Frontier Post</title>
+<meta name="description" content="open-diagram is a Python library that draws architecture diagrams and checks its own layout — overlaps, lines through boxes, text too small to read — naming each problem before you look at the picture. It went from zero to 387 GitHub stars in six days. I ran it end to end: the quickstart, a deliberately broken diagram, a RAG pipeline, Mermaid and JSON inputs, and the MCP server.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/open-diagram-architecture-diagrams-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Diagrams that check their own layout: hands-on with open-diagram">
+<meta property="og:description" content="open-diagram is a Python library that draws architecture diagrams and checks its own layout — overlaps, lines through boxes, text too small to read — naming each problem before you look at the picture. It went from zero to 387 GitHub stars in six days. I ran it end to end: the quickstart, a deliberately broken diagram, a RAG pipeline, Mermaid and JSON inputs, and the MCP server.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/open-diagram-architecture-diagrams-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/open-diagram-architecture-diagrams-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-24">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Diagrams that check their own layout: hands-on with open-diagram", "description": "open-diagram is a Python library that draws architecture diagrams and checks its own layout — overlaps, lines through boxes, text too small to read — naming each problem before you look at the picture. It went from zero to 387 GitHub stars in six days. I ran it end to end: the quickstart, a deliberately broken diagram, a RAG pipeline, Mermaid and JSON inputs, and the MCP server.", "datePublished": "2026-11-24", "dateModified": "2026-11-24", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/open-diagram-architecture-diagrams-tutorial/"}, "image": "https://aifrontierpost.com/articles/open-diagram-architecture-diagrams-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need Chrome to use open-diagram?", "acceptedAnswer": {"@type": "Answer", "text": "No. The SVG is always written, browser or not — everything in this tutorial ran on a VM with no browser installed. Chrome, Chromium, or Edge is only needed for PNG export; if yours is not in the usual place, set the CHROME environment variable to its path."}}, {"@type": "Question", "name": "How is this different from Mermaid?", "acceptedAnswer": {"@type": "Answer", "text": "Mermaid renders almost everywhere but never checks the layout — an overlapping box ships silently. open-diagram checks every layout and reads Mermaid files, so you can keep writing Mermaid and gain the checks. Use Mermaid when you need the widest embedding; use open-diagram when the diagram is generated and nobody will eyeball it first."}}, {"@type": "Question", "name": "Can my coding agent really draw diagrams with this?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The MCP server answers the standard handshake and exposes a check-first workflow — format guide, template, check until zero problems, then draw — plus a plain-text description the agent can compare against the request. The repo also ships an agent skill that explains each layout problem and its fix. The checker is what makes the agent loop work: the agent does not need eyes."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Diagrams that check their own layout: hands-on with open-diagram</h1>
+<p class="lede">open-diagram is a Python library that draws architecture diagrams and checks its own layout — overlaps, lines through boxes, text too small to read — naming each problem before you look at the picture. It went from zero to 387 GitHub stars in six days. I ran it end to end: the quickstart, a deliberately broken diagram, a RAG pipeline, Mermaid and JSON inputs, and the MCP server.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 24, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> open-diagram draws architecture diagrams from a short Python script — or from Mermaid or JSON — and checks its own layout before writing the file: overlaps, lines through boxes, gaps under 16 px, text too small to read. It went from zero to 387 GitHub stars in six days. I ran it end to end on a CPU-only VM: every example rendered with zero layout problems, the one diagram I broke on purpose failed loudly by name, and the MCP server answers its handshake — so a coding agent can draw, check, and fix diagrams in a loop.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> open-diagram 0.6.1 by Luke Deasy — MIT licensed, 387 GitHub stars in its first six days (created November 18, nine releases) — Python building blocks for dense architecture diagrams that check their own layout.</li><li><b>Cost:</b> $0. One pip install, one dependency (fontTools). No account, no API key, no GPU, and no network after the install.</li><li><b>Measured:</b> quickstart 1081×316 px, 0 layout problems; RAG pipeline 1447×316 px, 0 problems; Mermaid import 991×595 px and JSON import 1270×486 px, both 0 problems; the project’s systems-map example 1988×877 px, 0 problems.</li><li><b>The check:</b> a deliberately overlapped pair of panels raised LayoutError naming both panels and the fix — and the SVG was still written so the problem could be seen.</li><li><b>The agent angle:</b> the MCP server answers its initialize handshake as open-diagram 0.6.1, and describe() gives any agent a plain-text version of the picture to compare against the request.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/open-diagram-architecture-diagrams-tutorial/cover.webp" alt="A dense architecture diagram for a fictional video platform, drawn by open-diagram: media pipeline, storage, recommendations, and player apps connected by labelled arrows"></figure>
+<div class="article-body"><p>Every architecture diagram you have ever shipped started as a sketch and ended as a lie. A box drifted over a label. An arrow crossed straight through a panel. Two panels sat 9 pixels apart and nobody noticed until the slide was on the screen. The tools never said anything, because the tools never checked.</p>
+<p><strong>open-diagram</strong> checks. It is a small Python library that draws architecture diagrams from a short script — panels, tiles, lines, groups — and then inspects its own layout before it writes the file. If two panels collide, or a line runs through a box, or text drops below a readable size, the build fails and names the problem: <em>&lsquo;Storage&rsquo; and &lsquo;Recommendations&rsquo; overlap; move one</em>. The SVG is still written so you can look at it, but nothing ships silently broken.</p>
+<p>It is also the week&rsquo;s breakout open-source AI project. Created on November 18, it collected 387 GitHub stars in six days — the fourth most-starred new AI project of the week — with nine releases already and a 0.6.1 on PyPI. The reason is not the diagrams. It is who draws them: the library is built to be written by an AI agent. It ships a Claude Code skill, an MCP server, and a plain-text description of every picture it draws, so an agent can compare what it drew against what you asked for without ever looking at the image. I ran it end to end on a small CPU-only VM: the quickstart, a deliberately broken diagram, a real RAG pipeline, Mermaid and JSON inputs, and the MCP server. Every command and every number below is measured.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.9 or newer.</strong> I used Python 3.12. No GPU, no Docker, no account.</li><li><strong>About 10 MB of disk</strong> for the library and its single dependency, fontTools. The bundled Inter font ships inside the package.</li><li><strong>Google Chrome, Chromium, or Microsoft Edge — only if you want PNGs.</strong> The SVG is always written; PNG export needs a browser, and the library says so plainly instead of failing. Set the <code>CHROME</code> environment variable if your browser is not in the usual place.</li><li><strong>No API key, no account, no network</strong> after the install. The total cost is $0, and the library is MIT licensed.</li><li><strong>About 15 minutes.</strong></li></ul>
+<p>One honest caveat up front: this is a young project — six days old, version 0.6.1, one main author. The API is stable enough to teach, the test suite passes, and the docs are thorough, but expect the surface to move. Pin the version, as every command below does.</p>
+<h2 id="step-1-install-open-diagram">Step 1: Install open-diagram<a class="anchor" href="#step-1-install-open-diagram" aria-label="Link to section">#</a></h2>
+<p>The package is <code>open-diagram</code> on PyPI, version 0.6.1 at the time of writing. Its only runtime dependency is <code>fontTools</code>, which pip installs for you.</p>
+<pre><code class="language-bash">python3 -m venv .venv && source .venv/bin/activate
+python -m pip install open-diagram==0.6.1</code></pre>
+<p>Verify the install:</p>
+<pre><code class="language-bash">python -c "import open_diagram; print(open_diagram.__version__)"</code></pre>
+<p>On my machine this printed:</p>
+<pre><code class="language-plaintext">0.6.1</code></pre>
+<p>The install also gives you two commands: <code>open-diagram</code>, the CLI, and — after you install the optional MCP extra in step 6 — <code>open-diagram-mcp</code>, the MCP server.</p>
+<h2 id="step-2-your-first-diagram">Step 2: Your first diagram<a class="anchor" href="#step-2-your-first-diagram" aria-label="Link to section">#</a></h2>
+<p>The quickstart below is the project&rsquo;s own example, verbatim from its README. Three panels — a web app, a search API, a search index — placed left to right with two links between them. Save it as <code>quickstart.py</code>:</p>
+<pre><code class="language-python">from open_diagram import Diagram, Panel, Tile
+
+d = Diagram("How a search request is answered", tag="EXAMPLE")
+app = d.add(Panel("Web app", ["Search box", "Results page", "Filters"], footer="Owner: Web team"))
+api = d.right_of(app, Panel("Search API", [Tile("Checks access"), Tile("Caches results", status="building")],
+                            footer="Owner: Platform team"), align="center")
+index = d.right_of(api, Panel("Search index", ["Product text", Tile("Spelling fixes", status="planned")],
+                              status="planned"), align="center")
+d.link(app, api)
+d.link(api, index, kind="planned", label="new")
+d.save("quickstart")   # writes quickstart.svg and quickstart.png</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">python quickstart.py</code></pre>
+<p>On my machine — a VM with no Chrome installed — this printed:</p>
+<pre><code class="language-plaintext">PNG skipped: Chrome, Chromium or Edge was not found (set the CHROME environment variable to its path)
+wrote quickstart.svg: 1081 x 316 px; smallest text 10.5 px; 0 layout problem(s)</code></pre>
+<p>Three things to notice. First, the PNG was skipped, not failed: the SVG is the primary output and it is always written. Second, the summary reports the canvas size and the smallest text size, so you know at a glance whether anything is unreadable. Third, <strong>0 layout problem(s)</strong> — the build checked itself and found nothing wrong. The output file is 111 KB of SVG, and here it is:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/open-diagram-architecture-diagrams-tutorial/img2.webp" alt="The quickstart diagram: three panels for a web app, a search API, and a search index, connected by solid and dotted arrows"><figcaption>The quickstart diagram, drawn by the code above — the exact file this tutorial ran. The dotted arrow is a planned connection; the dashed tile is work in progress. Diagram: lukendeasy/open-diagram (MIT).</figcaption></figure>
+<p>Read the picture back. The <code>tag="EXAMPLE"</code> becomes the pill in the top left. The footer strings become the &ldquo;Owner:&rdquo; lines. <code>status="building"</code> gives a tile a dashed amber border; <code>status="planned"</code> on a panel gives it a dotted border and a Planned pill. <code>kind="planned"</code> on a link makes it dotted and labels it. Statuses are shown by color <em>and</em> by word, and the key at the top lists only the statuses and line kinds the picture actually uses. Nothing here is decoration you have to maintain — it all falls out of the labels you already wrote.</p>
+<h2 id="step-3-break-it-on-purpose">Step 3: Break it on purpose — the layout check<a class="anchor" href="#step-3-break-it-on-purpose" aria-label="Link to section">#</a></h2>
+<p>The check is the whole point of the library, so test it before you trust it. Place two panels at the same coordinates:</p>
+<pre><code class="language-python">from open_diagram import Diagram, Panel, LayoutError
+
+d = Diagram("Collision test")
+a = d.add(Panel("Storage", ["Files"]), x=0, y=0)
+b = d.add(Panel("Recommendations", ["Models"]), x=0, y=0)
+try:
+    d.save("collision")
+    print("NO ERROR RAISED")
+except LayoutError as e:
+    print(e)</code></pre>
+<p>This is what came back on my machine:</p>
+<pre><code class="language-plaintext">PNG skipped: Chrome, Chromium or Edge was not found (set the CHROME environment variable to its path)
+wrote collision.svg: 640 x 287 px; smallest text 12 px; 1 layout problem(s)
+LayoutError: 1 layout problem(s):
+  - 'Storage' and 'Recommendations' overlap; move one (right_of() and below() keep a gap)
+The drawing was still written, so you can look at it: collision.svg</code></pre>
+<p>That is the entire value proposition in one error message. It names both blocks, says what is wrong, and tells you how to fix it — <code>right_of()</code> and <code>below()</code> place blocks next to each other with the theme&rsquo;s gap, so the collision cannot happen by accident. And it still writes the SVG, so you can see the mess instead of guessing at it.</p>
+<p>The checks go further than overlap. The library measures every label from the font file before placing it, so boxes fit their words; it flags panels closer than 16 px, lines that cross panels, labels that land on boxes, and text under 10 px. The README&rsquo;s example of a line problem reads: <em>line &lsquo;Where videos come from&rsquo; -&gt; &lsquo;Storage&rsquo; crosses &lsquo;Processing&rsquo;; route it with via_x/via_y, move a block, or pass cross_ok=True</em>. Every problem comes with the fix attached. That is what &ldquo;checks its own layout&rdquo; means in practice: not a warning, but a named problem with a named remedy.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/open-diagram-architecture-diagrams-tutorial/img3.webp" alt="How open-diagram turns a script into a picture: measure from the font, place, check overlaps and gaps, then draw"><figcaption>How the library works, drawn by the library itself: script to measure to place to check to draw, with every problem reported by name. Diagram: lukendeasy/open-diagram (MIT).</figcaption></figure>
+<h2 id="step-4-a-real-diagram-end-to-end">Step 4: A real diagram, end to end<a class="anchor" href="#step-4-a-real-diagram-end-to-end" aria-label="Link to section">#</a></h2>
+<p>A quickstart proves the install; a real diagram proves the tool. Here is a local RAG pipeline — ingest, store, serve — the kind of picture that ends up in a design doc or a README. Save it as <code>rag_pipeline.py</code>:</p>
+<pre><code class="language-python">from open_diagram import Diagram, Panel, Tile
+
+d = Diagram("Local RAG pipeline: question in, cited answer out", tag="EXAMPLE")
+ingest = d.add(Panel("Ingest", ["Load PDFs", "Split 512-token chunks", "Embed with local model"],
+                      footer="Owner: Data team"))
+store = d.right_of(ingest, Panel("Store", [Tile("Vector index"), Tile("Chunk text", status="building")],
+                                  footer="Owner: Platform team"), align="center")
+serve = d.right_of(store, Panel("Serve", ["Retrieve top 8", "Rerank", "Draft with citations"],
+                                footer="Owner: App team"), align="center")
+d.link(ingest, store)
+d.link(store, serve)
+d.save("rag_pipeline")
+print(d.describe())</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">python rag_pipeline.py</code></pre>
+<p>Output:</p>
+<pre><code class="language-plaintext">PNG skipped: Chrome, Chromium or Edge was not found (set the CHROME environment variable to its path)
+wrote rag_pipeline.svg: 1447 x 316 px; smallest text 10.5 px; 0 layout problem(s)
+Local RAG pipeline: question in, cited answer out
+States shown: Live, Being built. Solid lines: data flows today.
+
+Blocks, left to right:
+- Ingest: Load PDFs; Split 512-token chunks; Embed with local model. Owner: Data team
+- Store: Vector index; Chunk text (being built). Owner: Platform team
+- Serve: Retrieve top 8; Rerank; Draft with citations. Owner: App team
+Lines:
+- Ingest -> Store
+- Store -> Serve</code></pre>
+<p>Two things matter here. First, the diagram passed its own checks — 0 layout problems — on the first run, which is the library&rsquo;s design goal: a first attempt that comes out clean because the layout is computed, not eyeballed. Second, <code>describe()</code> returns the picture as plain text. That text is also embedded in the SVG as its description, so screen readers can read the diagram, and — more importantly for 2026 — an AI agent can compare the description against the request without ever opening the image. If the agent drew the wrong thing, the text says so.</p>
+<p>For a sense of scale, the project&rsquo;s own systems-map example — a fictional video platform from upload to screen, with columns, a group, a data map, and lanes — renders at 1988 &times; 877 px with 0 layout problems. That is the cover image of this article: a dense, real diagram, drawn by this library, not a mockup.</p>
+<h2 id="step-5-bring-your-own-format">Step 5: Bring your own format — Mermaid, JSON, and the CLI<a class="anchor" href="#step-5-bring-your-own-format" aria-label="Link to section">#</a></h2>
+<p>Python is the native input, but it is not the only one. The CLI, <code>open-diagram</code>, reads Mermaid flowcharts and JSON as well. The repo ships both: <code>examples/signup_flow.mmd</code> and <code>examples/email_delivery.json</code>. Draw them:</p>
+<pre><code class="language-bash">open-diagram draw examples/signup_flow.mmd -o signup
+open-diagram draw examples/email_delivery.json -o email_delivery</code></pre>
+<p>Both worked on my machine:</p>
+<pre><code class="language-plaintext">wrote signup.svg: 991 x 595 px; smallest text 10.5 px; 0 layout problem(s)
+wrote email_delivery.svg: 1270 x 486 px; smallest text 10.5 px; 0 layout problem(s)</code></pre>
+<p>The CLI has five commands — <code>draw</code>, <code>check</code>, <code>describe</code>, <code>png</code>, and <code>new</code> — and the one you will use most in CI is <code>check</code>. It builds each file in memory, lists the layout problems, and exits 1 if there are any:</p>
+<pre><code class="language-bash">open-diagram check examples/signup_flow.mmd examples/email_delivery.json
+echo "exit=$?"</code></pre>
+<pre><code class="language-plaintext">examples/signup_flow.mmd: 0 layout problem(s)
+examples/email_delivery.json: 0 layout problem(s)
+exit=0</code></pre>
+<p>That makes diagrams testable artifacts. Put <code>open-diagram check diagrams/*.json</code> in CI and a broken diagram fails the build like a broken test — which is exactly the failure mode this library exists to prevent. <code>describe</code> prints the plain-text description for any file, and <code>new</code> lists the bundled cloud templates — <code>aws_etl</code>, <code>aws_architecture</code>, <code>azure_web_app</code>, <code>gcp_event_pipeline</code> — or writes one out to start from:</p>
+<pre><code class="language-bash">open-diagram new aws_etl
+open-diagram check aws_etl.json</code></pre>
+<p>The template it writes is a 3.6 KB JSON file: an AWS data-ingestion setup with MWAA orchestration, Lambda extractors, and real service icons, ready for you to relabel. The cloud icons are a separate story — the project keeps a versioned icon library with attribution rules, so icons come from fixed file versions rather than drifting URLs.</p>
+<h2 id="step-6-hand-it-to-your-coding-agent">Step 6: Hand it to your coding agent<a class="anchor" href="#step-6-hand-it-to-your-coding-agent" aria-label="Link to section">#</a></h2>
+<p>Diagrams are the classic thing agents get almost right: the boxes are there, the labels are close, and something overlaps something else in a way nobody notices until the review. open-diagram is built for that workflow. Install the MCP extra:</p>
+<pre><code class="language-bash">python -m pip install "open-diagram[mcp]"</code></pre>
+<p>Then register the server with Claude Code, using the command from the project&rsquo;s README:</p>
+<pre><code class="language-bash">claude mcp add open-diagram -- uvx --python 3.12 --from "open-diagram[mcp]" open-diagram-mcp</code></pre>
+<p>I verified the server itself rather than the Claude Code wiring: it starts over stdio and answers the MCP handshake. Send it an <code>initialize</code> request and it replies as <code>open-diagram</code> 0.6.1, listing its tools and its own workflow — call <code>format_guide</code> once, write the diagram as JSON or Mermaid (or start from a template), call <code>check</code> and fix every problem it names until it reports 0, then call <code>draw</code> and compare the description with what was asked. The loop is the point: the agent does not need eyes, because the checker is the eyes. The repo also ships an agent skill (<code>skills/open-diagram/SKILL.md</code>) that explains what each layout problem means and how to fix it, for agents that work from files rather than MCP.</p>
+<p>That is why this project is trending now, in a week when agent skills are the fastest-growing category on GitHub. Diagram tools that hand the agent a canvas and hope are everywhere. A diagram tool that hands the agent a <em>verifier</em> is the new part.</p>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p>The project ships its own comparison, drawing the same photo-upload flow in each tool with default settings. The table below is from that page, and the headline finding is simple: only open-diagram and archify check every layout.</p>
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>Input</th><th>Checks layout</th><th>Output</th><th>MCP</th><th>License</th></tr></thead><tbody><tr><td><strong>open-diagram</strong></td><td>Python, JSON, Mermaid</td><td>Yes</td><td>SVG, PNG</td><td>Yes</td><td>MIT</td></tr><tr><td>Mermaid</td><td>Text</td><td>No</td><td>SVG, PNG, PDF</td><td>Yes</td><td>MIT</td></tr><tr><td>D2</td><td>Text</td><td>No</td><td>SVG, PNG, PDF, PPT, GIF</td><td>No</td><td>MPL-2.0</td></tr><tr><td>draw.io</td><td>Editor</td><td>Only in its MCP viewer</td><td>PNG, SVG, PDF and more</td><td>Yes</td><td>Apache-2.0</td></tr><tr><td>Excalidraw</td><td>Editor</td><td>Only in its paid MCP server</td><td>PNG, SVG</td><td>Yes</td><td>MIT</td></tr><tr><td>archify</td><td>JSON</td><td>Yes</td><td>Interactive HTML page</td><td>No</td><td>Apache-2.0</td></tr></tbody></table></div>
+<p>Choose open-diagram when the diagram is generated — by a script, by CI, or by an agent — and nobody will eyeball it before it ships. The layout check is the feature; everything else is table stakes. Choose Mermaid when you need the widest rendering support: it is embedded in GitHub, GitLab, Notion, and a dozen other surfaces, and open-diagram itself reads Mermaid files, so the two are complements rather than rivals. Choose D2 when you need PowerPoint or GIF output, or its particular aesthetic. Choose draw.io or Excalidraw when a human is drawing by hand and wants a canvas, not a script. Choose archify when you want an interactive HTML page with evidence links back to your repo — it checks layout too, but it has no MCP server, so an agent cannot drive it the same way.</p>
+<p>Two limits to know before you commit. First, PNG output needs a browser installed; on a headless server, budget for that or ship SVG only — SVG is the better artifact anyway, since text stays selectable and the description stays embedded. Second, this is a diagram <em>library</em>, not a diagram <em>editor</em>: there is no drag-and-drop canvas, and every change goes through the script. If your team edits diagrams by mouse, that is a real workflow cost.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Architecture diagrams rot because nobody checks them. open-diagram makes the check part of the build: a one-line install, a ten-line script, and a <code>LayoutError</code> that names the problem and the fix. The quickstart, the RAG pipeline, the Mermaid import, and the JSON import all rendered with zero layout problems on the first run on a small CPU-only VM — and the one diagram I broke on purpose failed loudly, by name, with the drawing still written so I could see it. Add the MCP server and the check becomes something an agent can run in a loop, which is why 387 stars arrived in six days. If your diagrams live in a repo, put <code>open-diagram check</code> in CI and stop reviewing pixels by eye.</p>
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="open-diagram-architecture-diagrams-tutorial"></div><div class="comments" data-comments="open-diagram-architecture-diagrams-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/sherpa-onnx-offline-speech-toolkit-tutorial/"><span class="chip">Tutorials</span><h3>One toolkit, every speech job, zero cloud: hands-on with sherpa-onnx</h3><div class="meta">November 24, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/fast-anything-rust-port-tutorial/"><span class="chip">Tutorials</span><h3>Port the 5% that&#x27;s slow: hands-on with fast-anything&#x27;s Rust speedup loop</h3><div class="meta">November 24, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/career-ops-ai-job-search-agent-tutorial/"><span class="chip">Tutorials</span><h3>Run your job search like an agent workflow: hands-on with career-ops</h3><div class="meta">November 24, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/claude-ship-pr-review-fix-approve-tutorial/"><span class="chip">Tutorials</span><h3>Claude Ship tutorial: let AI review, fix, and approve your pull requests</h3><div class="meta">November 24, 2026 · 21 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need Chrome to use open-diagram?</h3><p>No. The SVG is always written, browser or not — everything in this tutorial ran on a VM with no browser installed. Chrome, Chromium, or Edge is only needed for PNG export; if yours is not in the usual place, set the CHROME environment variable to its path.</p><h3>How is this different from Mermaid?</h3><p>Mermaid renders almost everywhere but never checks the layout — an overlapping box ships silently. open-diagram checks every layout and reads Mermaid files, so you can keep writing Mermaid and gain the checks. Use Mermaid when you need the widest embedding; use open-diagram when the diagram is generated and nobody will eyeball it first.</p><h3>Can my coding agent really draw diagrams with this?</h3><p>Yes. The MCP server answers the standard handshake and exposes a check-first workflow — format guide, template, check until zero problems, then draw — plus a plain-text description the agent can compare against the request. The repo also ships an agent skill that explains each layout problem and its fix. The checker is what makes the agent loop work: the agent does not need eyes.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/diagram-design-hands-on-guide/">Make your agent draw diagrams worth publishing: a hands-on guide to diagram-design</a></li><li><a href="/articles/archify-interactive-diagrams-tutorial/">Diagrams your agent can defend: hands-on with Archify, the 73K-star skill for verifiable architecture diagrams</a></li><li><a href="/articles/stitch-skills-google-stitch-design-tutorial/">Design in your coding agent: hands-on with Google&#x27;s Stitch skills</a></li><li><a href="/articles/mcp-for-blender-ai-3d-tutorial/">Talk to Blender: build 3D scenes with Claude and MCP for Blender</a></li><li><a href="/articles/cursor-plugins-official-marketplace-tutorial/">Cursor plugins are here: install the 130+ official plugins and build your own</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
