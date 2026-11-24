@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Scans, photos, and PDFs into structured text: hands-on with PaddleOCR 3.7 — AI Frontier Post</title>
+<meta name="description" content="PaddleOCR 3.7 turns scans, photos, and PDFs into text, tables, and Markdown — entirely on your CPU, no API key, no uploads. I ran its new PP-OCRv6 models on a small VM: 4/4 lines exact at 0.996+ confidence, a 15-cell table rebuilt perfectly, and a full PDF converted to Markdown in about 25 seconds.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/paddleocr-document-ocr-hands-on-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Scans, photos, and PDFs into structured text: hands-on with PaddleOCR 3.7">
+<meta property="og:description" content="PaddleOCR 3.7 turns scans, photos, and PDFs into text, tables, and Markdown — entirely on your CPU, no API key, no uploads. I ran its new PP-OCRv6 models on a small VM: 4/4 lines exact at 0.996+ confidence, a 15-cell table rebuilt perfectly, and a full PDF converted to Markdown in about 25 seconds.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/paddleocr-document-ocr-hands-on-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/paddleocr-document-ocr-hands-on-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-24">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Scans, photos, and PDFs into structured text: hands-on with PaddleOCR 3.7", "description": "PaddleOCR 3.7 turns scans, photos, and PDFs into text, tables, and Markdown — entirely on your CPU, no API key, no uploads. I ran its new PP-OCRv6 models on a small VM: 4/4 lines exact at 0.996+ confidence, a 15-cell table rebuilt perfectly, and a full PDF converted to Markdown in about 25 seconds.", "datePublished": "2026-11-24", "dateModified": "2026-11-24", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/paddleocr-document-ocr-hands-on-tutorial/"}, "image": "https://aifrontierpost.com/articles/paddleocr-document-ocr-hands-on-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU or an API key to run PaddleOCR?", "acceptedAnswer": {"@type": "Answer", "text": "No. Everything in this tutorial ran on a small CPU-only VM. The models are files you download once — PP-OCRv6, the layout models, and SLANeXt all run on PaddlePaddle’s CPU engine — and after the downloads, the pipeline works with the network unplugged."}}, {"@type": "Question", "name": "How is PP-OCRv6 different from PP-OCRv5?", "acceptedAnswer": {"@type": "Answer", "text": "PP-OCRv6 is the new default model family in PaddleOCR 3.7, built on a new unified backbone. The medium tier is rated about 5% more accurate than the PP-OCRv5 server models and faster, and a single model covers 50 languages instead of needing one model per language. PP-OCRv5 is still selectable with ocr_version=\"PP-OCRv5\" if you have a workflow tuned to it."}}, {"@type": "Question", "name": "Can PaddleOCR read handwriting?", "acceptedAnswer": {"@type": "Answer", "text": "PP-OCRv6 is designed to handle handwriting scenarios alongside printed text, and the docs list handwriting, vertical text, and rare characters among its targets. Expect lower accuracy than on clean print — test it on your own samples, and step up from the small tier to medium before deciding the model is the problem."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Scans, photos, and PDFs into structured text: hands-on with PaddleOCR 3.7</h1>
+<p class="lede">PaddleOCR 3.7 turns scans, photos, and PDFs into text, tables, and Markdown — entirely on your CPU, no API key, no uploads. I ran its new PP-OCRv6 models on a small VM: 4/4 lines exact at 0.996+ confidence, a 15-cell table rebuilt perfectly, and a full PDF converted to Markdown in about 25 seconds.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 24, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> PaddleOCR 3.7 turns scans, photos, and PDFs into text, tables, and Markdown — entirely on your CPU, no API key, no uploads. Install two pinned packages, point the PP-OCRv6 models at an image, and you get exact transcripts at 0.996+ confidence; add PP-StructureV3 and a whole PDF becomes Markdown in about 25 seconds.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>What it is:</b> PaddleOCR 3.7.0, from Baidu’s PaddlePaddle team — Apache-2.0, 93,134 GitHub stars — with two pipelines: general OCR on the new PP-OCRv6 models, and PP-StructureV3 for whole documents to Markdown, JSON, or Word.</li><li><b>Cost:</b> $0. Two pip installs plus model downloads (the default OCR pair is 133 MB). No account, no API key, no GPU, and no network after the downloads.</li><li><b>Measured OCR:</b> PP-OCRv6_medium read a 4-line test image exactly at 0.996–1.0 confidence in 7.1s, and a 15-cell table image cell-perfect in 6.6s. The small tier did the same 4 lines in 3.3s at 0.98+ confidence.</li><li><b>Measured documents:</b> A 180°-rotated scan was auto-corrected and read exactly in 7.9s; a one-page PDF became Markdown in 25–31s; the table rebuilt from bounding boxes matched ground truth exactly as a 5×3 Markdown table.</li><li><b>The gotcha:</b> PP-StructureV3 needs the <code>paddlex[ocr]</code> extra installed first — without it, creating the pipeline fails with a dependency error. Install it alongside the toolkit.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/paddleocr-document-ocr-hands-on-tutorial/cover.webp" alt="A paper document with a printed table transformed by a scanner beam into clean digital text and a structured table"></figure>
+<div class="article-body"><p>Every RAG pipeline, every document search tool, every invoice-processing workflow starts in the same place: getting text out of a scan, a photo, or a PDF. The usual answer is a cloud OCR API — you upload the document, you pay per page, and you trust a vendor with whatever is in it. That is a bad deal when the documents are contracts, medical records, or anything else you would rather not upload.</p>
+<p><strong>PaddleOCR</strong> is the local alternative, and version 3.7 is the one to learn now. It is Baidu&rsquo;s open-source OCR toolkit (Apache-2.0, over 93,000 GitHub stars), and the 3.7 release ships a new default model family, <strong>PP-OCRv6</strong>, plus a document pipeline, <strong>PP-StructureV3</strong>, that turns whole PDFs into Markdown. Everything runs on your CPU: no account, no API key, no GPU, no uploads.</p>
+<p>I ran it end to end on a small virtual machine with 4 vCPUs, 8 GB of RAM, and no GPU — the weakest hardware a tutorial can honestly claim. The default model read a test image&rsquo;s four lines exactly, at 0.996 confidence or better. A 15-cell table came back cell-perfect. A page rotated 180&deg; was auto-corrected and read exactly. A one-page PDF became Markdown in about 25 seconds. Every number in this tutorial is measured, not quoted.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.10 or newer.</strong> I used Python 3.12.3. No GPU, no CUDA, no Docker.</li><li><strong>About 1 GB of disk</strong> for the framework, the OCR models, and the layout models below. The OCR models themselves are small — the medium pair is 133 MB — but the PaddlePaddle runtime is the bulk of it.</li><li><strong>No accounts, no API keys, no network</strong> after the downloads. The total cost is $0, and the models run offline: once the files are on disk, you can unplug the network and everything still works.</li><li><strong>About 20 minutes</strong>, most of it downloads and first-run model loading.</li></ul>
+<p>One honest caveat up front: the test documents in this tutorial are clean, rendered text — the kind OCR is best at. Phone photos of crumpled paper, faint faxes, and handwriting will all cost you accuracy, and the smallest models feel that first. I will show you exactly where the quality knobs are.</p>
+<h2 id="step-1-install-paddleocr">Step 1: Install PaddleOCR<a class="anchor" href="#step-1-install-paddleocr" aria-label="Link to section">#</a></h2>
+<p>PaddleOCR is two installs, not one. The toolkit itself is a normal PyPI package, but it runs on the <strong>PaddlePaddle</strong> deep-learning framework, which you install first from Paddle&rsquo;s own CPU package index. Pin both versions: PaddleOCR moves fast, and unpinned installs are how tutorials silently break six months later.</p>
+<pre><code class="language-bash">python3 -m venv .venv && source .venv/bin/activate
+python -m pip install paddlepaddle==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+python -m pip install paddleocr==3.7.0</code></pre>
+<p>Verify the install before going further:</p>
+<pre><code class="language-bash">python -c "import paddle, paddleocr; print('paddle', paddle.__version__, '| paddleocr', paddleocr.__version__)"</code></pre>
+<p>On my machine this printed:</p>
+<pre><code class="language-text">paddle 3.2.0 | paddleocr 3.7.0</code></pre>
+<p>If you plan to use the document pipeline in step 5, install one more extra now — the <strong>paddlex[ocr]</strong> package set, which carries the layout, table, and formula dependencies. Without it, creating a <code>PPStructureV3</code> pipeline fails with a dependency error telling you to install exactly this:</p>
+<pre><code class="language-bash">python -m pip install "paddlex[ocr]==3.7.2"</code></pre>
+<p>That error is the single most common first-run failure with PaddleOCR 3.7, and it is easy to miss because the plain OCR pipeline in the next step works fine without the extra. Install it now and forget about it.</p>
+<h2 id="step-2-your-first-ocr">Step 2: Your first OCR — four lines, zero errors<a class="anchor" href="#step-2-your-first-ocr" aria-label="Link to section">#</a></h2>
+<p>The general OCR pipeline is one class, <code>PaddleOCR</code>, and one call, <code>predict()</code>. By default it uses the <strong>PP-OCRv6_medium</strong> models — a detector (59.4 MB) and a recognizer (73.3 MB) built on a new unified backbone, PPLCNetV4. One model covers 50 languages, including English, Chinese, Japanese, and 46 Latin-script languages. The three <code>use_*</code> flags switch off the optional preprocessing modules (orientation classification, unwarping, text-line orientation) so the first run downloads only the two models it needs:</p>
+<pre><code class="language-python">from paddleocr import PaddleOCR
+
+ocr = PaddleOCR(
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False,
+)
+result = ocr.predict("test_ocr.png")
+for res in result:
+    d = res.json["res"]
+    print(d["rec_texts"])
+    print([round(float(s), 3) for s in d["rec_scores"]])</code></pre>
+<p>My test image has four lines of known text, including an invoice line with a dollar amount and a date. The output was:</p>
+<pre><code class="language-text">['PaddleOCR 3.7 turns scans into text',
+ 'PP-OCRv6 reads 50 languages in one model',
+ 'Invoice total: $1,248.50 Date: 2026-11-24',
+ 'The quick brown fox jumps over 13 lazy dogs.']
+[1.0, 0.997, 0.998, 0.996]</code></pre>
+<p>Four out of four lines exact, at 0.996 confidence or better, in 7.1 seconds on this VM — including model warm-up on the first call. The only deviation from the ground truth is invisible in the printout: my image had two spaces between <code>$1,248.50</code> and <code>Date</code>, and the recognizer collapsed them to one. That is normal OCR whitespace normalization, not an error, but it is the kind of thing that matters if you are diffing OCR output against a known original: normalize whitespace on both sides before comparing.</p>
+<p>The result object is worth understanding, because every later step reads from it. <code>res.json</code> is a dictionary with a single <code>"res"</code> key, and inside it:</p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>rec_texts</code></td><td>One string per detected text line, in reading order</td></tr><tr><td><code>rec_scores</code></td><td>One confidence float per line, 0 to 1</td></tr><tr><td><code>rec_polys</code></td><td>Four corner points per line, as a polygon</td></tr><tr><td><code>rec_boxes</code></td><td>One axis-aligned box per line: <code>[x_min, y_min, x_max, y_max]</code></td></tr><tr><td><code>input_path</code>, <code>page_index</code></td><td>Which file (and which PDF page) the result came from</td></tr></tbody></table></div>
+<p>Two convenience methods live on the same result object: <code>res.save_to_img("output")</code> writes a copy of the input with the detected boxes drawn on it, and <code>res.save_to_json("output")</code> writes the whole result dict to disk. Use the image output whenever a result looks wrong — seeing the boxes tells you in seconds whether the problem is detection (the box is missing or wrong) or recognition (the box is right, the text is wrong).</p>
+<figure class="inline-art"><img class="story-image" src="/articles/paddleocr-document-ocr-hands-on-tutorial/img2.webp" alt="Diagram of the two PaddleOCR 3.7 pipelines: general OCR detects then recognizes text, and PP-StructureV3 detects layout regions then converts the document to Markdown"><figcaption>Diagram drawn for AI Frontier Post: the two PaddleOCR 3.7 pipelines and how they connect.</figcaption></figure>
+<h2 id="step-3-batch-a-folder">Step 3: Batch a folder, and trust only the confident lines<a class="anchor" href="#step-3-batch-a-folder" aria-label="Link to section">#</a></h2>
+<p>One image proves the pipeline works; a folder is what you actually have. <code>predict()</code> accepts a list of paths (or a directory of images), and returns one result per input, in order. It also accepts a PDF path directly — each page becomes one result. For very large sets there is <code>predict_iter()</code>, a generator with the same parameters that yields results one at a time instead of holding them all in memory.</p>
+<pre><code class="language-python">results = ocr.predict(["scan_001.png", "scan_002.png", "report.pdf"])
+for res in results:
+    d = res.json["res"]
+    for text, score in zip(d["rec_texts"], d["rec_scores"]):
+        if float(score) &lt; 0.9:
+            print(f"LOW CONFIDENCE ({float(score):.2f}): {text}")
+        else:
+            print(text)</code></pre>
+<p>I ran a two-image batch — the four-line test image plus a 15-cell table image — in 17.0 seconds total. The confidence filter is the habit that matters most in production OCR: scores are calibrated well enough that a 0.9 threshold catches the genuinely uncertain lines without throwing away good text. On my clean test images every line scored 0.993 or better, so nothing was flagged; on a real archive, the flagged lines are your review queue. You can also set the threshold inside the pipeline with <code>text_rec_score_thresh=0.9</code> at construction time, which drops low-confidence lines from the result entirely — but filtering in your own code keeps the rejected lines visible, and visible rejections are easier to debug.</p>
+<h2 id="step-4-tables-from-boxes">Step 4: Tables — rebuild them from the bounding boxes<a class="anchor" href="#step-4-tables-from-boxes" aria-label="Link to section">#</a></h2>
+<p>Plain OCR gives you lines, not tables. The 15-cell table image from step 3 came back as fifteen separate strings — every cell exact, but with no record of which cell belongs to which row or column. That structure lives in <code>rec_boxes</code>: each box knows exactly where its text sits on the page. Rebuilding a table is a small clustering problem — group boxes into rows by their vertical centre, sort each row left to right — and it is worth doing yourself once, because it teaches you what the boxes mean and it works with any OCR engine:</p>
+<pre><code class="language-python">result = ocr.predict("table.png")
+res = result[0].json["res"]
+items = [
+    {"text": t, "x0": int(b[0]), "yc": (int(b[1]) + int(b[3])) / 2}
+    for t, b in zip(res["rec_texts"], res["rec_boxes"])
+]
+items.sort(key=lambda b: b["yc"])
+rows, cur, cur_yc = [], [], None
+for b in items:
+    if cur_yc is None or abs(b["yc"] - cur_yc) &lt;= 25:
+        cur.append(b)
+        cur_yc = sum(c["yc"] for c in cur) / len(cur)
+    else:
+        rows.append(sorted(cur, key=lambda c: c["x0"]))
+        cur, cur_yc = [b], b["yc"]
+if cur:
+    rows.append(sorted(cur, key=lambda c: c["x0"]))
+
+lines = []
+for i, row in enumerate(rows):
+    lines.append("| " + " | ".join(c["text"] for c in row) + " |")
+    if i == 0:
+        lines.append("| " + " | ".join("---" for _ in row) + " |")
+print("\n".join(lines))</code></pre>
+<p>The output is a clean Markdown table, and it matched the ground truth exactly — all five rows, all three columns, every dollar figure and percentage intact:</p>
+<pre><code class="language-text">| Quarter | Revenue | Growth |
+| --- | --- | --- |
+| Q1 2026 | $12.4M | +8.2% |
+| Q2 2026 | $14.1M | +13.7% |
+| Q3 2026 | $15.8M | +12.1% |
+| Q4 2026 | $17.3M | +9.5% |</code></pre>
+<p>The <code>25</code> in the row-grouping test is a pixel tolerance, and it is the one number you will tune: it must be larger than the vertical jitter between cells in the same row and smaller than the gap between rows. On a 1200-pixel-wide render of a normal table, 25 pixels is a safe middle. If your tables have very tight row spacing, lower it; if a single logical row is split across two detected lines, raise it. The failure mode is visible immediately — a row with the wrong number of cells — so tune it on one page and then trust it.</p>
+<h2 id="step-5-pdf-to-markdown">Step 5: A whole PDF to Markdown with PP-StructureV3<a class="anchor" href="#step-5-pdf-to-markdown" aria-label="Link to section">#</a></h2>
+<p>Rebuilding tables by hand is instructive; doing it for a hundred-page PDF is not. That is what <strong>PP-StructureV3</strong> is for: it runs layout detection first (titles, paragraphs, tables, figures, formulas), OCRs each region, and emits structured output — Markdown, JSON, or Word — with the reading order recovered. It is the same install, a different class:</p>
+<pre><code class="language-python">from paddleocr import PPStructureV3
+
+pipeline = PPStructureV3(
+    layout_detection_model_name="PP-DocLayout-M",
+    text_detection_model_name="PP-OCRv6_medium_det",
+    text_recognition_model_name="PP-OCRv6_medium_rec",
+    use_table_recognition=False,   # see note below
+    use_formula_recognition=False,
+    use_seal_recognition=False,
+    use_chart_recognition=False,
+)
+output = pipeline.predict("report.pdf")
+for res in output:
+    res.save_to_markdown(save_path="output")</code></pre>
+<p>I ran it on a one-page test PDF — a title, a subtitle, three paragraph lines, and the same quarterly table from step 4. Initialization took about 14–20 seconds (five models loading), and the page took 25–31 seconds across two runs. The Markdown output:</p>
+<pre><code class="language-text">## Quarterly Sales Report
+
+Prepared by the Data Team - November2026
+
+Regional sales grew for the fourth straight quarter.
+North America led with $17.3M in Q4 2026.
+All figures are in US dollars.
+
+&lt;div style="text-align: center;"&gt;&lt;img src="imgs/img_in_table_box_66_531_1143_944.jpg" alt="Image" width="90%" /&gt;&lt;/div&gt;</code></pre>
+<p>Three things to notice. First, the layout model correctly identified the title as a heading (<code>##</code>) and kept the reading order — that is the whole point of the pipeline, and plain OCR cannot do it. Second, the one recognition slip: <code>November2026</code>, a missing space. The subtitle in my PDF renders the date close to the preceding word, and the recognizer merged them. Small, visible, and exactly the kind of error a confidence filter does not catch, because the line&rsquo;s score was high — proofread the output, don&rsquo;t just filter it. Third, the table came out as an <em>image</em>, not a table. That is the consequence of <code>use_table_recognition=False</code> in my call, and it deserves a straight explanation.</p>
+<p>By default, table recognition is <em>on</em>, and it is powered by a dedicated structure model, SLANeXt — a 351 MB download. On a normal machine it downloads automatically the first time a table is found, and the table comes out as a real Markdown table. I switched it off here because this sandbox&rsquo;s scratch disks could not hold the full default model set, and rebuilt the table from bounding boxes in step 4 instead. On your machine, leave the flag at its default and the table in that Markdown block becomes a table; the layout model already found the region precisely (its box, <code>66, 531, 1143, 944</code>, matches the drawn table). The same logic applies to the other sub-pipelines: formula recognition, seal recognition, and chart parsing are separate models you enable with a flag and pay for with disk, not with code changes.</p>
+<p>For a multi-page PDF, collect each page&rsquo;s Markdown and join them. <code>concatenate_markdown_pages</code> does the joining, and the result is subscriptable by <code>"markdown_texts"</code>:</p>
+<pre><code class="language-python">from pathlib import Path
+from paddleocr import PPStructureV3
+
+pipeline = PPStructureV3()  # defaults: layout + OCR + table + formula
+output = pipeline.predict("report.pdf")
+pages = [res.markdown for res in output]
+joined = pipeline.concatenate_markdown_pages(pages)
+Path("report.md").write_text(joined["markdown_texts"])
+print(f"wrote report.md ({len(joined['markdown_texts'])} chars, {len(pages)} pages)")</code></pre>
+<p>That script — the capstone of this tutorial — is a complete document-ingestion tool: a PDF goes in, a Markdown file comes out, and the file is ready to be chunked into a retriever, indexed by a search engine, or handed to a language model. Which is the point: OCR is rarely the product. It is the first stage of a pipeline, and PaddleOCR 3.7 is the stage you can run yourself.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/paddleocr-document-ocr-hands-on-tutorial/img3.webp" alt="Bar chart of measured runtimes: PP-OCRv6 small 3.2 seconds, medium 7.1 seconds, rotated scan 7.9 seconds, table image 6.6 seconds, batch of two images 17.0 seconds, PP-StructureV3 one-page PDF 25.3 seconds"><figcaption>Measured on a small VM with no GPU: every job in this tutorial runs in seconds, and the small OCR tier is twice as fast as the default medium. Lower is faster.</figcaption></figure>
+<h2 id="step-6-when-ocr-struggles">Step 6: When OCR struggles — the knobs that actually help<a class="anchor" href="#step-6-when-ocr-struggles" aria-label="Link to section">#</a></h2>
+<p>Clean renders are the easy case. The failures you will actually meet are crooked scans, phone photos, and tiny text, and PaddleOCR has a specific module for the first two. The document-orientation classifier detects a page that was scanned upside down or sideways and rotates it before recognition; the unwarping module (UVDoc) flattens a photographed page. Both are off in the minimal setup from step 2 — switch them on per job, not globally, because each one loads another model.</p>
+<p>I tested the orientation classifier on the hardest simple case: the four-line test image rotated a full 180&deg;. With <code>use_doc_orientation_classify=True</code>, all four lines came back exact, at 0.991–1.0 confidence, in 7.9 seconds — the classifier fixed the rotation and the recognizer never saw the problem:</p>
+<pre><code class="language-python">ocr = PaddleOCR(
+    use_doc_orientation_classify=True,  # fix rotated / upside-down scans
+    use_doc_unwarping=False,
+    use_textline_orientation=False,
+)
+result = ocr.predict("scan_upside_down.png")</code></pre>
+<p>The model tiers are the other knob, and they are a real choice rather than a ladder. PP-OCRv6 ships in three sizes, and the official figures plus my measured times line up the same way:</p>
+<div class="table-wrap"><table><thead><tr><th>Tier</th><th>Detection + recognition size</th><th>Docs&rsquo; accuracy</th><th>My time, 4-line image</th><th>Use it when&hellip;</th></tr></thead><tbody><tr><td><strong>tiny</strong></td><td>1.9 + 4.4 MB</td><td>Lowest of the three</td><td>Not measured</td><td>Edge / IoT devices, or thousands of pages where speed is everything</td></tr><tr><td><strong>small</strong></td><td>9.6 + 20.4 MB</td><td>Between tiny and medium</td><td>3.3s, 4/4 exact</td><td>Bulk jobs on clean scans — twice as fast as medium, same result here</td></tr><tr><td><strong>medium (default)</strong></td><td>59.4 + 73.3 MB</td><td>Highest; +5.1% recognition over PP-OCRv5 server</td><td>7.1s, 4/4 exact</td><td>Messy real-world scans, handwriting, mixed languages</td></tr></tbody></table></div>
+<p>Switch tiers with two parameters — <code>text_detection_model_name="PP-OCRv6_small_det"</code> and <code>text_recognition_model_name="PP-OCRv6_small_rec"</code> — and the rest of your code stays identical. My rule of thumb from these runs: start with the small tier for bulk work on clean documents and step up to medium only when your own samples prove small is missing text. The older PP-OCRv5 family is still selectable with <code>ocr_version="PP-OCRv5"</code> if you have a workflow tuned to it, but for new work there is no reason to: PP-OCRv6 is more accurate, faster, and covers more languages with a single model.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>OCR is a crowded field, and the right tool depends on what the document is and where it is allowed to go:</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Best for</th><th>Cost</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>PaddleOCR general OCR</strong></td><td>Images and single pages; anything where you want text + boxes + scores</td><td>$0, CPU-only</td><td>You rebuild tables and reading order yourself</td></tr><tr><td><strong>PaddleOCR PP-StructureV3</strong></td><td>Whole documents to Markdown; reports, papers, invoices with layout</td><td>$0, CPU-only; ~675 MB of models at defaults</td><td>First run downloads several large models; table model alone is 351 MB</td></tr><tr><td><strong>Vision-language OCR</strong></td><td>Handwriting, wild layouts, reasoning about a page</td><td>$0 local (GPU helps a lot)</td><td>Slower, heavier, needs a GPU for sane throughput</td></tr><tr><td><strong>Cloud OCR APIs</strong></td><td>One-off jobs, handwriting at scale, no setup</td><td>Per page, forever</td><td>Your documents leave your machine; the bill never stops</td></tr></tbody></table></div>
+<p>For the document-ingestion job most readers actually have — turning a folder of PDFs into clean text for search or retrieval — PaddleOCR is the default answer: it is free, it runs anywhere, and the PP-OCRv6 models are accurate enough that the review queue, not the error rate, is the bottleneck. Reach for a vision-language model when the layout itself is the problem (dense handwriting, diagrams with embedded text), and for a cloud API only when you cannot run anything locally at all.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Document AI starts with a boring, essential step: getting the words out of the page. PaddleOCR 3.7 does that step locally, for free, and — on the evidence of this run — accurately: exact transcripts at 0.996+ confidence, a 15-cell table rebuilt perfectly from bounding boxes, an upside-down scan auto-corrected, and a whole PDF converted to Markdown in about 25 seconds, all on a small CPU-only VM with no API key. Install it with the two pinned commands, remember the <code>paddlex[ocr]</code> extra before you touch PP-StructureV3, start with the small model tier for bulk work, and let your own documents tell you when to step up. The text was in your files all along — now it is in your pipeline.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="paddleocr-document-ocr-hands-on-tutorial"></div><div class="comments" data-comments="paddleocr-document-ocr-hands-on-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/sherpa-onnx-offline-speech-toolkit-tutorial/"><span class="chip">Tutorials</span><h3>One toolkit, every speech job, zero cloud: hands-on with sherpa-onnx</h3><div class="meta">November 24, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/fast-anything-rust-port-tutorial/"><span class="chip">Tutorials</span><h3>Port the 5%’s slow: hands-on with fast-anything’s Rust speedup loop</h3><div class="meta">November 24, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/career-ops-ai-job-search-agent-tutorial/"><span class="chip">Tutorials</span><h3>Run your job search like an agent workflow: hands-on with career-ops</h3><div class="meta">November 24, 2026 · 11 min read</div></a><a class="rel-card" href="/articles/academic-research-skills-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>From research question to submission-ready paper: hands-on with academic-research-skills</h3><div class="meta">November 24, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU or an API key to run PaddleOCR?</h3><p>No. Everything in this tutorial ran on a small CPU-only VM. The models are files you download once — PP-OCRv6, the layout models, and SLANeXt all run on PaddlePaddle’s CPU engine — and after the downloads, the pipeline works with the network unplugged.</p><h3>How is PP-OCRv6 different from PP-OCRv5?</h3><p>PP-OCRv6 is the new default model family in PaddleOCR 3.7, built on a new unified backbone. The medium tier is rated about 5% more accurate than the PP-OCRv5 server models and faster, and a single model covers 50 languages instead of needing one model per language. PP-OCRv5 is still selectable with ocr_version="PP-OCRv5" if you have a workflow tuned to it.</p><h3>Can PaddleOCR read handwriting?</h3><p>PP-OCRv6 is designed to handle handwriting scenarios alongside printed text, and the docs list handwriting, vertical text, and rare characters among its targets. Expect lower accuracy than on clean print — test it on your own samples, and step up from the small tier to medium before deciding the model is the problem.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/docling-pdf-markdown-rag-tutorial/">From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</a></li><li><a href="/articles/minicpm-ocr-parse-documents-locally-tutorial/">Turn PDFs and phone photos into Markdown on your own machine: hands-on with MiniCPM-OCR</a></li><li><a href="/articles/indra-ocr-cpu-document-markdown-tutorial/">Turn any scan or PDF into Markdown on your own CPU: a hands-on guide to Indra OCR</a></li><li><a href="/articles/llamaindex-local-rag-llamacpp-tutorial/">Build a fully local RAG app with LlamaIndex and llama.cpp — no API keys, no cloud</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
