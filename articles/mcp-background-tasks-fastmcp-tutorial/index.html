@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Call now, fetch later: run long MCP tools as background Tasks with FastMCP — AI Frontier Post</title>
+<meta name="description" content="MCP tool calls block until they finish — so a four-minute job holds the request open and stalls the agent. FastMCP 4 turns slow tools into background Tasks: submit, get a handle, poll, cancel, even answer questions mid-run. The complete build, verified end to end.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/mcp-background-tasks-fastmcp-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Call now, fetch later: run long MCP tools as background Tasks with FastMCP">
+<meta property="og:description" content="MCP tool calls block until they finish — so a four-minute job holds the request open and stalls the agent. FastMCP 4 turns slow tools into background Tasks: submit, get a handle, poll, cancel, even answer questions mid-run. The complete build, verified end to end.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mcp-background-tasks-fastmcp-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/mcp-background-tasks-fastmcp-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-25">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Call now, fetch later: run long MCP tools as background Tasks with FastMCP", "description": "MCP tool calls block until they finish — so a four-minute job holds the request open and stalls the agent. FastMCP 4 turns slow tools into background Tasks: submit, get a handle, poll, cancel, even answer questions mid-run. The complete build, verified end to end.", "datePublished": "2026-11-25", "dateModified": "2026-11-25", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/mcp-background-tasks-fastmcp-tutorial/"}, "image": "https://aifrontierpost.com/articles/mcp-background-tasks-fastmcp-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need Redis to run background Tasks?", "acceptedAnswer": {"@type": "Answer", "text": "No. The in-memory backend is the default: TasksExtension() with no arguments runs against memory://, and nothing in this tutorial needs Redis. Reach for Redis (FASTMCP_DOCKET_URL=redis://...) when you need tasks to survive a server restart, single-digit-millisecond pickup, or more than one worker process sharing a queue."}}, {"@type": "Question", "name": "What happens if my client doesn’t support Tasks?", "acceptedAnswer": {"@type": "Answer", "text": "An optional tool (task=True) simply runs synchronously — the caller waits and gets the result, as verified against a legacy client. A required-mode tool fails loudly instead: MCPError naming the io.modelcontextprotocol/tasks extension. Nothing silently degrades the wrong way."}}, {"@type": "Question", "name": "Can a task ask me something halfway through?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The tool returns an InputRequiredResult instead of a result, the task pauses at input_required, and the client answers through tasks/update — no worker ever blocks waiting on a human. Without an elicitation handler the task raises a ToolError rather than hanging."}}, {"@type": "Question", "name": "What happens to a task if the server restarts?", "acceptedAnswer": {"@type": "Answer", "text": "With the in-memory backend the task is gone: pending work is lost and completed results with it. With Redis the queue survives. Either way, results are kept only for the task TTL — 15 minutes by default, measured as ttl_ms 900000 — then discarded."}}, {"@type": "Question", "name": "Which spec version should I build against?", "acceptedAnswer": {"@type": "Answer", "text": "The 2026-07-28 extension, io.modelcontextprotocol/tasks (SEP-2663). The experimental Tasks in the 2025-11-25 spec — per-request task flags, execution.taskSupport, the blocking tasks/result call — is superseded, and the two versions do not speak to each other on the wire."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Call now, fetch later: run long MCP tools as background Tasks with FastMCP</h1>
+<p class="lede">MCP tool calls block until they finish — so a four-minute job holds the request open and stalls the agent. FastMCP 4 turns slow tools into background Tasks: submit, get a handle, poll, cancel, even answer questions mid-run. The complete build, verified end to end.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 25, 2026 · 21 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> On November 24, 2026, MCP gained two generally available features — Tasks and elicitation — plus Skills over MCP in public beta. This tutorial builds a FastMCP 4 server whose slow tools run as background Tasks: submit a job, get a handle back in 0.01 seconds, poll for the result, cancel a runaway, and answer questions mid-task. Everything is tested end to end with the FastMCP client.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Tasks (SEP-2663, <code>io.modelcontextprotocol/tasks</code>):</b> the server answers a tool call with a task handle instead of a result; the client polls <code>tasks/get</code>, answers input with <code>tasks/update</code>, and cancels with <code>tasks/cancel</code>. Generally available in Claude and Claude Code since November 24, 2026.</li><li><b>FastMCP 4.2.6:</b> <code>mcp.add_extension(TasksExtension())</code> plus <code>@mcp.tool(task=True)</code> is the whole server-side change. The in-memory backend needs no setup; task tools must be async functions.</li><li><b>Measured on the sandbox run:</b> a handle in 0.01 seconds for a 10-second job; the transparent <code>call_tool</code> polls under the hood (5.2 seconds for a 3-second job at the default 5-second poll interval); cancel lands in <code>cancelled</code>; task TTL is 15 minutes.</li><li><b>Compatibility:</b> optional tools run synchronously for clients without the extension; required tools fail loudly naming it. <code>tools/list</code> carries no per-tool task flag in FastMCP 4.2.6 — the handshake is the extension capability, and the server decides per request.</li></ul>
+</header>
+A dark cover graphic reading “Call now, fetch later” with a four-step flow: submit, handle, poll, result</figure>
+<div class="article-body"><p>Until now, an MCP tool call was one request and one response. The client sent the call, held the connection open, and waited — however long the work took. A research job that runs four minutes holds a request open for four minutes: through proxies, past timeouts, while the agent that asked for it sits idle. On November 24, 2026, Anthropic marked the second anniversary of the Model Context Protocol by making <strong>Tasks</strong> generally available in Claude and Claude Code, alongside elicitation. Tasks break the one-request-one-response shape: the server accepts the job, hands back a handle immediately, and the client polls for the result while the agent keeps working. ZoomInfo already runs its deeper account research this way — work that used to take several prompts now runs as a single background job.</p>
+<p>This tutorial builds a working Tasks server from scratch with FastMCP 4, the Python framework that implements the extension. You will write a server whose slow tools run in the background, drive it from a client three ways (transparent, explicit, cancelled), make one tool refuse to run synchronously, ask the user a question mid-task, and wire the result into Claude Code. Every code block below is the exact code that was run to produce the quoted output — no API key, no GPU, no account, no Redis.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Python 3.11 or newer.</strong> FastMCP 4 requires it; the sandbox run for this tutorial used Python 3.12.</li><li><strong>FastMCP 4.2.6 with the tasks extra:</strong> <code>pip install "fastmcp[tasks]"</code> installs both <code>fastmcp</code> and <code>fastmcp-tasks</code>. Pin them if you want the exact versions tested here: <code>fastmcp==4.2.6</code> and <code>fastmcp-tasks==4.2.6</code>.</li><li><strong>Nothing else.</strong> The default backend is in-memory, so there is no Redis to install, no database to provision, and no model calls anywhere — the server sleeps to simulate slow work, and the client is a script.</li></ul>
+<p>One thing to know before you start: Tasks are a <em>negotiated</em> capability. The client declares the <code>io.modelcontextprotocol/tasks</code> extension when it connects, and only then may the server answer a tool call with a task handle. A client that never declares it gets the old behavior — synchronous calls — and a tool that <em>requires</em> tasks gets a clean error instead of running. That split is the whole design, and Step 4 proves it.</p>
+<h2 id="step-1-a-minimal-task-server">Step 1: A minimal task server<a class="anchor" href="#step-1-a-minimal-task-server" aria-label="Link to section">#</a></h2>
+<p>Two lines turn an ordinary FastMCP server into a task-capable one: register the extension, and mark a tool with <code>task=True</code>. Save this as <code>minimal_server.py</code>:</p>
+<pre><code class="language-python">&quot;&quot;&quot;Minimal task-capable MCP server: two new lines turn a tool into a Task.&quot;&quot;&quot;
+import asyncio
+
+from fastmcp import FastMCP
+from fastmcp_tasks import TasksExtension
+
+mcp = FastMCP(&quot;report-forge&quot;)
+mcp.add_extension(TasksExtension())  # line 1: the tasks extension
+
+
+@mcp.tool(task=True)  # line 2: this tool may run as a background task
+async def slow_job(word: str) -&gt; str:
+    await asyncio.sleep(10)
+    return f&quot;Done: {word}&quot;
+
+
+if __name__ == &quot;__main__&quot;:
+    mcp.run()</code></pre>
+<p>Run it, then drive it from a client that declares the extension. Save this as <code>minimal_client.py</code>:</p>
+<pre><code class="language-python">import asyncio, time
+from fastmcp import Client
+from fastmcp_tasks import call_tool_task
+from fastmcp_tasks.client import TasksClientExtension
+from minimal_server import mcp
+
+async def main():
+    async with Client(mcp, extensions=[TasksClientExtension()]) as client:
+        t0 = time.monotonic()
+        task = await call_tool_task(client, &quot;slow_job&quot;, {&quot;word&quot;: &quot;hello&quot;})
+        print(f&quot;handle in {time.monotonic()-t0:.2f}s, task_id={task.task_id}&quot;)
+        print(&quot;status:&quot;, (await task.status()).status)
+        print(&quot;result:&quot;, (await task.result()).content[0].text)
+
+asyncio.run(main())</code></pre>
+<p>Expected output — note the timing. The job sleeps for ten seconds, but the handle comes back in a hundredth of one:</p>
+<pre><code class="language-text">handle in 0.01s, task_id=00MIs-nXp1UTNLNOqEW8f7Y9ehwC62PhNE-SJCtOxh0
+status: working
+result: Done: hello</code></pre>
+<p>Your task id will differ; the shape is the point. <code>call_tool_task</code> returns a <code>ToolTask</code> handle the moment the server accepts the job. <code>status()</code> reads the current state, <code>wait()</code> polls until it turns terminal, and <code>result()</code> returns the finished tool result. Two details in the client are easy to miss and both matter. First, the tasks extension is registered on the <em>client</em> too, with <code>extensions=[TasksClientExtension()]</code> — without it, the client never declares the capability and the server never tasks the call. Second, <code>call_tool_task</code> is a module-level function from <code>fastmcp_tasks</code>, not a method on <code>Client</code> — in FastMCP 4.2.6, <code>Client</code> has no <code>call_tool_task</code> method, and the docs page that shows it as one is describing the intent, not the installed API.</p>
+<p>If you forget the extension on the server side, FastMCP fails fast instead of silently running everything synchronously. A server with a <code>task=True</code> tool and no extension registered refuses to connect, with this exact error:</p>
+<pre><code class="language-text">RuntimeError: Client failed to connect: Task-enabled tools (slow) require the tasks extension, but no extension with identifier 'io.modelcontextprotocol/tasks' is registered. Install it with `pip install 'fastmcp[tasks]'` and register it via `mcp.add_extension(TasksExtension(...))`.</code></pre>
+<p>That is the behavior you want from a capability negotiation: a missing piece is a loud error at startup, not a quiet downgrade you discover in production.</p>
+<h2 id="step-2-build-a-tool-worth-tasking">Step 2: Build a tool worth tasking — report-forge<a class="anchor" href="#step-2-build-a-tool-worth-tasking" aria-label="Link to section">#</a></h2>
+<p>A ten-second sleep proves the plumbing, but it does not teach you when to reach for Tasks. The server for the rest of this tutorial is <code>report-forge</code>: a research-brief service with four tools. The first three cover the three execution modes; the fourth asks the user a question mid-task, and gets its own step (Step 5). Save it as <code>report_forge.py</code>:</p>
+<pre><code class="language-python">&quot;&quot;&quot;report-forge: a FastMCP server whose slow tools run as background Tasks.
+
+Verified against fastmcp 4.2.6 + fastmcp-tasks (2026-11-25).
+Run it with:  python report_forge.py        (stdio, for Claude Code)
+           or fastmcp run report_forge.py  (same server, CLI launcher)
+&quot;&quot;&quot;
+import asyncio
+from datetime import timedelta
+
+import mcp_types
+from fastmcp import Context, FastMCP
+from fastmcp.dependencies import Progress
+from fastmcp.utilities.tasks import TaskConfig
+from fastmcp_tasks import TasksExtension
+
+mcp = FastMCP(&quot;report-forge&quot;)
+mcp.add_extension(TasksExtension())
+
+
+@mcp.tool(task=True)
+async def build_report(topic: str, sections: int = 3,
+                       progress: Progress = Progress()) -&gt; str:
+    &quot;&quot;&quot;Assemble a multi-section research brief. Slow on purpose: ~1s/section.&quot;&quot;&quot;
+    await progress.set_total(sections)
+    await progress.set_message(f&quot;Researching {topic!r}&quot;)
+    lines = [f&quot;# Brief: {topic}&quot;, &quot;&quot;]
+    for i in range(1, sections + 1):
+        await asyncio.sleep(1)  # stand-in for retrieval + synthesis
+        lines.append(f&quot;## Section {i}\nFinding {i} about {topic}.\n&quot;)
+        await progress.increment()
+        await progress.set_message(f&quot;Section {i} of {sections} done&quot;)
+    return &quot;\n&quot;.join(lines)
+
+
+@mcp.tool
+def quick_lookup(query: str) -&gt; str:
+    &quot;&quot;&quot;Instant lookup. Synchronous by design: never a task.&quot;&quot;&quot;
+    return f&quot;{query}: 42 (cached)&quot;
+
+
+@mcp.tool(task=TaskConfig(mode=&quot;required&quot;, poll_interval=timedelta(seconds=1)))
+async def deep_dive(topic: str) -&gt; str:
+    &quot;&quot;&quot;A job that MUST run as a task: refuses synchronous callers.&quot;&quot;&quot;
+    await asyncio.sleep(2)
+    return f&quot;Deep dive complete: {topic}&quot;
+
+
+@mcp.tool(task=True)
+async def publish_brief(topic: str, ctx: Context) -&gt; str:
+    &quot;&quot;&quot;Draft a brief, then ask the user whether to publish -- mid-task.&quot;&quot;&quot;
+    responses = ctx.input_responses
+    if responses is None:
+        # Leg 1: ask, don&#x27;t wait. The task pauses at input_required and
+        # the worker is freed until the client answers.
+        return mcp_types.InputRequiredResult(
+            input_requests={
+                &quot;confirm&quot;: mcp_types.ElicitRequest(
+                    params=mcp_types.ElicitRequestFormParams(
+                        message=f&quot;Publish the {topic} brief to the team channel?&quot;,
+                        requested_schema={
+                            &quot;type&quot;: &quot;object&quot;,
+                            &quot;properties&quot;: {
+                                &quot;approve&quot;: {&quot;type&quot;: &quot;boolean&quot;, &quot;title&quot;: &quot;Approve publish&quot;}
+                            },
+                            &quot;required&quot;: [&quot;approve&quot;],
+                        },
+                    )
+                )
+            }
+        )
+    # Leg 2: the client answered; re-invoked with the answer attached.
+    answer = responses[&quot;confirm&quot;]
+    if getattr(answer, &quot;action&quot;, None) != &quot;accept&quot; or not (answer.content or {}).get(&quot;approve&quot;):
+        return f&quot;Not published: {topic} (declined)&quot;
+    await asyncio.sleep(1)
+    return f&quot;Published: {topic} brief is live in #team-updates&quot;
+
+
+if __name__ == &quot;__main__&quot;:
+    mcp.run()</code></pre>
+<p>Three things to notice. First, <code>build_report</code> takes a <code>Progress</code> dependency — injected by FastMCP, imported from <code>fastmcp.dependencies</code>, not from <code>fastmcp</code> itself. <code>set_total</code>, <code>increment</code> and <code>set_message</code> report back to the client while the job runs; the same code works whether the call is synchronous or tasked, so you write progress reporting once. Second, <code>quick_lookup</code> is an ordinary synchronous tool. It is the control group: fast tools stay fast tools, and nothing in this setup forces everything into the background. Third, <code>deep_dive</code> uses <code>TaskConfig(mode="required", poll_interval=timedelta(seconds=1))</code> — imported from <code>fastmcp.utilities.tasks</code>. The poll interval matters: the server suggests how often the client should check back, and the client honors it. You will see the difference in the timings in Step 3.</p>
+<p>One hard rule: <strong>task tools must be async functions.</strong> Mark a synchronous function with <code>task=True</code> and FastMCP refuses it at decoration time:</p>
+<pre><code class="language-text">ValueError: 'sync_tool' uses a sync function but has task execution enabled. Background tasks require async functions.</code></pre>
+<p>That is a real constraint, not a style preference — the worker runs the function on an event loop, and a blocking sync function would stall it. If your slow work is a blocking library call, wrap it with <code>asyncio.to_thread</code> inside the async tool.</p>
+<h2 id="step-3-drive-it-from-a-client">Step 3: Drive it from a client — three ways to wait<a class="anchor" href="#step-3-drive-it-from-a-client" aria-label="Link to section">#</a></h2>
+<p>There are two ways to call a task-capable tool, and they look almost identical from the caller&rsquo;s side. Save this as <code>client.py</code>:</p>
+<pre><code class="language-python">&quot;&quot;&quot;Client for report-forge: transparent calls, explicit tasks, cancellation.&quot;&quot;&quot;
+import asyncio
+import time
+
+from fastmcp import Client
+from fastmcp_tasks import call_tool_task
+from fastmcp_tasks.client import TasksClientExtension
+
+from report_forge import mcp
+
+
+async def main() -&gt; None:
+    async with Client(mcp, extensions=[TasksClientExtension()]) as client:
+        # 1. Transparent: call_tool polls under the hood, returns the result.
+        t0 = time.monotonic()
+        result = await client.call_tool(&quot;build_report&quot;,
+                                        {&quot;topic&quot;: &quot;MCP Tasks&quot;, &quot;sections&quot;: 3})
+        print(f&quot;[transparent] {time.monotonic() - t0:.1f}s -&gt;&quot;,
+              result.content[0].text.splitlines()[0])
+
+        # 2. Explicit: a handle now, the result when you want it.
+        t0 = time.monotonic()
+        task = await call_tool_task(client, &quot;build_report&quot;,
+                                    {&quot;topic&quot;: &quot;FastMCP&quot;, &quot;sections&quot;: 3})
+        print(f&quot;[explicit] handle in {time.monotonic() - t0:.2f}s,&quot;,
+              f&quot;task_id={task.task_id}&quot;)
+        print(&quot;  status:&quot;, (await task.status()).status)
+        done = await task.wait(timeout=30)
+        print(&quot;  wait() -&gt;&quot;, done.status)
+        final = await task.result()
+        print(&quot;  result:&quot;, final.content[0].text.splitlines()[0])
+
+        # 3. Cancel a runaway job.
+        task2 = await call_tool_task(client, &quot;build_report&quot;,
+                                     {&quot;topic&quot;: &quot;Slow job&quot;, &quot;sections&quot;: 10})
+        await asyncio.sleep(0.5)
+        await task2.cancel()
+        print(&quot;  after cancel:&quot;, (await task2.wait(timeout=30)).status)
+
+
+asyncio.run(main())</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">[transparent] 5.2s -&gt; # Brief: MCP Tasks
+[explicit] handle in 0.01s, task_id=JttpID4NUBpTdiPmBCfNPtz6si-nitfbjQGejOee6co
+  status: working
+  wait() -&gt; completed
+  result: # Brief: FastMCP
+  after cancel: cancelled</code></pre>
+<p>The first call is the one most code will use. Plain <code>call_tool</code> works exactly as it always has: it returns the finished result. Under the hood, the client sees the task handle, polls <code>tasks/get</code> until the task is terminal, and hands you the result — the task is invisible. That is the right default: the same calling code works whether or not the server tasks the call, and whether or not the client declared the extension. The 5.2 seconds for a three-second job is the polling cadence, not slowness: the server suggests a five-second poll interval (measured: <code>poll_interval_ms: 5000</code> on the task snapshot), so the client notices completion at the next poll. <code>deep_dive</code> sets a one-second interval and returns in 2.3 seconds for a two-second job — same mechanism, tighter loop.</p>
+<p>The second call is for when you want to do other work while the job runs. <code>call_tool_task</code> returns the handle in 0.01 seconds, and from there you drive the task yourself: <code>status()</code> for a snapshot, <code>wait()</code> to block until a state you name (or any terminal state), <code>result()</code> to collect the finished output. Between submitting and collecting, your code is free — start ten reports, poll them in a loop, do something else entirely. The third call shows the escape hatch: <code>cancel()</code> asks the server to stop, and the task lands in <code>cancelled</code>. Cancellation is cooperative — a task that is already finishing may complete before the server notices — but the state machine guarantees the outcome is one of the terminal states, never a half-result.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mcp-background-tasks-fastmcp-tutorial/img2.webp" alt="Diagram of the MCP task lifecycle: working, then input_required while waiting on the user, then completed, failed or cancelled"><figcaption>Diagram drawn for AI Frontier Post: the task lifecycle — working, an optional pause for input, then one terminal state.</figcaption></figure>
+<p>The lifecycle has five states and one rule: <code>working</code> is where a task starts; <code>input_required</code> is an optional pause while the task waits on the client (Step 5); <code>completed</code>, <code>failed</code> and <code>cancelled</code> are terminal and never change. A terminal <code>tasks/get</code> response carries the result or the error inline — there is no separate fetch step. That is the main difference from the first, experimental version of Tasks in the 2025-11-25 spec, which had a blocking <code>tasks/result</code> call and a <code>tasks/list</code> method; both are gone in the extension, and the result rides on the poll itself.</p>
+<p>A note for anyone reading the wire: <code>tools/list</code> does not flag which tools support tasks. In FastMCP 4.2.6 the <code>execution</code> field comes back empty for every tool — the 2026-07-28 extension is server-directed, so the handshake is the extension capability and the server decides per request, based on the tool&rsquo;s execution mode. Do not go looking for a per-tool flag in the listing; there is not one to find.</p>
+<h2 id="step-4-execution-modes">Step 4: Execution modes — who decides?<a class="anchor" href="#step-4-execution-modes" aria-label="Link to section">#</a></h2>
+<p><code>task=True</code> is shorthand for <code>TaskConfig(mode="optional")</code>. The three modes decide what happens for each combination of client and tool:</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mcp-background-tasks-fastmcp-tutorial/img3.webp" alt="Table of the three FastMCP task execution modes: forbidden, optional and required, and what each does for clients with and without task support"><figcaption>Diagram drawn for AI Frontier Post: the three execution modes, and what each one does for a client with and without the tasks extension.</figcaption></figure>
+<p>The interesting row is <code>required</code>. It exists for jobs that must never run synchronously — a multi-minute agent loop, a batch export, anything where a synchronous call would be a bug rather than a fallback. Here is what a client without the extension sees. Save this as <code>legacy_client.py</code> and run it against the same server:</p>
+<pre><code class="language-python">&quot;&quot;&quot;What a client WITHOUT the tasks extension sees.&quot;&quot;&quot;
+import asyncio
+import time
+
+from fastmcp import Client
+
+from report_forge import mcp
+
+
+async def main() -&gt; None:
+    async with Client(mcp, mode=&quot;legacy&quot;) as legacy:
+        # An optional tool just runs synchronously: the caller waits.
+        t0 = time.monotonic()
+        result = await legacy.call_tool(&quot;build_report&quot;,
+                                        {&quot;topic&quot;: &quot;Legacy&quot;, &quot;sections&quot;: 2})
+        print(f&quot;[legacy] build_report took {time.monotonic() - t0:.1f}s &quot;
+              f&quot;(synchronous) -&gt;&quot;, result.content[0].text.splitlines()[0])
+        # A required-mode tool refuses instead of running.
+        try:
+            await legacy.call_tool(&quot;deep_dive&quot;, {&quot;topic&quot;: &quot;SEP-2663&quot;})
+        except Exception as e:  # noqa: BLE001 - demo prints the real error
+            print(&quot;[legacy] deep_dive raised:&quot;, type(e).__name__)
+            print(&quot; &quot;, str(e))
+
+
+asyncio.run(main())</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">[legacy] build_report took 2.1s (synchronous) -&gt; # Brief: Legacy
+[legacy] deep_dive raised: MCPError
+  Tool 'deep_dive' requires the tasks extension (io.modelcontextprotocol/tasks); the client did not declare it for this request.</code></pre>
+<p>Two behaviors, both deliberate. The optional tool degrades gracefully: the legacy client asked for a report, waited two seconds, and got it — no error, no task, no special handling. The required tool fails loudly with a message that names the missing capability, instead of running a job it was never supposed to run inline. And <code>quick_lookup</code>, the plain tool, is unaffected either way. That is the compatibility story in one script: new clients get background execution, old clients keep working, and the only thing that ever errors is a combination you explicitly forbade.</p>
+<h2 id="step-5-ask-the-user-mid-task">Step 5: Ask the user a question mid-task<a class="anchor" href="#step-5-ask-the-user-mid-task" aria-label="Link to section">#</a></h2>
+<p>The second half of the November 24 announcement was interactivity: a server that can check in with the user partway through a job. The fourth tool in <code>report_forge.py</code> does exactly that. It drafts a brief, then asks whether to publish it — and the question arrives while the task is running, not before it starts. Here is that function, isolated from the file:</p>
+<pre><code class="language-python">@mcp.tool(task=True)
+async def publish_brief(topic: str, ctx: Context) -&gt; str:
+    &quot;&quot;&quot;Draft a brief, then ask the user whether to publish -- mid-task.&quot;&quot;&quot;
+    responses = ctx.input_responses
+    if responses is None:
+        # Leg 1: ask, don&#x27;t wait. The task pauses at input_required and
+        # the worker is freed until the client answers.
+        return mcp_types.InputRequiredResult(
+            input_requests={
+                &quot;confirm&quot;: mcp_types.ElicitRequest(
+                    params=mcp_types.ElicitRequestFormParams(
+                        message=f&quot;Publish the {topic} brief to the team channel?&quot;,
+                        requested_schema={
+                            &quot;type&quot;: &quot;object&quot;,
+                            &quot;properties&quot;: {
+                                &quot;approve&quot;: {&quot;type&quot;: &quot;boolean&quot;, &quot;title&quot;: &quot;Approve publish&quot;}
+                            },
+                            &quot;required&quot;: [&quot;approve&quot;],
+                        },
+                    )
+                )
+            }
+        )
+    # Leg 2: the client answered; re-invoked with the answer attached.
+    answer = responses[&quot;confirm&quot;]
+    if getattr(answer, &quot;action&quot;, None) != &quot;accept&quot; or not (answer.content or {}).get(&quot;approve&quot;):
+        return f&quot;Not published: {topic} (declined)&quot;
+    await asyncio.sleep(1)
+    return f&quot;Published: {topic} brief is live in #team-updates&quot;</code></pre>
+<p>This is the guard pattern, and it is deliberately written as a function that can be called twice. On the first leg, <code>ctx.input_responses</code> is <code>None</code>, so the tool returns an <code>InputRequiredResult</code> instead of a result — a form request with a message and a JSON Schema for the answer. Returning, not awaiting, is the point: the leg ends, the worker is freed, and the task sits in <code>input_required</code> as durable state. No worker ever blocks waiting on a human. On the second leg, FastMCP re-invokes the same function with the answer attached to <code>ctx.input_responses</code>, and the tool reads it and proceeds. The same tool works identically as a foreground call — the framework runs the same two legs inline — which means one implementation serves both paths.</p>
+<p>The client answers through an <code>elicitation_handler</code>. Save this as <code>input_client.py</code>:</p>
+<pre><code class="language-python">&quot;&quot;&quot;Mid-task input: watch publish_brief pause, answer it, get the result.&quot;&quot;&quot;
+import asyncio
+
+from fastmcp import Client
+from fastmcp_tasks import call_tool_task
+from fastmcp_tasks.client import TasksClientExtension
+
+from report_forge import mcp
+
+
+async def approve_all(message, response_type, params, context):
+    print(&quot;  [client] server asks:&quot;, message)
+    return {&quot;approve&quot;: True}
+
+
+async def main() -&gt; None:
+    async with Client(mcp, extensions=[TasksClientExtension()],
+                      elicitation_handler=approve_all) as client:
+        task = await call_tool_task(client, &quot;publish_brief&quot;,
+                                    {&quot;topic&quot;: &quot;MCP Tasks&quot;})
+        print(&quot;submitted, task_id:&quot;, task.task_id)
+        # Observe the pause WITHOUT answering it.
+        paused = await task.wait(state=&quot;input_required&quot;, timeout=30)
+        print(&quot;wait(state=&#x27;input_required&#x27;) -&gt;&quot;, paused.status)
+        # Drive it to completion; the handler answers the question.
+        final = await task.result()
+        print(&quot;result:&quot;, final.content[0].text)
+
+
+asyncio.run(main())</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">submitted, task_id: gSyjnIQovInedbUSYM-OtPp4MrxiHNn4C_EDgZcKd_g
+wait(state='input_required') -&gt; input_required
+  [client] server asks: Publish the MCP Tasks brief to the team channel?
+result: Published: MCP Tasks brief is live in #team-updates</code></pre>
+<p>Two calls in that script deserve attention. <code>wait(state="input_required")</code> observes the pause without answering it — use it when you want to show the user the question yourself, or log that a task is waiting, rather than have the handler answer automatically. <code>result()</code> drives the task the rest of the way, including answering through the handler. And the handler itself is four lines: it receives the message, the schema-derived response type, and the raw params, and returns a plain dictionary — FastMCP wraps it as an accepted answer. Return <code>{"approve": False}</code> instead and the same run ends with <code>Not published: MCP Tasks (declined)</code>; the decline path was verified separately. Without any handler at all, a task that asks for input raises a <code>ToolError</code> rather than hanging — another fail-closed choice.</p>
+<h2 id="step-6-wire-it-into-claude-code">Step 6: Wire it into Claude Code<a class="anchor" href="#step-6-wire-it-into-claude-code" aria-label="Link to section">#</a></h2>
+<p>The server speaks stdio by default — <code>mcp.run()</code> with no transport argument — so Claude Code can run it as a local MCP server with no HTTP layer at all. Add it to <code>.mcp.json</code> in your project (or <code>~/.claude.json</code> for every project), using the absolute path to your copy of the file:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "report-forge": {
+      "command": "python",
+      "args": ["/absolute/path/to/report_forge.py"]
+    }
+  }
+}</code></pre>
+<p>Or use the FastMCP CLI instead of Python directly — <code>fastmcp run report_forge.py</code> finds the object named <code>mcp</code> and launches the same server. Restart Claude Code, and <code>build_report</code> is a tool like any other, except that Claude Code now moves it to the background as soon as the server returns a task handle, and picks up the result when it finishes. Claude keeps working on the rest of the conversation instead of waiting on the long job — that is the behavior Tasks were made generally available for on November 24. The <code>publish_brief</code> question arrives as a normal confirmation in the conversation, and the answer flows back through <code>tasks/update</code> without Claude ever seeing the polling.</p>
+<h2 id="running-it-for-real">Running it for real: backends, TTL, and workers<a class="anchor" href="#running-it-for-real" aria-label="Link to section">#</a></h2>
+<p>Everything above runs on the default in-memory backend, which is the right choice for a local server and the wrong one for anything else. It is ephemeral: restart the server and every pending task is gone, and you cannot add a second worker process because each process has its own queue. For a deployed server, point the extension at Redis:</p>
+<pre><code class="language-bash">FASTMCP_DOCKET_URL=redis://localhost:6379/0 python report_forge.py</code></pre>
+<p>Tasks then survive restarts, pickup drops from roughly 250&nbsp;ms to single-digit milliseconds, and additional workers pull from the same queue — each one loads the same server module and uses its registered extension, so no separate worker flag is needed. Two settings are worth knowing by name. <code>FASTMCP_DOCKET_EXECUTION_TTL</code> controls how long task state and results are kept — the default is 15 minutes, measured on a live task snapshot as <code>ttl_ms: 900000</code> — after which the result is discarded and a late poll finds nothing. And <code>FASTMCP_TASKS_ENCRYPTION_KEY</code> encrypts the task context snapshot at rest: with the in-memory backend the snapshot never leaves the process, but on Redis it is stored as plaintext JSON by default, including the caller&rsquo;s access token and inbound headers. A worker that cannot decrypt a snapshot fails the task instead of running it with no identity — fail closed again, by design. Treat the backend as sensitive regardless: tool arguments and answers gathered mid-task are still stored as plaintext.</p>
+<h2 id="two-versions-of-tasks">Two versions of Tasks — know which one you are building on<a class="anchor" href="#two-versions-of-tasks" aria-label="Link to section">#</a></h2>
+<p>If you read older material on MCP Tasks, it describes a different protocol. Tasks first shipped as an experimental core feature in the 2025-11-25 specification: the client flagged each request with a <code>task</code> field, tools advertised <code>execution.taskSupport</code>, and the client fetched the result with a blocking <code>tasks/result</code> call. The 2026-07-28 revision — the current spec — moved Tasks out of the core and into the official <code>io.modelcontextprotocol/tasks</code> extension (SEP-2663) and redesigned it: task creation is server-directed, the client only declares the extension once; the blocking <code>tasks/result</code> is gone and the terminal <code>tasks/get</code> response carries the result; <code>tasks/list</code> is gone; and a new <code>tasks/update</code> carries the client&rsquo;s answers to a task waiting on input. FastMCP 4 implements the extension version. The two versions do not speak to each other on the wire, so when a guide shows <code>tasks/result</code> or per-request task flags, it is describing the superseded surface — build against the extension.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>The decision is per tool, not per server, and it comes down to how long the work takes and what a synchronous caller would experience:</p>
+<ul><li><strong>Synchronous (no task flag)</strong> — for work that finishes in seconds: lookups, validation, anything where the caller waiting is the correct behavior. <code>quick_lookup</code> is the model.</li><li><strong>Optional (<code>task=True</code>)</strong> — the default for slow work. New clients get background execution with progress and cancellation; old clients get the same result synchronously. Use it whenever a tool <em>can</em> take minutes but does not <em>have</em> to. Most task-capable tools belong here.</li><li><strong>Required (<code>TaskConfig(mode="required")</code>)</strong> — for work that must never run inline: multi-minute agent loops, batch jobs, anything where a synchronous call would time out or block an agent for the whole run. The loud error for legacy clients is the feature — it stops a bad call pattern at the boundary instead of letting it fail slowly in production.</li></ul>
+<p>And a rule of thumb for the boundary itself: if a tool regularly takes more than about 30 seconds, it is a task. Below that, the polling overhead costs more than the blocking saves. Above it, the task pays for itself in the first timeout it avoids.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>MCP tool calls used to be a blocking handshake: one request, one response, wait as long as it takes. Tasks turn that into a durable job with a handle — submit, poll, cancel, answer mid-run — and FastMCP 4 makes the whole thing two lines of server code and one extension registration on the client. The compatibility story is what makes it safe to adopt now: optional tools degrade to synchronous calls for old clients, required tools fail loudly instead of running inline, and the in-memory backend means there is nothing to provision before the first task runs. Build one slow tool as a task this week. The next time a job takes four minutes, your agent will be doing something else while it runs — and that is the entire point.</p>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/mcp-elicitation-skills-server-tutorial/"><span class="chip">Tutorials</span><h3>Build an MCP server that asks before it acts: elicitation and server-shipped skills, hands-on</h3><div class="meta">November 24, 2026 · ? min read</div></a><a class="rel-card" href="/articles/fastmcp-python-mcp-server-tutorial/"><span class="chip">Tutorials</span><h3>Build a real MCP server in Python: the complete FastMCP guide</h3><div class="meta">October 27, 2026 · ? min read</div></a><a class="rel-card" href="/articles/typescript-mcp-server-tutorial/"><span class="chip">Tutorials</span><h3>Build an MCP server in TypeScript: your own tools, wired into Claude Code</h3><div class="meta">November 7, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/build-mcp-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build your first MCP-powered agent: tools, servers, and safety rails</h3><div class="meta">August 24, 2026 · ? min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need Redis to run background Tasks?</h3><p>No. The in-memory backend is the default: TasksExtension() with no arguments runs against memory://, and nothing in this tutorial needs Redis. Reach for Redis (FASTMCP_DOCKET_URL=redis://...) when you need tasks to survive a server restart, single-digit-millisecond pickup, or more than one worker process sharing a queue.</p><h3>What happens if my client doesn’t support Tasks?</h3><p>An optional tool (task=True) simply runs synchronously — the caller waits and gets the result, as verified against a legacy client. A required-mode tool fails loudly instead: MCPError naming the io.modelcontextprotocol/tasks extension. Nothing silently degrades the wrong way.</p><h3>Can a task ask me something halfway through?</h3><p>Yes. The tool returns an InputRequiredResult instead of a result, the task pauses at input_required, and the client answers through tasks/update — no worker ever blocks waiting on a human. Without an elicitation handler the task raises a ToolError rather than hanging.</p><h3>What happens to a task if the server restarts?</h3><p>With the in-memory backend the task is gone: pending work is lost and completed results with it. With Redis the queue survives. Either way, results are kept only for the task TTL — 15 minutes by default, measured as ttl_ms 900000 — then discarded.</p><h3>Which spec version should I build against?</h3><p>The 2026-07-28 extension, io.modelcontextprotocol/tasks (SEP-2663). The experimental Tasks in the 2025-11-25 spec — per-request task flags, execution.taskSupport, the blocking tasks/result call — is superseded, and the two versions do not speak to each other on the wire.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/mcp-turns-two-skills-tasks-elicitation/">MCP turns two: servers can now ship skills to Claude and hand off long jobs as Tasks</a></li><li><a href="/articles/claude-ship-pr-review-fix-approve-tutorial/">Claude Ship tutorial: let AI review, fix, and approve your pull requests</a></li><li><a href="/articles/chrome-devtools-mcp-coding-agents-tutorial/">Give your coding agent a browser: hands-on with chrome-devtools-mcp</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
