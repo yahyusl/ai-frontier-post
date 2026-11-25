@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Your own OpenAI-compatible LLM API: serve Gemma 4 on Modal&#x27;s serverless GPUs with vLLM — AI Frontier Post</title>
+<meta name="description" content="Renting a frontier API is easy; owning the endpoint is better. This tutorial deploys Google&#x27;s Gemma 4 on Modal&#x27;s serverless H200 GPUs behind vLLM — a private, OpenAI-compatible API you can point any client at, with scale-to-zero billing and a key you control.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Your own OpenAI-compatible LLM API: serve Gemma 4 on Modal&#x27;s serverless GPUs with vLLM">
+<meta property="og:description" content="Renting a frontier API is easy; owning the endpoint is better. This tutorial deploys Google&#x27;s Gemma 4 on Modal&#x27;s serverless H200 GPUs behind vLLM — a private, OpenAI-compatible API you can point any client at, with scale-to-zero billing and a key you control.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-25">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Your own OpenAI-compatible LLM API: serve Gemma 4 on Modal's serverless GPUs with vLLM", "description": "Renting a frontier API is easy; owning the endpoint is better. This tutorial deploys Google's Gemma 4 on Modal's serverless H200 GPUs behind vLLM \u2014 a private, OpenAI-compatible API you can point any client at, with scale-to-zero billing and a key you control.", "datePublished": "2026-11-25", "dateModified": "2026-11-25", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/"}, "image": "https://aifrontierpost.com/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a credit card for Modal's free tier?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Modal requires a payment method on file even on the $0 Starter plan. The $30 monthly credit is applied first, and only usage beyond it is charged \u2014 but set a spend limit in the dashboard before you share the URL anywhere."}}, {"@type": "Question", "name": "Why Gemma 4 and not a bigger model?", "acceptedAnswer": {"@type": "Answer", "text": "Because it fits the job: 25.2B total parameters with only about 4B active per token, a 256K context window, and native thinking and tool calling \u2014 on a single H200 with room for a long KV cache. It is also Apache 2.0 licensed, so there is no gated download or license acceptance step."}}, {"@type": "Question", "name": "How long does the first deploy take?", "acceptedAnswer": {"@type": "Answer", "text": "Plan on several minutes. The container image builds once, then roughly 50 GB of weights download into the cache Volume. Every later boot reuses that cache, so the second deploy is dramatically faster."}}, {"@type": "Question", "name": "Is the endpoint really private?", "acceptedAnswer": {"@type": "Answer", "text": "The /v1 routes require your API key, which lives in a Modal Secret and never appears in the code. The /health endpoint answers without a key by design \u2014 it reveals nothing but liveness. If a key leaks, recreate the secret with a new value and redeploy."}}, {"@type": "Question", "name": "Can I swap the model?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Change MODEL_NAME and MODEL_REVISION, drop the Gemma-specific flags (--reasoning-parser, --tool-call-parser, the speculative block), and pick a GPU the new model fits. Qwen3-8B on an L40S is the cheap next experiment, at about $1.95 an hour."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Your own OpenAI-compatible LLM API: serve Gemma 4 on Modal&#x27;s serverless GPUs with vLLM</h1>
+<p class="lede">Renting a frontier API is easy. Owning the endpoint is better — and this year it stopped being a DevOps project. One Python file and one deploy command put Google&#x27;s Gemma 4 on a rented H200 behind vLLM, as a private OpenAI-compatible API that bills by the second and switches off when nobody is asking it anything.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 25, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Write one Python file that defines a Modal server running vLLM with Gemma 4, protect it with an API key stored as a Modal Secret, deploy it with <code>modal deploy</code>, and call it with any OpenAI client pointed at your new URL. The GPU scales to zero after 15 idle minutes, so you pay per second of actual use.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The model:</b> Gemma 4 26B-A4B — 25.2B total parameters, only ~4B active per token, 256K context, Apache 2.0 license. MMLU Pro 82.6, AIME 2026 88.3 (no tools).</li><li><b>The bill:</b> one H200 costs $0.001261/second, about $4.54/hour while the container runs. Modal's Starter plan includes $30 of compute every month — roughly 6.6 H200-hours.</li><li><b>The security fix that matters:</b> Modal's official example pins vLLM 0.21.0, which is affected by an authentication-bypass flaw (CVE-2026-48746) fixed in 0.22.0. This tutorial pins vLLM 0.34.0 instead.</li><li><b>The key fact about keys:</b> vLLM's <code>--api-key</code> only guards <code>/v1</code>, <code>/v2</code> and similar API paths. <code>/health</code> answers without a key by design — that is what makes it a good liveness probe.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/cover.webp" alt="A laptop sends a request to a cloud server running a GPU, which returns a streamed chat reply"></figure>
+<div class="article-body"><p>Frontier APIs are wonderful until they aren't: the model you want isn't on offer, your data can't leave your own cloud, or your bill scales with someone else's pricing page. The fix is to own the endpoint — and this year, that stopped being a DevOps project. One Python file, one deploy command, and you have a private, OpenAI-compatible API serving a 26-billion-parameter reasoning model on a rented H200, billed by the second and off entirely when nobody is asking it anything.</p>
+<p>The stack is three pieces that each do one job well. <strong>Modal</strong> is the serverless GPU cloud: you describe the machine in Python and it builds the image, finds the GPU, and hands you a URL. <strong>vLLM</strong> is the inference engine: it turns the model weights into a fast OpenAI-compatible HTTP server with continuous batching and paged attention. <strong>Gemma 4</strong> is the model: Google's 26B-A4B mixture-of-experts, Apache 2.0 licensed, with built-in thinking and tool calling — strong enough to be useful, small enough to fit on a single GPU with room to spare for a long context window.</p>
+<p>By the end of this tutorial you will have a live HTTPS endpoint that answers <code>/v1/chat/completions</code> exactly like OpenAI's, a Python client that talks to it, and a clear picture of what it costs — about $4.54 an hour while the GPU runs, $0 while it doesn't, and nothing at all for the first ~6 hours each month on Modal's free credit.</p>
+
+<h2 id="what-you-will-need">What you'll need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<p>Three accounts, one install, and no GPU of your own:</p>
+<ul><li><strong>A Modal account</strong> — sign up at <a href="https://modal.com/" rel="nofollow">modal.com</a>. The Starter plan costs $0 and renews $30 of compute credit every month. A payment method is required on file even on Starter: anything past the monthly credit is charged to it, so set a spend limit in the dashboard before you deploy (Step 7 shows the math).</li><li><strong>Python 3.12 on your laptop</strong> — the Modal client and the <code>openai</code> package. Everything else runs in the cloud.</li><li><strong>About 10 minutes of waiting</strong> — the first deploy downloads roughly 50 GB of model weights once, into a cache that survives between boots.</li></ul>
+<p>There is no Hugging Face account in the list. Gemma 4 is Apache 2.0 licensed and publicly downloadable, so no token or license acceptance is needed to fetch the weights. (If you later swap in a gated model such as a Llama, you will need an <code>HF_TOKEN</code> secret — see the troubleshooting section.)</p>
+<h2 id="step-1-set-up-modal">Step 1 — Set up Modal<a class="anchor" href="#step-1-set-up-modal" aria-label="Link to section">#</a></h2>
+<p>Install the client and authenticate it. The setup command opens a browser window where you create a token; the client stores it locally.</p>
+<pre><code class="language-bash">pip install modal
+modal setup
+modal --version</code></pre>
+<p>Expected output: the setup flow finishes with a confirmation, and <code>modal --version</code> prints the client version (1.6.4 at the time of writing). If <code>modal setup</code> complains that no browser is available — common on a headless server — run it from your laptop instead; the token it creates is what matters, not the machine it was created on.</p>
+<p>Two commands to know before you need them: <code>modal deploy</code> ships an app and prints its URL, and <code>modal run</code> executes a file's entrypoint locally while a fresh server spins up in the cloud. Both are used below, and both are verified against the installed CLI.</p>
+<h2 id="step-2-create-the-api-key-secret">Step 2 — Create the API key secret<a class="anchor" href="#step-2-create-the-api-key-secret" aria-label="Link to section">#</a></h2>
+<p>The endpoint this tutorial builds is public on the internet — anyone who finds the URL can reach it. So it gets an API key, stored as a Modal Secret rather than written into the code. Generate a random one and store it:</p>
+<pre><code class="language-bash">modal secret create vllm-api-key VLLM_API_KEY=$(openssl rand -hex 16)</code></pre>
+<p>Copy the key you generated into a safe place now: your shell history has it, and your password manager should too. Modal never prints a secret's value back to you — that is the point of a secret — so if you lose it, the fix is to recreate the secret with a new key and redeploy. You will need the same value in Steps 4 and 5 to call the endpoint. (On macOS, <code>openssl rand -hex 16</code> works the same; on Windows, use PowerShell's <code>[Convert]::ToHexString((1..16 | ForEach-Object { Get-Random -Maximum 256 }))</code> or any password generator.)</p>
+<p>Why a secret instead of an environment variable in the code? Because the file you are about to write is meant to be committed, shared, and reused. Secrets stay in Modal's encrypted store and arrive in the container as environment variables; the code only ever reads <code>os.environ["VLLM_API_KEY"]</code>.</p>
+<h2 id="step-3-write-the-server">Step 3 — Write the server<a class="anchor" href="#step-3-write-the-server" aria-label="Link to section">#</a></h2>
+<p>Create a file called <code>vllm_inference.py</code>. It is adapted from <a href="https://modal.com/docs/examples/vllm_inference" rel="nofollow">Modal's official vLLM example</a>, with two deliberate changes: vLLM 0.34.0 instead of 0.21.0 (the CVE noted above), and the API-key secret wired in.</p>
+<pre><code class="language-python">"""Serve Gemma 4 on Modal with vLLM as an OpenAI-compatible API."""
+
+import json
+import os
+from typing import Any
+
+import aiohttp
+import modal
+
+vllm_image = (
+    modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
+    .entrypoint([])
+    .uv_pip_install("vllm==0.34.0", "transformers==5.16.1")
+    .env(
+        {
+            "HF_XET_HIGH_PERFORMANCE": "1",  # faster model transfers
+            "VLLM_LOG_STATS_INTERVAL": "1",  # more frequent metrics logging
+        }
+    )
+)
+
+MODEL_NAME = "google/gemma-4-26B-A4B-it"
+MODEL_REVISION = "47b6801b24d15ff9bcd8c96dfaea0be9ed3a0301"  # pin it: repos update
+
+hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
+vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
+
+FAST_BOOT = False  # True = faster cold starts, slower generation
+
+SPECULATIVE_MODEL_NAME = "google/gemma-4-26B-A4B-it-assistant"
+SPECULATIVE_MODEL_REVISION = "f188f476dc11dd5bb3014dc861529d316bce49d3"
+
+app = modal.App("gemma4-vllm-api")
+
+N_GPU = 1
+MINUTES = 60  # seconds in a minute
+VLLM_PORT = 8000
+ROUTING_REGION = "us-east"
+
+
+@app.server(
+    image=vllm_image,
+    gpu=f"H200:{N_GPU}",
+    scaledown_window=15 * MINUTES,  # stay up 15 min after the last request
+    startup_timeout=10 * MINUTES,  # max wait for container start
+    volumes={
+        "/root/.cache/huggingface": hf_cache_vol,
+        "/root/.cache/vllm": vllm_cache_vol,
+    },
+    secrets=[modal.Secret.from_name("vllm-api-key")],
+    port=VLLM_PORT,
+    routing_region=ROUTING_REGION,
+    target_concurrency=100,  # requests one replica handles; tune carefully
+    unauthenticated=True,  # public URL; vLLM's own --api-key guards /v1
+)
+class Server:
+    @modal.enter()
+    def start(self):
+        import subprocess
+
+        cmd = [
+            "vllm",
+            "serve",
+            MODEL_NAME,
+            "--revision",
+            MODEL_REVISION,
+            "--served-model-name",
+            MODEL_NAME,
+            "llm",  # short alias: clients can ask for model "llm"
+            "--host",
+            "0.0.0.0",
+            "--port",
+            str(VLLM_PORT),
+            "--uvicorn-log-level=info",
+            "--async-scheduling",
+            "--api-key",
+            os.environ["VLLM_API_KEY"],
+        ]
+        # enforce-eager disables Torch compilation and CUDA graph capture
+        cmd += ["--enforce-eager" if FAST_BOOT else "--no-enforce-eager"]
+        # one GPU = no tensor parallelism beyond 1, but be explicit
+        cmd += ["--tensor-parallel-size", str(N_GPU)]
+        # Gemma 4 specifics: text-only serving, tool use + thinking on
+        cmd += [
+            "--limit-mm-per-prompt",
+            json.dumps({"image": 0, "video": 0, "audio": 0}),
+            "--enable-auto-tool-choice",
+            "--reasoning-parser",
+            "gemma4",
+            "--tool-call-parser",
+            "gemma4",
+        ]
+        # multi-token prediction: the assistant model drafts 4 tokens ahead
+        cmd += [
+            "--speculative-config",
+            json.dumps(
+                {
+                    "model": SPECULATIVE_MODEL_NAME,
+                    "revision": SPECULATIVE_MODEL_REVISION,
+                    "num_speculative_tokens": 4,
+                }
+            ),
+        ]
+        print(*cmd)
+        self.process = subprocess.Popen(cmd)
+
+    @modal.exit()
+    def stop(self):
+        self.process.terminate()</code></pre>
+<p>What each piece is doing:</p>
+<ul><li><strong>The image</strong> starts from NVIDIA's CUDA 12.9 container and installs exactly two packages: vLLM 0.34.0 and transformers 5.16.1. The transformers pin is the floor of vLLM 0.34's supported range (5.16.1 to 5.23.0), and it also stays below versions where Gemma 4 startups were reported to fail. Pin both — an unpinned <code>pip install vllm</code> drifts, and a serving setup that drifts is a setup that breaks on a Tuesday.</li><li><strong>The model revision</strong> is a commit hash, not a branch. Model repos update; a floating reference means the weights your server loads next month may not be the weights you tested today.</li><li><strong>The Volumes</strong> are the difference between a five-minute cold start and a twenty-five-minute one. The first boot downloads ~50 GB of weights into <code>huggingface-cache</code>; every later boot reads them from the Volume at 1–2 GB/s instead of the network. The second Volume caches vLLM's compiled kernels for the same reason.</li><li><strong><code>FAST_BOOT</code></strong> is the one knob to understand. <code>False</code> (the default here) lets vLLM compile kernels and capture CUDA graphs: slower first boot, faster generation. Set it to <code>True</code> while you are iterating on configuration, then back to <code>False</code> when you care about throughput.</li><li><strong>The Gemma flags</strong> turn on what makes this model more than a text predictor: <code>--reasoning-parser gemma4</code> exposes the model's thinking as a proper reasoning field, <code>--tool-call-parser gemma4</code> plus <code>--enable-auto-tool-choice</code> enable native function calling, and <code>--limit-mm-per-prompt</code> with all zeros skips the vision and audio encoders to save GPU memory for text. The speculative decoding block lets the small assistant model draft four tokens ahead of the main model — free throughput at low concurrency.</li><li><strong><code>unauthenticated=True</code></strong> looks alarming and is deliberate: it turns off Modal's own proxy authentication so that any HTTP client can reach the endpoint, and the vLLM API key takes over as the gate. If you would rather have Modal's auth too, delete that line — but then only clients carrying a Modal token can call it, which defeats the point of an OpenAI-compatible API.</li></ul>
+<p>Before deploying, check the file the way you would check any Python: <code>python -c "import ast; ast.parse(open('vllm_inference.py').read())"</code> catches syntax errors in a second, and <code>python vllm_inference.py</code> should exit silently — defining a Modal app performs no network calls, so a failure there means the Modal client or the code is wrong, not your account.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/img3.webp" alt="Diagram of the deployment pipeline: the server file, the modal deploy command, the public URL, and the OpenAI client"><figcaption>Diagram drawn for AI Frontier Post: one file, one deploy command, one public URL — the whole pipeline from laptop to API.</figcaption></figure>
+<h2 id="step-4-deploy-it">Step 4 — Deploy it<a class="anchor" href="#step-4-deploy-it" aria-label="Link to section">#</a></h2>
+<p>One command:</p>
+<pre><code class="language-bash">modal deploy vllm_inference.py</code></pre>
+<p>Modal builds the container image (a few minutes the first time), creates the app, and prints a URL like this:</p>
+<pre><code class="language-bash">✓ App deployed in 6.7s! 🎉
+└── 🔨 Created web function server => https://your-workspace--gemma4-vllm-api-server.us-east.modal.direct</code></pre>
+<p>That URL is your API endpoint. The <code>your-workspace</code> part is your Modal workspace name; <code>us-east</code> is the routing region from the file. Note that "deployed in 6.7s" means the app was registered — it does not mean the model is loaded. The first request (or the test in Step 5) triggers the real work: container start, weight download into the Volume, engine initialization. Plan on several minutes for the very first boot, and a much faster one afterwards.</p>
+<p>Verify the deploy worked end to end without touching your own client code yet. The file's <code>local_entrypoint</code> does a health check and then sends two chat requests:</p>
+<pre><code class="language-bash">export VLLM_API_KEY="the-key-you-created-in-step-2"
+modal run vllm_inference.py</code></pre>
+<p>What you should see: a health check that polls <code>/health</code> until it returns 200, then a streamed answer to "Explain the singular value decomposition" in the voice of a pirate who went to Harvard, then the same question answered as Jar Jar Binks. The silly system prompts are Modal's own test fixture — they exist to prove the system prompt is actually being honored, which is the fastest way to catch a misconfigured chat template. If both answers come back, your server is live, the key works, and the model is thinking.</p>
+<h2 id="step-5-prove-it-works-with-curl">Step 5 — Prove it works with curl<a class="anchor" href="#step-5-prove-it-works-with-curl" aria-label="Link to section">#</a></h2>
+<p>Set the endpoint once, then three probes that each test a different layer:</p>
+<pre><code class="language-bash">export VLLM_BASE_URL="https://your-workspace--gemma4-vllm-api-server.us-east.modal.direct"
+
+# 1. Liveness — no key needed, by design
+curl -s -o /dev/null -w "%{http_code}\n" $VLLM_BASE_URL/health
+# expect: 200
+
+# 2. The model list — needs the key
+curl -s $VLLM_BASE_URL/v1/models -H "Authorization: Bearer $VLLM_API_KEY"
+# expect: {"object":"list","data":[{"id":"google/gemma-4-26B-A4B-it", ...}]}
+
+# 3. A real completion
+curl -s $VLLM_BASE_URL/v1/chat/completions \
+  -H "Authorization: Bearer $VLLM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "google/gemma-4-26B-A4B-it",
+       "messages": [{"role": "user", "content": "Write a haiku about GPU memory."}],
+       "max_tokens": 60}'</code></pre>
+<p>Read the failures, not just the successes. A <code>503</code> from <code>/health</code> means the container is still booting or scaled to zero — wait and retry; Modal starts a fresh replica on demand. A <code>401</code> from <code>/v1/models</code> means the key is wrong: check that the secret name in the file matches the one you created, and that the key you are sending is the same one you stored. A connection error usually means the deploy hasn't finished or the URL has a typo — compare it character by character with what <code>modal deploy</code> printed.</p>
+<h2 id="step-6-call-it-from-python">Step 6 — Call it from Python<a class="anchor" href="#step-6-call-it-from-python" aria-label="Link to section">#</a></h2>
+<p>The point of an OpenAI-compatible endpoint is that no client code needs to learn anything new. Save this as <code>client.py</code>:</p>
+<pre><code class="language-python">"""Minimal client for your Modal vLLM endpoint (OpenAI-compatible)."""
+import os
+
+from openai import OpenAI
+
+BASE_URL = os.environ["VLLM_BASE_URL"]  # .../v1, e.g. https://your-workspace--gemma4-vllm-api-server.us-east.modal.direct/v1
+API_KEY = os.environ["VLLM_API_KEY"]
+
+client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+
+models = client.models.list()
+print("Serving:", [m.id for m in models.data])
+
+response = client.chat.completions.create(
+    model=models.data[0].id,
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Explain the singular value decomposition in one paragraph."},
+    ],
+    stream=True,
+    extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+)
+
+for chunk in response:
+    delta = chunk.choices[0].delta
+    content = (
+        delta.content
+        or getattr(delta, "reasoning_content", None)
+        or getattr(delta, "reasoning", None)
+    )
+    if content:
+        print(content, end="", flush=True)
+print()</code></pre>
+<pre><code class="language-bash">pip install openai
+export VLLM_BASE_URL="https://your-workspace--gemma4-vllm-api-server.us-east.modal.direct/v1"
+python client.py</code></pre>
+<p>Expected output: the served model id, then the answer streaming token by token — thinking first, then the final paragraph. Two details worth noticing. First, the client never mentions Modal, vLLM, or Gemma: <code>base_url</code> and the key are the only differences from calling OpenAI. Any tool that accepts an OpenAI-compatible base URL — LangChain, LiteLLM, the Vercel AI SDK, your own app — works the same way. Second, <code>extra_body={"chat_template_kwargs": {"enable_thinking": True}}</code> is what turns Gemma's thinking on; without it you get a direct answer, with it you get the reasoning trace in the stream. The <code>getattr</code> fallbacks in the loop exist because vLLM surfaces reasoning under different field names depending on the parser — the loop prints whichever one arrives.</p>
+<h2 id="step-7-understand-the-bill">Step 7 — Understand the bill<a class="anchor" href="#step-7-understand-the-bill" aria-label="Link to section">#</a></h2>
+<p>Modal bills three resources separately, by the second, and only while a container runs: GPU time, CPU time, and memory. The GPU dominates, so here is the arithmetic that matters:</p>
+<div class="table-wrap"><table><thead><tr><th>GPU</th><th>VRAM</th><th>Per hour</th><th>What $30 buys</th></tr></thead><tbody><tr><td><strong>H200</strong></td><td>141 GB</td><td>~$4.54</td><td>~6.6 hours</td></tr><tr><td><strong>H100</strong></td><td>80 GB</td><td>~$3.95</td><td>~7.6 hours</td></tr><tr><td><strong>A100 80GB</strong></td><td>80 GB</td><td>~$2.50</td><td>~12 hours</td></tr><tr><td><strong>L40S</strong></td><td>48 GB</td><td>~$1.95</td><td>~15 hours</td></tr><tr><td><strong>L4</strong></td><td>24 GB</td><td>~$0.80</td><td>~37 hours</td></tr><tr><td><strong>T4</strong></td><td>16 GB</td><td>~$0.59</td><td>~51 hours</td></tr></tbody></table></div>
+<p>Three consequences follow. First, the free credit is real money for this workload: a few hours of H200 time a month covers a personal project, a demo, or an evaluation run. Second, the <code>scaledown_window=15</code> in the server file is a cost decision disguised as a timeout: after the last request, the container idles for up to 15 minutes — still billing — before scaling to zero. Shorten it if your traffic is sparse, lengthen it if your users come in bursts and hate cold starts. Third, the bill has no ceiling unless you set one: put a spend limit on the workspace in the Modal dashboard before you share the URL anywhere. The $30 credit is applied first; everything past it lands on the card on file.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/img2.webp" alt="Diagram of the scale-to-zero lifecycle: request arrives, container boots, model loads, reply streams, then idle 15 minutes and scales to zero"><figcaption>Diagram drawn for AI Frontier Post: the scale-to-zero lifecycle — you pay while the container runs and nothing while it is off.</figcaption></figure>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Serving your own model is one of four honest options, and the right one depends on what you are optimizing for:</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Best when</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>This tutorial: Modal + vLLM</strong></td><td>You want a private endpoint with no servers to manage, and spiky or bursty traffic</td><td>Cold starts of a few minutes; per-second GPU rates above a reserved instance at sustained load</td></tr><tr><td><strong>Hosted frontier API</strong></td><td>You want the strongest model and zero operations, and your data may leave your cloud</td><td>Per-token pricing that grows with usage; no model choice beyond the provider's menu</td></tr><tr><td><strong>Rented GPU (Vast, RunPod, a cloud VM)</strong></td><td>Traffic is steady enough that a 24/7 instance beats per-second billing</td><td>You own patching, uptime, and scaling; idle time is still billed</td></tr><tr><td><strong>Local machine (Ollama, llama.cpp)</strong></td><td>Privacy is absolute or the model fits your own hardware</td><td>Throughput and context are bounded by your GPU; no sharing beyond your network</td></tr></tbody></table></div>
+<p>The crossover rule is simple: if the GPU would run more than about half the time, a reserved instance is usually cheaper than serverless. Below that, scale-to-zero wins, and this tutorial is the cheapest way to find out which side of the line you are on — the experiment costs a few dollars of free credit.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<ul><li><strong><code>503</code> on first contact.</strong> The container is booting or was scaled to zero. Wait a minute and retry; <code>modal run vllm_inference.py</code> forces a fresh replica and shows you the startup logs.</li><li><strong><code>401 Unauthorized</code> on <code>/v1/*</code>.</strong> The key in your request doesn't match the key in the <code>vllm-api-key</code> secret. Recreate the secret with a known value (<code>modal secret create --force</code> overwrites) and redeploy.</li><li><strong>Deploy fails on image build.</strong> The usual cause is a version conflict in <code>uv_pip_install</code>. Keep the two pins exactly as written: vLLM 0.34.0 requires transformers between 5.16.1 and 5.23.0, and 5.16.1 is the tested floor.</li><li><strong>First boot is very slow.</strong> Expected once: ~50 GB of weights download into the Volume. If it is slow every time, check the Modal dashboard — the Volumes may not be mounting, in which case every boot re-downloads. The volume names in the file (<code>huggingface-cache</code>, <code>vllm-cache</code>) must match what <code>modal volume list</code> shows.</li><li><strong>Out of memory on the H200.</strong> The 26B model plus a large KV cache fits one H200, but only just if you raise <code>--max-model-len</code> toward the full 256K. Either lower the context with <code>--max-model-len 131072</code> or move to two GPUs with <code>--tensor-parallel-size 2</code> and <code>gpu="H200:2"</code>.</li><li><strong>Swapping in a gated model.</strong> Create an <code>HF_TOKEN</code> secret (<code>modal secret create huggingface-secret HF_TOKEN=&lt;token&gt;</code>), add it to the server's <code>secrets</code> list, and accept the model's license on Hugging Face first — otherwise the download fails with a 401 from the Hub.</li><li><strong>Removing the speculative block.</strong> If the server logs complain at startup, delete the <code>--speculative-config</code> addition first. It is the most model-specific piece; the server runs fine without it, just slightly slower at low concurrency.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>You now own an endpoint instead of renting someone else's. The same file, with the model name changed and the Gemma-specific flags adjusted, serves any open-weights model that fits the GPU you pick — Qwen3-8B on an L40S is the obvious next experiment, at about $1.95 an hour. And the same client code works against all of them, because the OpenAI interface is the contract and the model behind it is your choice.</p>
+<p>The habit to keep: pin every version, pin the model revision, keep the key out of the code, and set a spend limit before you share the URL. The rest — scaling, patching, hardware — is Modal's problem now, and that is the whole point.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="modal-vllm-gemma4-serverless-llm-api-tutorial"></div><div class="comments" data-comments="modal-vllm-gemma4-serverless-llm-api-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/lean-4-verify-ai-math-proofs-tutorial/"><span class="chip">Tutorials</span><h3>Don&#x27;t trust the proof — check it: verify AI-generated math with Lean 4</h3><div class="meta">November 25, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/mobile-agent-testers-ai-qa-phones-tutorial/"><span class="chip">Tutorials</span><h3>20 AI testers on 20 phones at once: hands-on with mobile-agent-testers</h3><div class="meta">November 25, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/openspec-spec-driven-development-tutorial/"><span class="chip">Tutorials</span><h3>Stop re-explaining your feature to your coding agent: hands-on with OpenSpec 2.0</h3><div class="meta">November 25, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/google-workspace-mcp-claude-code-setup-tutorial/"><span class="chip">Tutorials</span><h3>Connect Claude Code to Gmail, Drive, and Calendar: the complete Google Workspace MCP setup</h3><div class="meta">November 25, 2026 · 12 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a credit card for Modal&#x27;s free tier?</h3><p>Yes. Modal requires a payment method on file even on the $0 Starter plan. The $30 monthly credit is applied first, and only usage beyond it is charged — but set a spend limit in the dashboard before you share the URL anywhere.</p><h3>Why Gemma 4 and not a bigger model?</h3><p>Because it fits the job: 25.2B total parameters with only about 4B active per token, a 256K context window, and native thinking and tool calling — on a single H200 with room for a long KV cache. It is also Apache 2.0 licensed, so there is no gated download or license acceptance step.</p><h3>How long does the first deploy take?</h3><p>Plan on several minutes. The container image builds once, then roughly 50 GB of weights download into the cache Volume. Every later boot reuses that cache, so the second deploy is dramatically faster.</p><h3>Is the endpoint really private?</h3><p>The /v1 routes require your API key, which lives in a Modal Secret and never appears in the code. The /health endpoint answers without a key by design — it reveals nothing but liveness. If a key leaks, recreate the secret with a new value and redeploy.</p><h3>Can I swap the model?</h3><p>Yes. Change MODEL_NAME and MODEL_REVISION, drop the Gemma-specific flags (--reasoning-parser, --tool-call-parser, the speculative block), and pick a GPU the new model fits. Qwen3-8B on an L40S is the cheap next experiment, at about $1.95 an hour.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/serve-model-vllm-tutorial/">Serve an open model with vLLM: a deployment tutorial</a></li><li><a href="/articles/litellm-gateway-tutorial/">One API for every LLM: run LiteLLM as your AI gateway</a></li><li><a href="/articles/qwen3-8-27b-local-setup/">Qwen3.8-27B on your own hardware: the complete local setup guide</a></li><li><a href="/articles/open-weights-vs-closed-api/">Open weights vs closed API: the strategic split defining 2026</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
