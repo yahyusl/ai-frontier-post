@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Connect Claude Code to Gmail, Drive, and Calendar: the complete Google Workspace MCP setup — AI Frontier Post</title>
+<meta name="description" content="Google&#x27;s hosted Workspace MCP servers are generally available — and from February 1, 2027, agents must use them instead of the REST APIs. This tutorial wires them into Claude Code end to end: Cloud project, OAuth client, servers, and the first verified prompts.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/google-workspace-mcp-claude-code-setup-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Connect Claude Code to Gmail, Drive, and Calendar: the complete Google Workspace MCP setup">
+<meta property="og:description" content="Google&#x27;s hosted Workspace MCP servers are generally available — and from February 1, 2027, agents must use them instead of the REST APIs. This tutorial wires them into Claude Code end to end: Cloud project, OAuth client, servers, and the first verified prompts.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/google-workspace-mcp-claude-code-setup-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/google-workspace-mcp-claude-code-setup-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-25">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Connect Claude Code to Gmail, Drive, and Calendar: the complete Google Workspace MCP setup", "description": "Google's hosted Workspace MCP servers are generally available — and from February 1, 2027, agents must use them instead of the REST APIs. This tutorial wires them into Claude Code end to end: Cloud project, OAuth client, servers, and the first verified prompts.", "datePublished": "2026-11-25", "dateModified": "2026-11-25", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/google-workspace-mcp-claude-code-setup-tutorial/"}, "image": "https://aifrontierpost.com/articles/google-workspace-mcp-claude-code-setup-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a Google Workspace subscription, or does a personal Gmail account work?", "acceptedAnswer": {"@type": "Answer", "text": "A personal Google account works for the setup in this tutorial: Google's Quick setup for personal use creates an OAuth client that works only for your own account. Workspace organizations get the same servers plus admin controls in the Admin console, such as disabling agent access and requiring confirmation for sensitive actions."}}, {"@type": "Question", "name": "Why does Claude Code ask me to sign in again every hour?", "acceptedAnswer": {"@type": "Answer", "text": "Your OAuth client is not returning a refresh token. Web application OAuth clients default to online access, so make sure the authorization request includes access_type=offline or the offline_access scope, and don't set access_type=online. If you already authorized the client without offline access, remove the app's access in your Google Account connections and sign in again so Google issues a refresh token."}}, {"@type": "Question", "name": "Can Claude send email directly, or only draft it?", "acceptedAnswer": {"@type": "Answer", "text": "The Gmail MCP server has no send tool. It can search and read threads and create drafts with gmail.create_draft, which land in your Drafts folder for you to review and send from Gmail. That is deliberate: sending is the one action Google keeps behind a human click."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Connect Claude Code to Gmail, Drive, and Calendar: the complete Google Workspace MCP setup</h1>
+<p class="lede">Google&#x27;s hosted Workspace MCP servers are generally available — and from February 1, 2027, agents must use them instead of the REST APIs. This tutorial wires them into Claude Code end to end: Cloud project, OAuth client, servers, and the first verified prompts.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 25, 2026 · 12 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Google now hosts one MCP server per Workspace app — Gmail, Drive, Docs, Sheets, Slides, Calendar, Chat, Tasks, People, Classroom, plus a Universal Search server. Set up a Google Cloud project, create an OAuth client flagged for AI agents, add the servers to Claude Code with <code>claude mcp add --transport http</code>, sign in once, and Claude can search your mail, read your files, and check your calendar from the terminal. The whole setup takes about 20 minutes, and it is free on Google&#x27;s Standard tier.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Why now:</b> the servers reached general availability on November 24, 2026. From February 1, 2027, Google begins technically enforcing that AI agents reach Workspace data through MCP or the official CLI — not the REST APIs.</li><li><b>What you get:</b> pre-built tools per app — <code>gmail.search_threads</code>, <code>drive.search_files</code>, <code>calendar.list_events</code> and more — that inherit your permissions and your organization&#x27;s data-governance controls.</li><li><b>What it costs:</b> nothing for nearly everyone. The Standard usage tier is free with published quotas; Google says over 99% of active developers operate within it. Scaled-tier billing starts April 1, 2027, and only for usage above daily free allowances.</li><li><b>The one setting that breaks everything:</b> your OAuth client must have <b>Use this client for an AI-powered agent</b> selected. Without it, requests fail with a generic <code>invalid token</code> error.</li><li><b>What Claude cannot do:</b> the Gmail server has no send tool. It drafts; you send. Treat that as a feature, not a limitation.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/google-workspace-mcp-claude-code-setup-tutorial/cover.webp" alt="Illustration of a laptop terminal connected through a glowing hub to email, cloud files, and calendar panels"><figcaption>AI-generated illustration: Claude Code in the terminal, connected through Google&#x27;s hosted MCP servers to Gmail, Drive, and Calendar.</figcaption></figure>
+<div class="article-body"><p>Until this week, giving a coding agent access to your inbox meant one of two bad options: hand it a service-account key with broad API access, or wire up a third-party Gmail integration and hope its OAuth scopes were honest. Google&#x27;s answer, generally available since November 24, is to host the integration itself: one remote MCP server per Workspace app, speaking the open Model Context Protocol, authenticated with your own OAuth client, and governed by the same permissions and DLP rules that already apply to you.</p>
+<p>This tutorial sets that up with Claude Code — the agent most developers already have in their terminal. By the end, Claude will answer "what did Ariel say in her last email about the marketing plan?" by searching your Gmail, summarize a Drive file without you pasting it, and check your calendar before proposing a meeting time. Every command below is taken from Google&#x27;s and Anthropic&#x27;s own documentation, and the server URLs were verified live at publication time.</p>
+<h2 id="what-you-will-need">What you&#x27;ll need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>A Google account</strong> — a personal Gmail account works. A Workspace account adds admin controls, but nothing in this tutorial requires them.</li>
+<li><strong>A Google Cloud project</strong> — free to create; no billing account needed for the Standard tier.</li>
+<li><strong>Claude Code installed and signed in</strong> — any recent 2.x release. Check with <code>claude --version</code>.</li>
+<li><strong>A browser</strong> — the OAuth sign-in happens there, once per server.</li>
+<li><strong>About 20 minutes</strong> — most of it is clicking through the Cloud console.</li></ul>
+<p>Optional but recommended: the <code>gcloud</code> CLI, if you prefer enabling APIs from the terminal instead of the console. Google&#x27;s Quick setup path below doesn&#x27;t need it.</p>
+<h2 id="how-the-pieces-fit-together">How the pieces fit together<a class="anchor" href="#how-the-pieces-fit-together" aria-label="Link to section">#</a></h2>
+<p>Three parts, each owned by someone else, which is the point: Google hosts the servers, Google issues the credentials, and Claude Code is just the client that calls them.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/google-workspace-mcp-claude-code-setup-tutorial/img2.webp" alt="Diagram of Claude Code in a terminal connecting through MCP servers to email, files, and calendar apps"><figcaption>AI-generated diagram: Claude Code talks to one hosted MCP server per Workspace app; each server exposes that app&#x27;s tools over Streamable HTTP.</figcaption></figure>
+<p>Claude Code connects to each server over Streamable HTTP with OAuth 2.0. When you ask about an email, Claude calls <code>gmail.search_threads</code> on the Gmail server; the server runs the search as you, under your permissions, and returns the result. The agent never sees your password, never holds a long-lived API key, and can only do what the OAuth scopes you granted allow. Revoke the OAuth client and every server stops working at once.</p>
+<p>Each Workspace product has its own server and URL:</p>
+<div class="table-wrap"><table><thead><tr><th>Server</th><th>URL</th></tr></thead><tbody><tr><td>Gmail</td><td><code>https://gmailmcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Drive</td><td><code>https://drivemcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Docs</td><td><code>https://docsmcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Sheets</td><td><code>https://sheetsmcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Slides</td><td><code>https://slidesmcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Calendar</td><td><code>https://calendarmcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Chat</td><td><code>https://chatmcp.googleapis.com/mcp/v1</code></td></tr><tr><td>People API</td><td><code>https://people.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Tasks</td><td><code>https://tasksmcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Google Classroom</td><td><code>https://classroommcp.googleapis.com/mcp/v1</code></td></tr><tr><td>Universal Search</td><td><code>https://workspacemcp.googleapis.com/mcp/v1</code></td></tr></tbody></table></div>
+<p>This tutorial wires up the three most useful — Gmail, Drive, and Calendar — and Step 5 adds the rest. The Universal Search server deserves a special mention: one <code>search_corpus</code> call searches Gmail, Drive, Calendar, and Chat together, which is the fastest way to answer "find anything about Project X."</p>
+<h2 id="step-1-set-up-the-google-cloud-project">Step 1 — Set up the Google Cloud project<a class="anchor" href="#step-1-set-up-the-google-cloud-project" aria-label="Link to section">#</a></h2>
+<p>Everything the MCP servers do runs inside a Google Cloud project you own. Google offers two routes: a guided Quick setup that does the whole job on one page, or the manual route with <code>gcloud</code>. Use Quick setup unless you need a multi-user OAuth client or want to enable only specific APIs.</p>
+<p><strong>Quick setup (recommended).</strong> Open Personal mode onboarding in the Google Cloud console — it pre-selects a Web application client, which is what you want. Select an existing project or create a new one, give the client a name, and review the Google API Services User Data Policy. The console enables the core Workspace APIs and MCP services and creates your OAuth client in one pass. Copy the client ID and client secret it shows you; you&#x27;ll need them in Step 3.</p>
+<p><strong>Manual route.</strong> If you prefer the terminal, create a project, then enable the product APIs and the MCP services with <code>gcloud</code>. Replace <code>PROJECT_ID</code> with your project ID in both commands:</p>
+<pre><code class="language-bash">gcloud services enable gmail.googleapis.com \
+  drive.googleapis.com \
+  docs.googleapis.com \
+  sheets.googleapis.com \
+  slides.googleapis.com \
+  calendar-json.googleapis.com \
+  chat.googleapis.com \
+  people.googleapis.com \
+  classroom.googleapis.com --project=PROJECT_ID</code></pre>
+<pre><code class="language-bash">gcloud services enable gmailmcp.googleapis.com \
+  drivemcp.googleapis.com \
+  docsmcp.googleapis.com \
+  sheetsmcp.googleapis.com \
+  slidesmcp.googleapis.com \
+  calendarmcp.googleapis.com \
+  chatmcp.googleapis.com \
+  people.googleapis.com \
+  tasksmcp.googleapis.com \
+  classroommcp.googleapis.com \
+  workspacemcp.googleapis.com \
+  --project=PROJECT_ID</code></pre>
+<p>Two details worth noticing. First, the product APIs and the MCP services are separate enables: <code>gmail.googleapis.com</code> is the Gmail API; <code>gmailmcp.googleapis.com</code> is the Gmail MCP API. You need both. Second, the People API serves MCP directly on <code>people.googleapis.com</code> — it has no separate <code>*mcp</code> service — and the Universal Search and Tasks servers need no separate product API enabled. If you used Quick setup, skip both commands: the console already did this, except for Classroom, which Quick setup doesn&#x27;t enable automatically.</p>
+<h2 id="step-2-create-the-oauth-client">Step 2 — Create the OAuth client (and the one checkbox that matters)<a class="anchor" href="#step-2-create-the-oauth-client" aria-label="Link to section">#</a></h2>
+<p>If you used Quick setup, your client already exists — but open it and check the two settings below anyway, because they are the difference between a working setup and an afternoon of cryptic errors.</p>
+<p>In the Google Cloud console, go to <strong>Google Auth Platform &gt; Clients &gt; Create Client</strong>. Select <strong>Web application</strong> as the application type and give it a name like <code>Claude Code Workspace</code>. Then:</p>
+<ol><li><strong>Add the redirect URI.</strong> Under Authorized redirect URIs, add <code>http://localhost:8080/callback</code>. Claude Code runs its OAuth callback on a local port; fixing the port with <code>--callback-port 8080</code> in Step 3 makes the registered URI and the real one match exactly. Google accepts localhost redirect URIs, and the port must match character for character — a trailing slash or a different port fails the sign-in.</li>
+<li><strong>Tick the agent checkbox.</strong> Select <strong>Use this client for an AI-powered agent</strong>. This is mandatory: user-delegated OAuth clients that call the Workspace MCP servers without this setting get their requests rejected with a generic <code>invalid token</code> error. If an existing client can&#x27;t be updated, or it also serves non-agent features, create a separate client for the agent and keep the old one for everything else.</li>
+<li><strong>Click Create and copy the client ID and client secret.</strong> You&#x27;ll paste them into the <code>claude mcp add</code> commands in the next step.</li></ol>
+<p>Now set the OAuth scopes — the permissions your agent actually gets. In <strong>Google Auth Platform &gt; Data Access</strong>, add the scopes for the servers you plan to use. For this tutorial&#x27;s three servers, that&#x27;s:</p>
+<div class="table-wrap"><table><thead><tr><th>Server</th><th>Scopes</th></tr></thead><tbody><tr><td><strong>Gmail</strong></td><td><code>https://www.googleapis.com/auth/gmail.readonly</code><br><code>https://www.googleapis.com/auth/gmail.compose</code></td></tr><tr><td><strong>Drive</strong></td><td><code>https://www.googleapis.com/auth/drive.readonly</code><br><code>https://www.googleapis.com/auth/drive.file</code></td></tr><tr><td><strong>Calendar</strong></td><td><code>https://www.googleapis.com/auth/calendar.calendarlist.readonly</code><br><code>https://www.googleapis.com/auth/calendar.events.freebusy</code><br><code>https://www.googleapis.com/auth/calendar.events.readonly</code><br><code>https://www.googleapis.com/auth/calendar.events</code></td></tr></tbody></table></div>
+<p>Notice the pattern: <code>readonly</code> scopes let Claude look; the write scopes (<code>gmail.compose</code>, <code>calendar.events</code>, <code>drive.file</code>) let it act. <code>gmail.compose</code> only authorizes drafts — there is no scope that lets the server send mail, because the server has no send tool. If you&#x27;re cautious, start with the readonly scopes only and add the write scopes later, when you actually want Claude to draft or schedule things. Also add your own email under <strong>Test users</strong> if your consent screen is in testing mode (External audience); without it, sign-in fails with a generic "Access blocked" error.</p>
+<h2 id="step-3-add-the-servers-to-claude-code">Step 3 — Add the servers to Claude Code<a class="anchor" href="#step-3-add-the-servers-to-claude-code" aria-label="Link to section">#</a></h2>
+<p>With the project and the client in place, the Claude Code side is three commands. Google&#x27;s MCP servers don&#x27;t support dynamic client registration, so you pass the pre-configured credentials when adding each server: <code>--client-id</code> with your client ID, <code>--client-secret</code> (it prompts for the secret as masked input), and <code>--callback-port 8080</code> to match the redirect URI you registered.</p>
+<pre><code class="language-bash">claude mcp add --transport http \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret --callback-port 8080 \
+  --scope user gmail https://gmailmcp.googleapis.com/mcp/v1
+
+claude mcp add --transport http \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret --callback-port 8080 \
+  --scope user drive https://drivemcp.googleapis.com/mcp/v1
+
+claude mcp add --transport http \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret --callback-port 8080 \
+  --scope user calendar https://calendarmcp.googleapis.com/mcp/v1</code></pre>
+<p>Each command prints an <code>Added ...</code> line on success — that confirms the configuration was written, not that the server connected. The <code>--scope user</code> flag makes the servers available in every project, not just the current one; the default local scope keeps them in the current project only, and <code>--scope project</code> writes them to a shareable <code>.mcp.json</code> at the repo root.</p>
+<p>Now sign in. Run this for each server, or open the <code>/mcp</code> panel inside a Claude Code session and authenticate there:</p>
+<pre><code class="language-bash">claude mcp login gmail
+claude mcp login drive
+claude mcp login calendar</code></pre>
+<p>A browser window opens for Google sign-in. Approve the scopes, and Claude Code stores the token and refreshes it automatically. If you&#x27;re on SSH or a headless machine, the command prints the authorization URL instead — open it on your local machine and paste the full redirect URL back at the prompt. Then check the status:</p>
+<pre><code class="language-bash">claude mcp list</code></pre>
+<p>Expected output: all three servers showing <code>✔ Connected</code>, each with its tool count. A server showing <code>! Needs authentication</code> means the sign-in didn&#x27;t complete — run <code>claude mcp login &lt;name&gt;</code> again. <code>✘ Failed to connect</code> means Claude Code couldn&#x27;t reach the server at all, which usually traces back to Step 1 or 2: an API not enabled, or the agent checkbox missing.</p>
+<p>If you prefer config files to commands, the same servers can live in a project <code>.mcp.json</code>. The shape Claude Code requires is a <code>type</code> of <code>http</code> next to the <code>url</code> — a URL without a type is read as a stdio server and skipped:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "gmail": {
+      "type": "http",
+      "url": "https://gmailmcp.googleapis.com/mcp/v1",
+      "oauth": {
+        "scopes": "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose"
+      }
+    }
+  }
+}</code></pre>
+<p>Setting <code>oauth.scopes</code> pins the scopes Claude Code requests during sign-in, which is the supported way to keep a server to an approved subset. Leave it unset and the server decides the scope set.</p>
+<h2 id="step-4-verify-it-works">Step 4 — Verify it works with real prompts<a class="anchor" href="#step-4-verify-it-works" aria-label="Link to section">#</a></h2>
+<p>Don&#x27;t trust the green checkmark alone — make Claude do something. Open Claude Code and try these, one at a time, watching which tools it calls:</p>
+<ul><li><strong>"What did Ariel say in her last email about our marketing plan?"</strong> — Claude should call <code>gmail.search_threads</code> to find Ariel&#x27;s emails, then <code>gmail.get_thread</code> to read the latest one and summarize it.</li>
+<li><strong>"Summarize the file Marketing Plan."</strong> — Claude calls <code>drive.search_files</code> to locate it, then <code>drive.read_file_content</code> to read and summarize it.</li>
+<li><strong>"When is my next meeting with Ariel?"</strong> — Claude checks your schedule with <code>calendar.list_events</code> and gives you the time and details.</li>
+<li><strong>"Draft an email to ariel@example.com saying that I approve the marketing plan."</strong> — Claude uses <code>gmail.create_draft</code>. Check Gmail: the draft should be sitting in your Drafts folder, unsent, waiting for your review.</li></ul>
+<p>If the tools run and the answers are relevant to your actual data, the setup is correct. The draft test is the most informative one: it proves the write scopes work, and it proves the safety boundary works too — Claude drafts, you send.</p>
+<h2 id="step-5-add-the-rest">Step 5 — Add the rest: Docs, Sheets, Slides, Tasks, and Universal Search<a class="anchor" href="#step-5-add-the-rest" aria-label="Link to section">#</a></h2>
+<p>The same three commands from Step 3 work for every other server — same client ID and secret, different name and URL. Add the ones you&#x27;ll actually use:</p>
+<pre><code class="language-bash">claude mcp add --transport http \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret --callback-port 8080 \
+  --scope user docs https://docsmcp.googleapis.com/mcp/v1
+
+claude mcp add --transport http \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret --callback-port 8080 \
+  --scope user sheets https://sheetsmcp.googleapis.com/mcp/v1
+
+claude mcp add --transport http \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret --callback-port 8080 \
+  --scope user tasks https://tasksmcp.googleapis.com/mcp/v1
+
+claude mcp add --transport http \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret --callback-port 8080 \
+  --scope user workspace-universal https://workspacemcp.googleapis.com/mcp/v1</code></pre>
+<p>Remember to add the matching scopes in the console first — Docs needs the Drive scopes plus <code>documents.readonly</code> and <code>documents</code>; Sheets needs the Drive scopes plus <code>spreadsheets.readonly</code> and <code>spreadsheets</code>; Tasks needs <code>tasks.readonly</code> and <code>tasks</code>; Universal Search needs the readonly scopes for Gmail, Drive, Calendar, and Chat. If a tool call fails with a message about needing additional permissions, that&#x27;s the console telling you a scope is missing: add it, then re-authenticate the server from <code>/mcp</code>.</p>
+<p>Universal Search is the one to try first. Ask <strong>"Find anything related to Project X across my email, files, and chat messages"</strong> and Claude calls <code>search_corpus</code> once instead of searching four apps separately. And a genuinely useful everyday prompt: <strong>"Add a task to send Ariel the marketing plan by Friday"</strong> — the Tasks server&#x27;s <code>tasks.create_task</code> drops it on your default task list.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Google now offers three sanctioned ways for an agent to reach Workspace data, and the right one depends on where your agent lives:</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Best for</th><th>Trade-offs</th></tr></thead><tbody><tr><td><strong>Hosted MCP servers (this tutorial)</strong></td><td>Cloud and web agents, Claude Code, Antigravity</td><td>Google hosts and governs it; needs the OAuth client setup above; one server per app</td></tr><tr><td><strong>Official Workspace CLI (<code>gwscli</code>)</strong></td><td>Terminal agents, VMs, sandboxes, scripts</td><td>Google-supported, built for agents, JSON output and scoped sign-in; commands are discovered at runtime, so don&#x27;t hard-code them into static scripts</td></tr><tr><td><strong>Community <code>gws</code> CLI</strong></td><td>Power users who want every Workspace API in one command</td><td>Not an officially supported Google product; mature and widely used, but you&#x27;re on community support</td></tr><tr><td><strong>Direct REST APIs</strong></td><td>Traditional applications</td><td>Still fine for regular apps — but agents must migrate off them before enforcement begins February 1, 2027</td></tr></tbody></table></div>
+<p>If your agent runs in a terminal, the hosted MCP servers and the official CLI are complements, not competitors: MCP for conversational work inside Claude Code, the CLI for scripts and automation that need deterministic, pipeable JSON. What you should not do is build a new agent integration directly against the REST APIs — that&#x27;s the path Google is closing for agentic access.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<p>Four failures cover nearly every bad setup. Check them in this order:</p>
+<ul><li><strong><code>invalid token</code> on every request.</strong> The OAuth client doesn&#x27;t have <strong>Use this client for an AI-powered agent</strong> selected. Google&#x27;s own docs flag this as a known issue: the error message is generic, and a descriptive one is coming in a future release. Tick the setting (or create a new client with it ticked) and sign in again.</li>
+<li><strong>Asked to sign in again about every hour.</strong> Your client isn&#x27;t receiving a refresh token. Web application clients default to online access — request offline access with <code>access_type=offline</code> or the <code>offline_access</code> scope, and don&#x27;t set <code>access_type=online</code>. If you already authorized the client without offline access, remove the app&#x27;s access in your Google Account connections and sign in again; Google only issues a refresh token the first time offline access is granted.</li>
+<li><strong><code>redirect_uri_mismatch</code> during sign-in.</strong> The port in <code>--callback-port</code> doesn&#x27;t match the redirect URI registered on the client. Re-check both: the client needs exactly <code>http://localhost:8080/callback</code> if you passed <code>--callback-port 8080</code>.</li>
+<li><strong>A tool call fails with "needs additional permissions."</strong> The scope the tool needs isn&#x27;t in your granted set. Add the scope in the console&#x27;s Data Access page, then re-authenticate the server from <code>/mcp</code> — re-authenticating without adding the scope just returns a token that still lacks it.</li></ul>
+<p>One more administrative note: if you&#x27;re on a Workspace domain and the servers won&#x27;t connect at all, ask your admin to check the OAuth log events in the security investigation tool. Admins can disable agent access outright, and their audit logs always show the correct attribution even when the UI badge occasionally shows the user instead of the agent.</p>
+<h2 id="lock-it-down">Lock it down: security notes<a class="anchor" href="#lock-it-down" aria-label="Link to section">#</a></h2>
+<figure class="inline-art"><img class="story-image" src="/articles/google-workspace-mcp-claude-code-setup-tutorial/img3.webp" alt="Illustration of a user, a shield with a keyhole, and a server rack connected by a verified path with locks"><figcaption>AI-generated illustration: every request passes through OAuth and the user&#x27;s own permissions — the agent acts as you, and only as you.</figcaption></figure>
+<p>You just gave an AI agent the keys to your email, files, and calendar. The architecture limits the blast radius, but only if you respect it:</p>
+<ul><li><strong>Least-privilege scopes.</strong> Grant readonly scopes until a workflow needs a write scope. The difference between "Claude can read my mail" and "Claude can draft mail" is one checkbox — keep it deliberate.</li>
+<li><strong>Review everything it does.</strong> Google&#x27;s own guidance is blunt: always carefully review the actions your agent takes on your behalf. Drafts are for reviewing; calendar events it creates are for checking. The agent is fast and confident, and those are different things.</li>
+<li><strong>Watch for indirect prompt injection.</strong> An email from an untrusted sender can contain hidden instructions. Once the agent can read mail and act on it, a malicious message can try to hijack the session and get the agent to modify, steal, or delete your data. Don&#x27;t ask the agent to process mail or documents from unverified sources, and consider Google&#x27;s Model Armor service to screen prompts and responses for injection.</li>
+<li><strong>Human confirmation stays on.</strong> The servers prompt for confirmation on sensitive actions, and saved approvals expire after 90 days — you can&#x27;t approve something once and forget about it forever. That friction is the design.</li>
+<li><strong>Know how to kill it.</strong> <code>claude mcp logout &lt;name&gt;</code> clears stored credentials for one server; <code>claude mcp remove &lt;name&gt;</code> deletes the server and its tokens. Revoking the OAuth client in the Cloud console kills all of them at once.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>The setup is twenty minutes of console clicking for something that used to be a weekend project: no service accounts, no custom Gmail integration, no third-party OAuth broker standing between your agent and your data. Google hosts the servers, you own the credentials, and Claude Code gets tools that respect your permissions instead of bypassing them.</p>
+<p>Do it now rather than in January. The February 1 enforcement deadline means every agent integration built on the REST APIs needs this migration anyway — setting it up while the documentation is fresh and the quotas are free beats doing it under a deadline. Start with Gmail, Drive, and Calendar; add Docs and Universal Search when the first three feel routine; and keep the scopes as narrow as your actual workflows allow.</p>
+<p class="sources">Sources: <a href="https://developers.google.com/workspace/guides/configure-mcp-servers" rel="nofollow">Configure the Google Workspace MCP servers — Google for Developers</a>; <a href="https://code.claude.com/docs/en/mcp/" rel="nofollow">Connect Claude Code to tools via MCP — Claude Code Docs</a>.</p></div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="google-workspace-mcp-claude-code-setup-tutorial"></div><div class="comments" data-comments="google-workspace-mcp-claude-code-setup-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/a2ui-generative-ui-agent-sdk-tutorial/"><span class="chip">Tutorials</span><h3>Your agent can build the interface now: hands-on with A2UI, the generative UI framework</h3><div class="meta">November 25, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/mroffice-ai-office-editors-mcp-tutorial/"><span class="chip">Tutorials</span><h3>Let your coding agent edit real Office files: hands-on with MR Office&#x27;s MCP server</h3><div class="meta">November 25, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/skills-cli-package-manager-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Stop copying SKILL.md files by hand: the skills CLI is the package manager for agent skills</h3><div class="meta">November 25, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/mcp-background-tasks-fastmcp-tutorial/"><span class="chip">Tutorials</span><h3>Call now, fetch later: run long MCP tools as background Tasks with FastMCP</h3><div class="meta">November 25, 2026 · 21 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a Google Workspace subscription, or does a personal Gmail account work?</h3><p>A personal Google account works for the setup in this tutorial: Google&#x27;s Quick setup for personal use creates an OAuth client that works only for your own account. Workspace organizations get the same servers plus admin controls in the Admin console, such as disabling agent access and requiring confirmation for sensitive actions.</p><h3>Why does Claude Code ask me to sign in again every hour?</h3><p>Your OAuth client is not returning a refresh token. Web application OAuth clients default to online access, so make sure the authorization request includes access_type=offline or the offline_access scope, and don&#x27;t set access_type=online. If you already authorized the client without offline access, remove the app&#x27;s access in your Google Account connections and sign in again so Google issues a refresh token.</p><h3>Can Claude send email directly, or only draft it?</h3><p>The Gmail MCP server has no send tool. It can search and read threads and create drafts with gmail.create_draft, which land in your Drafts folder for you to review and send from Gmail. That is deliberate: sending is the one action Google keeps behind a human click.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/google-workspace-mcp-servers-cli-generally-available/">Google makes Workspace MCP servers and CLI generally available — and agents must ditch REST APIs by February 1, 2027</a></li><li><a href="/articles/mcp-elicitation-skills-server-tutorial/">Build an MCP server that asks before it acts: elicitation and server-shipped skills, hands-on</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li><li><a href="/articles/claude-code-github-action-tutorial/">Put Claude Code on autopilot: the complete GitHub Action tutorial</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
