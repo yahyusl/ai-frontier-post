@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Let your coding agent edit real Office files: hands-on with MR Office's MCP server — AI Frontier Post</title>
+<meta name="description" content="MR Office went from zero to 4,300 GitHub stars in fifteen days with an MCP server that lets Claude Code draft a document, open it in a real editor for you to fix by hand, and read your edits back. The full loop, verified end to end — including the two places it stops and asks for a sign-in.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/mroffice-ai-office-editors-mcp-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Let your coding agent edit real Office files: hands-on with MR Office's MCP server">
+<meta property="og:description" content="MR Office went from zero to 4,300 GitHub stars in fifteen days with an MCP server that lets Claude Code draft a document, open it in a real editor for you to fix by hand, and read your edits back. The full loop, verified end to end — including the two places it stops and asks for a sign-in.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mroffice-ai-office-editors-mcp-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/mroffice-ai-office-editors-mcp-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="article:published_time" content="2026-11-25">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Let your coding agent edit real Office files: hands-on with MR Office's MCP server", "description": "MR Office went from zero to 4,300 GitHub stars in fifteen days with an MCP server that lets Claude Code draft a document, open it in a real editor for you to fix by hand, and read your edits back. The full loop, verified end to end — including the two places it stops and asks for a sign-in.", "datePublished": "2026-11-25", "dateModified": "2026-11-25", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/mroffice-ai-office-editors-mcp-tutorial/"}, "image": "https://aifrontierpost.com/articles/mroffice-ai-office-editors-mcp-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an MR Office account to use the MCP server?", "acceptedAnswer": {"@type": "Answer", "text": "No, not for the core loop. Creating, reading, updating and exporting to Markdown, HTML and CSV all run locally with no account. You need a free MR Office account only when you export to .docx, .xlsx or .pptx, because those files are written by MR Office’s conversion engine."}}, {"@type": "Question", "name": "Do my documents leave my machine?", "acceptedAnswer": {"@type": "Answer", "text": "Not through the local server. Documents are stored in a folder on your machine (MROFFICE_MCP_DATA_DIR, or a temp folder by default), and the editor page is served on 127.0.0.1. The README notes only the editor’s scripts, styles and fonts load from demo.mroffice.ai. Office conversion sends the file to MR Office’s engine under your account; the README says those files are not stored after conversion."}}, {"@type": "Question", "name": "Can I export to PDF?", "acceptedAnswer": {"@type": "Answer", "text": "Not in mroffice-mcp 0.2.0. The server answers “PDF export of documents and spreadsheets is not in this version; docx, md or csv are.” The README lists PDF as an export format, so this is a gap between the docs and the code — check a later release before relying on it."}}, {"@type": "Question", "name": "What happens if I edit a document while the agent updates it?", "acceptedAnswer": {"@type": "Answer", "text": "The update is refused. Pass expected_revision with the revision you read, and the server answers “Document … changed since revision …; reload it before saving.” Always get_document before update_document, and pass the revision you just read."}}, {"@type": "Question", "name": "Which clients can use the server?", "acceptedAnswer": {"@type": "Answer", "text": "Any MCP client that starts local stdio servers: Claude Code, Cursor, Codex, VS Code and others, with the command npx -y mroffice-mcp. Clients that connect to remote servers can use the hosted endpoint at https://mcp.mroffice.ai/mcp, which signs you in to an MR Office account on first use."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Let your coding agent edit real Office files: hands-on with MR Office's MCP server</h1>
+<p class="lede">MR Office went from zero to 4,300 GitHub stars in fifteen days with an MCP server that lets Claude Code draft a document, open it in a real editor for you to fix by hand, and read your edits back. The full loop, verified end to end — including the two places it stops and asks for a sign-in.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 25, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MR Office is a fifteen-day-old open-source office suite whose MCP server lets a coding agent draft documents and spreadsheets, open them in a real editor for you to edit by hand, and read your edits back with revision safety. The local loop needs only Node 22+ and was verified end to end against mroffice-mcp 0.2.0: create, read, update, spreadsheet round-trip, and exports to Markdown, HTML and CSV. Office formats need a free account sign-in, page pictures need Chromium, and PDF export is not in this version.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>MR Office (XinaTian/MROffice):</b> created November 10, 2026; 4,326 stars and 459 forks by November 25, with 1,061 stars gained in the previous 24 hours. AGPL-3.0, ten releases, npm package <code>mroffice-mcp</code> 0.2.0.</li><li><b>Eleven tools over stdio:</b> <code>create_document</code>, <code>open_document</code>, <code>update_document</code>, <code>get_document</code>, <code>render_page</code>, <code>export_document</code>, <code>list_documents</code>, <code>sign_in</code> / <code>sign_out</code>, plus two editor-view internals. Documents live in <code>MROFFICE_MCP_DATA_DIR</code>; the editor serves on 127.0.0.1:3410.</li><li><b>Measured on the sandbox run:</b> document created at revision 1 and updated to revision 3; a stale <code>expected_revision</code> is refused with &ldquo;reload it before saving&rdquo;; Markdown export 110 bytes, CSV export 33 bytes, HTML export 349 bytes; the editor page and the download link both returned HTTP 200.</li><li><b>What does not work yet:</b> PDF export answers &ldquo;not in this version&rdquo; despite the README listing it; <code>.docx</code> export needs Chromium installed; <code>.docx</code>, <code>.xlsx</code> and <code>.pptx</code> all need a free MR Office account sign-in. The sign-in flow was verified up to the OAuth link, not completed.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/mroffice-ai-office-editors-mcp-tutorial/cover.webp" alt="Editorial illustration: a coding-agent chat window on the left and a document page plus spreadsheet on the right, connected by a glowing loop of arrows"></figure>
+<div class="article-body"><p>On November 10, 2026, a repository called MR Office appeared on GitHub. Fifteen days later it had 4,326 stars, 459 forks, and the sharpest 24-hour gain on the AI trending boards &mdash; 1,061 new stars in a day. The pitch is a familiar one &mdash; open-source editors for documents, spreadsheets, presentations, PDF and code in the browser, closest to Microsoft Office &mdash; but the reason it is moving this fast is the MCP server underneath it. Instead of pasting text into a chat and hoping the model reproduces it faithfully, your coding agent drafts a real document, opens it in a real editor for you to fix by hand, and then reads your edits back before it does anything else.</p>
+<p>That loop &mdash; draft, edit, read back &mdash; is the whole product idea, and it is what this tutorial tests. You will install <code>mroffice-mcp</code> 0.2.0, wire it into Claude Code, create a document and a spreadsheet from a script, read them back, update them with revision safety, and export them. Every command and code block below is the exact code that was run for this article, with the exact output it produced. Two things did not run here, and they are reported as failures rather than glossed over: page pictures and <code>.docx</code> export need a Chromium install this sandbox could not fetch, and Word, Excel and PowerPoint conversion needs a free MR Office account, which this tutorial does not create for you.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Node.js 22 or newer.</strong> The MCP server runs on <code>npx</code> and needs it; the sandbox run used Node 24.22.1. Check with <code>node --version</code>.</li><li><strong>Python 3.11 or newer, plus <code>pip install mcp</code>.</strong> Only for the verification client in Step 3, which drives the server directly so you can see every call and response. If you only use Claude Code, skip it.</li><li><strong>No account, no API key, no GPU.</strong> The core loop &mdash; create, read, update, export to Markdown, HTML and CSV &mdash; runs entirely on your machine.</li><li><strong>Optional: Google Chrome or Chromium.</strong> Page pictures (<code>render_page</code>) and <code>.docx</code> export render through a headless browser. Install it with <code>npx playwright-core install chromium-headless-shell</code>.</li><li><strong>Optional: a free MR Office account.</strong> Only for <code>.docx</code>, <code>.xlsx</code> and <code>.pptx</code> conversion, which runs through MR Office&rsquo;s engine under your account.</li></ul>
+<figure class="inline-art"><img class="story-image" src="/articles/mroffice-ai-office-editors-mcp-tutorial/img2.webp" alt="Diagram of MR Office's architecture: coding agent, mroffice-mcp server, MR Office editor, and you editing in the loop"><figcaption>Diagram drawn for AI Frontier Post: the agent, the MCP server, the editor, and you in the loop.</figcaption></figure>
+<h2 id="step-1-install-the-server-and-check-it-answers">Step 1: Install the server and check it answers<a class="anchor" href="#step-1-install-the-server-and-check-it-answers" aria-label="Link to section">#</a></h2>
+<p>The server ships as <code>mroffice-mcp</code> on npm, version 0.2.0 at the time of writing, from the <code>XinaTian/MROffice</code> repository. There is nothing to configure to start it: <code>npx</code> fetches the package and it speaks MCP over stdio. Run it once, on its own, to see it come up:</p>
+<pre><code class="language-bash">MROFFICE_MCP_DATA_DIR=/tmp/mroffice-data npx -y mroffice-mcp</code></pre>
+<p>Expected output, exactly as it appeared in the sandbox:</p>
+<pre><code class="language-text">[mroffice-mcp] editor pages at http://127.0.0.1:3410
+[mroffice-mcp] MCP on stdio</code></pre>
+<p>Two details in those lines matter. First, the server also starts a small web server on port 3410 (set <code>MROFFICE_MCP_PORT</code> to change it) that serves the editor pages your documents open in. Second, documents live in <code>MROFFICE_MCP_DATA_DIR</code> &mdash; one folder per document, holding a <code>meta.json</code> and one file per revision &mdash; or in a folder under the system temp directory if you do not set it. Kill the process with Ctrl+C when you have seen the two lines; a client will start its own copy in the next steps.</p>
+<p>Ask it what it can do. A <code>tools/list</code> call returns eleven tools:</p>
+<table><thead><tr><th>Tool</th><th>What it does</th></tr></thead><tbody><tr><td><code>create_document</code></td><td>New document from Markdown, or spreadsheet from CSV; opened in the editor</td></tr><tr><td><code>open_document</code></td><td>Open a file by text, base64 bytes, or https URL &mdash; docx, xlsx, pptx, PDF, Markdown, HTML, CSV</td></tr><tr><td><code>update_document</code></td><td>Replace a document&rsquo;s content as a new revision; refuses stale writes (see Step 4)</td></tr><tr><td><code>get_document</code></td><td>Read the current content, including the person&rsquo;s edits in the editor</td></tr><tr><td><code>render_page</code></td><td>A PNG of one page as the editor draws it &mdash; needs Chromium</td></tr><tr><td><code>export_document</code></td><td>The document as a file; Office formats need a sign-in</td></tr><tr><td><code>list_documents</code></td><td>Every document created or opened with this server, newest first</td></tr><tr><td><code>sign_in</code> / <code>sign_out</code></td><td>Connect or disconnect the person&rsquo;s MR Office account (OAuth)</td></tr><tr><td><code>widget_load</code> / <code>widget_save</code></td><td>Internal: the editor view reading and saving a document</td></tr></tbody></table>
+<p>That table is the whole surface. Everything in this tutorial is a combination of those seven user-facing tools, and the two that need something extra &mdash; <code>render_page</code> and the Office formats in <code>export_document</code> &mdash; say so in their own descriptions, which is how you know before you hit them.</p>
+<h2 id="step-2-wire-it-into-claude-code">Step 2: Wire it into Claude Code<a class="anchor" href="#step-2-wire-it-into-claude-code" aria-label="Link to section">#</a></h2>
+<p>The project&rsquo;s README gives the one-line setup for the two clients most people will use:</p>
+<pre><code class="language-bash"># Claude Code
+claude mcp add mroffice -- npx -y mroffice-mcp
+# Codex
+codex mcp add mroffice -- npx -y mroffice-mcp</code></pre>
+<p>For Claude Desktop, Cursor, VS Code and anything else that takes a JSON configuration, the same server is one entry:</p>
+<pre><code class="language-json">{ "mcpServers": { "mroffice": { "command": "npx", "args": ["-y", "mroffice-mcp"] } } }</code></pre>
+<p>There is also a hosted endpoint, <code>https://mcp.mroffice.ai/mcp</code>, which needs no install but does need a sign-in to an MR Office account on first use. The rest of this tutorial uses the local server: it is the path with no account, and it is the path that was verified. Restart your client after adding the server, and <code>create_document</code> is a tool like any other &mdash; ask it to draft a status update and it will create the document and hand you the editor link.</p>
+<h2 id="step-3-create-your-first-document">Step 3: Create your first document &mdash; and see every call<a class="anchor" href="#step-3-create-your-first-document" aria-label="Link to section">#</a></h2>
+<p>To verify the server without taking a client&rsquo;s word for it, drive it directly with the official Python MCP SDK. Save this as <code>mroffice_client.py</code>:</p>
+<pre><code class="language-python">&quot;&quot;&quot;mroffice_client.py — drive MR Office's MCP server from Python.
+Requires: pip install mcp   (and Node 22+ for npx -y mroffice-mcp)
+Run:  MROFFICE_MCP_DATA_DIR=/tmp/mroffice-data python mroffice_client.py
+&quot;&quot;&quot;
+import asyncio
+import os
+import re
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+
+def doc_id(result):
+    &quot;&quot;&quot;The server answers in prose; the document id is in the first line.&quot;&quot;&quot;
+    return re.search(r&quot;document ([a-z0-9]+),&quot;, result.content[0].text).group(1)
+
+
+async def main():
+    env = dict(os.environ)
+    env.setdefault(&quot;MROFFICE_MCP_DATA_DIR&quot;, &quot;/tmp/mroffice-data&quot;)
+    params = StdioServerParameters(
+        command=&quot;npx&quot;, args=[&quot;-y&quot;, &quot;mroffice-mcp&quot;], env=env)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as s:
+            await s.initialize()
+            print(&quot;connected to mroffice-mcp&quot;)
+
+            created = await s.call_tool(&quot;create_document&quot;, {
+                &quot;title&quot;: &quot;Weekly status - Nov 25&quot;,
+                &quot;kind&quot;: &quot;document&quot;,
+                &quot;content&quot;: &quot;# Weekly status
+
+- Shipped the new checkout flow.
+- Two bugs fixed in search.
+&quot;,
+                &quot;format&quot;: &quot;md&quot;})
+            did = doc_id(created)
+            print(&quot;created document:&quot;, did)
+
+            got = await s.call_tool(&quot;get_document&quot;, {&quot;id&quot;: did})
+            print(&quot;read back, revision 1:&quot;)
+            print(got.content[0].text)
+
+            updated = await s.call_tool(&quot;update_document&quot;, {
+                &quot;id&quot;: did,
+                &quot;content&quot;: &quot;# Weekly status
+
+- Shipped the new checkout flow.
+- Two bugs fixed in search.
+- Drafted the Q1 hiring plan.
+&quot;})
+            print(updated.content[0].text.split(&quot;
+&quot;)[0])
+
+            sheet = await s.call_tool(&quot;create_document&quot;, {
+                &quot;title&quot;: &quot;November expenses&quot;,
+                &quot;kind&quot;: &quot;spreadsheet&quot;,
+                &quot;content&quot;: &quot;item,amount
+Hosting,42
+Domain,12
+&quot;,
+                &quot;format&quot;: &quot;csv&quot;})
+            sid = doc_id(sheet)
+            print(&quot;created spreadsheet:&quot;, sid)
+
+            md = await s.call_tool(&quot;export_document&quot;, {&quot;id&quot;: did, &quot;format&quot;: &quot;md&quot;})
+            print(md.content[0].text.split(&quot;
+&quot;)[0])
+            csv = await s.call_tool(&quot;export_document&quot;, {&quot;id&quot;: sid, &quot;format&quot;: &quot;csv&quot;})
+            print(csv.content[0].text.split(&quot;
+&quot;)[0])
+
+            docs = await s.call_tool(&quot;list_documents&quot;, {})
+            print(&quot;all documents:&quot;)
+            print(docs.content[0].text)
+
+
+asyncio.run(main())</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">MROFFICE_MCP_DATA_DIR=/tmp/mroffice-data python mroffice_client.py</code></pre>
+<p>Expected output, verbatim from the sandbox run (your document ids and tokens will differ):</p>
+<pre><code class="language-text">[mroffice-mcp] editor pages at http://127.0.0.1:3410
+[mroffice-mcp] MCP on stdio
+connected to mroffice-mcp
+created document: ecotjhifkvo6
+read back, revision 1:
+"Weekly status - Nov 25" (document ecotjhifkvo6, document), revision 1, last saved by you at 2026-11-25T09:30:59.742Z.
+
+# Weekly status
+
+- Shipped the new checkout flow.
+
+- Two bugs fixed in search.
+Updated "Weekly status - Nov 25" (document ecotjhifkvo6, document, revision 2).
+created spreadsheet: a7ii15o6mpsm
+Weekly status - Nov 25.md (110 bytes, revision 2). The person can download it here: http://127.0.0.1:3410/_mcp/file/ecotjhifkvo6?t=Yzk8G3MSwYT8GdoQLN5Ecpkm&amp;format=md
+November expenses.csv (33 bytes, revision 1). The person can download it here: http://127.0.0.1:3410/_mcp/file/a7ii15o6mpsm?t=Qb4K0IvQ_xyOGY1Pn7_e1PNr&amp;format=csv
+all documents:
+a7ii15o6mpsm  November expenses (csv, revision 1, last by model)
+ecotjhifkvo6  Weekly status - Nov 25 (md, revision 2, last by model)</code></pre>
+<p>Three things to notice. First, the server answers in prose, not JSON: the document id, the revision number, and the editor link are embedded in a sentence, which is why the script pulls the id out with a regular expression. Second, every create returns an editor link of the form <code>http://127.0.0.1:3410/_mcp/view/&lt;id&gt;?t=&lt;token&gt;</code> &mdash; that link is what the person opens, and it served HTTP 200 when checked directly. Third, the document is already on disk: under <code>MROFFICE_MCP_DATA_DIR</code> there is a folder per document id with a <code>meta.json</code> and one file per revision, so the editor, the agent and the filesystem are all looking at the same revisions.</p>
+<p>One line in the full create response deserves a note. Without a Chromium installed, each create and update appends a parenthetical: <em>&ldquo;No picture of the page: pictures of pages need a Chromium: install Google Chrome or Microsoft Edge, or run <code>npx playwright-core install chromium-headless-shell</code>.&rdquo;</em> The document is still created &mdash; the picture is a bonus the server tries to attach for clients that can show it. The tutorial&rsquo;s sandbox could not fetch the Chromium download, so the picture path is documented, not run; Step 7 covers what that costs you.</p>
+<h2 id="step-4-read-it-back-and-update-it">Step 4: Read it back and update it, without overwriting anyone<a class="anchor" href="#step-4-read-it-back-and-update-it" aria-label="Link to section">#</a></h2>
+<p>The read-back is the feature that separates this server from a file generator. <code>get_document</code> returns the document&rsquo;s current content, including edits the person made in the editor &mdash; the tool&rsquo;s own description says so, and the update flow is built around it. The script above already shows the shape: create at revision 1, read it back, update to revision 2, and the export line confirms the new revision.</p>
+<p>The guard that makes the loop safe is <code>expected_revision</code>. Pass the revision you read, and the server refuses the write if the document has moved on. Verified against the same document, which was at revision 2:</p>
+<pre><code class="language-text">stale rev=1 -&gt; isError: True
+Document ecotjhifkvo6 changed since revision 1 (it is at 2); reload it before saving.
+current rev=2 -&gt; isError: False
+Updated "Weekly status - Nov 25" (document ecotjhifkvo6, document, revision 3).</code></pre>
+<p>That is the correct behavior for a human-in-the-loop tool, and it is the rule to teach your agent: always <code>get_document</code> before <code>update_document</code>, and always pass the revision you just read. An update made on top of edits the agent has not seen is refused rather than lost &mdash; the README states it, and the server does it.</p>
+<h2 id="step-5-a-spreadsheet-from-csv">Step 5: A spreadsheet from CSV<a class="anchor" href="#step-5-a-spreadsheet-from-csv" aria-label="Link to section">#</a></h2>
+<p>Spreadsheets work the same way, with CSV as the interchange format. The script creates one from three lines of CSV and reads it back unchanged:</p>
+<pre><code class="language-text">"November expenses" (document a7ii15o6mpsm, spreadsheet), revision 1, last saved by you at 2026-11-25T09:30:59.742Z.
+
+item,amount
+Hosting,42
+Domain,12</code></pre>
+<p>Exporting it back to CSV returned the same three lines in a 33-byte file. Two honest limits. First, the local server stores the sheet as CSV, so what you can verify end to end is CSV in and CSV out. The full formula engine &mdash; SUM, IF, VLOOKUP and hundreds more functions, calculated live &mdash; runs in the free desktop app and the hosted embed, not through this local path; do not promise a reader that a formula they type into CSV will evaluate here. Second, the same revision rules apply: update a sheet with the revision you read, or the write is refused.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mroffice-ai-office-editors-mcp-tutorial/img3.webp" alt="Diagram of the draft, edit, read-back, update and export loop"><figcaption>Diagram drawn for AI Frontier Post: the five-step loop, and which exports need an account.</figcaption></figure>
+<h2 id="step-6-open-an-existing-file-and-list-your-documents">Step 6: Open an existing file and list your documents<a class="anchor" href="#step-6-open-an-existing-file-and-list-your-documents" aria-label="Link to section">#</a></h2>
+<p>You are not limited to documents the agent creates. <code>open_document</code> takes a file by name plus its text, its base64 bytes, or an https URL to fetch it from, and opens it in the matching editor &mdash; Word, Excel, PowerPoint, PDF, Markdown, HTML, text or CSV. Verified with a Markdown file passed as text:</p>
+<pre><code class="language-text">Opened "notes" (document 5t3xln7tskta, document, revision 1).
+The person can open and edit it in MR Office here: http://127.0.0.1:3410/_mcp/view/5t3xln7tskta?t=fOJzu6JO4o6yq1qY93mUgMp6
+Call get_document with this id to read the person's edits.
+
+# Opened notes
+
+This file was opened, not created.</code></pre>
+<p>And <code>list_documents</code> returns everything the server has touched, newest first, with format, revision and who last saved it &mdash; the same listing the script prints at the end of Step 3. That listing is also how you find a document again in a later session: the ids persist in the data directory, so a document created yesterday is still listed today, as long as the data directory is the same.</p>
+<h2 id="step-7-export-what-works-locally-and-what-needs-an-account">Step 7: Export &mdash; what works locally, and what needs an account<a class="anchor" href="#step-7-export-what-works-locally-and-what-needs-an-account" aria-label="Link to section">#</a></h2>
+<p>Export is where the open-source boundary sits, and it is worth stating precisely, because the README and the server disagree on one format. Verified in the sandbox:</p>
+<table><thead><tr><th>Format</th><th>Local, no account</th><th>What happened</th></tr></thead><tbody><tr><td><code>md</code></td><td>Works</td><td>110-byte file, download link plus the file itself in the tool result</td></tr><tr><td><code>html</code></td><td>Works</td><td>349-byte file, same pattern</td></tr><tr><td><code>csv</code></td><td>Works</td><td>33-byte file for the spreadsheet</td></tr><tr><td><code>pdf</code></td><td>No</td><td><em>&ldquo;PDF export of documents and spreadsheets is not in this version; docx, md or csv are.&rdquo;</em> &mdash; despite the README listing PDF</td></tr><tr><td><code>docx</code></td><td>No</td><td>Needs a Chromium install first, then a sign-in; see below</td></tr><tr><td><code>xlsx</code></td><td>No</td><td>Needs a sign-in; see below</td></tr><tr><td><code>pptx</code></td><td>No</td><td>Needs a sign-in, same as xlsx</td></tr></tbody></table>
+<p>The PDF result is the one to remember: the README and the MCP directory listings both say PDF export exists, but 0.2.0 answers that it is not in this version. Do not build a workflow on it until a later release restores it. The native formats &mdash; <code>mrdoc</code>, <code>mrsheet</code>, <code>mrslides</code> &mdash; are listed in the export schema but were not run here; they are the editors&rsquo; own file formats, and the README says the open-source editors save in them.</p>
+<p>The Office formats take two different paths to the same gate. Exporting a spreadsheet to <code>xlsx</code> without signing in fails immediately with the account error, and the error itself hands you the way through:</p>
+<pre><code class="language-text">Word, Excel and PowerPoint files needs your MR Office account. MR Office's sign-in page is open in your browser (or open https://mroffice.ai/api/v1/oauth/authorize?...); allow it there, then try again.</code></pre>
+<p>That link is a standard OAuth 2.1 authorization request &mdash; PKCE, scope <code>office.convert+account.read</code>, redirect back to a callback on your own machine &mdash; and the <code>sign_in</code> tool returns the same link on demand. The sign-in itself was not completed for this tutorial: it needs the reader&rsquo;s own free MR Office account, and creating one is a personal step, not a sandbox step. The free account is enough for conversion; the README says the files are not stored after conversion.</p>
+<p>Exporting a document to <code>docx</code> hits a different gate first. The server materializes the document through its own headless editor before converting it, so it needs a Chromium installed even before the sign-in matters. Without one, the error is the same Chromium message from Step 3. On a normal machine the documented install &mdash; <code>npx playwright-core install chromium-headless-shell</code> &mdash; provides it; in this sandbox that download was blocked, so the <code>.docx</code> path is documented from the server&rsquo;s own code and error messages, not from a completed run. Budget for both gates: Chromium on the machine, and a signed-in free account.</p>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<ul><li><strong>MR Office, when a human edits in the loop.</strong> The live editor and the read-back are the point. Use it for reports, briefs, spreadsheets and decks where someone will fix wording, numbers or layout by hand and the agent must see those fixes before it goes on.</li><li><strong>GenOffice, when the whole job stays in the terminal.</strong> GenOffice is a CLI for Office files with its own MCP server; there is no editor and no human in the loop. Pick it for batch generation and scripts, MR Office for anything a person touches. (<a href="/articles/genoffice-ai-office-suite-cli-tutorial/">Hands-on with GenOffice</a>.)</li><li><strong>Anthropic&rsquo;s Agent Skills, when you only need files out.</strong> The official document, spreadsheet, presentation and PDF skills let Claude Code generate Office files with no live editor and no read-back. They are simpler and need no server; they cannot show you the document or notice your edits. (<a href="/articles/anthropic-official-agent-skills-tutorial/">Hands-on with Anthropic&rsquo;s Agent Skills</a>.)</li><li><strong>Univer, when the work is spreadsheets only.</strong> Univer is a spreadsheet-centric open harness with deep formula and collaboration support. MR Office covers docs, sheets, slides, PDF and code in one place, but its local spreadsheet path is CSV. (<a href="/articles/univer-office-harness-ai-agents-tutorial/">Hands-on with Univer</a>.)</li><li><strong>ONLYOFFICE or Google Docs, when you need a hosted suite, not a building block.</strong> MR Office&rsquo;s editors are AGPL-3.0 with an attribution notice, free to self-host and embed, with a commercial license available; the hosted embed&rsquo;s free plan covers 1,000 sessions a month on localhost and 100 on your own domains. The trade-off is that real Office conversion still routes through MR Office&rsquo;s service, so the &ldquo;fully self-hosted&rdquo; story stops at the editors&rsquo; own formats.</li></ul>
+<p>One more boundary to keep in mind: the repository is fifteen days old. The 0.2.0 server is stable at the paths verified here, but the PDF gap shows the docs run ahead of the code, and the hosted pieces &mdash; the embed, the desktop app, the conversion engine &mdash; are a commercial product wrapped around an open core. Treat the local MCP loop as the solid part, and the Office formats as a free-account feature, not an open-source one.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Most agent document tools are one-way: the model writes text, you copy it somewhere real. MR Office&rsquo;s MCP server closes the loop &mdash; the agent drafts in Markdown or CSV, you edit in a real editor, the agent reads your version back, and a revision number stands between your edits and an overwrite. The local half of that loop needs nothing but Node and runs entirely on your machine, as verified here: create, read, update with a stale-revision refusal, spreadsheet round-trip, and exports to Markdown, HTML and CSV, all against <code>mroffice-mcp</code> 0.2.0 with no account and no API key. The other half &mdash; page pictures, <code>.docx</code>, <code>.xlsx</code>, <code>.pptx</code> &mdash; costs a Chromium install and a free account sign-in, and PDF export is simply not in this version. Set the server up this week and let your agent draft the next status update. Open the editor link, fix two sentences by hand, and ask the agent what changed. That read-back is the feature &mdash; everything else is plumbing.</p>
+
+</div>
+<div class="post-engage"><div class="reactions" data-reactions="mroffice-ai-office-editors-mcp-tutorial"></div><div class="comments" data-comments="mroffice-ai-office-editors-mcp-tutorial"></div></div>
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/genoffice-ai-office-suite-cli-tutorial/"><span class="chip">Tutorials</span><h3>Run your office from the terminal: hands-on with GenOffice, the open-source AI office suite</h3><div class="meta">October 27, 2026 · ? min read</div></a><a class="rel-card" href="/articles/anthropic-official-agent-skills-tutorial/"><span class="chip">Tutorials</span><h3>Hands-on with Anthropic’s official Agent Skills: Word, Excel, PowerPoint and PDF, done by Claude Code</h3><div class="meta">November 9, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/univer-office-harness-ai-agents-tutorial/"><span class="chip">Tutorials</span><h3>Univer: give your AI agent a real spreadsheet — the open office harness, hands-on</h3><div class="meta">September 29, 2026 · ? min read</div></a><a class="rel-card" href="/articles/mcp-elicitation-skills-server-tutorial/"><span class="chip">Tutorials</span><h3>Build an MCP server that asks before it acts: elicitation and server-shipped skills, hands-on</h3><div class="meta">November 24, 2026 · ? min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an MR Office account to use the MCP server?</h3><p>No, not for the core loop. Creating, reading, updating and exporting to Markdown, HTML and CSV all run locally with no account. You need a free MR Office account only when you export to .docx, .xlsx or .pptx, because those files are written by MR Office’s conversion engine.</p><h3>Do my documents leave my machine?</h3><p>Not through the local server. Documents are stored in a folder on your machine (MROFFICE_MCP_DATA_DIR, or a temp folder by default), and the editor page is served on 127.0.0.1. The README notes only the editor’s scripts, styles and fonts load from demo.mroffice.ai. Office conversion sends the file to MR Office’s engine under your account; the README says those files are not stored after conversion.</p><h3>Can I export to PDF?</h3><p>Not in mroffice-mcp 0.2.0. The server answers “PDF export of documents and spreadsheets is not in this version; docx, md or csv are.” The README lists PDF as an export format, so this is a gap between the docs and the code — check a later release before relying on it.</p><h3>What happens if I edit a document while the agent updates it?</h3><p>The update is refused. Pass expected_revision with the revision you read, and the server answers “Document … changed since revision …; reload it before saving.” Always get_document before update_document, and pass the revision you just read.</p><h3>Which clients can use the server?</h3><p>Any MCP client that starts local stdio servers: Claude Code, Cursor, Codex, VS Code and others, with the command npx -y mroffice-mcp. Clients that connect to remote servers can use the hosted endpoint at https://mcp.mroffice.ai/mcp, which signs you in to an MR Office account on first use.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/mcp-background-tasks-fastmcp-tutorial/">Call now, fetch later: run long MCP tools as background Tasks with FastMCP</a></li><li><a href="/articles/mcp-turns-two-skills-tasks-elicitation/">MCP turns two: servers can now ship skills to Claude and hand off long jobs as Tasks</a></li><li><a href="/articles/fastmcp-python-mcp-server-tutorial/">Build a real MCP server in Python: the complete FastMCP guide</a></li><li><a href="/articles/chrome-devtools-mcp-coding-agents-tutorial/">Give your coding agent a browser: hands-on with chrome-devtools-mcp</a></li><li><a href="/articles/google-adk-multi-agent-tutorial/">Build a multi-agent research team with Google’s ADK: researcher, writer, and guardrails, end to end</a></li></ul></section></article></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
