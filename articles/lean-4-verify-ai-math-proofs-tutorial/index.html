@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Don&#x27;t trust the proof — check it: verify AI-generated math with Lean 4 — AI Frontier Post</title>
+<meta name="description" content="AI agents now write proofs faster than any human can read them — DeepMind&#x27;s Gemini teams proved quantum speedups in Lean this month. This tutorial installs Lean 4, writes your first machine-checked proofs, and builds a harness that makes the kernel, not the model, the judge.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/lean-4-verify-ai-math-proofs-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Don&#x27;t trust the proof — check it: verify AI-generated math with Lean 4">
+<meta property="og:description" content="AI agents now write proofs faster than any human can read them — DeepMind&#x27;s Gemini teams proved quantum speedups in Lean this month. This tutorial installs Lean 4, writes your first machine-checked proofs, and builds a harness that makes the kernel, not the model, the judge.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/lean-4-verify-ai-math-proofs-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/lean-4-verify-ai-math-proofs-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-25">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Don't trust the proof — check it: verify AI-generated math with Lean 4", "description": "AI agents now write proofs faster than any human can read them — DeepMind's Gemini teams proved quantum speedups in Lean this month. This tutorial installs Lean 4, writes your first machine-checked proofs, and builds a harness that makes the kernel, not the model, the judge.", "datePublished": "2026-11-25", "dateModified": "2026-11-25", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/lean-4-verify-ai-math-proofs-tutorial/"}, "image": "https://aifrontierpost.com/articles/lean-4-verify-ai-math-proofs-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need Mathlib for this tutorial?", "acceptedAnswer": {"@type": "Answer", "text": "No. Every executed example uses Lean's core library only, so there is no Mathlib download. Mathlib is the optional Step 7: it widens the mathematics you can write, at the cost of roughly 7.5 GB of disk and a long first build."}}, {"@type": "Question", "name": "Can Lean check a proof written in plain English?", "acceptedAnswer": {"@type": "Answer", "text": "No. Lean checks Lean code: a formal statement plus a proof in Lean's syntax. An agent can draft the statement from an English claim, but the check only starts once the claim exists as a theorem in a .lean file."}}, {"@type": "Question", "name": "What happens when the agent's proof is wrong?", "acceptedAnswer": {"@type": "Answer", "text": "Lean prints an error naming the exact mismatch — usually a type mismatch on the wrong lemma, or unsolved goals — and the file fails with a non-zero exit code. The harness in Step 5 feeds that error back to the agent for another attempt, up to three times."}}, {"@type": "Question", "name": "How long does the Mathlib setup take?", "acceptedAnswer": {"@type": "Answer", "text": "The download and first build are the slow part: plan on roughly 7.5 GB of disk and well over an hour if Mathlib compiles from source. Always run lake exe cache get first — it downloads prebuilt files and is the difference between minutes and hours."}}, {"@type": "Question", "name": "Which Lean version should I pin?", "acceptedAnswer": {"@type": "Answer", "text": "The one this tutorial was verified against, leanprover/lean4:v4.36.0, written in the lean-toolchain file. A proof checked against one Lean and Mathlib version is a different claim from the same text checked against another — record the versions with the proof."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Don&#x27;t trust the proof — check it: verify AI-generated math with Lean 4</h1>
+<p class="lede">AI agents now write proofs faster than any human can read them — DeepMind&#x27;s Gemini teams proved quantum speedups in Lean this month. This tutorial installs Lean 4, writes your first machine-checked proofs, and builds a harness that makes the kernel, not the model, the judge.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 25, 2026 · 14 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> In November 2026, AI agents started proving things faster than humans can check them — DeepMind’s Gemini teams proved quantum speedups in Lean, and three more proof stories landed in the same week. This tutorial installs Lean 4.36.0, writes your first machine-checked proofs, watches Lean reject a confident wrong proof, and builds a pass/fail harness so the kernel — not the model — decides what counts as proved.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Lean 4.36.0, via elan:</b> install the version manager, not Lean directly; the project pins <code>leanprover/lean4:v4.36.0</code> in <code>lean-toolchain</code> so every run checks against the same compiler.</li><li><b>Silence means proved:</b> <code>lake env lean Proofs.lean</code> prints only <code>#eval</code> and <code>#check</code> output — a file with no errors is a file of proved theorems.</li><li><b>The harness is one script:</b> <code>check.sh</code> exits 0 and prints PASS only when the kernel accepts the whole file; a wrong lemma fails loudly with a <code>type mismatch</code> naming both types.</li><li><b><code>sorry</code> is the hole:</b> it compiles but proves nothing, and shows up as <code>sorryAx</code> under <code>#print axioms</code> — forbid it in CI with a grep.</li><li><b>Mathlib is optional:</b> core-only for this tutorial; the Mathlib path costs roughly 7.5&nbsp;GB and a long first build, and its <code>irrational_sqrt_two</code> example is verified against Mathlib source, not executed here.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/lean-4-verify-ai-math-proofs-tutorial/cover.webp" alt="A green wax seal stamped with a checkmark over handwritten mathematical equations, with a magnifying glass inspecting the proof steps"></figure>
+<div class="article-body"><p>In November 2026, the bottleneck in mathematics moved. On November 23, Google DeepMind described teams of Gemini 4 agents that found faster quantum algorithms — a 290&times; speedup on the arcsin routine, 2.57&times; on a Grover search implementation, 11.8&times; cheaper fusion calculations — and proved each one correct in Lean, a formal theorem prover, before it counted. Two days later, Google&rsquo;s Cogentic agent posted six math papers, OpenAI&rsquo;s team claimed a new matrix-multiplication exponent bound, and the Riemann proof that Claude produced days earlier was certified in Lean. The pattern is the same in all four stories: generating a proof is now the cheap part. Checking it is the work — and the check is done by a machine.</p>
+<p>That machine is Lean 4, and this tutorial teaches you to run it. You will install Lean, scaffold a project, write proofs the Lean kernel accepts, watch it reject a confident wrong proof, and build a small pass/fail harness that turns the kernel into the judge of any proof an AI agent hands you. No GPU, no API key, no account. The only thing you need to believe is the output of one command: exit code 0 means proved; anything else means not proved.</p>
+<h2 id="what-youll-need">What you&rsquo;ll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Linux, macOS, or Windows.</strong> The walkthrough below runs on Linux; the macOS steps are identical, and Windows works under WSL or Git Bash.</li><li><strong><code>git</code> and <code>curl</code>.</strong> Lean&rsquo;s installer needs both. On Ubuntu: <code>sudo apt install git curl</code>.</li><li><strong>About 3.5&nbsp;GB of free disk.</strong> The Lean 4.36.0 toolchain is about 2.7&nbsp;GB once unpacked, and the installer holds the 580&nbsp;MB download alongside it while extracting. Do not skimp here: the install fails with a quota error if the disk fills mid-download, and the fix is freeing space and starting over.</li><li><strong>Nothing else.</strong> No model calls, no GPU, no paid service. The proofs in this tutorial use Lean&rsquo;s core library only, so there is no 7.5&nbsp;GB Mathlib download. Mathlib gets its own step at the end, clearly marked optional.</li></ul>
+<p>One thing to know before you start: Lean is two things at once — a programming language and a proof checker — and this tutorial uses both halves. The programming half (<code>#eval</code>, function definitions) gives you fast feedback while you learn the syntax. The proof half (theorems, tactics) is the point: when Lean accepts a theorem, the kernel has checked every logical step, and no amount of confident prose can substitute for that.</p>
+<h2 id="step-1-install-lean">Step 1: Install Lean with elan<a class="anchor" href="#step-1-install-lean" aria-label="Link to section">#</a></h2>
+<p>You do not install Lean directly. You install <code>elan</code>, a version manager in the rustup mould: it downloads the right Lean toolchain per project and forwards your commands to it. The official install is one command:</p>
+<pre><code class="language-bash">curl https://elan.lean-lang.org/elan-init.sh -sSf | sh</code></pre>
+<p>Accept the default install when prompted (option 1), then add elan to the PATH of your current shell:</p>
+<pre><code class="language-bash">source $HOME/.elan/env
+lean --version</code></pre>
+<p>Expected output — this is the version this tutorial was verified against on November 25, 2026:</p>
+<pre><code class="language-text">Lean (version 4.36.0, x86_64-unknown-linux-gnu, commit 611c117bfaf7b7ae1cfcf246ce6fba31e8f509e9, Release)</code></pre>
+<p>If you see a newer version, the commands in this tutorial still apply, but pin the version in Step 2 so your project stays reproducible: elan reads the pin automatically whenever you enter the project directory. If the install fails partway with a disk or quota error, delete the partial toolchain under <code>~/.elan</code> and free space before retrying — a half-extracted toolchain is the one failure mode that produces confusing errors later (a <code>lean</code> binary that cannot find its own shared library). The install in this tutorial hit exactly that failure once, on a nearly-full home directory; the fix was removing the broken toolchain and running the install a second time, with nothing else touching elan while it ran.</p>
+<h2 id="step-2-scaffold-the-project">Step 2: Scaffold a project and pin the toolchain<a class="anchor" href="#step-2-scaffold-the-project" aria-label="Link to section">#</a></h2>
+<p>Lean&rsquo;s build tool is <code>lake</code>. Scaffold a project called <code>proof-check</code>:</p>
+<pre><code class="language-bash">lake new proof-check
+cd proof-check</code></pre>
+<p>The scaffold is small and worth reading in full:</p>
+<pre><code class="language-text">proof-check
+proof-check/Main.lean
+proof-check/ProofCheck
+proof-check/ProofCheck.lean
+proof-check/ProofCheck/Basic.lean
+proof-check/README.md
+proof-check/lakefile.toml
+proof-check/lean-toolchain</code></pre>
+<p>Three files matter. <code>lean-toolchain</code> pins the compiler version:</p>
+<pre><code class="language-text">leanprover/lean4:v4.36.0</code></pre>
+<p>That single line is what makes the project reproducible: anyone (or any agent) who enters this directory gets exactly Lean 4.36.0, never whatever happens to be newest that month. <code>lakefile.toml</code> is the build configuration; <code>ProofCheck/Basic.lean</code> is the library&rsquo;s starting file, and <code>Main.lean</code> is the executable entry point. Build it:</p>
+<pre><code class="language-bash">lake build
+lake exe proof-check</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">✔ [2/11] Built ProofCheck.Basic (550ms)
+✔ [4/11] Built ProofCheck.Basic:c.o (156ms)
+✔ [5/11] Built ProofCheck (595ms)
+✔ [7/11] Built ProofCheck:c.o (159ms)
+✔ [8/11] Built Main (477ms)
+✔ [10/11] Built Main:c.o (132ms)
+✔ [11/11] Built «proof-check»:exe (267ms)
+Build completed successfully (11 jobs).
+Hello, world!</code></pre>
+<p><code>lake build</code> compiles the library; <code>lake exe proof-check</code> runs the scaffold&rsquo;s <code>main</code>, which prints <code>Hello, world!</code>. Neither output is exciting. Both matter: a green build means the toolchain, the pin, and the project layout all agree — the same three things that have to agree before a single proof can be checked.</p>
+<h2 id="step-3-first-checked-proofs">Step 3: Your first machine-checked proofs<a class="anchor" href="#step-3-first-checked-proofs" aria-label="Link to section">#</a></h2>
+<p>Create a file called <code>Proofs.lean</code> in the project root. It holds six small proofs, each teaching one mechanism. Save it exactly as written — every line below was checked against Lean 4.36.0:</p>
+<pre><code class="language-lean">/-
+  Proofs.lean — the tutorial's working file.
+  Every proof below was checked with Lean 4.36.0 (`lake env lean Proofs.lean`).
+  A file with no errors and no `sorry` is a file Lean accepts in full.
+-/
+
+/- Smoke test: `#eval` runs code and prints the result. -/
+#eval 2 + 2
+
+/- Ask Lean the type of a core lemma. -/
+#check @Nat.add_comm
+
+/-- A tiny function, evaluated on the spot. -/
+def double (n : Nat) : Nat := n + n
+
+#eval double 21
+
+/-- Proof by term: the statement *is* the lemma. -/
+theorem add_comm_nat (a b : Nat) : a + b = b + a :=
+  Nat.add_comm a b
+
+/-- Proof by `rfl`: both sides compute to the same value. -/
+example : 2 + 3 = 5 := rfl
+
+/-- Proof by `decide`: Lean evaluates a finite check. -/
+example : (List.range 5).sum = 10 := by decide
+
+/-- Proof by induction. The `omega` tactic closes the step case
+    from the induction hypothesis and the `Nat.pow_succ` rewrite. -/
+theorem two_pow_ge (n : Nat) : n + 1 ≤ 2 ^ n := by
+  induction n with
+  | zero =&gt; simp
+  | succ k ih =&gt;
+    have h : 2 ^ (k + 1) = 2 ^ k * 2 := by rw [Nat.pow_succ]
+    omega</code></pre>
+<p>Check it with <code>lake env lean</code>, which runs Lean with the project&rsquo;s environment (so the pinned toolchain applies):</p>
+<pre><code class="language-bash">lake env lean Proofs.lean</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">4
+Nat.add_comm : ∀ (n m : Nat), n + m = m + n
+42</code></pre>
+<p>Three things to notice. First, Lean prints the <code>#eval</code> and <code>#check</code> results and nothing else — silence about a theorem means the kernel accepted it. A file that produces no errors <em>is</em> a file of proved theorems. Second, the proofs use four different mechanisms, and knowing which one fits where is most of the skill: a <strong>term proof</strong> (<code>Nat.add_comm a b</code>) when the statement is already a lemma; <strong><code>rfl</code></strong> when both sides compute to the same value; <strong><code>decide</code></strong> when the claim is a finite computation; and a <strong>tactic block</strong> (<code>induction</code>, then <code>omega</code>) when the proof needs steps. Third, <code>two_pow_ge</code> is a real induction, not a toy: the base case is closed by <code>simp</code>, and the step case rewrites <code>2 ^ (k+1)</code> into <code>2 ^ k * 2</code> so <code>omega</code> can finish the linear arithmetic from the induction hypothesis.</p>
+<p>If you are following along in VS Code with the Lean 4 extension, the same file gives you a live goal display as you type. The command line is the authority, though: the editor can lag or misconfigure, and <code>lake env lean</code> is what the harness in Step 5 runs.</p>
+<h2 id="step-4-watch-lean-say-no">Step 4: Watch Lean say no<a class="anchor" href="#step-4-watch-lean-say-no" aria-label="Link to section">#</a></h2>
+<p>A checker you have never seen reject anything is a checker you do not trust yet. Feed Lean a false statement:</p>
+<pre><code class="language-lean">example : 1 = 2 := rfl</code></pre>
+<p>Save that as <code>Broken.lean</code> and run <code>lake env lean Broken.lean</code>:</p>
+<pre><code class="language-text">Broken.lean:6:19: error: Type mismatch
+  rfl
+has type
+  ?m.8 = ?m.8
+but is expected to have type
+  1 = 2</code></pre>
+<p>The error is the whole point. <code>rfl</code> asks the kernel to check that both sides are the same value by computation; 1 and 2 are not, so the proof is refused and the file fails. Lean does not grade on effort, plausibility, or how convincing the surrounding paragraph was.</p>
+<p>Now the subtler failure — the one AI-generated proofs actually produce. An agent asked to prove that multiplication commutes might reach for the lemma it remembers best, addition&rsquo;s commutativity, and write this:</p>
+<pre><code class="language-lean">/-- WRONG: `Nat.add_comm` proves `a + b = b + a`, not `a * b = b * a`. -/
+example (a b : Nat) : a * b = b * a := Nat.add_comm a b</code></pre>
+<p>Save it as <code>Attempt1.lean</code> and check it:</p>
+<pre><code class="language-text">Attempt1.lean:9:39: error: Type mismatch
+  Nat.add_comm a b
+has type
+  a + b = b + a
+but is expected to have type
+  a * b = b * a</code></pre>
+<p>Read the error the way Lean means it: the term <code>Nat.add_comm a b</code> has type <code>a + b = b + a</code>, but the goal needs <code>a * b = b * a</code>. The lemma is true; it is simply the wrong true statement. This is the characteristic failure of a model that has seen many proofs and retrieves the near-miss: the shape is right, the operation is wrong, and only the kernel notices. Keep this error message in mind — Step 5 turns it into a loop.</p>
+<h2 id="step-5-the-harness">Step 5: Build the harness — the kernel becomes the judge<a class="anchor" href="#step-5-the-harness" aria-label="Link to section">#</a></h2>
+<p>One command, run by hand, is a demo. A script with an exit code is a gate. Save this as <code>check.sh</code> in the project root:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+# check.sh — the acceptance test for every proof file.
+# Usage: ./check.sh Proofs.lean
+# Exits 0 and prints PASS only if Lean accepts the whole file.
+# Any error (wrong lemma, false statement) exits non-zero.
+# NOTE: `sorry` is only a warning — it still exits 0. Catch it with
+# `#print axioms` (see below) or `grep -r sorry *.lean` in CI.
+set -euo pipefail
+cd "$(dirname "$0")"
+export PATH="$HOME/.elan/bin:$PATH"
+if [ $# -ne 1 ]; then
+  echo "usage: $0 &lt;file.lean&gt;" &gt;&amp;2
+  exit 2
+fi
+lake env lean "$1"
+echo "PASS: $1"</code></pre>
+<p>Make it executable and run it against the wrong proof first:</p>
+<pre><code class="language-bash">chmod +x check.sh
+./check.sh Attempt1.lean; echo "exit code: $?"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">Attempt1.lean:9:39: error: Type mismatch
+  Nat.add_comm a b
+has type
+  a + b = b + a
+but is expected to have type
+  a * b = b * a
+exit code: 1</code></pre>
+<p>Now fix the proof. The statement was right; the lemma was wrong. Multiplication has its own commutativity lemma, <code>Nat.mul_comm</code>. Save this as <code>Attempt2.lean</code>:</p>
+<pre><code class="language-lean">/-- RIGHT: multiplication has its own commutativity lemma. -/
+example (a b : Nat) : a * b = b * a := Nat.mul_comm a b</code></pre>
+<pre><code class="language-bash">./check.sh Attempt2.lean; echo "exit code: $?"</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">PASS: Attempt2.lean
+exit code: 0</code></pre>
+<p>That is the entire workflow, and it is the same shape DeepMind&rsquo;s agent teams run at scale: propose a candidate, hand it to Lean, read the error, fix, repeat — except their loop runs over quantum circuits and yours runs over one file. Two properties make the harness trustworthy. First, the exit code is the verdict: scripts, CI, and agents can all branch on it without parsing prose. Second, the harness checks the <em>file</em>, not the claim: if the agent edits the statement to something easier instead of fixing the proof, the file still has to pass — and the changed statement is visible in the diff.</p>
+<p>One hole remains, and you should know its name: <code>sorry</code>. Lean accepts <code>sorry</code> anywhere a proof is expected, and the file still compiles — it is a placeholder that says &ldquo;trust me&rdquo;, which is exactly what this tutorial exists to stop doing. A file can pass <code>check.sh</code> while containing a <code>sorry</code>, so add one more command to the workflow: <code>#print axioms</code> lists every axiom a theorem depends on, and a <code>sorry</code> shows up as <code>sorryAx</code>. Try it:</p>
+<pre><code class="language-lean">theorem fake (n : Nat) : n = n + 1 := sorry
+#print axioms fake</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">Sorry.lean:1:8: warning: declaration uses `sorry`
+'fake' depends on axioms: [sorryAx]</code></pre>
+<p>And for a genuinely proved theorem, the same command reports only the standard axioms the proof itself relies on — no <code>sorryAx</code>:</p>
+<pre><code class="language-text">'two_pow_ge' depends on axioms: [propext, Quot.sound]</code></pre>
+<p>The rule for your projects: a proof is done when <code>check.sh</code> prints PASS <em>and</em> <code>#print axioms</code> shows no <code>sorryAx</code>. Better still, forbid the word outright — <code>grep -r sorry *.lean</code> in CI costs nothing and catches the placeholder before it ever reaches a human.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/lean-4-verify-ai-math-proofs-tutorial/img2.webp" alt="Diagram of the proof-check loop: an agent writes a Lean proof, the check script runs the Lean kernel, a failure returns the exact error to the agent and a pass means the proof is accepted"><figcaption>Diagram drawn for AI Frontier Post: the proof-check loop — the agent proposes, the Lean kernel disposes, and only an exit code of 0 counts as proved.</figcaption></figure>
+<h2 id="step-6-wire-it-into-your-agent">Step 6: Wire the loop into your coding agent<a class="anchor" href="#step-6-wire-it-into-your-agent" aria-label="Link to section">#</a></h2>
+<p>The harness is only useful if the agent actually runs it — and an agent with no instruction to run it will do what agents do: read its own proof, decide it looks right, and report success. Give it the rule in writing, as a skill. Save this as <code>SKILL.md</code> inside <code>~/.claude/skills/proof-check/</code> (for Claude Code) or your agent&rsquo;s equivalent skills folder:</p>
+<pre><code class="language-markdown">---
+name: proof-check
+description: Verify Lean 4 proofs with the Lean kernel before claiming any mathematical result. Use when an agent writes, edits, or reviews a Lean proof, or when a claim of the form "X is proved" needs checking.
+---
+
+# Proof check — Lean 4 is the judge
+
+A mathematical claim is **not proved** until `lake env lean` exits 0 on the
+file containing it. No exceptions. A proof that "looks right", typechecks in
+the editor, or passed a language model's self-review does not count.
+
+## Rules
+
+1. Every proof lives in a `.lean` file inside the project (see `lakefile.toml`
+   and `lean-toolchain` for the pinned Lean version).
+2. Run `./check.sh &lt;file.lean&gt;` after every edit. It exits 0 and prints
+   `PASS: &lt;file&gt;` only when the Lean kernel accepts the whole file.
+   Then run `#print axioms` on the theorem: it must show no `sorryAx`.
+3. On failure, read the error, fix the proof, re-run. Do not weaken the
+   statement to make it pass, and never insert `sorry` — `sorry` compiles
+   but proves nothing, and a file containing it is a failed check.
+4. Never claim a result is proved in chat, in a commit message, or in a
+   document until step 2 has passed for the exact file being claimed.
+5. If the same error survives three fix attempts, stop and show the human
+   the statement, the latest proof, and the latest Lean error verbatim.
+
+## Common errors and what they mean
+
+- `type mismatch` on a lemma application: the lemma proves a different
+  statement than the goal (e.g. `Nat.add_comm` where `Nat.mul_comm` was
+  needed). Find the lemma whose statement matches the goal.
+- `unsolved goals`: the tactic block ended with goals remaining. Add the
+  missing step; `omega` closes linear arithmetic, `simp` closes
+  definitional equalities, `decide` closes finite checks.
+- `unknown identifier`: the name is misspelled or lives in Mathlib, which
+  this project does not depend on. Check `#check` output first.</code></pre>
+<p>With the skill installed, the instruction to your agent becomes one sentence: &ldquo;Prove it, then run <code>./check.sh</code> — I only accept what passes.&rdquo; The three-attempt rule in step 5 is the part people skip and then regret: a loop that never stops is worse than no loop, because it burns tokens while looking busy. Three failed fixes means the agent does not understand the error, and the error text plus the proof belong in front of a human.</p>
+<p>Note what this does <em>not</em> do. Lean checks that the proof is valid; it cannot check that the statement is the one you meant. If the agent proves <code>a + b = b + a</code> when you asked for <code>a * b = b * a</code>, the kernel passes it happily — the statement is true, just not yours. The harness catches wrong proofs. Reading the statement still belongs to you.</p>
+<h2 id="step-7-scale-up-with-mathlib">Step 7 (optional): Scale up with Mathlib<a class="anchor" href="#step-7-scale-up-with-mathlib" aria-label="Link to section">#</a></h2>
+<p>Everything so far used Lean&rsquo;s core library, which is deliberately small: natural numbers, lists, basic logic. Real mathematics lives in Mathlib, the community library of definitions and proofs — and it is the library the Riemann certification, the Cogentic papers, and DeepMind&rsquo;s quantum library all build on. Adding it is one flag at scaffold time:</p>
+<pre><code class="language-bash">lake new proof-check-math math
+cd proof-check-math
+lake exe cache get   # downloads prebuilt Mathlib oleans
+lake build</code></pre>
+<p>Go in with your eyes open: a Mathlib project costs roughly 7.5&nbsp;GB of disk and a long first build, and <code>lake exe cache get</code> is the step that saves you from compiling Mathlib from source (which takes hours). With Mathlib available, the same workflow checks real theorems — for example, that the square root of two is irrational:</p>
+<pre><code class="language-lean">import Mathlib
+
+example : Irrational (Real.sqrt 2) := irrational_sqrt_two</code></pre>
+<p>Note on verification: the Mathlib snippet above was checked against Mathlib's published source (the lemma irrational_sqrt_two in Mathlib/NumberTheory/Real/Irrational.lean), not executed in this tutorial's sandbox — a Mathlib project needs about 7.5 GB of disk and a long first build, so it sits outside the verified core loop. Steps 1–6 above are the fully executed workflow: every command and output shown was run against Lean 4.36.0 on November 25, 2026.</p>
+<p>If you never touch Mathlib, nothing in this tutorial breaks: the core-library workflow is the complete loop, and Mathlib only widens the set of statements you can write. The reverse is not true — do not add Mathlib &ldquo;just in case&rdquo; and then wonder why your disk is full and your first build is still running.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/lean-4-verify-ai-math-proofs-tutorial/img3.webp" alt="Diagram of the three Lean setups: core-only project, Mathlib project, and the browser-based Lean web editor, with their disk cost and use case"><figcaption>Diagram drawn for AI Frontier Post: three ways to run Lean — core-only for learning, Mathlib for real mathematics, the web editor for zero-install tries.</figcaption></figure>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>The right setup depends on what you are checking, not on how serious you feel about it:</p>
+<ul><li><strong>Lean core only (this tutorial)</strong> — for learning the loop, checking arithmetic and induction proofs, and wiring the harness into an agent. Fast install, small disk, everything verified above.</li><li><strong>Mathlib project</strong> — for real mathematics: analysis, algebra, number theory, anything beyond the core library. Accept the 7.5&nbsp;GB and the long first build; use <code>lake exe cache get</code> and never compile Mathlib from source.</li><li><strong>Lean 4 web editor</strong> — for a zero-install first try. It runs Lean with Mathlib in the browser, so you can paste any snippet from this tutorial and check it without installing anything. Use it to evaluate, not to build: there is no project, no pin, and no harness.</li><li><strong><code>#eval</code> smoke tests only</strong> — for checking that code <em>runs</em>, not that a theorem holds. Useful while learning syntax; not a proof of anything.</li></ul>
+<p>One rule covers all four: the statement and the pin travel together. A proof checked against Lean 4.36.0 with Mathlib v4.36.0 is a different claim from the same text checked against another version — libraries move, lemma names change, and a proof that passed in May can fail in November. Record the versions with the proof, the way you would record the dataset with a benchmark.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>AI agents now produce proofs faster than humans can read them, and the month&rsquo;s headlines prove it: quantum speedups, six math papers, a matrix-multiplication bound, a certified Riemann proof — all of them landing as Lean files before they land as prose. The correct response is not to read faster. It is to stop reading proofs for correctness at all, and let the kernel do it: install Lean, pin the toolchain, write the statement, and accept only an exit code of 0. The loop in this tutorial is fifteen minutes to set up and it never gets tired, never gets flattered by confident prose, and never mistakes a near-miss lemma for the right one. Build it once, and every proof an agent hands you from now on gets the same answer DeepMind&rsquo;s quantum circuits got: proved — or not yet.</p>
+
+
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/"><span class="chip">Tutorials</span><h3>Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</h3><div class="meta">November 23, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/red-team-your-evals-reward-hacking-tutorial/"><span class="chip">Tutorials</span><h3>Red-team your evals: catch reward hacking in your LLM judges, hands-on</h3><div class="meta">September 29, 2026 · ? min read</div></a><a class="rel-card" href="/articles/claude-code-hooks-complete-guide/"><span class="chip">Tutorials</span><h3>Claude Code hooks: the complete hands-on guide to deterministic agent control</h3><div class="meta">September 28, 2026 · ? min read</div></a><a class="rel-card" href="/articles/build-agent-skill-claude-skill-md-tutorial/"><span class="chip">Tutorials</span><h3>Teach Claude your workflow: building an Agent Skill with SKILL.md</h3><div class="meta">September 25, 2026 · ? min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need Mathlib for this tutorial?</h3><p>No. Every executed example uses Lean&#x27;s core library only, so there is no Mathlib download. Mathlib is the optional Step 7: it widens the mathematics you can write, at the cost of roughly 7.5 GB of disk and a long first build.</p><h3>Can Lean check a proof written in plain English?</h3><p>No. Lean checks Lean code: a formal statement plus a proof in Lean&#x27;s syntax. An agent can draft the statement from an English claim, but the check only starts once the claim exists as a theorem in a .lean file.</p><h3>What happens when the agent&#x27;s proof is wrong?</h3><p>Lean prints an error naming the exact mismatch — usually a type mismatch on the wrong lemma, or unsolved goals — and the file fails with a non-zero exit code. The harness in Step 5 feeds that error back to the agent for another attempt, up to three times.</p><h3>How long does the Mathlib setup take?</h3><p>The download and first build are the slow part: plan on roughly 7.5 GB of disk and well over an hour if Mathlib compiles from source. Always run lake exe cache get first — it downloads prebuilt files and is the difference between minutes and hours.</p><h3>Which Lean version should I pin?</h3><p>The one this tutorial was verified against, leanprover/lean4:v4.36.0, written in the lean-toolchain file. A proof checked against one Lean and Mathlib version is a different claim from the same text checked against another — record the versions with the proof.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/deepmind-gemini-agents-lean-quantum-algorithms/">DeepMind&#x27;s agent teams found faster quantum algorithms — and proved them correct in Lean</a></li><li><a href="/articles/google-cogentic-six-math-papers/">Google&#x27;s Cogentic agent posts six math papers, claiming proofs for problems open since 1964</a></li><li><a href="/articles/lean-mathlib-certify-riemann-proof-correct/">Lean and Mathlib certify Alpöge’s Riemann proof: ‘We have full confidence’</a></li><li><a href="/articles/openai-matrix-multiplication-exponent-nine-fourths/">OpenAI claims the matrix multiplication exponent is exactly 9/4 — and that nothing can beat it</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
