@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Mellum 2.1 Instruct, hands-on: JetBrains&#x27; fast local coding model that skips the thinking — AI Frontier Post</title>
+<meta name="description" content="JetBrains released Mellum 2.1 Instruct today: a 12B mixture-of-experts coding model that answers without a chain of thought, uses about half the tokens of its Thinking sibling, and runs on your own hardware for free. Install it with Ollama, verify it with real commands, and put it to work as a fix-the-failing-test sub-agent.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/mellum-2-1-instruct-local-coding-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Mellum 2.1 Instruct, hands-on: JetBrains&#x27; fast local coding model that skips the thinking">
+<meta property="og:description" content="JetBrains released Mellum 2.1 Instruct today: a 12B mixture-of-experts coding model that answers without a chain of thought, uses about half the tokens of its Thinking sibling, and runs on your own hardware for free. Install it with Ollama, verify it with real commands, and put it to work as a fix-the-failing-test sub-agent.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mellum-2-1-instruct-local-coding-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/mellum-2-1-instruct-local-coding-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Mellum 2.1 Instruct, hands-on: JetBrains' fast local coding model that skips the thinking", "description": "JetBrains released Mellum 2.1 Instruct today: a 12B mixture-of-experts coding model that answers without a chain of thought, uses about half the tokens of its Thinking sibling, and runs on your own hardware for free. Install it with Ollama, verify it with real commands, and put it to work as a fix-the-failing-test sub-agent.", "datePublished": "2026-11-26", "dateModified": "2026-11-26", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/mellum-2-1-instruct-local-coding-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/mellum-2-1-instruct-local-coding-agent-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to run Mellum 2.1 Instruct?", "acceptedAnswer": {"@type": "Answer", "text": "No, but you will want one. The Q4_K_M build needs about 8&nbsp;GB of VRAM plus context, and on an RTX&nbsp;3090 it generates at 216.8 tokens per second once loaded. On a CPU-only laptop the same model runs at a few tokens per second, which is usable for a single question but too slow for an agent loop that makes dozens of calls."}}, {"@type": "Question", "name": "What is the difference between Mellum 2.1 Instruct and Mellum 2.1 Thinking?", "acceptedAnswer": {"@type": "Answer", "text": "Same architecture, same training, different output style. Thinking reasons out loud before acting and is the better choice for hard algorithmic and math problems &mdash; it scores 47.0% on SWE-bench Verified against Instruct&rsquo;s 40.4%, and 82.0 vs 53.7 on LiveCodeBench v6. Instruct answers directly with no chain of thought, uses about half as many tokens, and is the fast worker for small fixes, tool calls, and questions about code."}}, {"@type": "Question", "name": "How much disk space does the model need?", "acceptedAnswer": {"@type": "Answer", "text": "The smallest GGUF build, MXFP4_MOE, is 7.0&nbsp;GB; Q4_K_M, the default, is 8.1&nbsp;GB; Q6_K is 10.9&nbsp;GB; Q8_0 is 12.9&nbsp;GB; and the full-precision BF16 reference is 24.3&nbsp;GB. All are Apache 2.0, free to download from Hugging Face, with no account needed."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Mellum 2.1 Instruct, hands-on: JetBrains' fast local coding model that skips the thinking</h1>
+<p class="lede">JetBrains released Mellum 2.1 Instruct today: a 12B mixture-of-experts coding model that answers without a chain of thought, uses about half the tokens of its Thinking sibling, and runs on your own hardware for free. Install it with Ollama, verify it with real commands, and put it to work as a fix-the-failing-test sub-agent.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 26, 2026 · 15 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> JetBrains released Mellum 2.1 Instruct today (November 26, 2026): a 12B mixture-of-experts coding model that answers directly, with no chain of thought, and resolves 40.4% of SWE-bench Verified tasks &mdash; double its predecessor. It runs locally through Ollama for $0. This tutorial pulls the 8.1&nbsp;GB Q4_K_M build, verifies it with real commands (216.8 tokens/sec on an RTX&nbsp;3090 once loaded), and wires it into a 60-line fix-the-failing-test loop that passed on its first try.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The model in one sentence:</b> 12B mixture-of-experts, 2.5B active parameters, 131,072-token context, Apache 2.0 &mdash; trained with reinforcement learning inside real repositories, rewarded when hidden tests pass.</li><li><b>The verified install:</b> <code>ollama pull hf.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF:Q4_K_M</code> &mdash; 8.1&nbsp;GB, no Modelfile, no account, no key. Model ID <code>ae9559075c7c</code> in this tutorial.</li><li><b>The sampling settings that matter:</b> temperature 0.6, top_p 0.95, top_k 20, straight from the model card. Set <code>num_ctx</code> explicitly (32,768 used here) &mdash; Ollama&rsquo;s default is far smaller than the model&rsquo;s 131K maximum.</li><li><b>The measured speed:</b> 216.8 tokens/sec steady-state on an RTX&nbsp;3090 with the full model in VRAM. The first call takes ~48 seconds because it loads 8.1&nbsp;GB of weights &mdash; that is load time, not generation speed.</li><li><b>The agent loop:</b> failing test &rarr; patch &rarr; the test suite decides. Passed on try 1 in 1.1 seconds and 450 tokens, with a genuine one-line fix (<code>reverse=True</code>).</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/mellum-2-1-instruct-local-coding-agent-tutorial/cover.webp" alt="A laptop glowing with source code at dusk while a small robot arm holds up a circuit-board wrench beside it"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body">
+<p>JetBrains shipped a new coding model today, and it is built for a job most models are bad at: being the fast, cheap worker inside your own tools. Mellum 2.1 Instruct is the direct-answer sibling of October&rsquo;s Mellum 2.1 Thinking. Same 12-billion-parameter mixture-of-experts model, same reinforcement-learning training in real repositories &mdash; but where Thinking reasons out loud before it acts, Instruct answers straight, with no chain of thought. On JetBrains&rsquo; repository-level tasks it uses about half as many tokens as Thinking, and it still resolves 40.4% of SWE-bench Verified tasks, double its predecessor&rsquo;s 20.2%. The weights are Apache 2.0, the GGUF builds are on Hugging Face, and the whole thing runs on your own hardware for $0 after the download.</p>
+<p>This tutorial runs it for real. You will install Ollama, pull the 8.1&nbsp;GB Q4_K_M build, get a first answer with the model card&rsquo;s exact sampling settings, call it from Python through the OpenAI-compatible API, and then put it to work as a sub-agent: a small loop that hands it a failing test, takes back a patch, and lets the test suite decide. Every command below ran while writing this tutorial, on a desktop RTX&nbsp;3090, and the outputs shown are the real ones.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mellum-2-1-instruct-local-coding-agent-tutorial/img2.webp" alt="Diagram of the local stack: your code talks to Ollama on localhost port 11434, which serves Mellum 2.1 Instruct on your GPU or CPU"><figcaption>Diagram drawn for AI Frontier Post. Your code talks to Ollama on localhost; Ollama serves Mellum on your GPU or CPU. Nothing leaves the machine.</figcaption></figure>
+<h2 id="what-you-ll-need">What you&rsquo;ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Ollama 0.40 or newer</strong> (<a href="https://ollama.com/download" rel="nofollow">ollama.com/download</a>). This tutorial used Ollama 0.40.2 on Windows with an RTX&nbsp;3090; the same commands work on macOS and Linux.</li><li><strong>About 9&nbsp;GB of free disk</strong> for the Q4_K_M weights (8.1&nbsp;GB) plus overhead. The other quants are 7.0&nbsp;GB (MXFP4_MOE, smallest) to 24.3&nbsp;GB (BF16, reference).</li><li><strong>A GPU with 8&nbsp;GB+ of VRAM is strongly recommended</strong> &mdash; an RTX&nbsp;3090/4090, an Apple Silicon Mac, or any card that fits the quant. CPU-only works, but a 12B MoE at 2.5B active parameters generates a few tokens a second on a laptop CPU, which is too slow for an agent loop.</li><li><strong>Cost: $0.</strong> No account, no API key, no cloud. The model is Apache 2.0, so commercial use is fine.</li><li><strong>Python 3.10+</strong> for the API and agent-loop steps. Only the standard library is used &mdash; no extra packages.</li></ul>
+<p>Time: about 20 minutes including the download. The finished setup is a local model server on <code>localhost:11434</code> answering OpenAI-compatible requests, plus a 60-line Python loop that turns it into a fix-the-failing-test sub-agent.</p>
+<h2 id="1-install-ollama-and-pull-the-model">1. Install Ollama and pull the model<a class="anchor" href="#1-install-ollama-and-pull-the-model" aria-label="Link to section">#</a></h2>
+<p>Mellum 2.1 Instruct ships as GGUF files in the Hugging Face repo <code>JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF</code>. Ollama can pull a GGUF straight from the Hub with no Modelfile: the <code>hf.co/</code> prefix names the repo, and the tag after the colon picks the quantization. Q4_K_M is the default when no tag is given, and it is the right starting point &mdash; JetBrains&rsquo; own measurements put it at 87.4% top-token agreement with the unquantized model, against 94.3% for Q6_K and 96.2% for Q8_0.</p>
+<pre><code class="language-bash">ollama pull hf.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF:Q4_K_M</code></pre>
+<p>Expect an 8.1&nbsp;GB download. Verify it landed:</p>
+<pre><code class="language-bash">ollama list</code></pre>
+<pre><code class="language-plaintext">NAME                                                      ID            SIZE      MODIFIED
+hf.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF:Q4_K_M  ae9559075c7c  8.1 GB    13 seconds ago</code></pre>
+<p>Picking a quant is a VRAM decision, and JetBrains publishes the quality cost of each one, measured as KL divergence and top-token agreement against the BF16 logits on Wikitext-2:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Quantization</th><th>Size</th><th>Top-token match vs BF16</th><th>Use it when</th></tr></thead>
+<tbody>
+<tr><td><code>MXFP4_MOE</code></td><td>7.0&nbsp;GB</td><td>84.3%</td><td>VRAM is tightest; smallest file</td></tr>
+<tr><td><code>Q4_K_M</code></td><td>8.1&nbsp;GB</td><td>87.4%</td><td>Default; best size/quality balance</td></tr>
+<tr><td><code>Q6_K</code></td><td>10.9&nbsp;GB</td><td>94.3%</td><td>JetBrains&rsquo; recommended quant</td></tr>
+<tr><td><code>Q8_0</code></td><td>12.9&nbsp;GB</td><td>96.2%</td><td>Near-lossless; 16&nbsp;GB+ VRAM</td></tr>
+<tr><td><code>BF16</code></td><td>24.3&nbsp;GB</td><td>&mdash; (reference)</td><td>Reference quality; 24&nbsp;GB VRAM</td></tr>
+</tbody></table></div>
+<p>The same repo also ships the multi-token prediction (MTP) head &mdash; one extra transformer block that predicts the token after the one just sampled, used for speculative decoding in llama.cpp. Step 5 covers it. Ollama does not use the MTP head; the quants above are what <code>ollama run hf.co/&hellip;</code> resolves to.</p>
+<h2 id="2-first-run">2. First run: chat with the exact sampling settings<a class="anchor" href="#2-first-run" aria-label="Link to section">#</a></h2>
+<p>Start a chat session:</p>
+<pre><code class="language-bash">ollama run hf.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF:Q4_K_M</code></pre>
+<p>That drops you into an interactive prompt. Before asking anything, set the sampling parameters from the model card. Instruct is tuned for temperature 0.6, top-p 0.95, top-k 20 &mdash; noticeably cooler than the temperature 1.0 JetBrains used for the Thinking variant in its agent evals. In the Ollama chat, type:</p>
+<pre><code class="language-plaintext">/set parameter temperature 0.6
+/set parameter top_p 0.95
+/set parameter top_k 20</code></pre>
+<p>Then ask it the model card&rsquo;s own example task:</p>
+<pre><code class="language-plaintext">&gt;&gt;&gt; Write a Python function to reverse a string.</code></pre>
+<p>On this machine the answer came back as exactly this, nothing more:</p>
+<pre><code class="language-python">def reverse_string(s):
+    return s[::-1]</code></pre>
+<p>Note what did <em>not</em> happen: no thinking block, no &ldquo;let me think through this&rdquo; preamble. That is the whole point of Instruct. The Thinking variant would have spent tokens reasoning about a one-line function; Instruct just answers. On a trivial task the difference is cosmetic. On an agent loop that makes dozens of calls, it is the difference between a snappy tool and a slow one.</p>
+<p>One honest number about that first call: it took 48.5 seconds wall-clock for 15 reply tokens. That is <em>not</em> the model&rsquo;s speed &mdash; it is the cold-load cost of pulling 8.1&nbsp;GB of weights into VRAM the first time. Once loaded, the same model is fast, as the next step measures.</p>
+<h2 id="3-call-it-from-python">3. Call it from Python through the OpenAI-compatible API<a class="anchor" href="#3-call-it-from-python" aria-label="Link to section">#</a></h2>
+<p>Ollama serves an OpenAI-compatible API on <code>http://localhost:11434/v1</code>, so any OpenAI client works unchanged. The script below uses only the standard library, so there is nothing to install. Save it as <code>mellum_check.py</code>:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""mellum_check.py — first-run verification against desktop Ollama (stdlib only).
+Calls /api/chat with Mellum 2.1 Instruct sampling params from the model card
+(temp 0.6, top_p 0.95, top_k 20) and prints the reply + token/timing stats.
+Usage: python mellum_check.py
+"""
+import json, time, urllib.request
+
+MODEL = "hf.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF:Q4_K_M"
+BASE = "http://127.0.0.1:11434"
+
+def chat(messages, num_ctx=32768):
+    body = {
+        "model": MODEL,
+        "messages": messages,
+        "stream": False,
+        "options": {"temperature": 0.6, "top_p": 0.95, "top_k": 20,
+                    "num_ctx": num_ctx},
+    }
+    req = urllib.request.Request(
+        BASE + "/api/chat",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    t0 = time.time()
+    with urllib.request.urlopen(req, timeout=600) as r:
+        out = json.load(r)
+    wall = time.time() - t0
+    return out, wall
+
+def main():
+    messages = [
+        {"role": "user", "content":
+         "Write a Python function to reverse a string. Reply with only the code, no explanation."},
+    ]
+    out, wall = chat(messages)
+    reply = out["message"]["content"]
+    print("=== REPLY ===")
+    print(reply)
+    print("=== STATS ===")
+    print("wall_s: %.1f" % wall)
+    print("prompt_tokens:", out.get("prompt_eval_count"))
+    print("reply_tokens:", out.get("eval_count"))
+    dur = out.get("eval_duration")  # nanoseconds
+    if dur and out.get("eval_count"):
+        print("eval_tok_per_s: %.1f" % (out["eval_count"] / (dur / 1e9)))
+    print("done_reason:", out.get("done_reason"))
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p>Two details matter. First, <code>num_ctx</code>: the model supports a 131,072-token context, but Ollama&rsquo;s default context is far smaller, so set it explicitly &mdash; 32,768 covers a file plus test output with room to spare. Second, the <code>eval_count</code> / <code>eval_duration</code> fields in Ollama&rsquo;s response give you a real tokens-per-second measurement for every call, which is how the speed numbers in this tutorial were produced. Run it:</p>
+<pre><code class="language-bash">python mellum_check.py</code></pre>
+<p>The same reverse-a-string call, now through the API, returned the same one-liner. The interesting measurement came from a longer ask &mdash; an LRU cache class with docstrings and an example, 616 reply tokens:</p>
+<pre><code class="language-plaintext">reply_chars: 2131
+wall_s: 3.1
+prompt_tokens: 54
+reply_tokens: 616
+prompt_eval_s: 0.25
+eval_tok_per_s: 216.8
+done_reason: stop</code></pre>
+<p><strong>216.8 tokens per second</strong> on an RTX&nbsp;3090, with the full 8.1&nbsp;GB model offloaded to VRAM (Ollama&rsquo;s <code>/api/ps</code> reports <code>size_vram</code> equal to the full model size). That is the number that makes the agent loop in the next step practical: a 150-token patch costs under a second of generation. The reply itself was clean, complete code with docstrings &mdash; no thinking block, no preamble, no truncation.</p>
+<p>If you prefer the <code>openai</code> package, the model card&rsquo;s quickstart is the same call with a different client: <code>OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")</code>, model set to the <code>hf.co/&hellip;</code> name, <code>temperature=0.6, top_p=0.95, extra_body={"top_k": 20}</code>. The <code>api_key</code> value is ignored by Ollama; any string works.</p>
+<h2 id="4-the-fix-loop">4. The fix loop: Mellum as a fast sub-agent<a class="anchor" href="#4-the-fix-loop" aria-label="Link to section">#</a></h2>
+<p>This is the use case Instruct was trained for. JetBrains&rsquo; own benchmark setup runs the model as an agent inside real repositories with shell and file tools, rewarded only when hidden tests pass. The loop below is the same idea shrunk to one file: a failing test, a prompt, a patch, and the test suite as judge. The model proposes; the tests decide.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mellum-2-1-instruct-local-coding-agent-tutorial/img3.webp" alt="Diagram of the fix loop: a failing test goes to Mellum, Mellum drafts a patch, the patch is applied and tests run again, and a red result loops back at most three times"><figcaption>Diagram drawn for AI Frontier Post. The model proposes; the test suite decides. A red result loops back to step 2, at most three times.</figcaption></figure>
+<p>First the buggy file, <code>buggy.py</code> &mdash; a <code>top_k_frequent</code> helper with one planted bug (it sorts by count ascending, so it returns the <em>least</em> frequent items):</p>
+<pre><code class="language-python">"""buggy.py — small module with one planted bug for the fix-loop demo.
+
+The bug: top_k_frequent sorts by count ASCENDING, so it returns the
+LEAST frequent items instead of the most frequent ones.
+"""
+
+
+def top_k_frequent(items, k):
+    """Return the k most frequent items, most frequent first."""
+    counts = {}
+    for it in items:
+        counts[it] = counts.get(it, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: kv[1])
+    return [item for item, _ in ranked[:k]]
+</code></pre>
+<p>And a plain-assert test runner, <code>run_tests.py</code> (no pytest needed):</p>
+<pre><code class="language-python">"""run_tests.py — plain-assert test runner for the fix-loop demo (no pytest needed)."""
+import sys
+from buggy import top_k_frequent
+
+failures = []
+
+def check(name, got, want):
+    if got != want:
+        failures.append(f"{name}: got {got!r}, want {want!r}")
+    else:
+        print(f"ok: {name}")
+
+check("basic top-2",
+      top_k_frequent(["a", "b", "a", "c", "b", "a"], 2), ["a", "b"])
+check("top-1",
+      top_k_frequent(["x", "y", "y", "z", "y"], 1), ["y"])
+check("k larger than distinct",
+      top_k_frequent(["p", "p", "q"], 5), ["p", "q"])
+check("ties keep insertion order",
+      top_k_frequent(["m", "n", "m", "n"], 2), ["m", "n"])
+
+if failures:
+    print("FAILURES:")
+    for f in failures:
+        print(" -", f)
+    sys.exit(1)
+print("ALL TESTS PASSED")
+</code></pre>
+<p>Confirm the bug is real before the model touches anything:</p>
+<pre><code class="language-bash">python run_tests.py; echo "exit=$?"</code></pre>
+<pre><code class="language-plaintext">ok: ties keep insertion order
+FAILURES:
+ - basic top-2: got ['c', 'b'], want ['a', 'b']
+ - top-1: got ['x'], want ['y']
+ - k larger than distinct: got ['q', 'p'], want ['p', 'q']
+exit=1</code></pre>
+<p>Three of four tests fail; the tie test passes even with the bug, which is useful &mdash; it guards against a fix that breaks tie order. Now the loop itself, <code>fix_loop.py</code>. It runs the tests, sends the file plus the failure output to Mellum, takes back a complete corrected file from a single <code>```python</code> block, writes it, and runs the tests again. Three tries maximum, then it stops and says so:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+"""fix_loop.py — Mellum 2.1 Instruct as a fast fix-the-failing-test sub-agent.
+Stdlib only. Loop: run tests -&gt; send file + failure to local Ollama -&gt;
+apply the model's full-file rewrite -&gt; run tests again. Max 3 tries.
+Usage: python fix_loop.py   (run from the demo project directory)
+"""
+import json, re, subprocess, sys, time, urllib.request
+
+MODEL = "hf.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF:Q4_K_M"
+BASE = "http://127.0.0.1:11434"
+TARGET = "buggy.py"
+TESTS = "run_tests.py"
+MAX_TRIES = 3
+
+PROMPT = """You are a precise coding assistant. Fix the bug in the file below so the
+tests pass. Reply with the COMPLETE corrected file inside one ```python block
+and nothing else outside it. Do not change the function signatures.
+
+FILE buggy.py:
+```python
+{source}
+```
+
+TEST OUTPUT:
+```
+{test_out}
+```
+"""
+
+def chat(messages):
+    body = {"model": MODEL, "messages": messages, "stream": False,
+            "options": {"temperature": 0.6, "top_p": 0.95, "top_k": 20,
+                        "num_ctx": 32768}}
+    req = urllib.request.Request(BASE + "/api/chat",
+        data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        return json.load(r)
+
+def run_tests():
+    p = subprocess.run([sys.executable, TESTS], capture_output=True, text=True, timeout=120)
+    return p.returncode, (p.stdout + p.stderr).strip()
+
+def main():
+    total_prompt = total_reply = 0
+    t_start = time.time()
+    for attempt in range(1, MAX_TRIES + 1):
+        rc, test_out = run_tests()
+        print(f"--- try {attempt}: tests exit={rc}")
+        print(test_out)
+        if rc == 0:
+            print(f"RESULT: PASS on try {attempt} (no fix needed)" if attempt == 1
+                  else f"RESULT: PASS after {attempt - 1} fix(es)")
+            print(f"total wall_s: {time.time() - t_start:.1f}")
+            print(f"total prompt_tokens: {total_prompt} reply_tokens: {total_reply}")
+            return 0
+        source = open(TARGET).read()
+        out = chat([{"role": "user", "content": PROMPT.format(source=source, test_out=test_out)}])
+        reply = out["message"]["content"]
+        total_prompt += out.get("prompt_eval_count", 0)
+        total_reply += out.get("eval_count", 0)
+        m = re.search(r"```python\n(.*?)```", reply, re.S)
+        if not m:
+            print("RESULT: FAIL — model reply had no python block")
+            print(reply[:500])
+            return 1
+        open(TARGET, "w").write(m.group(1))
+        print(f"try {attempt}: patch applied ({len(m.group(1))} chars, "
+              f"reply_tokens={out.get('eval_count')})")
+    rc, test_out = run_tests()
+    print(f"--- final: tests exit={rc}")
+    print(test_out)
+    print("RESULT: FAIL after 3 tries" if rc else "RESULT: PASS on final check")
+    print(f"total wall_s: {time.time() - t_start:.1f}")
+    print(f"total prompt_tokens: {total_prompt} reply_tokens: {total_reply}")
+    return rc
+
+if __name__ == "__main__":
+    sys.exit(main())
+</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">python fix_loop.py</code></pre>
+<pre><code class="language-plaintext">--- try 1: tests exit=1
+ok: ties keep insertion order
+FAILURES:
+ - basic top-2: got ['c', 'b'], want ['a', 'b']
+ - top-1: got ['x'], want ['y']
+ - k larger than distinct: got ['q', 'p'], want ['p', 'q']
+try 1: patch applied (495 chars, reply_tokens=157)
+--- try 2: tests exit=0
+ok: basic top-2
+ok: top-1
+ok: k larger than distinct
+ok: ties keep insertion order
+ALL TESTS PASSED
+RESULT: PASS after 1 fix(es)
+total wall_s: 1.1
+total prompt_tokens: 293 reply_tokens: 157</code></pre>
+<p>One try, 1.1 seconds wall-clock, 450 tokens total. And the patch was a genuine one-line fix, not a test-gaming rewrite &mdash; the model added <code>reverse=True</code> to the sort and left everything else alone:</p>
+<pre><code class="language-python">ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)</code></pre>
+<p>That is the honest shape of a local sub-agent: fast, cheap, and judged by an external check rather than by its own confidence. The loop&rsquo;s guardrails are doing as much work as the model &mdash; the three-try cap, the full-file rewrite (no patch parsing to get wrong), and the rule that only a green test run counts as done. On a harder bug the model will fail the cap, and that is the correct outcome: escalate to a stronger model instead of letting a small one guess repeatedly.</p>
+<h2 id="5-faster-still-mtp-speculative-decoding">5. Faster still: MTP speculative decoding with llama.cpp<a class="anchor" href="#5-faster-still-mtp-speculative-decoding" aria-label="Link to section">#</a></h2>
+<p>Mellum 2.1 Instruct ships with a multi-token prediction head: one extra transformer block, trained with the model, that predicts the token after the one just sampled. llama.cpp uses it as a speculative draft &mdash; the full model verifies every drafted token, so the output is unchanged and generation is faster whenever drafts are accepted. JetBrains reports the head makes generation up to 1.8x faster.</p>
+<p>The GGUF repo ships the head two ways: a standalone 1.8&nbsp;GB BF16 draft file (<code>mtp-Mellum2.1-12B-A2.5B-Instruct-BF16.gguf</code>), and combined model-plus-head files under <code>mtp/</code>. The combined files need llama.cpp build <code>b11747</code> (19 October 2026) or newer; older builds, Ollama, and LM Studio cannot load them yet. With the <code>llama</code> CLI from <a href="https://llama.app" rel="nofollow">llama.app</a> or any recent llama.cpp build, serving with the draft is one command:</p>
+<pre><code class="language-bash"># Pull and serve in one step; the suffix picks the quantization
+llama serve -hf JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF:Q6_K \
+  --temp 0.6 --top-p 0.95 --top-k 20</code></pre>
+<p>That serves the same OpenAI-compatible API on <code>http://localhost:9931/v1</code> &mdash; note the port, 9931, not Ollama&rsquo;s 11434. To actually use the draft head, pass <code>--spec-type draft-mtp</code>; without it the head is simply not used and nothing else changes. This step is documented from the GGUF repo&rsquo;s README rather than run end to end here &mdash; the Ollama path above is the verified one, and MTP only pays off once you are generating long outputs in a loop.</p>
+<h2 id="6-the-server-paths">6. The server paths: vLLM and Transformers<a class="anchor" href="#6-the-server-paths" aria-label="Link to section">#</a></h2>
+<p>For a shared server instead of a laptop, the model card gives two more routes. vLLM serves the full-precision weights with tool calling enabled:</p>
+<pre><code class="language-bash"># Without tool calling
+vllm serve JetBrains/Mellum2.1-12B-A2.5B-Instruct --max-model-len 131072
+
+# With tool calling
+vllm serve JetBrains/Mellum2.1-12B-A2.5B-Instruct \
+  --max-model-len 131072 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes</code></pre>
+<p>And plain Transformers works from version 5.11.0, which added the <code>mellum</code> architecture. Both need a real GPU and a 24&nbsp;GB+ download; they are here so you know the options exist, not as steps this tutorial ran.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Your situation</th><th>Use</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>You want it running in five minutes</td><td>Ollama + Q4_K_M</td><td>One pull command; API on :11434; the verified path in this tutorial</td></tr>
+<tr><td>You want the fastest local generation</td><td>llama.cpp + MTP head</td><td>Speculative decoding, up to 1.8x faster; needs a recent build</td></tr>
+<tr><td>You are serving a team or an app</td><td>vLLM</td><td>Throughput, tool calling, 131K context; needs a server GPU</td></tr>
+<tr><td>The task needs deep reasoning</td><td>Mellum 2.1 Thinking</td><td>Same weights + chain of thought; 47.0% vs 40.4% on SWE-bench Verified</td></tr>
+<tr><td>The task is a small fix, a question, a tool call</td><td>Mellum 2.1 Instruct</td><td>About half the tokens, nearly the same agentic score</td></tr>
+</tbody></table></div>
+<p>The Instruct/Thinking choice is the one that matters most, and JetBrains is unusually direct about it: reasoning is crucial on hard algorithmic and math problems (LiveCodeBench, AIME), where Thinking leads by a wide margin; on ordinary agent work &mdash; a small fix, a command to run, a question about the code &mdash; reasoning adds time and compute without adding quality. Use Instruct as the fast worker, Thinking as the escalation.</p>
+<h2 id="what-the-benchmarks-actually-say">What the benchmarks actually say<a class="anchor" href="#what-the-benchmarks-actually-say" aria-label="Link to section">#</a></h2>
+<p>All numbers below are JetBrains&rsquo; own, from the model card, and every one is self-reported. The agentic rows were produced with the same open-source harness for every model &mdash; the Pi coding agent v0.73.1, shell and file tools, 114K-token context, up to 16K tokens per turn &mdash; which is the right way to compare agents, but it is still one harness, and harness choice moves scores.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Benchmark</th><th>Mellum 2.1 Instruct</th><th>Mellum 2.1 Thinking</th><th>Qwen3.5 9B</th></tr></thead>
+<tbody>
+<tr><td>SWE-bench Verified</td><td><strong>40.4</strong></td><td>47.0</td><td>49.8 / 55.6</td></tr>
+<tr><td>LiveCodeBench v6</td><td>53.7</td><td>82.0</td><td>65.2 / 74.8</td></tr>
+<tr><td>HumanEval+</td><td>89.1</td><td>91.5</td><td>84.8 / 89.0</td></tr>
+<tr><td>MBPP+</td><td>74.3</td><td>79.4</td><td>63.8 / 69.0</td></tr>
+<tr><td>AIME 25/26</td><td>61.1</td><td>83.3</td><td>69.2 / 79.8</td></tr>
+<tr><td>BFCL v4 (tool use)</td><td>46.5</td><td>62.3</td><td>61.2 / 60.0</td></tr>
+<tr><td>Terminal-Bench 2.1</td><td>8.2</td><td>17.4</td><td>17.6 / 18.5</td></tr>
+</tbody></table></div>
+<p>Read the table as a tradeoff, not a ranking. Instruct leads its comparison group on code generation (HumanEval+, MBPP+) and doubles its predecessor on SWE-bench Verified &mdash; but Qwen3.5 9B, a dense 9B model, scores higher on the agentic benchmarks while activating more parameters per token (9B vs Mellum&rsquo;s 2.5B). JetBrains&rsquo; answer is speed: Mellum generates about 1.4x faster than Qwen3.5 9B on a single request and about 1.8x faster under load, and it does it on hardware you already own. If your bottleneck is latency and cost per agent step, that matters more than nine points on SWE-bench. If your bottleneck is solving the hardest tasks, it does not &mdash; and the Thinking variant, or a bigger model, is the right call.</p>
+<h2 id="limitations">Limitations, stated plainly<a class="anchor" href="#limitations" aria-label="Link to section">#</a></h2>
+<ul><li><strong>The benchmarks are vendor-reported.</strong> Nobody outside JetBrains has reproduced the SWE-bench numbers yet, and the agentic scores come from one harness. Treat them as a starting point.</li><li><strong>Instruct is not a reasoner.</strong> It answers directly, which is a feature on easy tasks and a liability on hard ones: LiveCodeBench drops from 82.0 (Thinking) to 53.7 (Instruct). Do not use it for algorithmic work that needs a chain of thought.</li><li><strong>131K context is a maximum, not a default.</strong> Ollama&rsquo;s default context is much smaller; pass <code>num_ctx</code> explicitly, and remember that a long context on a local GPU costs VRAM for the KV cache.</li><li><strong>The MTP head is llama.cpp-only for now.</strong> Ollama and LM Studio cannot use the combined files until they ship a new enough llama.cpp build.</li><li><strong>12B MoE is small, not tiny.</strong> Q4_K_M needs ~8&nbsp;GB of VRAM plus context. On a CPU-only laptop it runs, but slowly enough that an agent loop stops being fun.</li></ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>Mellum 2.1 Instruct is a small, honest proposition: a fast open model that does the routine half of coding-agent work on your own machine, for free, without a chain of thought tax on every call. Install Ollama, pull the Q4_K_M build, point your tools at <code>localhost:11434</code>, and let the test suite &mdash; not the model&rsquo;s confidence &mdash; decide whether a patch lands. Keep the Thinking variant, or a bigger model, one escalation away for the tasks that actually need reasoning. That two-tier setup, fast worker plus strong reasoner, is the shape of local coding agents now, and this model was built to be the fast half.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://blog.jetbrains.com/ai/2026/11/mellum2-1-instruct-is-out-bringing-faster-answers-for-coding-agents/" rel="nofollow">JetBrains: Mellum2.1 Instruct Is Out</a> — the release announcement (November 26, 2026): the Instruct/Thinking split, token savings, MTP head, and training on NeMo RL.</li><li><a href="https://huggingface.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct" rel="nofollow">JetBrains/Mellum2.1-12B-A2.5B-Instruct</a> — the model card: architecture, sampling settings (temperature 0.6, top_p 0.95, top_k 20), the full benchmark table, and the vLLM and Transformers quickstarts.</li><li><a href="https://huggingface.co/JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF" rel="nofollow">JetBrains/Mellum2.1-12B-A2.5B-Instruct-GGUF</a> — the GGUF repo README: the quantization table with KL divergence and top-token agreement, the <code>llama serve</code> commands, and the MTP speculative-decoding notes.</li><li><a href="https://huggingface.co/docs/hub/ollama" rel="nofollow">Hugging Face: Use Ollama with any GGUF Model</a> — the <code>ollama run hf.co/&hellip;</code> syntax and the default-Q4_K_M rule.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="mellum-2-1-instruct-local-coding-agent-tutorial"></div><div class="comments" data-comments="mellum-2-1-instruct-local-coding-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/qwen3-8-27b-local-setup/"><span class="chip">Tutorials</span><h3>Qwen3.8-27B on your own hardware: the complete local setup guide</h3><div class="meta">September 25, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/speculative-decoding-llamacpp-tutorial/"><span class="chip">Tutorials</span><h3>Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</h3><div class="meta">September 29, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/llm-cascade-router-tutorial/"><span class="chip">Tutorials</span><h3>Stop paying flagship prices for easy questions: build an LLM cascade router that knows when to escalate</h3><div class="meta">September 29, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/claude-code-hooks-complete-guide/"><span class="chip">Tutorials</span><h3>Claude Code hooks: the complete hands-on guide to deterministic agent control</h3><div class="meta">September 28, 2026 · 11 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run Mellum 2.1 Instruct?</h3><p>No, but you will want one. The Q4_K_M build needs about 8&nbsp;GB of VRAM plus context, and on an RTX&nbsp;3090 it generates at 216.8 tokens per second once loaded. On a CPU-only laptop the same model runs at a few tokens per second, which is usable for a single question but too slow for an agent loop that makes dozens of calls.</p><h3>What is the difference between Mellum 2.1 Instruct and Mellum 2.1 Thinking?</h3><p>Same architecture, same training, different output style. Thinking reasons out loud before acting and is the better choice for hard algorithmic and math problems &mdash; it scores 47.0% on SWE-bench Verified against Instruct&rsquo;s 40.4%, and 82.0 vs 53.7 on LiveCodeBench v6. Instruct answers directly with no chain of thought, uses about half as many tokens, and is the fast worker for small fixes, tool calls, and questions about code.</p><h3>How much disk space does the model need?</h3><p>The smallest GGUF build, MXFP4_MOE, is 7.0&nbsp;GB; Q4_K_M, the default, is 8.1&nbsp;GB; Q6_K is 10.9&nbsp;GB; Q8_0 is 12.9&nbsp;GB; and the full-precision BF16 reference is 24.3&nbsp;GB. All are Apache 2.0, free to download from Hugging Face, with no account needed.</p></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
