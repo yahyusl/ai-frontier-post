@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build your first MCP App: an interactive task board that lives inside Claude — AI Frontier Post</title>
+<meta name="description" content="MCP tools return text. MCP Apps return an interface. Build a working task board with the official ext-apps SDK — tool, UI resource, and View — verify it end to end, and run it in Claude Desktop.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/build-mcp-app-interactive-ui-claude-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build your first MCP App: an interactive task board that lives inside Claude">
+<meta property="og:description" content="MCP tools return text. MCP Apps return an interface. Build a working task board with the official ext-apps SDK — tool, UI resource, and View — verify it end to end, and run it in Claude Desktop.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/build-mcp-app-interactive-ui-claude-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/build-mcp-app-interactive-ui-claude-tutorial/cover.webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-11-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build your first MCP App: an interactive task board that lives inside Claude", "description": "MCP tools return text. MCP Apps return an interface. Build a working task board with the official ext-apps SDK \u2014 tool, UI resource, and View \u2014 verify it end to end, and run it in Claude Desktop.", "datePublished": "2026-11-26", "dateModified": "2026-11-26", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/build-mcp-app-interactive-ui-claude-tutorial/"}, "image": "https://aifrontierpost.com/articles/build-mcp-app-interactive-ui-claude-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a paid Claude plan to use an MCP App I built?", "acceptedAnswer": {"@type": "Answer", "text": "No, not to build and test it: the reference basic-host, VS Code, and Goose need no plan at all. In Claude, the January 2026 connectors launched for Pro, Max, Team, and Enterprise; the November full-app rollout covers the web and desktop apps on all plans. The newest pieces \u2014 app tools and embedded sites \u2014 are a gated public preview, so a developer can build against them today without assuming every Claude user will see them yet."}}, {"@type": "Question", "name": "My View renders blank. What do I check first?", "acceptedAnswer": {"@type": "Answer", "text": "Four things, in order: the tool\u2019s _meta.ui.resourceUri must exactly match the resource URI (including the ui:// scheme); the resource must be served with the MIME type text/html;profile=mcp-app; the bundled HTML must be a single self-contained file with no external script or stylesheet references; and the host must support the extension \u2014 the verification script in step 6 catches the first three without any host at all."}}, {"@type": "Question", "name": "Can the View fetch data from the internet or my own API?", "acceptedAnswer": {"@type": "Answer", "text": "Only if you declare it. The host applies a strict content security policy by default, including connect-src 'none'. List each origin in csp.connectDomains on the resource (never on the tool, where hosts ignore it), and keep anything the View needs at load time inlined in the bundle so it renders even with no network at all."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build your first MCP App: an interactive task board that lives inside Claude</h1>
+<p class="lede">Claude can call your tools. What it could not do — until MCP Apps — was show your user an interface instead of a paragraph. This tutorial builds one from scratch: a task board that lives inside Claude, with checkboxes that work, a form that adds tasks, and a button that asks Claude to summarize the board — every step verified against the real server and the real View.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 26, 2026 · 29 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MCP Apps (SEP-1865, stable since January 26, 2026) let an MCP server ship an interactive HTML View with a tool: the tool declares a <code>ui://</code> resource, the host renders it in a sandboxed iframe, and the View calls tools back through the host. You build a task board with five tools — one the model sees, four only the UI can call — bundle the View into a single 239 KB HTML file, verify the whole contract with a real MCP client, and run it in Claude Desktop.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The pattern in one sentence:</b> a tool declares <code>_meta.ui.resourceUri</code> pointing at a <code>ui://</code> resource with MIME type <code>text/html;profile=mcp-app</code>; the host fetches it and renders it.</li><li><b>Two registrations do all the work:</b> <code>registerAppTool</code> for the tool, <code>registerAppResource</code> for the HTML. The SDK is <code>@modelcontextprotocol/ext-apps</code> 2.0.4; Node 20+ required.</li><li><b>Visibility is the access control:</b> <code>visibility: ["app"]</code> hides a tool from the model so only the View can call it — the four plumbing tools in this tutorial use it.</li><li><b>The View never talks to your server directly.</b> Every call is relayed by the host over <code>postMessage</code> JSON-RPC, and the host applies a strict CSP by default.</li><li><b>Verified end to end:</b> 18 protocol checks against the real server over stdio, an HTTP initialize handshake, and 15 View checks in a fake host — all passing.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/build-mcp-app-interactive-ui-claude-tutorial/cover.webp" alt="An AI chat window beside an interactive task-board panel with checkboxes and an add-task field"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body">
+<p>Claude can already call your MCP tools. What it could not do — until MCP Apps — was show your user an interface instead of a paragraph. Ask for a chart and you got a description of a chart. Ask to review a list and you got the list as text, which you then had to re-type to change.</p>
+<p>That gap closed in two steps. On January 26, 2026, MCP Apps became the first official extension to the Model Context Protocol: a standard way for a server to ship an interactive HTML interface with a tool, rendered in a sandboxed iframe inside the chat. On November 10, 2026, Anthropic went further, announcing full apps that open beside the conversation in Claude — with Claude able to operate the app itself. This tutorial builds one from scratch: a task board that lives inside Claude, with checkboxes that work, a form that adds tasks, and a button that asks Claude to summarize the board. Every line of it is verified — the server, the View, and the handshake between them all run in this tutorial’s test suite, and the outputs below are the real ones.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/build-mcp-app-interactive-ui-claude-tutorial/img3.webp" alt="Diagram of the MCP Apps flow: you ask Claude to open the board, Claude calls the tool, the server returns a UI resource, and the host renders it in a sandboxed iframe"><figcaption>Diagram: AI Frontier Post. The model never sees the UI code — the host fetches it from the server and renders it.</figcaption></figure>
+<h2 id="what-you-ll-need">What you’ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Node.js 20 or newer</strong> (this tutorial used 24.22.1) and npm. No other runtime, no Docker, no GPU.</li><li><strong>A code editor and a terminal.</strong> Two terminal windows help in the final steps: one for the server, one for the tests.</li><li><strong>A host to see it in.</strong> Claude Desktop, VS Code with MCP support, or the reference basic-host that ships with the ext-apps repo. The build itself needs no account and no API key.</li><li><strong>Basic TypeScript.</strong> If you have built an MCP server before, this is a short step. If you have not, every piece is explained as it appears.</li><li><strong>Cost: $0. Time: about 45 minutes.</strong></li></ul>
+<p>The finished project is a folder called <code>task-board-app</code> with nine files: a server, an entry point, a View, three config files, and two test scripts. The server exposes five tools. One of them, <code>open_board</code>, is the tool the model sees. The other four — <code>get_tasks</code>, <code>add_task</code>, <code>toggle_task</code>, <code>delete_task</code> — are plumbing for the UI, hidden from the model entirely. Tasks persist in a <code>tasks.json</code> file, so the board survives restarts.</p>
+<h2 id="1-scaffold-the-project">1. Scaffold the project<a class="anchor" href="#1-scaffold-the-project" aria-label="Link to section">#</a></h2>
+<p>Create the folder and install the dependencies from the official quickstart. The ext-apps SDK is the only new piece; the rest are the standard MCP TypeScript packages, zod for schemas, and Express for the HTTP transport.</p>
+<pre><code class="language-bash">mkdir task-board-app &amp;&amp; cd task-board-app
+npm init -y
+npm install @modelcontextprotocol/ext-apps @modelcontextprotocol/client@^2.0.0 @modelcontextprotocol/server@^2.0.0 @modelcontextprotocol/node@^2.0.0 @modelcontextprotocol/express@^2.0.0 zod@^4.2.0 express cors
+npm install -D typescript vite vite-plugin-singlefile @types/express @types/cors @types/node tsx concurrently cross-env
+npm pkg set type=module
+npm pkg set scripts.build="tsc --noEmit &amp;&amp; tsc -p tsconfig.server.build.json &amp;&amp; cross-env INPUT=mcp-app.html vite build"
+npm pkg set scripts.start='concurrently --raw "cross-env NODE_ENV=development INPUT=mcp-app.html vite build --watch" "tsx watch main.ts"'</code></pre>
+<p>Two scripts do the work. <code>npm start</code> is the development loop: Vite rebuilds the View on every save while <code>tsx</code> restarts the server. <code>npm run build</code> typechecks everything, compiles the server to plain JavaScript in <code>dist/</code>, and bundles the View into a single HTML file. The versions this tutorial verified with:</p>
+<div class="table-wrap"><table><thead><tr><th>Package</th><th>Verified version</th><th>Role</th></tr></thead><tbody><tr><td><code>@modelcontextprotocol/ext-apps</code></td><td>2.0.4</td><td>MCP Apps SDK (App class, registerAppTool, registerAppResource)</td></tr><tr><td><code>@modelcontextprotocol/server</code></td><td>2.4.0</td><td>McpServer</td></tr><tr><td><code>@modelcontextprotocol/client</code></td><td>2.4.0</td><td>Used by the verification script</td></tr><tr><td><code>@modelcontextprotocol/node</code> / <code>express</code></td><td>2.1.2 / 2.0.2</td><td>Streamable HTTP transport</td></tr><tr><td><code>zod</code></td><td>4.6.7</td><td>Tool input schemas</td></tr><tr><td><code>typescript</code> / <code>vite</code></td><td>7.0.2 / 8.4.0</td><td>Typecheck and bundling</td></tr><tr><td><code>vite-plugin-singlefile</code></td><td>2.3.4</td><td>Inlines the View into one HTML file</td></tr></tbody></table></div>
+<p>Now the three config files. The root <code>tsconfig.json</code> typechecks the whole project; <code>tsconfig.server.build.json</code> compiles the server to JavaScript; <code>vite.config.ts</code> bundles the View. All three are adapted from the official quickstart, with one deliberate change: the quickstart’s server tsconfig emits declarations only, which is fine when you run the server with <code>tsx</code> in development — but this tutorial also compiles a plain <code>dist/main.js</code> so Claude Desktop can run the server with stock Node.</p>
+<pre><code class="language-json">{
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    "target": "ESNext", "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "ESNext", "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true, "resolveJsonModule": true,
+    "isolatedModules": true, "verbatimModuleSyntax": true,
+    "noEmit": true, "strict": true, "skipLibCheck": true,
+    "noUnusedLocals": true, "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src", "server.ts", "main.ts"]
+}</code></pre>
+<pre><code class="language-json">{
+  "compilerOptions": {
+    "types": ["node"],
+    "target": "ES2022", "lib": ["ES2022"],
+    "module": "NodeNext", "moduleResolution": "NodeNext",
+    "declaration": false, "emitDeclarationOnly": false,
+    "outDir": "./dist", "rootDir": ".",
+    "strict": true, "esModuleInterop": true, "skipLibCheck": true,
+    "noUnusedLocals": true, "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["server.ts", "main.ts"]
+}</code></pre>
+<pre><code class="language-typescript">import { createLogger, defineConfig } from "vite";
+import { viteSingleFile } from "vite-plugin-singlefile";
+
+const INPUT = process.env.INPUT;
+if (!INPUT) {
+  throw new Error("INPUT environment variable is not set");
+}
+const isDevelopment = process.env.NODE_ENV === "development";
+const prefixedLogger = createLogger();
+for (const level of ["info", "warn", "error"] as const) {
+  const fn = prefixedLogger[level];
+  prefixedLogger[level] = (msg, opts) =&gt; fn(msg.replace(/^/mg, "[vite] "), opts);
+}
+
+export default defineConfig({
+  customLogger: prefixedLogger,
+  plugins: [viteSingleFile()],
+  build: {
+    sourcemap: isDevelopment ? "inline" : undefined,
+    cssMinify: !isDevelopment,
+    minify: !isDevelopment,
+    rollupOptions: { input: INPUT },
+    outDir: "dist",
+    emptyOutDir: false,
+  },
+});</code></pre>
+<h2 id="2-register-the-tool-and-the-ui-resource">2. Register the tool and the UI resource<a class="anchor" href="#2-register-the-tool-and-the-ui-resource" aria-label="Link to section">#</a></h2>
+<p>This is the whole pattern: <strong>a tool plus a UI resource, tied together by one URI</strong>. The tool’s <code>_meta.ui.resourceUri</code> names a resource under the <code>ui://</code> scheme; that resource serves an HTML page with the MIME type <code>text/html;profile=mcp-app</code>. When a host calls the tool, it reads the resource and renders the page in a sandboxed iframe. The rest of the file is a small task store in <code>tasks.json</code> and four plumbing tools the View calls.</p>
+<p>Three details deserve attention before you read the code. First, <strong>visibility</strong>: every tool defaults to visible to both the model and the app. Setting <code>visibility: ["app"]</code> hides a tool from the model, so only the View on this server connection can call it — that is how the four plumbing tools stay out of the model’s tool list. Second, <strong>every tool returns the board twice</strong>: human-readable text for the chat transcript, and <code>structuredContent</code> carrying the task list for the View. The app-only tools also put the same payload in their text as JSON, so the View can always read the new state even on a host that does not forward <code>structuredContent</code> to the View. Third, <strong>state lives in a file, not in memory</strong>: in HTTP mode the server factory runs once per request, and a View reload restarts from the HTML, so anything that must survive either belongs on disk.</p>
+<pre><code class="language-typescript">import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from &quot;@modelcontextprotocol/ext-apps/server&quot;;
+import { McpServer } from &quot;@modelcontextprotocol/server&quot;;
+import { randomUUID } from &quot;node:crypto&quot;;
+import fs from &quot;node:fs/promises&quot;;
+import fsSync from &quot;node:fs&quot;;
+import path from &quot;node:path&quot;;
+import { fileURLToPath } from &quot;node:url&quot;;
+import { z } from &quot;zod&quot;;
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+// tsx runs server.ts from the project root; the compiled build runs it from dist/.
+const PROJECT_ROOT = path.basename(HERE) === &quot;dist&quot; ? path.dirname(HERE) : HERE;
+const DIST_DIR = path.join(PROJECT_ROOT, &quot;dist&quot;);
+const DATA_FILE = path.join(PROJECT_ROOT, &quot;tasks.json&quot;);
+const RESOURCE_URI = &quot;ui://task-board/mcp-app.html&quot;;
+
+interface Task {
+  id: string;
+  title: string;
+  done: boolean;
+  createdAt: string;
+}
+
+function seedTasks(): Task[] {
+  const now = new Date().toISOString();
+  return [
+    { id: randomUUID(), title: &quot;Ship the MCP App tutorial&quot;, done: false, createdAt: now },
+    { id: randomUUID(), title: &quot;Try the board in Claude Desktop&quot;, done: false, createdAt: now },
+    { id: randomUUID(), title: &quot;Read the MCP Apps spec (SEP-1865)&quot;, done: true, createdAt: now },
+  ];
+}
+
+function loadTasksSync(): Task[] {
+  try {
+    return JSON.parse(fsSync.readFileSync(DATA_FILE, &quot;utf-8&quot;)) as Task[];
+  } catch {
+    return seedTasks();
+  }
+}
+
+function taskListText(tasks: Task[]): string {
+  const open = tasks.filter((t) =&gt; !t.done).length;
+  const done = tasks.length - open;
+  const lines = tasks
+    .map((t) =&gt; `${t.done ? &quot;[x]&quot; : &quot;[ ]&quot;} ${t.title}`)
+    .join(&quot;\n&quot;);
+  return `Task board: ${open} open, ${done} done.\n${lines || &quot;(no tasks yet)&quot;}`;
+}
+
+function boardPayload(tasks: Task[]) {
+  return {
+    tasks,
+    openCount: tasks.filter((t) =&gt; !t.done).length,
+    doneCount: tasks.filter((t) =&gt; t.done).length,
+  };
+}
+
+/**
+ * Creates a new MCP server instance with the task-board tools and UI resource.
+ * Tasks live in tasks.json next to this file, so the board survives restarts
+ * and is shared across transports (a fresh server is created per HTTP request).
+ */
+export function createServer(): McpServer {
+  const server = new McpServer({
+    name: &quot;Task Board MCP App&quot;,
+    version: &quot;1.0.0&quot;,
+  });
+
+  let tasks = loadTasksSync();
+
+  const persist = async () =&gt; {
+    await fs.writeFile(DATA_FILE, JSON.stringify(tasks, null, 2), &quot;utf-8&quot;);
+  };
+
+  // Every tool returns the same shape: human-readable text for the chat
+  // transcript, plus structuredContent carrying the full task list for the View.
+  const boardResult = () =&gt; ({
+    content: [{ type: &quot;text&quot; as const, text: taskListText(tasks) }],
+    structuredContent: boardPayload(tasks),
+  });
+
+  // The one tool the model can see. Its _meta.ui.resourceUri tells the host
+  // to render the board UI whenever this tool runs.
+  registerAppTool(
+    server,
+    &quot;open_board&quot;,
+    {
+      title: &quot;Open Task Board&quot;,
+      description:
+        &quot;Open the interactive task board. Shows your tasks as a clickable list you can add to, check off, and delete.&quot;,
+      inputSchema: z.object({}),
+      _meta: { ui: { resourceUri: RESOURCE_URI } },
+    },
+    async () =&gt; boardResult(),
+  );
+
+  // Plumbing tools for the View. visibility: [&quot;app&quot;] hides them from the
+  // model entirely — only the UI on this server connection may call them.
+  // Their text payload is JSON so the View can always read the new state,
+  // even on a host that does not forward structuredContent to the View.
+  const jsonResult = () =&gt; ({
+    content: [{ type: &quot;text&quot; as const, text: JSON.stringify(boardPayload(tasks)) }],
+    structuredContent: boardPayload(tasks),
+  });
+
+  registerAppTool(
+    server,
+    &quot;get_tasks&quot;,
+    {
+      title: &quot;Get Tasks&quot;,
+      description: &quot;Return the current task list as JSON. Used by the board UI to refresh itself.&quot;,
+      inputSchema: z.object({}),
+      _meta: { ui: { resourceUri: RESOURCE_URI, visibility: [&quot;app&quot;] } },
+    },
+    async () =&gt; jsonResult(),
+  );
+
+  registerAppTool(
+    server,
+    &quot;add_task&quot;,
+    {
+      title: &quot;Add Task&quot;,
+      description: &quot;Add a task to the board. Used by the board UI.&quot;,
+      inputSchema: z.object({ title: z.string().min(1).max(200) }),
+      _meta: { ui: { resourceUri: RESOURCE_URI, visibility: [&quot;app&quot;] } },
+    },
+    async ({ title }) =&gt; {
+      tasks = [
+        ...tasks,
+        {
+          id: randomUUID(),
+          title: title.trim(),
+          done: false,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      await persist();
+      return jsonResult();
+    },
+  );
+
+  registerAppTool(
+    server,
+    &quot;toggle_task&quot;,
+    {
+      title: &quot;Toggle Task&quot;,
+      description: &quot;Flip a task between open and done. Used by the board UI.&quot;,
+      inputSchema: z.object({ id: z.string() }),
+      _meta: { ui: { resourceUri: RESOURCE_URI, visibility: [&quot;app&quot;] } },
+    },
+    async ({ id }) =&gt; {
+      const task = tasks.find((t) =&gt; t.id === id);
+      if (!task) {
+        return {
+          content: [{ type: &quot;text&quot; as const, text: `No task with id ${id}` }],
+          isError: true,
+        };
+      }
+      task.done = !task.done;
+      await persist();
+      return jsonResult();
+    },
+  );
+
+  registerAppTool(
+    server,
+    &quot;delete_task&quot;,
+    {
+      title: &quot;Delete Task&quot;,
+      description: &quot;Delete a task from the board. Used by the board UI.&quot;,
+      inputSchema: z.object({ id: z.string() }),
+      _meta: { ui: { resourceUri: RESOURCE_URI, visibility: [&quot;app&quot;] } },
+    },
+    async ({ id }) =&gt; {
+      if (!tasks.some((t) =&gt; t.id === id)) {
+        return {
+          content: [{ type: &quot;text&quot; as const, text: `No task with id ${id}` }],
+          isError: true,
+        };
+      }
+      tasks = tasks.filter((t) =&gt; t.id !== id);
+      await persist();
+      return jsonResult();
+    },
+  );
+
+  // The UI resource: the bundled single-file HTML page, served with the
+  // MCP Apps MIME type. prefersBorder asks the host for a visible frame
+  // around the View; no CSP is declared, so the host applies its strict
+  // default (no network fetches — everything the View needs is inlined).
+  registerAppResource(
+    server,
+    &quot;Task Board&quot;,
+    RESOURCE_URI,
+    {
+      mimeType: RESOURCE_MIME_TYPE,
+      _meta: { ui: { prefersBorder: true } },
+    },
+    async () =&gt; {
+      const html = await fs.readFile(path.join(DIST_DIR, &quot;mcp-app.html&quot;), &quot;utf-8&quot;);
+      return {
+        contents: [{ uri: RESOURCE_URI, mimeType: RESOURCE_MIME_TYPE, text: html }],
+      };
+    },
+  );
+
+  return server;
+}</code></pre>
+<h2 id="3-start-the-server">3. Start the server<a class="anchor" href="#3-start-the-server" aria-label="Link to section">#</a></h2>
+<p>The entry point is the quickstart’s transport boilerplate, unchanged in structure: <code>--stdio</code> for Claude Desktop and VS Code, Streamable HTTP on port 3001 otherwise, in stateless mode (a fresh server per request, which is why the file-backed store from step 2 matters).</p>
+<pre><code class="language-typescript">import { createMcpExpressApp } from &quot;@modelcontextprotocol/express&quot;;
+import { NodeStreamableHTTPServerTransport } from &quot;@modelcontextprotocol/node&quot;;
+import type { McpServer } from &quot;@modelcontextprotocol/server&quot;;
+import { StdioServerTransport } from &quot;@modelcontextprotocol/server/stdio&quot;;
+import cors from &quot;cors&quot;;
+import type { Request, Response } from &quot;express&quot;;
+import { createServer } from &quot;./server.js&quot;;
+
+/**
+ * Starts an MCP server with Streamable HTTP transport in stateless mode.
+ *
+ * @param createServer - Factory function that creates a new McpServer instance per request.
+ */
+export async function startStreamableHTTPServer(
+  createServer: () =&gt; McpServer,
+): Promise&lt;void&gt; {
+  const port = parseInt(process.env.PORT ?? &quot;3001&quot;, 10);
+  const app = createMcpExpressApp({ host: &quot;0.0.0.0&quot; });
+  app.use(cors());
+
+  app.all(&quot;/mcp&quot;, async (req: Request, res: Response) =&gt; {
+    const server = createServer();
+
+    const transport = new NodeStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+
+    res.on(&quot;close&quot;, () =&gt; {
+      transport.close().catch(() =&gt; {});
+      server.close().catch(() =&gt; {});
+    });
+
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error(&quot;MCP error:&quot;, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: &quot;2.0&quot;,
+          error: { code: -32603, message: &quot;Internal server error&quot; },
+          id: null,
+        });
+      }
+    }
+  });
+
+  const httpServer = app.listen(port, (err) =&gt; {
+    if (err) {
+      console.error(&quot;Failed to start server:&quot;, err);
+      process.exit(1);
+    }
+
+    console.log(`MCP server listening on http://localhost:${port}/mcp`);
+  });
+
+  const shutdown = () =&gt; {
+    console.log(&quot;\nShutting down...&quot;);
+    httpServer.close(() =&gt; process.exit(0));
+  };
+
+  process.on(&quot;SIGINT&quot;, shutdown);
+  process.on(&quot;SIGTERM&quot;, shutdown);
+}
+
+/**
+ * Starts an MCP server with stdio transport.
+ *
+ * @param createServer - Factory function that creates a new McpServer instance.
+ */
+export async function startStdioServer(
+  createServer: () =&gt; McpServer,
+): Promise&lt;void&gt; {
+  await createServer().connect(new StdioServerTransport());
+}
+
+async function main() {
+  if (process.argv.includes(&quot;--stdio&quot;)) {
+    await startStdioServer(createServer);
+  } else {
+    await startStreamableHTTPServer(createServer);
+  }
+}
+
+main().catch((e) =&gt; {
+  console.error(e);
+  process.exit(1);
+});</code></pre>
+<h2 id="4-build-the-view">4. Build the View<a class="anchor" href="#4-build-the-view" aria-label="Link to section">#</a></h2>
+<p>The View is one HTML page plus one TypeScript module. The HTML is deliberately plain: a header with counts, an add-task form, the list, a status line, and a summarize button. The styling reads the host’s CSS variables when the host provides them (<code>--color-background-primary</code>, <code>--color-text-primary</code>, and friends) and falls back to a light palette otherwise, so the board looks native in both light and dark hosts.</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+  &lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot; /&gt;
+    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot; /&gt;
+    &lt;title&gt;Task Board&lt;/title&gt;
+    &lt;style&gt;
+      :root {
+        --bg: var(--color-background-primary, #ffffff);
+        --bg-secondary: var(--color-background-secondary, #f4f4f5);
+        --text: var(--color-text-primary, #18181b);
+        --text-secondary: var(--color-text-secondary, #71717a);
+        --border: var(--color-border-primary, #e4e4e7);
+        --accent: #7c3aed;
+      }
+      [data-theme=&quot;dark&quot;] {
+        --bg: var(--color-background-primary, #18181b);
+        --bg-secondary: var(--color-background-secondary, #27272a);
+        --text: var(--color-text-primary, #fafafa);
+        --text-secondary: var(--color-text-secondary, #a1a1aa);
+        --border: var(--color-border-primary, #3f3f46);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+        background: var(--bg);
+        color: var(--text);
+      }
+      .board { max-width: 560px; margin: 0 auto; padding: 20px 16px 28px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      #counts { margin: 0 0 16px; color: var(--text-secondary); font-size: 14px; }
+      form { display: flex; gap: 8px; margin-bottom: 12px; }
+      input[type=&quot;text&quot;] {
+        flex: 1; padding: 9px 12px; font-size: 15px;
+        border: 1px solid var(--border); border-radius: 8px;
+        background: var(--bg); color: var(--text);
+      }
+      button {
+        padding: 9px 14px; font-size: 14px; font-weight: 600;
+        border: 1px solid var(--border); border-radius: 8px;
+        background: var(--bg-secondary); color: var(--text); cursor: pointer;
+      }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      ul { list-style: none; margin: 0; padding: 0; }
+      li {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 4px; border-bottom: 1px solid var(--border);
+      }
+      li.done .title { text-decoration: line-through; color: var(--text-secondary); }
+      li input[type=&quot;checkbox&quot;] { width: 18px; height: 18px; accent-color: var(--accent); }
+      li .title { flex: 1; font-size: 15px; }
+      li .delete { border: none; background: none; color: var(--text-secondary); padding: 4px 8px; }
+      #status { min-height: 20px; margin: 12px 0 0; font-size: 13px; color: var(--text-secondary); }
+      footer { margin-top: 16px; }
+    &lt;/style&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;main class=&quot;board&quot;&gt;
+      &lt;header&gt;
+        &lt;h1&gt;Task Board&lt;/h1&gt;
+        &lt;p id=&quot;counts&quot;&gt;Loading…&lt;/p&gt;
+      &lt;/header&gt;
+      &lt;form id=&quot;add-form&quot;&gt;
+        &lt;input id=&quot;new-task&quot; type=&quot;text&quot; placeholder=&quot;Add a task…&quot; maxlength=&quot;200&quot; autocomplete=&quot;off&quot; /&gt;
+        &lt;button class=&quot;primary&quot; type=&quot;submit&quot;&gt;Add&lt;/button&gt;
+      &lt;/form&gt;
+      &lt;ul id=&quot;task-list&quot;&gt;&lt;/ul&gt;
+      &lt;p id=&quot;status&quot; role=&quot;status&quot;&gt;&lt;/p&gt;
+      &lt;footer&gt;
+        &lt;button id=&quot;summarize-btn&quot; type=&quot;button&quot;&gt;Summarize in chat&lt;/button&gt;
+      &lt;/footer&gt;
+    &lt;/main&gt;
+    &lt;script type=&quot;module&quot; src=&quot;/src/mcp-app.ts&quot;&gt;&lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>The script is where the protocol lives, and it is short enough to read in full. Four things to notice:</p>
+<ul><li><strong>Handlers are registered before <code>connect()</code>.</strong> The host pushes the first tool result as soon as the tool runs; registering <code>app.ontoolresult</code> after connecting would miss it. The SDK warns you about exactly this.</li><li><strong>The View never assumes how the host delivers data.</strong> <code>extractBoard</code> reads <code>structuredContent</code> first and falls back to parsing the text payload as JSON — the reason the app-only tools return JSON text.</li><li><strong>Every user action is a tool call.</strong> A checkbox calls <code>toggle_task</code>; the form calls <code>add_task</code>; the delete button calls <code>delete_task</code>. The View holds no state of its own beyond what the server last returned.</li><li><strong><code>sendMessage</code> talks back to the chat.</strong> The summarize button posts a user-role message into the conversation, and the host decides what to do with it. Nothing in the View can force a model response — it can only ask.</li></ul>
+<pre><code class="language-typescript">import { App } from &quot;@modelcontextprotocol/ext-apps&quot;;
+import type { CallToolResult } from &quot;@modelcontextprotocol/client&quot;;
+
+interface Task {
+  id: string;
+  title: string;
+  done: boolean;
+  createdAt: string;
+}
+
+interface BoardPayload {
+  tasks: Task[];
+  openCount: number;
+  doneCount: number;
+}
+
+const listEl = document.getElementById(&quot;task-list&quot;)!;
+const countsEl = document.getElementById(&quot;counts&quot;)!;
+const statusEl = document.getElementById(&quot;status&quot;)!;
+const formEl = document.getElementById(&quot;add-form&quot;) as HTMLFormElement;
+const inputEl = document.getElementById(&quot;new-task&quot;) as HTMLInputElement;
+const summarizeBtn = document.getElementById(&quot;summarize-btn&quot;) as HTMLButtonElement;
+
+const app = new App({ name: &quot;Task Board&quot;, version: &quot;1.0.0&quot; });
+
+let tasks: Task[] = [];
+
+/** Pull the task list out of a tool result, however the host delivered it. */
+function extractBoard(result: CallToolResult): BoardPayload | null {
+  const structured = result.structuredContent as BoardPayload | undefined;
+  if (structured?.tasks) return structured;
+  const text = result.content?.find((c) =&gt; c.type === &quot;text&quot;)?.text;
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as BoardPayload;
+    return parsed.tasks ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function render() {
+  const open = tasks.filter((t) =&gt; !t.done).length;
+  const done = tasks.length - open;
+  countsEl.textContent = `${open} open · ${done} done`;
+
+  listEl.innerHTML = &quot;&quot;;
+  for (const task of tasks) {
+    const li = document.createElement(&quot;li&quot;);
+    if (task.done) li.classList.add(&quot;done&quot;);
+
+    const checkbox = document.createElement(&quot;input&quot;);
+    checkbox.type = &quot;checkbox&quot;;
+    checkbox.checked = task.done;
+    checkbox.setAttribute(&quot;aria-label&quot;, `Mark &quot;${task.title}&quot; ${task.done ? &quot;open&quot; : &quot;done&quot;}`);
+    checkbox.addEventListener(&quot;change&quot;, () =&gt; void callTool(&quot;toggle_task&quot;, { id: task.id }));
+
+    const title = document.createElement(&quot;span&quot;);
+    title.className = &quot;title&quot;;
+    title.textContent = task.title;
+
+    const del = document.createElement(&quot;button&quot;);
+    del.type = &quot;button&quot;;
+    del.className = &quot;delete&quot;;
+    del.textContent = &quot;✕&quot;;
+    del.setAttribute(&quot;aria-label&quot;, `Delete &quot;${task.title}&quot;`);
+    del.addEventListener(&quot;click&quot;, () =&gt; void callTool(&quot;delete_task&quot;, { id: task.id }));
+
+    li.append(checkbox, title, del);
+    listEl.append(li);
+  }
+}
+
+async function callTool(name: string, args: Record&lt;string, unknown&gt;) {
+  statusEl.textContent = &quot;Working…&quot;;
+  try {
+    const result = await app.callServerTool({ name, arguments: args });
+    const board = extractBoard(result);
+    if (board) {
+      tasks = board.tasks;
+      render();
+      statusEl.textContent = &quot;&quot;;
+    } else if (result.isError) {
+      statusEl.textContent = &quot;That didn&#x27;t work — try again.&quot;;
+    }
+  } catch (error) {
+    statusEl.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+function applyHostStyles() {
+  const ctx = app.getHostContext();
+  if (ctx?.theme) document.documentElement.dataset.theme = ctx.theme;
+  const styles = ctx?.styles as Record&lt;string, string&gt; | undefined;
+  if (styles) {
+    for (const [key, value] of Object.entries(styles)) {
+      if (typeof value === &quot;string&quot;) {
+        document.documentElement.style.setProperty(key, value);
+      }
+    }
+  }
+}
+
+// The host pushes the open_board result as soon as the tool runs.
+app.ontoolresult = (result) =&gt; {
+  const board = extractBoard(result);
+  if (board) {
+    tasks = board.tasks;
+    render();
+  } else {
+    // Fallback: ask the server directly for the current list.
+    void callTool(&quot;get_tasks&quot;, {});
+  }
+};
+
+// Theme can change while the View is open (host toggles light/dark).
+app.onhostcontextchanged = () =&gt; applyHostStyles();
+
+formEl.addEventListener(&quot;submit&quot;, (event) =&gt; {
+  event.preventDefault();
+  const title = inputEl.value.trim();
+  if (!title) return;
+  inputEl.value = &quot;&quot;;
+  void callTool(&quot;add_task&quot;, { title });
+});
+
+summarizeBtn.addEventListener(&quot;click&quot;, async () =&gt; {
+  const open = tasks.filter((t) =&gt; !t.done).length;
+  const done = tasks.length - open;
+  const summary =
+    `My task board: ${open} open, ${done} done. ` +
+    (tasks.filter((t) =&gt; !t.done).map((t) =&gt; t.title).join(&quot;; &quot;) || &quot;Nothing open.&quot;);
+  try {
+    const result = await app.sendMessage({
+      role: &quot;user&quot;,
+      content: [{ type: &quot;text&quot;, text: `Summarize this for me: ${summary}` }],
+    });
+    statusEl.textContent = result.isError
+      ? &quot;The host didn&#x27;t accept that message.&quot;
+      : &quot;Summary request sent to the chat.&quot;;
+  } catch (error) {
+    statusEl.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+  }
+});
+
+// Connect to the host, then load the board. Handlers are registered above,
+// before connect(), so the first tool result can&#x27;t arrive before we&#x27;re ready.
+// Loading starts only after the handshake completes: callServerTool before
+// that warns (and throws in a future SDK version).
+app
+  .connect()
+  .then(() =&gt; {
+    applyHostStyles();
+    void callTool(&quot;get_tasks&quot;, {});
+  })
+  .catch((error: unknown) =&gt; {
+    statusEl.textContent = `Could not connect to host: ${error instanceof Error ? error.message : String(error)}`;
+  });</code></pre>
+<h2 id="5-build-and-bundle">5. Build and bundle<a class="anchor" href="#5-build-and-bundle" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">npm run build</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-bash">[vite] vite v8.4.0 building client environment for production...
+[vite] [plugin vite:singlefile] Inlining: mcp-app-CGM4TjIU.js
+[vite] dist/mcp-app.html  238.88 kB │ gzip: 62.44 kB
+[vite] ✓ built in 1.48s</code></pre>
+<p>Check <code>dist/</code> now holds five files: <code>main.js</code> and <code>server.js</code> (the compiled server), <code>mcp-app.html</code> (the whole View in one file), and the two <code>.d.ts</code> files. The single-file bundle matters: the resource serves exactly one HTML document, so the View must not reference external scripts, styles, or images — everything is inlined, which is also why the default content security policy (no network fetches) is enough for this app.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/build-mcp-app-interactive-ui-claude-tutorial/img2.webp" alt="A task-board card with checkboxes floating in front of a chat bubble"><figcaption>Illustration generated for AI Frontier Post. This is what the finished board looks like inside a host: a card with checkboxes, an add-task field, and a button — rendered by the host, not by the model.</figcaption></figure>
+<h2 id="6-verify-the-protocol">6. Verify the protocol<a class="anchor" href="#6-verify-the-protocol" aria-label="Link to section">#</a></h2>
+<p>Do not trust the build; talk to the server the way a host would. This script uses the official client SDK over stdio, spawns the compiled server, and asserts the whole contract: five tools, the UI link on <code>open_board</code>, app-only visibility on the plumbing tools, the resource’s MIME type and contents, the full mutation round-trip, an error case, and persistence on disk.</p>
+<pre><code class="language-javascript">import fs from &quot;node:fs&quot;;
+import { Client } from &quot;@modelcontextprotocol/client&quot;;
+import { StdioClientTransport } from &quot;@modelcontextprotocol/client/stdio&quot;;
+
+const transport = new StdioClientTransport({
+  command: &quot;node&quot;,
+  args: [&quot;dist/main.js&quot;, &quot;--stdio&quot;],
+  cwd: process.cwd(),
+  stderr: &quot;pipe&quot;,
+});
+const client = new Client(
+  { name: &quot;verify-client&quot;, version: &quot;1.0.0&quot; },
+  { capabilities: {} },
+);
+
+let failures = 0;
+const check = (label, cond, extra = &quot;&quot;) =&gt; {
+  console.log(`${cond ? &quot;PASS&quot; : &quot;FAIL&quot;}  ${label}${extra ? ` — ${extra}` : &quot;&quot;}`);
+  if (!cond) failures++;
+};
+
+await client.connect(transport);
+
+// 1. Tool list and UI metadata
+const { tools } = await client.listTools();
+const byName = Object.fromEntries(tools.map((t) =&gt; [t.name, t]));
+check(&quot;5 tools registered&quot;, tools.length === 5, tools.map((t) =&gt; t.name).join(&quot;, &quot;));
+check(
+  &quot;open_board links its UI resource&quot;,
+  byName.open_board?._meta?.ui?.resourceUri === &quot;ui://task-board/mcp-app.html&quot;,
+  JSON.stringify(byName.open_board?._meta?.ui),
+);
+check(
+  &quot;open_board has no visibility restriction (model can call it)&quot;,
+  byName.open_board?._meta?.ui?.visibility === undefined,
+);
+for (const name of [&quot;get_tasks&quot;, &quot;add_task&quot;, &quot;toggle_task&quot;, &quot;delete_task&quot;]) {
+  check(
+    `${name} is app-only (hidden from the model)`,
+    JSON.stringify(byName[name]?._meta?.ui?.visibility) === &#x27;[&quot;app&quot;]&#x27;,
+  );
+}
+
+// 2. open_board returns the seeded board
+const board = await client.callTool({ name: &quot;open_board&quot;, arguments: {} });
+check(
+  &quot;open_board text summary reads &#x27;2 open, 1 done&#x27;&quot;,
+  typeof board.content?.[0]?.text === &quot;string&quot; &amp;&amp;
+    board.content[0].text.includes(&quot;2 open, 1 done&quot;),
+  board.content?.[0]?.text?.split(&quot;\n&quot;)[0],
+);
+check(
+  &quot;open_board structuredContent carries 3 seeded tasks&quot;,
+  board.structuredContent?.tasks?.length === 3,
+  JSON.stringify(board.structuredContent?.tasks?.map((t) =&gt; t.title)),
+);
+
+// 3. The UI resource serves the bundled View
+const res = await client.readResource({ uri: &quot;ui://task-board/mcp-app.html&quot; });
+const item = res.contents[0];
+check(
+  &quot;resource MIME type is text/html;profile=mcp-app&quot;,
+  item.mimeType === &quot;text/html;profile=mcp-app&quot;,
+  item.mimeType,
+);
+check(
+  &quot;resource HTML contains the board UI&quot;,
+  item.text.includes(&quot;Task Board&quot;) &amp;&amp;
+    item.text.includes(&#x27;id=&quot;new-task&quot;&#x27;) &amp;&amp;
+    item.text.includes(&#x27;id=&quot;summarize-btn&quot;&#x27;),
+);
+check(
+  &quot;resource HTML is a single self-contained file (no external scripts)&quot;,
+  !/src=&quot;https?:/.test(item.text) &amp;&amp; !/href=&quot;https?:/.test(item.text),
+  `${(item.text ?? &quot;&quot;).length} chars`,
+);
+
+// 4. Mutations round-trip through the server
+const added = await client.callTool({
+  name: &quot;add_task&quot;,
+  arguments: { title: &quot;Verify the MCP App end to end&quot; },
+});
+check(&quot;add_task grows the list to 4&quot;, added.structuredContent?.tasks?.length === 4);
+const newTask = added.structuredContent.tasks.find(
+  (t) =&gt; t.title === &quot;Verify the MCP App end to end&quot;,
+);
+check(&quot;add_task returns the new task with an id&quot;, typeof newTask?.id === &quot;string&quot;);
+
+const toggled = await client.callTool({
+  name: &quot;toggle_task&quot;,
+  arguments: { id: newTask.id },
+});
+check(
+  &quot;toggle_task marks the task done&quot;,
+  toggled.structuredContent.tasks.find((t) =&gt; t.id === newTask.id)?.done === true,
+);
+
+const deleted = await client.callTool({
+  name: &quot;delete_task&quot;,
+  arguments: { id: newTask.id },
+});
+check(&quot;delete_task shrinks the list back to 3&quot;, deleted.structuredContent?.tasks?.length === 3);
+
+const bad = await client.callTool({ name: &quot;toggle_task&quot;, arguments: { id: &quot;no-such-id&quot; } });
+check(&quot;toggle of an unknown id returns isError&quot;, bad.isError === true);
+
+// 5. State persisted to disk
+const onDisk = JSON.parse(fs.readFileSync(process.cwd() + &quot;/tasks.json&quot;, &quot;utf-8&quot;));
+check(&quot;tasks.json on disk holds the 3 remaining tasks&quot;, onDisk.length === 3);
+
+await client.close();
+console.log(failures === 0 ? &quot;ALL CHECKS PASSED&quot; : `${failures} CHECK(S) FAILED`);
+process.exit(failures === 0 ? 0 : 1);</code></pre>
+<pre><code class="language-bash">node verify.mjs</code></pre>
+<p>Expected output — all eighteen checks pass:</p>
+<pre><code class="language-bash">PASS  5 tools registered — open_board, get_tasks, add_task, toggle_task, delete_task
+PASS  open_board links its UI resource — {"resourceUri":"ui://task-board/mcp-app.html"}
+PASS  open_board has no visibility restriction (model can call it)
+PASS  get_tasks is app-only (hidden from the model)
+PASS  add_task is app-only (hidden from the model)
+PASS  toggle_task is app-only (hidden from the model)
+PASS  delete_task is app-only (hidden from the model)
+PASS  open_board text summary reads '2 open, 1 done'
+PASS  open_board structuredContent carries 3 seeded tasks
+PASS  resource MIME type is text/html;profile=mcp-app
+PASS  resource HTML contains the board UI
+PASS  resource HTML is a single self-contained file (no external scripts)
+PASS  add_task grows the list to 4
+PASS  add_task returns the new task with an id
+PASS  toggle_task marks the task done
+PASS  delete_task shrinks the list back to 3
+PASS  toggle of an unknown id returns isError
+PASS  tasks.json on disk holds the 3 remaining tasks
+ALL CHECKS PASSED</code></pre>
+<p>The HTTP transport gets the same treatment with a single curl: start the server with <code>npx tsx main.ts</code> (or <code>node dist/main.js</code>), then POST an <code>initialize</code> request to <code>http://localhost:3001/mcp</code>. The reply is a JSON-RPC result naming the server <code>Task Board MCP App</code>, version <code>1.0.0</code>, with <code>tools</code> and <code>resources</code> capabilities. If that handshake fails, nothing downstream can work — debug here, not in the host.</p>
+<h2 id="7-verify-the-view">7. Verify the View<a class="anchor" href="#7-verify-the-view" aria-label="Link to section">#</a></h2>
+<p>The protocol checks prove the server. They say nothing about the View, which runs in a browser iframe talking <code>postMessage</code>. To test it without a host, this tutorial’s second script loads the bundled HTML in jsdom and plays the host: it answers the <code>ui/initialize</code> handshake, pushes the <code>open_board</code> result, then clicks the checkbox, submits the form, deletes a task, and presses summarize — asserting the DOM after each step. The heart of the fake host is small:</p>
+<pre><code class="language-javascript">// Answer the handshake the way a real host does, then push the tool result.
+if (msg.method === "ui/initialize") {
+  respondToView(msg.id, {
+    protocolVersion: "2026-01-26",
+    hostInfo: { name: "fake-host", version: "1.0.0" },
+    hostCapabilities: {},
+    hostContext: { theme: "light", locale: "en-US", displayMode: "inline" },
+  });
+  setTimeout(() =&gt; {
+    sendToView("ui/notifications/tool-result", boardResult());
+  }, 50);
+  return;
+}
+// Relay View-initiated tool calls to the same in-memory board.
+if (msg.method === "tools/call") {
+  const { name, arguments: args } = msg.params;
+  if (name === "add_task") {
+    tasks = [...tasks, { id: `t${Date.now()}`, title: args.title, done: false }];
+  } else if (name === "toggle_task") {
+    tasks = tasks.map((t) =&gt; (t.id === args.id ? { ...t, done: !t.done } : t));
+  } else if (name === "delete_task") {
+    tasks = tasks.filter((t) =&gt; t.id !== args.id);
+  }
+  respondToView(msg.id, boardResult());
+  return;
+}</code></pre>
+<p>Two test-only shims are worth knowing about, because they are not bugs in the app: jsdom does not execute <code>&lt;script type="module"&gt;</code>, so the harness strips the tag and evaluates the bundle after the DOM exists; and jsdom has no <code>ResizeObserver</code>, which the SDK uses for auto-resize notifications, so the harness stubs one. In a real browser neither shim exists. Expected output:</p>
+<pre><code class="language-bash">PASS  View renders 3 tasks after host pushes the tool result
+PASS  Counts line reads '2 open · 1 done'
+PASS  Theme applied from host context
+PASS  View sent ui/initialize handshake
+PASS  View sent ui/notifications/initialized
+PASS  Clicking a checkbox toggles the task done
+PASS  Counts update to '1 open · 2 done'
+PASS  Checkbox click called toggle_task on the server
+PASS  Adding a task grows the list to 4
+PASS  New task title appears in the list
+PASS  Form submit called add_task on the server
+PASS  Deleting a task shrinks the list back to 3
+PASS  Summarize button sends ui/message to the host
+PASS  Summary message mentions the open/done counts
+PASS  Status line confirms the message was sent
+ALL VIEW CHECKS PASSED</code></pre>
+<h2 id="8-run-it-in-a-real-host">8. Run it in a real host<a class="anchor" href="#8-run-it-in-a-real-host" aria-label="Link to section">#</a></h2>
+<p><strong>Claude Desktop.</strong> Open the MCP settings (<em>Settings → Developer → Edit Config</em> on macOS, <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>; <code>%APPDATA%\Claude\claude_desktop_config.json</code> on Windows) and add the server, using the absolute path to your project and the compiled entry point:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "task-board": {
+      "command": "node",
+      "args": ["/absolute/path/to/task-board-app/dist/main.js", "--stdio"]
+    }
+  }
+}</code></pre>
+<p>Restart Claude Desktop, then ask: <em>“Open my task board.”</em> Claude calls <code>open_board</code>, the board renders beside the conversation, and the four plumbing tools stay invisible to the model — check the tool list if you want proof. Check a box and watch the count change; add a task and reopen the board later to confirm it persisted.</p>
+<p><strong>VS Code.</strong> The same server block goes in <code>.vscode/mcp.json</code> under <code>"servers"</code>. VS Code is one of the hosts the ext-apps repo lists as supported, and it renders MCP Apps the same way.</p>
+<p><strong>The reference host.</strong> To see the board with no account at all, run the quickstart’s test host: clone the ext-apps repo, <code>npm install</code>, then <code>cd examples/basic-host &amp;&amp; npm start</code> and open <code>http://localhost:8080</code>. With your server running on port 3001, select <code>open_board</code> from the tool dropdown and click <em>Call Tool</em> — the View renders in the sandbox below, and the <em>Get Server Time</em>-style button in your board is the add-task form and checkboxes.</p>
+<p><strong>HTTP mode.</strong> Run <code>npm start</code> and point any Streamable HTTP client at <code>http://localhost:3001/mcp</code>. This is the shape you deploy: the same server behind a URL, with the View still served as a resource by the server itself.</p>
+<h2 id="the-security-model-in-60-seconds">The security model in 60 seconds<a class="anchor" href="#the-security-model-in-60-seconds" aria-label="Link to section">#</a></h2>
+<p>Executing third-party HTML inside a chat client is exactly the kind of idea that makes security teams nervous, so the spec earns its keep here. Four rules cover most of what can go wrong:</p>
+<ul><li><strong>The View never talks to your server directly.</strong> It lives in a sandboxed iframe on an origin the host controls, and every call is relayed by the host over <code>postMessage</code> JSON-RPC. The host can see, log, and refuse anything the UI asks for. Web hosts must additionally wrap the View in a sandbox proxy iframe on a different origin.</li><li><strong>The default content security policy denies network access.</strong> Omit <code>csp</code> and the host applies a strict default, including <code>connect-src 'none'</code>. This board needs no network at all, so it declares none. If your View fetches an API, declare exactly that origin in <code>csp.connectDomains</code> on the resource — never on the tool, where hosts ignore it.</li><li><strong>Visibility is the access boundary.</strong> A tool marked <code>["app"]</code> is callable by the View on the same server connection and invisible to the model. A tool marked <code>["model"]</code> is the reverse. The default is both. Put the resource URI on every tool the View calls, or the host has no UI to render for it.</li><li><strong>State belongs on the server.</strong> When a View reloads, it starts from your HTML. The board keeps tasks in <code>tasks.json</code> for exactly this reason. And render task titles with <code>textContent</code>, never <code>innerHTML</code> — a task title is user input, and user input is not markup.</li></ul>
+<p>One more thing the November announcement adds, and one thing it does not. The new capabilities — <strong>app tools</strong> and <strong>embedded sites</strong> — invert the direction this tutorial uses: instead of the View calling the server, the View exposes tools the host calls (<code>app.registerTool</code>, ext-apps 1.7.0 or later), and a View can embed your real web product in an iframe. Both are in public preview for developers and, per Anthropic’s own docs, available to a limited set of organizations — build against them, but do not assume every Claude user will see them yet. What the announcement does not change is the stable core you just built: the January 2026 spec, the <code>ui://</code> resource, and the handshake are the foundation the new features sit on.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>Not every tool needs a UI. Pick by what the user has to do with the result:</p>
+<div class="table-wrap"><table><thead><tr><th>Approach</th><th>Use it when</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Plain MCP tools</strong></td><td>The answer fits in prose or JSON; no interaction needed</td><td>Nothing — this is still the right default</td></tr><tr><td><strong>MCP Apps (this tutorial)</strong></td><td>The user must see, click, edit, or compare something</td><td>Host support varies; keep the View a single file; state lives on the server</td></tr><tr><td><strong>OpenAI Apps SDK</strong></td><td>Your users are on ChatGPT</td><td>ChatGPT-specific APIs; MCP Apps is the portable twin, built on the same patterns</td></tr><tr><td><strong>MCP-UI (<code>@mcp-ui/*</code>)</strong></td><td>You want a production host/client framework</td><td>Heavier; the official SDK already covers the server and the View</td></tr><tr><td><strong>Claude app tools + embedded sites</strong></td><td>Claude should operate your full web product</td><td>Public preview, limited organizations; embedded sites need <code>frame-ancestors</code> headers</td></tr></tbody></table></div>
+<p>The rule of thumb: if the user’s next action is obvious from the text, ship a tool. If the user’s next action is a click, ship an app.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>MCP Apps collapse the distance between “ask the model” and “use the software” into two registrations: a tool that declares a <code>ui://</code> resource, and the resource itself. You built a board that renders inside Claude, calls tools back through the host, persists across reloads, and passes an 18-check protocol suite plus a 15-check View suite. The pattern generalizes to anything a chat window cannot show as text: dashboards, forms, calendars, canvases, media players.</p>
+<p>Where to go next: rebuild the View with the React template from the ext-apps repo (<code>examples/basic-server-react</code>) and compare it with the vanilla version line for line; add an <strong>app tool</strong> with <code>app.registerTool</code> so Claude can add a task to the open board itself; or swap the file store for a database and serve the same app over HTTP. The repo’s examples folder — map, budget allocator, system monitor, sheet music, cohort heatmap — is the fastest way to see how far the pattern stretches.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://github.com/modelcontextprotocol/ext-apps" rel="nofollow">modelcontextprotocol/ext-apps</a> — the official repo: spec, SDK, examples, and the basic-host reference implementation.</li><li><a href="https://apps.extensions.modelcontextprotocol.io/api/documents/quickstart.html" rel="nofollow">MCP Apps Quickstart</a> — the official walkthrough this tutorial builds on, including the get-time example.</li><li><a href="https://www.genaibrief.com/tools/claude-mcp-apps-app-tools-embedded-sites/" rel="nofollow">Full apps now open inside Claude</a> (GenAI Brief, November 2026) — a docs-based read of Anthropic’s November 10 announcement, the app-tools limits, and the gating.</li><li><a href="https://techcrunch.com/2026/01/26/anthropic-launches-interactive-claude-apps-including-slack-and-other-workplace-tools/" rel="nofollow">Anthropic launches interactive Claude apps</a> (TechCrunch, January 26, 2026) — the original launch and its nine partner integrations.</li><li><a href="https://mcp.so/blog/mcp-apps-guide" rel="nofollow">MCP Apps: How Interactive UI in MCP Works</a> — the spec status, wire format, and host list in one place.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="build-mcp-app-interactive-ui-claude-tutorial"></div><div class="comments" data-comments="build-mcp-app-interactive-ui-claude-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/claude-install-as-app-hands-on-tutorial/"><span class="chip">Tutorials</span><h3>Turn a Claude artifact into a real desktop app: hands-on with Install as app</h3><div class="meta">November 26, 2026 · 10 min read</div></a><a class="rel-card" href="/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/"><span class="chip">Tutorials</span><h3>Your own OpenAI-compatible LLM API: serve Gemma 4 on Modal&#x27;s serverless GPUs with vLLM</h3><div class="meta">November 25, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/lean-4-verify-ai-math-proofs-tutorial/"><span class="chip">Tutorials</span><h3>Don&#x27;t trust the proof — check it: verify AI-generated math with Lean 4</h3><div class="meta">November 25, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/mobile-agent-testers-ai-qa-phones-tutorial/"><span class="chip">Tutorials</span><h3>20 AI testers on 20 phones at once: hands-on with mobile-agent-testers</h3><div class="meta">November 25, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a paid Claude plan to use an MCP App I built?</h3><p>No, not to build and test it: the reference basic-host, VS Code, and Goose need no plan at all. In Claude, the January 2026 connectors launched for Pro, Max, Team, and Enterprise; the November full-app rollout covers the web and desktop apps on all plans. The newest pieces — app tools and embedded sites — are a gated public preview, so a developer can build against them today without assuming every Claude user will see them yet.</p><h3>My View renders blank. What do I check first?</h3><p>Four things, in order: the tool’s _meta.ui.resourceUri must exactly match the resource URI (including the ui:// scheme); the resource must be served with the MIME type text/html;profile=mcp-app; the bundled HTML must be a single self-contained file with no external script or stylesheet references; and the host must support the extension — the verification script in step 6 catches the first three without any host at all.</p><h3>Can the View fetch data from the internet or my own API?</h3><p>Only if you declare it. The host applies a strict content security policy by default, including connect-src 'none'. List each origin in csp.connectDomains on the resource (never on the tool, where hosts ignore it), and keep anything the View needs at load time inlined in the bundle so it renders even with no network at all.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/mcp-background-tasks-fastmcp-tutorial/">Call now, fetch later: run long MCP tools as background Tasks with FastMCP</a></li><li><a href="/articles/mcp-elicitation-skills-server-tutorial/">Build an MCP server that asks before it acts: elicitation and server-shipped skills, hands-on</a></li><li><a href="/articles/mcp-turns-two-skills-tasks-elicitation/">MCP turns two: servers can now ship skills to Claude and hand off long jobs as Tasks</a></li><li><a href="/articles/a2ui-generative-ui-agent-sdk-tutorial/">Your agent can build the interface now: hands-on with A2UI, the generative UI framework</a></li><li><a href="/articles/google-workspace-mcp-claude-code-setup-tutorial/">Connect Claude Code to Gmail, Drive, and Calendar: the complete Google Workspace MCP setup</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
