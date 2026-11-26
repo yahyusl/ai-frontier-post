@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Windmill: turn Python scripts into AI workflows, apps, and scheduled jobs — hands-on — AI Frontier Post</title>
+<meta name="description" content="Windmill is the open-source, code-first platform for workflows, apps, and AI agents — 18,732 stars and fifth on GitHub&#x27;s weekly trending. This tutorial runs it from the release binary, builds a three-step AI news digest with a local model, and wires it to a schedule and a webhook.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/windmill-code-first-ai-workflows-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Windmill: turn Python scripts into AI workflows, apps, and scheduled jobs — hands-on">
+<meta property="og:description" content="Windmill is the open-source, code-first platform for workflows, apps, and AI agents — 18,732 stars and fifth on GitHub&#x27;s weekly trending. This tutorial runs it from the release binary, builds a three-step AI news digest with a local model, and wires it to a schedule and a webhook.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/windmill-code-first-ai-workflows-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/windmill-code-first-ai-workflows-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-26">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Windmill: turn Python scripts into AI workflows, apps, and scheduled jobs — hands-on", "description": "Windmill is the open-source, code-first platform for workflows, apps, and AI agents  —  18,732 stars and fifth on GitHub's weekly trending. This tutorial runs it from the release binary, builds a three-step AI news digest with a local model, and wires it to a schedule and a webhook.", "datePublished": "2026-11-26", "dateModified": "2026-11-26", "author": {"@type": "Person", "name": "Sofia Almeida", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/windmill-code-first-ai-workflows-tutorial/"}, "image": "https://aifrontierpost.com/articles/windmill-code-first-ai-workflows-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need Docker to run Windmill?", "acceptedAnswer": {"@type": "Answer", "text": "No. The documented quick start is Docker Compose, but the prebuilt release binary plus Postgres works the same way, and that is the path this tutorial verifies end to end. Docker is the easier path on a machine that has it; the binary is the path when it does not."}}, {"@type": "Question", "name": "Why is the first flow run slow?", "acceptedAnswer": {"@type": "Answer", "text": "The first LLM call loads the model into memory — about 40 seconds for qwen3:0.6b on a 2-core CPU — and five classifications take around two minutes on that hardware. Later runs reuse the loaded model. A larger model or a hosted API is faster, and the flow does not change."}}, {"@type": "Question", "name": "Can I use a hosted model instead of Ollama?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The classify script calls an OpenAI-compatible endpoint, so change the base URL and the model name and the rest — the scripts, the flow, the schedule, the webhook — stays exactly the same."}}, {"@type": "Question", "name": "What does Windmill cost?", "acceptedAnswer": {"@type": "Answer", "text": "The self-hosted Community Edition is free under AGPLv3; you pay only for the server it runs on. Windmill Cloud is the hosted option, with a free tier for trying it out."}}, {"@type": "Question", "name": "Is my code locked into Windmill?", "acceptedAnswer": {"@type": "Answer", "text": "No. Scripts are plain functions in normal languages, flows are YAML or JSON, and wmill sync pull exports the whole workspace as files you can keep in Git and take with you."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Windmill: turn Python scripts into AI workflows, apps, and scheduled jobs — hands-on</h1>
+<p class="lede">Windmill turns plain Python scripts into shareable tools, scheduled jobs, and AI workflows — no visual canvas, no YAML spaghetti. This tutorial runs the real server from its release binary, builds a three-step news digest with a local model, and puts it on a schedule and a webhook.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 26, 2026 · 12 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Install Postgres, download the Windmill 1.885.0 release binary, and start it in standalone mode. Write three Python scripts — fetch headlines, classify them with a local Ollama model, format a digest — chain them into a flow, and put the flow on an hourly schedule with a webhook trigger. The whole stack runs on localhost, free, under AGPLv3.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project:</b> Windmill 1.885.0, released November 25, 2026 — 18,732 stars, 1,175 forks, 15,980 commits, AGPLv3; fifth on GitHub weekly trending.</li><li><b>The stack:</b> Rust server and workers on a Postgres queue, about 50 ms of added latency per job; scripts in 20+ languages, each one becoming a UI, an API, and a CLI command.</li><li><b>Measured here:</b> fetch 5 headlines in ~1.5 s; classify 5 headlines with qwen3:0.6b in ~118 s warm on 2 CPU cores; the full three-step flow in ~117 s.</li><li><b>The gotcha that matters:</b> Python workers need <code>uv</code> to fetch a Python build — behind a TLS-inspecting proxy it fails with <code>UnknownIssuer</code>. Set <code>PYTHON_PATH</code> and <code>UV_NATIVE_TLS=true</code>, or pre-install the Python version.</li><li><b>The cron that matters:</b> Windmill cron has six fields, seconds first — hourly is <code>0 0 * * * *</code>, not the five-field <code>0 * * * *</code>.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/windmill-code-first-ai-workflows-tutorial/cover.webp" alt="A windmill with circuit-board blades turns code scripts into a row of scheduled automated jobs"></figure>
+<div class="article-body"><p>Every team ends up with the same pile: a Python script that fetches something, another that calls a model, a third that formats the result — and a cron entry, a README, and a prayer holding them together. Windmill is the open-source answer to that pile: a code-first platform where a plain script becomes a shareable UI, an API endpoint, and a scheduled job, and where scripts chain into flows that run on a real orchestrator. It has 18,732 stars on GitHub, 1,175 forks, and 15,980 commits; version 1.885.0 shipped on November 25, 2026, and the project is currently fifth on GitHub's weekly trending list.</p>
+<p>The pitch is specific, and it is what separates Windmill from the visual workflow tools it is usually compared with. You write code — Python, TypeScript, Go, Bash, SQL, and fifteen more languages — and Windmill reads the function signature and generates the form, the HTTP endpoint, and the CLI command for it. A flow is code too: steps, branches, loops, and approvals, all versioned and reviewable. Underneath is a Rust backend and workers pulling jobs from a Postgres queue, with about 50 ms of added latency per job. This tutorial runs the real thing from the release binary, builds a three-step AI news digest with a local model, and wires it to a schedule and a webhook — every command below was executed against a live instance.</p>
+
+<h2 id="what-you-will-need">What you'll need<a class="anchor" href="#what-you-will-need" aria-label="Link to section">#</a></h2>
+<ul><li><strong>A Linux or macOS machine with Python 3.12 and Postgres 16</strong> — the tutorial uses the release binary, so there is no Docker and no build step. The verification ran on a 2-core Linux VM with 6 GB of RAM; the whole stack used under 100 MB at idle.</li><li><strong>Ollama with a small model</strong> — <code>qwen3:0.6b</code> (522 MB) for the classification step. Any OpenAI-compatible endpoint works in its place, including a hosted API key.</li><li><strong>Node 20 or newer</strong> — only for the <code>wmill</code> CLI in Step 7.</li><li><strong>About 20 minutes</strong> — most of it is the first model download and the first flow run, which takes around two minutes on a small CPU.</li></ul>
+<p>There is no account to create and no credit card. The Community Edition binary is free under AGPLv3, and everything in this tutorial runs on localhost.</p>
+
+<h2 id="step-1-run-the-server">Step 1 — Run the server<a class="anchor" href="#step-1-run-the-server" aria-label="Link to section">#</a></h2>
+<p>Windmill's documented quick start is Docker Compose — three files, <code>docker compose up -d</code>, and the UI at <code>http://localhost</code>. This machine has no Docker, so this tutorial uses the other official distribution: the prebuilt server binary from the GitHub releases. The binary is the same server the container runs, and it needs exactly one thing Docker would have provided for free: a Postgres database.</p>
+<p>Install Postgres 16, create the database, and download the matching release binary (v1.885.0, 716 MB):</p>
+<pre><code class="language-bash">sudo apt-get install -y postgresql postgresql-contrib
+sudo -u postgres psql -c "CREATE USER windmill WITH PASSWORD 'windmill' SUPERUSER;"
+sudo -u postgres psql -c "CREATE DATABASE windmill OWNER windmill;"
+curl -sL -o windmill-amd64 \
+  https://github.com/windmill-labs/windmill/releases/download/v1.885.0/windmill-amd64
+chmod +x windmill-amd64</code></pre>
+<p>Start it in standalone mode — one process that runs the API server and a worker together:</p>
+<pre><code class="language-bash">DATABASE_URL='postgres://windmill:windmill@localhost:5432/windmill' \
+  MODE=standalone \
+  PYTHON_PATH=/usr/bin/python3.12 \
+  UV_NATIVE_TLS=true \
+  ./windmill-amd64</code></pre>
+<p>Two of those variables deserve an explanation, because they are the difference between a server that starts and one that fails in a confusing way. <code>PYTHON_PATH</code> tells Windmill's Python workers to use the system Python instead of asking <code>uv</code> to download one; without it, the first script deploy fails while <code>uv</code> tries to fetch a Python build. <code>UV_NATIVE_TLS=true</code> makes <code>uv</code> trust the system certificate store — behind a TLS-inspecting corporate proxy, <code>uv</code> otherwise dies with <code>invalid peer certificate: UnknownIssuer</code>. Both are covered in the troubleshooting section.</p>
+<p>Verify the server is up before going further:</p>
+<pre><code class="language-bash">curl -s http://localhost:8000/api/version
+# expect: CE v1.885.0
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/
+# expect: 200</code></pre>
+<p>Open <code>http://localhost:8000</code> in a browser and log in with the default superadmin credentials, <code>admin@windmill.dev</code> / <code>changeme</code>. Change them before exposing the instance anywhere: the first thing to do in production is to rotate that password in the superadmin settings. The rest of this tutorial drives Windmill through its REST API, so every step below is copy-pasteable from a terminal — the same calls the web UI makes.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/windmill-code-first-ai-workflows-tutorial/img3.webp" alt="Architecture diagram: database, Rust engine, and a laptop with a local language model chip connected inside one box"><figcaption>AI-generated illustration for AI Frontier Post: the self-hosted stack — Postgres holds the queue and all state, the Rust server and workers do the work, and a local model supplies the AI step.</figcaption></figure>
+
+<h2 id="step-2-your-first-script">Step 2 — Your first script: fetch the news<a class="anchor" href="#step-2-your-first-script" aria-label="Link to section">#</a></h2>
+<p>A Windmill script is a plain function. Its typed arguments become the form fields of an auto-generated UI, and its return value becomes the job result. Log in through the API and create a workspace, then create a script that fetches the five top headlines from Hacker News:</p>
+<pre><code class="language-bash">TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@windmill.dev","password":"changeme"}')
+
+curl -s -X POST http://localhost:8000/api/workspaces/create \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"id":"demo","name":"Demo"}'
+# expect: "Created workspace demo"</code></pre>
+<pre><code class="language-python"># f/demo/fetch_hn_top — fetch the top headlines from Hacker News
+import re
+import urllib.request
+
+def main(limit: int = 5):
+    with urllib.request.urlopen("https://news.ycombinator.com/", timeout=20) as r:
+        html = r.read().decode("utf-8", "replace")
+    titles = re.findall(r'class="titleline"><a href="[^"]+">([^<]+)</a>', html)
+    return {"count": len(titles[:limit]), "titles": titles[:limit]}</code></pre>
+<p>Deploy it with the scripts API. The <code>path</code> is the script's address inside the workspace; <code>f/</code> is the folder, <code>demo</code> is a subfolder, and the name follows:</p>
+<pre><code class="language-bash">curl -s -X POST http://localhost:8000/api/w/demo/scripts/create \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"path":"f/demo/fetch_hn_top","summary":"Fetch top HN headlines",
+       "content":"import re\nimport urllib.request\n\ndef main(limit: int = 5):\n    with urllib.request.urlopen(\"https://news.ycombinator.com/\", timeout=20) as r:\n        html = r.read().decode(\"utf-8\", \"replace\")\n    titles = re.findall(r\x27class=\"titleline\"><a href=\"[^\"]+\">([^<]+)</a>\x27, html)\n    return {\"count\": len(titles[:limit]), \"titles\": titles[:limit]}\n",
+       "language":"python3","kind":"script","auto_parent":true}'</code></pre>
+<p>That inline JSON is unwieldy in a shell, so for real work, keep the script in a file and build the request with Python, or use the <code>wmill</code> CLI in Step 7. Either way, run it and wait for the result synchronously:</p>
+<pre><code class="language-bash">curl -s -X POST \
+  http://localhost:8000/api/w/demo/jobs/run_wait_result/p/f/demo/fetch_hn_top \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"limit": 5}'</code></pre>
+<p>Expected output — the real headlines from the front page at the time of the run, in about 1.5 seconds:</p>
+<pre><code class="language-json">{"count": 5, "titles": ["Euro-Office comes to your desktop with the Nextcloud Office Desktop app",
+  "NP_R ≠ PAR_R", "AMD Specific Patches for Llama.cpp",
+  "Holy shit holy shit holy shit holy shit: The magnitude of what's now happening",
+  "Intel One Mono font"]}</code></pre>
+<p>Two things to notice. First, the script's <code>limit: int = 5</code> argument was parsed from the function signature and exposed as a typed input — that is the mechanism that turns any script into a form. Second, the deployment is not instant: Windmill runs a lock job when a script is deployed, resolving its dependencies. Until that job succeeds, the script lists with <code>has_deploy_errors: true</code> and cannot run. A script with no third-party dependencies locks in seconds; check the error in the script's <code>lock_error_logs</code> if it ever stalls.</p>
+<p>One honest caveat: the scraper parses Hacker News HTML with a regular expression, so it breaks if HN changes its markup. For a tutorial it is the simplest real fetch; for production, use the official <a href="https://github.com/HackerNews/API" rel="nofollow">Hacker News API</a> instead.</p>
+
+<h2 id="step-3-add-the-local-llm">Step 3 — Add the local LLM step<a class="anchor" href="#step-3-add-the-local-llm" aria-label="Link to section">#</a></h2>
+<p>The second script classifies each headline with a model running on the same machine. Start Ollama and pull the 0.6-billion-parameter Qwen3 — small enough to run on a CPU, honest enough to be a real classifier:</p>
+<pre><code class="language-bash">ollama serve &
+ollama pull qwen3:0.6b
+curl -s http://localhost:11434/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Reply with one word: tech, science, business, or other. Headline: AMD Specific Patches for Llama.cpp"}],"temperature":0}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'])"</code></pre>
+<p>Expected output: <code>tech</code>, in about 10 seconds once the model is loaded. The endpoint is OpenAI-compatible, so the script below works unchanged against any OpenAI-compatible backend — swap the base URL and model name to point it at a hosted API instead.</p>
+<pre><code class="language-python"># f/demo/classify_titles — classify headlines with a local LLM
+import json
+import urllib.request
+
+def main(titles: list):
+    out = []
+    for title in titles:
+        payload = json.dumps({
+            "model": "qwen3:0.6b",
+            "messages": [
+                {"role": "system", "content": "Classify the headline into exactly one word: tech, science, business, or other. Reply with only that word."},
+                {"role": "user", "content": title},
+            ],
+            "temperature": 0,
+        }).encode()
+        req = urllib.request.Request(
+            "http://localhost:11434/v1/chat/completions",
+            data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=300) as r:
+            body = json.loads(r.read())
+        cat = body["choices"][0]["message"]["content"].strip().lower().split()[0]
+        out.append({"title": title, "category": cat})
+    return out</code></pre>
+<p>Deploy it the same way as Step 2, then run it against the headlines from the fetch step. The full run — five headlines, five model calls — took 118 seconds on the 2-core VM, and returned:</p>
+<pre><code class="language-json">[{"title": "NP_R ≠ PAR_R", "category": "tech"},
+ {"title": "AMD Specific Patches for Llama.cpp", "category": "tech"},
+ {"title": "Intel One Mono font", "category": "other"},
+ {"title": "Holy shit holy shit holy shit holy shit: The magnitude of what's now happening", "category": "tech"},
+ {"title": "Tell HN: Happy Thanksgiving", "category": "other"}]</code></pre>
+<p>The classifications are sensible, and the timing is the honest part of this tutorial: a 0.6B model on two CPU cores is a plumbing test, not a production classifier. The first cold run failed outright — the model load plus the first inference exceeded the original 120-second HTTP timeout, which is why the script above uses 300 seconds. On a laptop with more cores, or against a hosted model, the same five calls take seconds. The lesson to carry into production is that the model is a replaceable resource: the script, the flow, and the schedule do not change when you swap <code>qwen3:0.6b</code> for something larger.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/windmill-code-first-ai-workflows-tutorial/img2.webp" alt="Three-step pipeline diagram: a browser fetching headlines, a robot brain classifying them, and a formatted digest document"><figcaption>AI-generated illustration for AI Frontier Post: the digest flow — fetch, classify with a local model, format.</figcaption></figure>
+
+<h2 id="step-4-chain-them-into-a-flow">Step 4 — Chain them into a flow<a class="anchor" href="#step-4-chain-them-into-a-flow" aria-label="Link to section">#</a></h2>
+<p>Three scripts become one workflow when a flow wires their inputs and outputs together. The third script formats the result as Markdown:</p>
+<pre><code class="language-python"># f/demo/format_digest — format the classified headlines as Markdown
+def main(items: list):
+    lines = ["# HN digest"]
+    for it in items:
+        lines.append(f"- [{it['category']}] {it['title']}")
+    return "\n".join(lines)</code></pre>
+<p>Create the flow. Each module runs one script; <code>input_transforms</code> maps the previous step's output into the next step's arguments, using <code>results.&lt;step-id&gt;</code>:</p>
+<pre><code class="language-bash">curl -s -X POST http://localhost:8000/api/w/demo/flows/create \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"path":"f/demo/hn_digest","summary":"HN digest: fetch, classify with local LLM, format",
+  "value":{"modules":[
+    {"id":"fetch","value":{"type":"script","language":"python3","path":"f/demo/fetch_hn_top",
+      "input_transforms":{"limit":{"type":"static","value":5}}}},
+    {"id":"classify","value":{"type":"script","language":"python3","path":"f/demo/classify_titles",
+      "input_transforms":{"titles":{"type":"javascript","expr":"results.fetch.titles"}}}},
+    {"id":"format","value":{"type":"script","language":"python3","path":"f/demo/format_digest",
+      "input_transforms":{"items":{"type":"javascript","expr":"results.classify"}}}}
+  ]}}'
+# expect: 201</code></pre>
+<p>Run it — asynchronously this time. The flow takes about two minutes end to end, and the synchronous wait endpoint cancels the job if your HTTP connection breaks first (see Troubleshooting). Start it, then poll the completed-jobs list:</p>
+<pre><code class="language-bash">JOB=$(curl -s -X POST http://localhost:8000/api/w/demo/jobs/run/f/f/demo/hn_digest \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}' | tr -d '"')
+echo "job: $JOB"
+
+curl -s "http://localhost:8000/api/w/demo/jobs/completed/list?per_page=5" \
+  -H "Authorization: Bearer $TOKEN" | python3 -c "
+import json,sys
+for j in json.load(sys.stdin):
+    print(j['id'], j.get('script_path'), 'success=', j['success'], 'duration_ms=', j.get('duration_ms'))"</code></pre>
+<p>Expected: the flow job completes with <code>success: true</code> in about 117 seconds. Fetch its final result — the output of the <code>format</code> step:</p>
+<pre><code class="language-bash">curl -s http://localhost:8000/api/w/demo/jobs/result_by_id/$JOB/format \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+<pre><code class="language-text"># HN digest
+- [tech] NP_R ≠ PAR_R
+- [tech] AMD Specific Patches for Llama.cpp
+- [other] Intel One Mono font
+- [tech] Holy shit holy shit holy shit holy shit: The magnitude of what’s now happening
+- [other] Tell HN: Happy Thanksgiving</code></pre>
+<p>That is the whole point of the platform in one result: three plain functions, composed by data flow, executed by an orchestrator that logs every step, retries failures, and keeps the history of every run. The same flow gains branches, loops, approvals, and error handlers without changing the scripts — those are flow-level concepts, configured in the editor or in the flow JSON.</p>
+
+<h2 id="step-5-schedule-it">Step 5 — Schedule it<a class="anchor" href="#step-5-schedule-it" aria-label="Link to section">#</a></h2>
+<p>A flow that only runs when you trigger it is a demo; a schedule makes it infrastructure. Create one that runs the digest every hour:</p>
+<pre><code class="language-bash">curl -s -X POST http://localhost:8000/api/w/demo/schedules/create \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"path":"f/demo/hn_digest_hourly","schedule":"0 0 * * * *","timezone":"UTC",
+       "script_path":"f/demo/hn_digest","is_flow":true,"args":{},"enabled":true}'</code></pre>
+<p>The one detail that will bite you: Windmill cron expressions have <strong>six</strong> fields and start with seconds — <code>sec min hour day-of-month month day-of-week</code>. The five-field crontab syntax is rejected with a clear error telling you to prepend a seconds field, so <code>0 0 * * * *</code> means "at second 0, minute 0, every hour." Verify it landed:</p>
+<pre><code class="language-bash">curl -s http://localhost:8000/api/w/demo/schedules/list \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+<p>Expected: one entry, <code>f/demo/hn_digest_hourly</code>, schedule <code>0 0 * * * *</code>, timezone UTC, <code>enabled: true</code>, pointing at the flow. From here the digest runs itself once an hour until you disable it — no cron daemon, no server to keep awake, no wrapper script.</p>
+
+<h2 id="step-6-trigger-it-from-anywhere">Step 6 — Trigger it from anywhere<a class="anchor" href="#step-6-trigger-it-from-anywhere" aria-label="Link to section">#</a></h2>
+<p>The same run endpoint is the flow's webhook. Any system that can POST JSON can trigger the digest on demand — a GitHub Action, another service, a button in an internal app:</p>
+<pre><code class="language-bash">curl -s -X POST http://localhost:8000/api/w/demo/jobs/run/f/f/demo/hn_digest \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}'
+# expect: 201 and a job id</code></pre>
+<p>In production, do not use the admin login token for this. Create a dedicated token for the integration (user settings → tokens) with access to just the workspace it needs, and pass it as the <code>Bearer</code> token. Windmill also supports native HTTP routes that expose a flow at a clean URL, and triggers from Kafka, WebSockets, and email — the run endpoint is the simplest webhook and the one every other trigger is built on.</p>
+
+<h2 id="step-7-develop-locally-with-the-cli">Step 7 — Develop locally with the wmill CLI<a class="anchor" href="#step-7-develop-locally-with-the-cli" aria-label="Link to section">#</a></h2>
+<p>Editing scripts in a browser is fine for a first draft; for real work you want your editor, your tests, and your Git history. The <code>wmill</code> CLI syncs a workspace to a local folder of plain files. Install it (Node 20 or newer) and connect it to the instance:</p>
+<pre><code class="language-bash">npm install -g windmill-cli
+wmill --version
+# expect: CLI version: 1.885.0
+
+wmill workspace add demo http://localhost:8000 --token "$TOKEN"
+# expect: Added workspace demo for demo on http://localhost:8000/</code></pre>
+<p>List what is on the server, then pull it down:</p>
+<pre><code class="language-bash">wmill script list
+wmill flow list
+wmill sync pull</code></pre>
+<p>Expected: <code>script list</code> shows the three scripts and <code>flow list</code> shows the flow, in tables. <code>sync pull</code> downloads the whole workspace — scripts as <code>.py</code> files with a <code>.script.yaml</code> and a lock file each, flows as <code>flow.yaml</code> — and then asks for confirmation before writing anything to disk. Edit locally, then <code>wmill sync push</code> deploys. <code>wmill init</code> goes one step further and generates <code>AGENTS.md</code> and skill files so Claude Code or Cursor can work in the synced folder with full context.</p>
+<p>One thing the CLI also gives you: the version check. <code>wmill --version</code> prints both the CLI version and the backend version, and warns if they drift apart — worth running after every server upgrade, since the CLI and the server release together.</p>
+
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>Tool</th><th>Best when</th><th>Watch out for</th></tr></thead><tbody><tr><td><strong>Windmill</strong></td><td>Your automations are code, you want them versioned and reviewed, and one platform should cover scripts, flows, schedules, and internal apps</td><td>You operate the server (or pay for Cloud); the AI builder needs an LLM key of your own</td></tr><tr><td><strong>n8n</strong></td><td>The team building automations is not writing code, and the workflow is mostly connecting SaaS apps</td><td>Complex logic in a visual canvas gets hard to review; AI steps are nodes, not code you own</td></tr><tr><td><strong>Airflow / Prefect / Temporal</strong></td><td>You run large data pipelines or durable, long-lived workflows with strict orchestration needs</td><td>Heavier to operate; no built-in UI generation from scripts, no app builder</td></tr><tr><td><strong>Retool</strong></td><td>The deliverable is an internal dashboard or admin tool, and the logic is mostly CRUD</td><td>Not a workflow engine; scheduled jobs and multi-step agents are not its job</td></tr><tr><td><strong>Cron + scripts on a server</strong></td><td>One job, one machine, no audience</td><td>No UI, no history, no retries, no permissions — the pile this tutorial replaces</td></tr></tbody></table></div>
+<p>The honest summary: if the people building the automation write code, Windmill is the smallest thing that does the whole job. If they do not write code, n8n's canvas is the better tool — and Windmill's own AI sessions, which let business users build in the browser with a review step before anything deploys, are the bridge between the two.</p>
+
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" href="#troubleshooting" aria-label="Link to section">#</a></h2>
+<ul><li><strong>Script shows <code>has_deploy_errors: true</code> and will not run.</strong> The deploy-time lock job failed. Read the script's <code>lock_error_logs</code> via the API — in this tutorial's sandbox the cause was <code>uv</code> failing to download Python behind a TLS-inspecting proxy. The fixes, in order: set <code>PYTHON_PATH</code> to the system Python when starting the server, set <code>UV_NATIVE_TLS=true</code>, or pre-install the Python version with <code>uv python install 3.13</code> so no download is needed.</li><li><strong><code>run_wait_result</code> cancels a long job.</strong> The synchronous wait holds an HTTP connection open; if it breaks — including on a client timeout — Windmill cancels the job with reason <code>http connection broke</code>. For anything that runs longer than a couple of minutes, start the job asynchronously with <code>/jobs/run/f/…</code> or <code>/jobs/run/p/…</code> and poll <code>/jobs/completed/list</code>.</li><li><strong>Schedule rejected: "Windmill cron expressions have 6 fields".</strong> Prepend a seconds field. Hourly is <code>0 0 * * * *</code>, not <code>0 * * * *</code>.</li><li><strong>First LLM call times out.</strong> A cold model load on a small CPU can take a minute or more before the first token. Give the HTTP call a generous timeout (300 seconds in the script above) and expect the first run of the day to be slow; later calls reuse the loaded model.</li><li><strong><code>wmill sync pull</code> seems to hang.</strong> It is waiting at an interactive confirmation prompt listing the changes it will write. Answer it, or look for a non-interactive flag in <code>wmill sync pull --help</code> for scripted use.</li><li><strong>Server will not start: database connection timeout.</strong> Check Postgres is actually running (<code>pg_lsclusters</code>) and that <code>DATABASE_URL</code> points at a database the user owns. The server runs migrations on first boot, so a fresh database takes a few seconds longer.</li></ul>
+
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>You now have a self-hosted automation platform that treats your code as the source of truth: three scripts, one flow, one schedule, one webhook, and a CLI that keeps it all in Git. The digest in this tutorial is deliberately small — the same pattern scales to the jobs Windmill is actually bought for: nightly ETL that writes to a data table, an approval flow where a human signs off before a deploy, or an agent loop where each step calls a model and the next step acts on the result.</p>
+<p>The habits to keep: pin the Python version the workers use, keep secrets out of scripts (Windmill variables and resources exist for exactly that), run long jobs asynchronously, and remember that the cron has six fields. Everything else — the queue, the retries, the UI, the history — is the platform's job now, and that is the whole point.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="windmill-code-first-ai-workflows-tutorial"></div><div class="comments" data-comments="windmill-code-first-ai-workflows-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/"><span class="chip">Tutorials</span><h3>Your own OpenAI-compatible LLM API: serve Gemma 4 on Modal&#x27;s serverless GPUs with vLLM</h3><div class="meta">November 25, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/ai-workflow-automation-n8n/"><span class="chip">Tutorials</span><h3>Automate your marketing with AI workflows: an n8n starter</h3><div class="meta">August 30, 2026 · 8 min read</div></a><a class="rel-card" href="/articles/litellm-gateway-tutorial/"><span class="chip">Tutorials</span><h3>One API for every LLM: run LiteLLM as your AI gateway</h3><div class="meta">September 28, 2026 · 9 min read</div></a><a class="rel-card" href="/articles/treg-openrouter-for-agent-tools-tutorial/"><span class="chip">Tutorials</span><h3>OpenRouter for agent tools: self-host one registry for every API your agents call — hands-on with treg</h3><div class="meta">September 30, 2026 · 11 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need Docker to run Windmill?</h3><p>No. The documented quick start is Docker Compose, but the prebuilt release binary plus Postgres works the same way, and that is the path this tutorial verifies end to end. Docker is the easier path on a machine that has it; the binary is the path when it does not.</p><h3>Why is the first flow run slow?</h3><p>The first LLM call loads the model into memory — about 40 seconds for qwen3:0.6b on a 2-core CPU — and five classifications take around two minutes on that hardware. Later runs reuse the loaded model. A larger model or a hosted API is faster, and the flow does not change.</p><h3>Can I use a hosted model instead of Ollama?</h3><p>Yes. The classify script calls an OpenAI-compatible endpoint, so change the base URL and the model name and the rest — the scripts, the flow, the schedule, the webhook — stays exactly the same.</p><h3>What does Windmill cost?</h3><p>The self-hosted Community Edition is free under AGPLv3; you pay only for the server it runs on. Windmill Cloud is the hosted option, with a free tier for trying it out.</p><h3>Is my code locked into Windmill?</h3><p>No. Scripts are plain functions in normal languages, flows are YAML or JSON, and wmill sync pull exports the whole workspace as files you can keep in Git and take with you.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/ai-workflow-automation-n8n/">Automate your marketing with AI workflows: an n8n starter</a></li><li><a href="/articles/litellm-gateway-tutorial/">One API for every LLM: run LiteLLM as your AI gateway</a></li><li><a href="/articles/modal-vllm-gemma4-serverless-llm-api-tutorial/">Your own OpenAI-compatible LLM API: serve Gemma 4 on Modal's serverless GPUs with vLLM</a></li><li><a href="/articles/treg-openrouter-for-agent-tools-tutorial/">OpenRouter for agent tools: self-host one registry for every API your agents call — hands-on with treg</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
