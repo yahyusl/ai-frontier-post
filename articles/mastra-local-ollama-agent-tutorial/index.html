@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Build a local AI agent with Mastra and Ollama: no API key, no cloud — AI Frontier Post</title>
+<meta name="description" content="Mastra 1.86 and Qwen3.5 on Ollama: build a local AI agent with real tools, persistent memory, and a two-step briefing workflow — no API key, no account, no data leaving your machine.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/mastra-local-ollama-agent-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Build a local AI agent with Mastra and Ollama: no API key, no cloud">
+<meta property="og:description" content="Mastra 1.86 and Qwen3.5 on Ollama: build a local AI agent with real tools, persistent memory, and a two-step briefing workflow — no API key, no account, no data leaving your machine.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/mastra-local-ollama-agent-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/mastra-local-ollama-agent-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Build a local AI agent with Mastra and Ollama: no API key, no cloud", "description": "Mastra 1.86 and Qwen3.5 on Ollama: build a local AI agent with real tools, persistent memory, and a two-step briefing workflow — no API key, no account, no data leaving your machine.", "datePublished": "2026-11-27", "dateModified": "2026-11-27", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/mastra-local-ollama-agent-tutorial/"}, "image": "https://aifrontierpost.com/articles/mastra-local-ollama-agent-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need a GPU to run Qwen3.5:9B?", "acceptedAnswer": {"@type": "Answer", "text": "No, but you will want one. The 9B model needs about 6 GB of VRAM, and on an RTX 3090 the full verification run — tool call, memory test, and workflow — finished in about twelve seconds. On a CPU-only laptop the same model runs at a few tokens per second, which is usable for this tutorial but too slow for an agent loop that makes dozens of calls. If you have no GPU, pull qwen3.5:4b instead; nothing else in the tutorial changes."}}, {"@type": "Question", "name": "Why does the scaffold need a tsconfig change?", "acceptedAnswer": {"@type": "Answer", "text": "The empty scaffold ships TypeScript 6.0.3 with a tsconfig that has no \"types\" field, and TypeScript 6 does not pick up the Node type definitions from @types/node on its own in this setup — npx tsc --noEmit fails with error TS2591: Cannot find name 'fs/promises'. Adding \"types\": [\"node\"] to compilerOptions fixes it. The Mastra CLI itself does not typecheck, so mastra dev works either way; the fix only matters if you run tsc."}}, {"@type": "Question", "name": "Can I swap the local model for a hosted one later?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, and it is a one-line change. Replace model: ollama('qwen3.5:9B') with a hosted model string such as 'openai/gpt-6.1-sol' (plus the provider package and API key), and the tools, memory, workflow, and Studio setup are unchanged. That is the main reason to start local: the plumbing is identical whichever model does the reasoning."}}, {"@type": "Question", "name": "Does Mastra need an account?", "acceptedAnswer": {"@type": "Answer", "text": "No. The framework is free and open source under Apache 2.0, and the --empty scaffold never asks for anything. The CLI offers to connect your project to the Mastra platform during the default setup, but it is optional and this tutorial skips it. Mastra Gateway and Mastra Cloud are separate hosted products with their own pricing."}}, {"@type": "Question", "name": "What if the agent invents a citation?", "acceptedAnswer": {"@type": "Answer", "text": "That is the known failure mode of a small local model, and this tutorial hit it twice: one draft cited a file that does not exist, and the final draft attributed a remembered fact to the notes when it came from the conversation. Scope the instructions so the model knows which source answers which question, forbid invented file names explicitly, and prefer workflow output — where code fixes the citations — over chat answers for anything that has to be right."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Build a local AI agent with Mastra and Ollama: no API key, no cloud</h1>
+<p class="lede">Mastra 1.86 and Qwen3.5 on Ollama: build a local AI agent with real tools, persistent memory, and a two-step briefing workflow — no API key, no account, no data leaving your machine.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 27, 2026 · 20 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Mastra 1.86.0 and Qwen3.5:9B on Ollama make a complete local agent: two file tools, LibSQL-backed memory, a research-to-briefing workflow, and Studio on localhost:4111. Everything in this tutorial was run end to end &mdash; the agent called its search tool, remembered a fact across calls, and wrote a briefing with four correct citations. Cost: $0 after a 6.5&nbsp;GB download. One honest caveat: the 9B model sometimes misattributes where a remembered fact came from, so the workflow&rsquo;s output &mdash; where code fixes the citations &mdash; is the one to trust.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The stack in one sentence:</b> Mastra 1.86.0 (TypeScript agent framework) + Ollama 0.40.2 serving Qwen3.5:9B, with LibSQL memory in a local <code>mastra.db</code> file &mdash; all free, all on your machine.</li><li><b>The verified install:</b> <code>npx create-mastra@latest mastra-local-agent --empty</code> (create-mastra 1.40.2) plus <code>ollama pull qwen3.5:9B</code> &mdash; a 5.6&nbsp;GB weights layer and a 921&nbsp;MB layer, about eight minutes at 13&nbsp;MB/s.</li><li><b>The provider:</b> <code>ollama-ai-provider-v2</code> 4.1.0; the agent takes <code>model: ollama('qwen3.5:9B')</code> and the provider talks to <code>http://localhost:11434/api</code> by default. No key, no account.</li><li><b>The gotcha:</b> TypeScript 6.0.3 with the scaffold&rsquo;s stock <code>tsconfig.json</code> cannot see Node&rsquo;s built-ins (<code>error TS2591</code>). Add <code>"types": ["node"]</code> to <code>compilerOptions</code> and the typecheck passes clean.</li><li><b>The honest result:</b> tool calls, memory recall, workflow, Studio, and build all verified live. The 9B model&rsquo;s briefing carried four correct citations; its chat recall got the fact right but the provenance wrong &mdash; design around that, don&rsquo;t hide it.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/mastra-local-ollama-agent-tutorial/cover.webp" alt="A small robot working at a laptop while a glowing diagram connects the laptop to a brain-shaped chip"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body">
+<p>Most agent tutorials start by asking for an API key. This one does not. By the end of it you will have a working AI agent &mdash; tools, memory, a two-step workflow, and a browser UI &mdash; running entirely on your own machine, with a local model doing the reasoning and a local database holding the memory. The total bill is $0, there is no account to create, and your notes never leave the laptop.</p>
+<p>The stack is <a href="https://mastra.ai/docs/getting-started/installation" rel="nofollow">Mastra</a>, the TypeScript agent framework, and <a href="https://ollama.com/library/qwen3.5" rel="nofollow">Ollama</a> serving Qwen3.5, the open-weight model family Alibaba&rsquo;s Qwen team released this autumn. Mastra is at version 1.86.0 as of this week, and Qwen3.5&rsquo;s 9B size is the sweet spot for this job: it supports tool calling, it fits on a single consumer GPU, and it is free. Every command and every output in this tutorial was run, not copied from documentation &mdash; including the two places where the first draft of the agent misbehaved, and what fixed it.</p>
+<p>The agent you will build is a research assistant for a folder of markdown notes. It searches the notes when you ask about a topic, saves new notes when you ask it to remember something, recalls facts from earlier in the conversation, and can turn a topic into a written briefing file through a fixed two-step workflow. Small enough to understand in one sitting; complete enough to be the skeleton of a real tool.</p>
+<h2 id="what-you-ll-need">What you&rsquo;ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><b>Node.js 22.13 or newer.</b> The Mastra scaffold refuses anything older (its <code>engines</code> field says so). This tutorial was verified with Node v22.18.0 and npm 10.9.3.</li>
+<li><b>Ollama 0.40 or newer</b>, installed from <a href="https://ollama.com/download" rel="nofollow">ollama.com/download</a>. Verified here with Ollama 0.40.2.</li>
+<li><b>About 7&nbsp;GB of free disk:</b> roughly 6.5&nbsp;GB for the model and a few hundred megabytes for <code>node_modules</code>.</li>
+<li><b>A GPU helps but is not required.</b> The 9B model runs at full speed on an RTX&nbsp;3090 (24&nbsp;GB VRAM); on a CPU-only laptop it still runs, at a few tokens a second &mdash; usable for this tutorial, too slow for an agent loop that makes dozens of calls. If you have no GPU at all, pull <code>qwen3.5:4b</code> instead of the 9B in Step&nbsp;1; nothing else changes.</li>
+<li><b>No API key, no account, no credit card.</b> That is the whole point.</li>
+</ul>
+<h2 id="1-install-ollama-and-pull-the-model">1. Install Ollama and pull the model<a class="anchor" href="#1-install-ollama-and-pull-the-model" aria-label="Link to section">#</a></h2>
+<p>Install Ollama, confirm the server is up, then pull the model:</p>
+<pre><code class="language-bash">ollama pull qwen3.5:9B
+curl http://localhost:11434/api/version</code></pre>
+<p>The pull downloads two layers &mdash; 921&nbsp;MB and 5.6&nbsp;GB &mdash; and took about eight minutes at 13&nbsp;MB/s on this machine. The version check should answer with your Ollama version:</p>
+<pre><code class="language-plaintext">{"version":"0.40.2"}</code></pre>
+<p>Qwen3.5 comes in sizes from 0.8B to 122B parameters. The 9B is the one to pick for a first agent: it is the smallest size that reliably calls tools, and it still fits in 6&nbsp;GB of VRAM. The family is multimodal, covers 201 languages, and uses a hybrid architecture that mixes Gated Delta Networks with sparse mixture-of-experts &mdash; none of which matters for this tutorial except that the 9B behaves like a much larger model when you ask it to use a function. Verify the model is in your library before moving on:</p>
+<pre><code class="language-bash">ollama list</code></pre>
+<p>You should see <code>qwen3.5:9B</code> in the list. If the pull is still running, wait for it &mdash; every later step assumes the model is local.</p>
+<h2 id="2-scaffold-the-project">2. Scaffold the project<a class="anchor" href="#2-scaffold-the-project" aria-label="Link to section">#</a></h2>
+<p>Mastra&rsquo;s scaffolder is <code>create-mastra</code>. Run it with the <code>--empty</code> flag:</p>
+<pre><code class="language-bash">MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest mastra-local-agent --empty --no-skills --no-git --timeout 300000</code></pre>
+<p>The flags are doing specific work. <code>--empty</code> creates a provider-free project with no agents, examples, model SDKs, or environment files &mdash; and that is exactly what you want, because the default starter only offers hosted providers (Mastra Gateway, OpenAI, Anthropic, Gemini, xAI) and there is no Ollama option in it. <code>--no-skills</code> and <code>--no-git</code> skip the automatic skills install and the initial git commit, which keeps the scaffold fast and out of your way. <code>--timeout 300000</code> raises the dependency-install timeout from its 60-second default, which is too short on a slow connection. <code>MASTRA_TELEMETRY_DISABLED=1</code> opts out of the CLI&rsquo;s anonymous usage telemetry.</p>
+<p>The command installs <code>create-mastra@1.40.2</code> and produces a project whose <code>package.json</code> pins <code>@mastra/core</code> at 1.86.0, the <code>mastra</code> CLI at 1.40.2, and TypeScript 6.0.3. The only source file is a three-line <code>src/mastra/index.ts</code>:</p>
+<pre><code class="language-typescript">import { Mastra } from '@mastra/core/mastra';
+
+export const mastra = new Mastra({});</code></pre>
+<p>Everything else in this tutorial is built on top of that empty instance.</p>
+<h2 id="3-install-the-provider-memory-and-storage">3. Install the provider, memory, and storage<a class="anchor" href="#3-install-the-provider-memory-and-storage" aria-label="Link to section">#</a></h2>
+<p>Mastra does not bundle an Ollama provider &mdash; local models arrive through the Vercel AI SDK provider <code>ollama-ai-provider-v2</code>. Memory and durable storage are separate packages too. Install them, plus <code>zod</code> for tool schemas and <code>tsx</code> for running TypeScript directly:</p>
+<pre><code class="language-bash">npm install ollama-ai-provider-v2 @mastra/memory @mastra/libsql zod
+npm install -D tsx @types/node</code></pre>
+<p>The resolved versions on this machine: <code>ollama-ai-provider-v2</code> 4.1.0, <code>@mastra/memory</code> 1.41.3, <code>@mastra/libsql</code> 1.32.0, <code>zod</code> 4.6.7, <code>tsx</code> 4.23.15, <code>@types/node</code> 26.6.11. Two things worth knowing came out of this step. First, npm prints a harmless warning that <code>posthog-node</code> wants Node &ge;22.22.0 while the scaffold only requires &ge;22.13.0; the install succeeds anyway, so you can ignore it &mdash; or upgrade Node to 22.22+ to silence it. Second, TypeScript 6.0.3 will not find Node&rsquo;s built-in modules with the scaffold&rsquo;s stock <code>tsconfig.json</code>: <code>npx tsc --noEmit</code> fails with <code>error TS2591: Cannot find name 'fs/promises'</code>. The fix is one line in <code>tsconfig.json</code> &mdash; add <code>"types": ["node"]</code> to <code>compilerOptions</code>. That is the only change this tutorial makes to the scaffold&rsquo;s TypeScript config, and with it the typecheck passes clean.</p>
+<h2 id="4-give-the-agent-tools-that-touch-real-files">4. Give the agent tools that touch real files<a class="anchor" href="#4-give-the-agent-tools-that-touch-real-files" aria-label="Link to section">#</a></h2>
+<p>An agent without tools is a chatbot. This one gets two, both local and deterministic: <code>searchNotes</code>, which greps a <code>notes/</code> folder of markdown files, and <code>saveNote</code>, which writes a new markdown file into it. Tools in Mastra are built with <code>createTool</code> from <code>@mastra/core/tools</code>: an <code>id</code>, a <code>description</code> the model reads when deciding what to call, Zod <code>inputSchema</code> and <code>outputSchema</code>, and an <code>execute</code> function. Save this as <code>src/mastra/tools/notes-tools.ts</code>:</p>
+<pre><code class="language-typescript">import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+import { readdir, readFile, writeFile } from 'fs/promises'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
+
+// The notes folder sits at the project root: src/mastra/tools -> ../../..
+const NOTES_DIR = fileURLToPath(new URL('../../../notes', import.meta.url))
+
+export const searchNotesTool = createTool({
+  id: 'search-notes',
+  description:
+    'Searches the local notes folder for a text query and returns the matching lines with their file names. Use it whenever the user asks what the notes say about a topic.',
+  inputSchema: z.object({
+    query: z.string().describe('The text to search for in the notes'),
+  }),
+  outputSchema: z.object({
+    matches: z.array(
+      z.object({
+        file: z.string(),
+        lines: z.array(z.string()),
+      }),
+    ),
+  }),
+  execute: async ({ query }) => {
+    const files = (await readdir(NOTES_DIR)).filter(f => f.endsWith('.md')).sort()
+    const matches: { file: string; lines: string[] }[] = []
+    for (const file of files) {
+      const text = await readFile(join(NOTES_DIR, file), 'utf-8')
+      const lines = text
+        .split('\n')
+        .filter(line => line.toLowerCase().includes(query.toLowerCase()))
+      if (lines.length > 0) matches.push({ file, lines: lines.slice(0, 5) })
+    }
+    return { matches }
+  },
+})
+
+export const saveNoteTool = createTool({
+  id: 'save-note',
+  description:
+    'Saves a short note to the local notes folder as a new markdown file. Use it when the user asks to remember or file something.',
+  inputSchema: z.object({
+    title: z.string().describe('Short title, used as the file name'),
+    body: z.string().describe('The note text in markdown'),
+  }),
+  outputSchema: z.object({ file: z.string() }),
+  execute: async ({ title, body }) => {
+    const slug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+    const file = `${slug}.md`
+    await writeFile(join(NOTES_DIR, file), `# ${title}\n\n${body}\n`, 'utf-8')
+    return { file }
+  },
+})</code></pre>
+<p>Two details matter. First, the tool&rsquo;s <code>description</code> is not documentation for humans &mdash; it is the text the model reads when choosing between tools, so write it as an instruction about <em>when</em> to call the tool, not just what it does. Second, <code>searchNotes</code> returns at most five matching lines per file: tool results go straight into the model&rsquo;s context, and an unbounded file dump is how a small model&rsquo;s context window gets eaten by one call.</p>
+<p>Now seed the notes folder with three short files so the agent has something real to retrieve. The content is factual and checkable &mdash; it comes from the Ollama model page and the Mastra docs, and the tutorial&rsquo;s test questions will be answered from exactly these lines:</p>
+<pre><code class="language-bash">mkdir notes</code></pre>
+<p><code>notes/qwen3-5-release.md</code>:</p>
+<pre><code class="language-plaintext"># Qwen3.5
+
+Qwen3.5 is a family of open-weight multimodal models from Alibaba's Qwen team.
+It comes in sizes from 0.8B to 122B parameters, including a 9B size that runs
+comfortably on a single consumer GPU.
+The family uses a hybrid architecture that mixes Gated Delta Networks with
+sparse mixture-of-experts, and it supports tool calling, vision input, and
+reasoning mode.
+Qwen3.5 covers 201 languages and dialects.
+On Ollama the 9B model is pulled with `ollama pull qwen3.5:9B`.</code></pre>
+<p><code>notes/mastra-notes.md</code> and <code>notes/ollama-tips.md</code> hold the equivalent facts about Mastra (TypeScript framework; agents, tools, workflows, memory, Studio on <code>localhost:4111</code>; Apache 2.0) and Ollama (serves on <code>localhost:11434</code>; <code>ollama pull</code> and <code>ollama list</code>). Keep your own notes just as short and factual &mdash; the agent can only be as accurate as the files it reads.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mastra-local-ollama-agent-tutorial/img2.webp" alt="Diagram of the local stack: your project, Mastra, Ollama with Qwen3.5 9B, and LibSQL storage"><figcaption>Diagram: the four pieces of the local stack. Generated for AI Frontier Post.</figcaption></figure>
+<h2 id="5-wire-the-agent-to-the-local-model">5. Wire the agent to the local model<a class="anchor" href="#5-wire-the-agent-to-the-local-model" aria-label="Link to section">#</a></h2>
+<p>The agent itself is one file, <code>src/mastra/agents/local-agent.ts</code>. The key line is the model: instead of a hosted model string such as <code>'openai/gpt-6.1-sol'</code>, you pass a model instance from the Ollama provider. The provider talks to <code>http://localhost:11434/api</code> by default, so there is nothing to configure if Ollama runs on the same machine:</p>
+<pre><code class="language-typescript">import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { ollama } from 'ollama-ai-provider-v2'
+import { searchNotesTool, saveNoteTool } from '../tools/notes-tools'
+
+export const localAgent = new Agent({
+  id: 'local-agent',
+  name: 'Local Agent',
+  instructions: `You are a research assistant that answers from the user's local notes.
+Use the searchNotes tool only when the user asks what the notes say about a topic. Answer questions about the user or the conversation from memory — do not search the notes for those.
+When you save a note, confirm the file name. Keep answers short. When a fact comes from the notes, cite the file it came from — never invent a file name for facts that came from the conversation.`,
+  model: ollama('qwen3.5:9B'),
+  tools: { searchNotesTool, saveNoteTool },
+  memory: new Memory({
+    options: { lastMessages: 20 },
+  }),
+})</code></pre>
+<p>The instructions went through three drafts on this machine, and the drafts are worth seeing because they show how much of agent work is instruction work. The first version said &ldquo;always use the searchNotes tool when the user asks what the notes say&rdquo; and &ldquo;cite the file each fact came from&rdquo;. The agent obeyed &mdash; too well. Asked what the user&rsquo;s favourite programming language was, it went hunting through the notes for a fact that lived in the conversation, rambled for two paragraphs about a search that found nothing, and then answered correctly anyway. The second version scoped the tool to notes questions only, and the recall came back as one clean sentence &mdash; but with a made-up citation to a file called <code>favourite-language.md</code> that does not exist. The third version, shown above, adds the one clause that fixed it: never invent a file name for facts that came from the conversation. With a 9B local model, instructions are not decoration; they are the difference between a tool that works and a tool that confabulates. The section near the end of this tutorial shows the exact outputs of all three drafts.</p>
+<h2 id="6-add-memory-that-survives-a-restart">6. Add memory that survives a restart<a class="anchor" href="#6-add-memory-that-survives-a-restart" aria-label="Link to section">#</a></h2>
+<p>Memory in Mastra needs a storage provider, and the local option is LibSQL &mdash; SQLite with a file on disk. Register it on the Mastra instance, alongside the agent and the workflow from the next step. Replace <code>src/mastra/index.ts</code> with:</p>
+<pre><code class="language-typescript">import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+import { localAgent } from './agents/local-agent'
+import { briefingWorkflow } from './workflows/briefing-workflow'
+
+export const mastra = new Mastra({
+  agents: { localAgent },
+  workflows: { briefingWorkflow },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+})</code></pre>
+<p>The <code>url: 'file:./mastra.db'</code> is the difference between a demo and a tool: with the in-memory URL from the docs quickstart (<code>':memory:'</code>), every restart wipes the conversation history; with the file URL, the history and the trace spans persist in a <code>mastra.db</code> file next to your project. On this machine the file appeared after the first run at 569&nbsp;KB. Memory is addressed by <code>resource</code> (who the conversation belongs to) and <code>thread</code> (which conversation), both passed at call time &mdash; you will see them in Step&nbsp;8. The agent&rsquo;s <code>lastMessages: 20</code> keeps the most recent twenty messages in context; older turns are dropped rather than summarized, which is the right default for a small local model with a limited context window.</p>
+<h2 id="7-turn-the-agent-into-a-workflow">7. Turn the agent into a workflow<a class="anchor" href="#7-turn-the-agent-into-a-workflow" aria-label="Link to section">#</a></h2>
+<p>Agents are for open-ended work; workflows are for work whose steps you already know. A briefing has exactly two steps &mdash; research the notes, then write the file &mdash; so it belongs in a workflow. Save this as <code>src/mastra/workflows/briefing-workflow.ts</code>:</p>
+<pre><code class="language-typescript">import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+import { mkdir, writeFile } from 'fs/promises'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
+
+const PROJECT_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
+
+const researchStep = createStep({
+  id: 'research',
+  inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ topic: z.string(), findings: z.string() }),
+  execute: async ({ inputData, mastra }) => {
+    const agent = mastra?.getAgentById('local-agent')
+    const response = await agent?.generate(
+      `What do my notes say about ${inputData.topic}? Summarise the key facts in 3-5 bullet points and name the file each fact came from.`,
+    )
+    return { topic: inputData.topic, findings: response?.text ?? 'No findings.' }
+  },
+})
+
+const writeStep = createStep({
+  id: 'write-briefing',
+  inputSchema: z.object({ topic: z.string(), findings: z.string() }),
+  outputSchema: z.object({ path: z.string() }),
+  execute: async ({ inputData }) => {
+    const slug = inputData.topic
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+    const dir = join(PROJECT_ROOT, 'briefings')
+    await mkdir(dir, { recursive: true })
+    const path = join(dir, `${slug}.md`)
+    await writeFile(path, `# Briefing: ${inputData.topic}\n\n${inputData.findings}\n`, 'utf-8')
+    return { path }
+  },
+})
+
+export const briefingWorkflow = createWorkflow({
+  id: 'briefing-workflow',
+  inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ path: z.string() }),
+})
+  .then(researchStep)
+  .then(writeStep)
+  .commit()</code></pre>
+<p>Three things to notice. First, a workflow step can call an agent: the step&rsquo;s <code>execute</code> receives the <code>mastra</code> instance, and <code>getAgentById('local-agent')</code> returns the registered agent with its memory and tools attached. Second, the second step does no model work at all &mdash; it is plain TypeScript writing a file, which is the point of a workflow: the model decides <em>what</em> to say, code decides <em>where it goes</em>. Third, the workflow&rsquo;s own <code>inputSchema</code> and <code>outputSchema</code> are what Studio renders as a form in the browser, so keep them small and honest.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/mastra-local-ollama-agent-tutorial/img3.webp" alt="Diagram of the flow from question to briefing file: ask, agent calls searchNotes, workflow research, workflow write"><figcaption>Diagram: the same agent, two shapes. Generated for AI Frontier Post.</figcaption></figure>
+<h2 id="8-run-it-from-the-command-line">8. Run it from the command line<a class="anchor" href="#8-run-it-from-the-command-line" aria-label="Link to section">#</a></h2>
+<p>Before opening any UI, prove the whole thing works from the terminal. Save this as <code>src/run.ts</code> &mdash; it exercises the three behaviours in one process: tool use, memory, and the workflow:</p>
+<pre><code class="language-typescript">import { mastra } from './mastra/index'
+
+const agent = mastra.getAgentById('local-agent')
+
+// 1. Tool use: the answer must come from the notes, via the search-notes tool.
+const notes = await agent.generate('What do my notes say about Qwen3.5?')
+console.log('--- notes answer ---')
+console.log(notes.text)
+console.log('--- tool calls ---')
+console.log(JSON.stringify(notes.toolCalls, null, 2))
+console.log('--- usage ---')
+console.log(JSON.stringify(notes.usage))
+
+// 2. Memory: store a fact, then recall it on a fresh call in the same thread.
+await agent.generate('My favourite programming language is TypeScript. Remember that.', {
+  memory: { resource: 'demo-user', thread: 'memory-test' },
+})
+const recall = await agent.generate('What is my favourite programming language?', {
+  memory: { resource: 'demo-user', thread: 'memory-test' },
+})
+console.log('--- memory recall ---')
+console.log(recall.text)
+
+// 3. Workflow: research the notes, then write a briefing file.
+const workflow = mastra.getWorkflow('briefingWorkflow')
+const run = await workflow.createRun()
+const result = await run.start({ inputData: { topic: 'Qwen3.5' } })
+console.log('--- workflow ---')
+console.log('status:', result.status)
+if (result.status === 'success') console.log('briefing:', JSON.stringify(result.result))
+else console.log(JSON.stringify(result, null, 2))</code></pre>
+<pre><code class="language-bash">npx tsc --noEmit && npx tsx src/run.ts</code></pre>
+<p>The typecheck passes clean, and the run takes about twelve seconds end to end &mdash; model load included. This is the real output from the final run on this machine:</p>
+<pre><code class="language-plaintext">--- notes answer ---
+Your notes contain information about **Qwen3.5** from two files:
+
+1. **qwen3-5-release.md**: Describes Qwen3.5 as an open-weight multimodal model family from Alibaba, supporting 201 languages/dialects, and notes the pull command on Ollama is `ollama pull qwen3.5:9B`.
+2. **ollama-tips.md**: States that on Ollama, the Qwen3.5 family ranges from 0.8B to 122B parameters.
+--- tool calls ---
+[{ "toolName": "searchNotesTool", "args": { "query": "Qwen3.5" } }]
+--- usage ---
+{"inputTokens":1229,"outputTokens":149,"totalTokens":1378}
+--- memory recall ---
+Based on the notes I found, your favorite programming language is TypeScript.
+--- workflow ---
+status: success
+briefing: {"path":"C:\\setup_dl\\mastra-local-agent\\briefings\\qwen3-5.md"}</code></pre>
+<p>Everything checks out except one line, and it is worth pausing on: the memory recall says &ldquo;Based on the notes I found&rdquo;, but the favourite-language fact came from the earlier message in the same thread, not from any note. The fact is right; the provenance is wrong. A 9B model cannot reliably tell you <em>where</em> it got a remembered fact, which is why the workflow&rsquo;s briefing &mdash; where every fact is tied to a file by construction &mdash; is the trustworthy output, and a chat answer is a draft. The briefing file itself came out clean:</p>
+<pre><code class="language-plaintext"># Briefing: Qwen3.5
+
+Based on your notes, here are the key facts about Qwen3.5:
+
+*   **Origin:** It is a family of open-weight multimodal models created by Alibaba's Qwen team (from file `qwen3-5-release.md`).
+*   **Parameter Range:** The available models range in size from 0.8 billion to 122 billion parameters (from file `ollama-tips.md`).
+*   **Language Support:** It supports 201 different languages and dialects (from file `qwen3-5-release.md`).
+*   **Ollama Command:** On Ollama, the 9B parameter model can be pulled using the command `ollama pull qwen3.5:9B` (from file `qwen3-5-release.md`).</code></pre>
+<p>Four facts, four correct citations, zero invented files. That is the standard to hold the agent to.</p>
+<h2 id="9-open-studio-and-drive-it-from-the-browser">9. Open Studio and drive it from the browser<a class="anchor" href="#9-open-studio-and-drive-it-from-the-browser" aria-label="Link to section">#</a></h2>
+<p>The command line proves the agent works; Studio is where you actually use it. Start the dev server:</p>
+<pre><code class="language-bash">npm run dev</code></pre>
+<p>Studio opens at <a href="http://localhost:4111" rel="nofollow">http://localhost:4111</a>. The Agents tab lists Local Agent with its tools and lets you chat with it, watching each tool call land in the trace panel. The Workflows tab renders the briefing workflow&rsquo;s input schema as a form: type a topic, run it, and watch the research and write steps turn green in the graph view. Verified on this machine: the Studio root returns HTTP&nbsp;200, and the server&rsquo;s API lists the agent exactly as configured &mdash; provider <code>ollama.responses</code>, model <code>qwen3.5:9B</code>, both tools with their schemas, and <code>supportsMemory: true</code>. No account, no sign-in, no tunnel: it is a local web server for a local agent.</p>
+<h2 id="10-build-it-for-deployment">10. Build it for deployment<a class="anchor" href="#10-build-it-for-deployment" aria-label="Link to section">#</a></h2>
+<p>When the agent behaves, bundle it:</p>
+<pre><code class="language-bash">npm run build</code></pre>
+<pre><code class="language-plaintext">INFO (Mastra CLI): Bundling Mastra application
+INFO (Mastra CLI): Bundling Mastra done
+INFO (Mastra CLI): Build successful, you can now deploy the .mastra/output directory to your target platform.
+INFO (Mastra CLI): To start the server, run: node .mastra/output/index.mjs</code></pre>
+<p>The build output is a plain Node server in <code>.mastra/output</code>. It still talks to Ollama on <code>localhost:11434</code> by default, so wherever you deploy it, point it at an Ollama server &mdash; or swap the model for a hosted one with a one-line change to the agent file, which is the subject of the next section.</p>
+<h2 id="which-approach-should-you-use">Which approach should you use?<a class="anchor" href="#which-approach-should-you-use" aria-label="Link to section">#</a></h2>
+<p>There are four ways to give a Mastra agent a model, and the right one depends on who is running the model and who is allowed to see it.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Approach</th><th>How it works</th><th>Use it when</th></tr></thead>
+<tbody>
+<tr><td><b>AI SDK provider</b> (this tutorial)</td><td><code>model: ollama('qwen3.5:9B')</code> via <code>ollama-ai-provider-v2</code></td><td>One local model, one machine, no ceremony. The simplest path and the one to start with.</td></tr>
+<tr><td><b>Model <code>url</code> config</td><td>Point the model at any OpenAI-compatible endpoint by URL, no gateway code</td><td>The model already runs behind an HTTP endpoint (Ollama, vLLM, LM Studio) and you just need to reach it.</td></tr>
+<tr><td><b>Private model gateway</td><td>Register a gateway with an ID; agents address models as <code>gateway/provider/model</code>, e.g. <code>private/ollama/gpt-oss:20b</code></td><td>A team or a product: you need the Studio model picker to show only your models, per-gateway auth, or several endpoints behind one scheme. Needs <code>@mastra/core</code> 1.82.0 or later; <code>AUTO_BLOCK_EXTERNAL_PROVIDERS=true</code> hides hosted providers from Studio.</td></tr>
+<tr><td><b>Hosted provider or Mastra Gateway</td><td>Model strings such as <code>'openai/gpt-6.1-sol'</code>, or <code>mastra/…</code> models through one Gateway key</td><td>You need frontier quality, and you accept per-token billing and data leaving the machine. Swap the model line and nothing else changes.</td></tr>
+</tbody>
+</table></div>
+<p>The useful property of this stack is that the choice is one line in the agent file. Everything else &mdash; the tools, the memory, the workflow, Studio &mdash; is identical whichever row of that table you pick, so starting local costs nothing if you later need a hosted model for a harder job.</p>
+<h2 id="what-a-9b-local-model-gets-wrong">What a 9B local model gets wrong<a class="anchor" href="#what-a-9b-local-model-gets-wrong" aria-label="Link to section">#</a></h2>
+<p>A local 9B model is not a frontier model with a smaller bill; it is a different instrument, and this tutorial hit its edges three times in one afternoon. Stated plainly, with the actual outputs:</p>
+<ul>
+<li><b>It pads.</b> The first instructions draft produced a memory answer that spent two paragraphs narrating a file search that had found nothing before finally answering &ldquo;TypeScript&rdquo;. Scoping the instructions to the right source fixed it.</li>
+<li><b>It rounds numbers.</b> The first notes answer said the family &ldquo;covers over 100 languages and dialects&rdquo;; the note says 201. True, but imprecise &mdash; and the kind of drift that compounds if you let the agent summarise its own summaries.</li>
+<li><b>It invents provenance.</b> One draft cited a file called <code>favourite-language.md</code> that never existed, and the final draft still opens its recall with &ldquo;Based on the notes I found&rdquo; for a fact that came from the conversation. The fact was right in both cases; the citation was fiction.</li>
+</ul>
+<p>Three design rules follow, and they are the real lesson of the tutorial. First, scope instructions to sources: tell the model <em>which</em> source answers <em>which</em> question, and forbid invented citations explicitly. Second, put structured output behind a workflow, where code &mdash; not the model &mdash; decides the file, the format, and the citations. Third, keep a stronger model one line away: the agent file takes a hosted model with no other changes, so the 9B does the everyday work and the frontier model handles the job that has to be right.</p>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>You now have an agent that reads your files, remembers your conversations, and writes briefings on demand &mdash; and the only infrastructure it needs is a laptop with Ollama on it. The moving parts are small enough to hold in your head: one scaffold command, one provider package, two tools, one agent file, one workflow, one database file. The cost is $0 after a 6.5&nbsp;GB download, the data never leaves the machine, and every piece is replaceable &mdash; a bigger local model, a hosted model, a second agent, a scheduled run &mdash; without rewriting the rest. That is the shape local agents are converging on: frameworks like Mastra for the plumbing, open-weight models like Qwen3.5 for the reasoning, and your own files for the knowledge. Start with the notes folder you already have.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://mastra.ai/docs/getting-started/installation" rel="nofollow">Mastra: Get started with Mastra</a> — the quickstart: <code>npm create mastra@latest</code>, the default agent harness, and the framework integrations.</li><li><a href="https://mastra.ai/reference/cli/create-mastra" rel="nofollow">Mastra: create-mastra CLI reference</a> — the <code>--empty</code> scaffold, the <code>--llm</code> provider flags, <code>--no-skills</code> / <code>--no-git</code>, and the telemetry opt-out.</li><li><a href="https://mastra.ai/docs/agents/overview" rel="nofollow">Mastra: Agents</a> — the <code>Agent</code> class, <code>generate()</code> / <code>stream()</code>, and registration in the Mastra instance.</li><li><a href="https://mastra.ai/docs/tools/overview" rel="nofollow">Mastra: Tools</a> — <code>createTool</code>, Zod input/output schemas, and the <code>execute</code> signature.</li><li><a href="https://mastra.ai/docs/workflows/overview" rel="nofollow">Mastra: Workflows</a> — <code>createStep</code> / <code>createWorkflow</code>, <code>.then()</code> / <code>.commit()</code>, and running a workflow with <code>createRun()</code> / <code>start()</code>.</li><li><a href="https://mastra.ai/docs/memory/overview" rel="nofollow">Mastra: Memory</a> — the <code>Memory</code> class, LibSQL storage, and <code>resource</code> / <code>thread</code> addressing.</li><li><a href="https://mastra.ai/models/gateways/custom-gateways" rel="nofollow">Mastra: Custom model gateways</a> — private gateways for self-hosted models, the <code>gateway/provider/model</code> addressing, and the <code>url</code> alternative for single OpenAI-compatible endpoints.</li><li><a href="https://ollama.com/library/qwen3.5" rel="nofollow">Ollama: Qwen3.5</a> — the model family: sizes 0.8B–122B, hybrid Gated Delta Networks + MoE architecture, 201 languages, and the benchmark table.</li><li><a href="https://sdk.vercel.ai/providers/community-providers/ollama" rel="nofollow">Vercel AI SDK: Ollama</a> — the community Ollama providers, including <code>ollama-ai-provider-v2</code> and its default base URL <code>http://localhost:11434/api</code>.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="mastra-local-ollama-agent-tutorial"></div><div class="comments" data-comments="mastra-local-ollama-agent-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/vercel-ai-sdk-local-ollama-chat-tutorial/"><span class="chip">Tutorials</span><h3>Build a streaming AI chat app with the Vercel AI SDK and a local Ollama model — no API key needed</h3><div class="meta">November 14, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/google-adk-multi-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a multi-agent research team with Google&#x27;s ADK: researcher, writer, and guardrails, end to end</h3><div class="meta">November 18, 2026 · 19 min read</div></a><a class="rel-card" href="/articles/build-mcp-client-from-scratch-tutorial/"><span class="chip">Tutorials</span><h3>Build an MCP client from scratch: connect your own agent to any MCP server</h3><div class="meta">November 26, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/"><span class="chip">Tutorials</span><h3>Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</h3><div class="meta">November 23, 2026 · 15 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run Qwen3.5:9B?</h3><p>No, but you will want one. The 9B model needs about 6 GB of VRAM, and on an RTX 3090 the full verification run — tool call, memory test, and workflow — finished in about twelve seconds. On a CPU-only laptop the same model runs at a few tokens per second, which is usable for this tutorial but too slow for an agent loop that makes dozens of calls. If you have no GPU, pull qwen3.5:4b instead; nothing else in the tutorial changes.</p><h3>Why does the scaffold need a tsconfig change?</h3><p>The empty scaffold ships TypeScript 6.0.3 with a tsconfig that has no "types" field, and TypeScript 6 does not pick up the Node type definitions from @types/node on its own in this setup — npx tsc --noEmit fails with error TS2591: Cannot find name 'fs/promises'. Adding "types": ["node"] to compilerOptions fixes it. The Mastra CLI itself does not typecheck, so mastra dev works either way; the fix only matters if you run tsc.</p><h3>Can I swap the local model for a hosted one later?</h3><p>Yes, and it is a one-line change. Replace model: ollama('qwen3.5:9B') with a hosted model string such as 'openai/gpt-6.1-sol' (plus the provider package and API key), and the tools, memory, workflow, and Studio setup are unchanged. That is the main reason to start local: the plumbing is identical whichever model does the reasoning.</p><h3>Does Mastra need an account?</h3><p>No. The framework is free and open source under Apache 2.0, and the --empty scaffold never asks for anything. The CLI offers to connect your project to the Mastra platform during the default setup, but it is optional and this tutorial skips it. Mastra Gateway and Mastra Cloud are separate hosted products with their own pricing.</p><h3>What if the agent invents a citation?</h3><p>That is the known failure mode of a small local model, and this tutorial hit it twice: one draft cited a file that does not exist, and the final draft attributed a remembered fact to the notes when it came from the conversation. Scope the instructions so the model knows which source answers which question, forbid invented file names explicitly, and prefer workflow output — where code fixes the citations — over chat answers for anything that has to be right.</p></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
