@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Turn any document into LLM-ready Markdown: hands-on with Microsoft&#x27;s MarkItDown — AI Frontier Post</title>
+<meta name="description" content="MarkItDown is back on GitHub&#x27;s trending list — 198,000 stars for a tool that turns PDFs, Word docs, spreadsheets, and decks into clean Markdown. Install it, convert a whole folder in under a second, plug it into your coding agent as an MCP server, and know exactly where it falls short.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/microsoft-markitdown-document-to-markdown-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Turn any document into LLM-ready Markdown: hands-on with Microsoft's MarkItDown">
+<meta property="og:description" content="MarkItDown is back on GitHub&#x27;s trending list — 198,000 stars for a tool that turns PDFs, Word docs, spreadsheets, and decks into clean Markdown. Install it, convert a whole folder in under a second, plug it into your coding agent as an MCP server, and know exactly where it falls short.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/microsoft-markitdown-document-to-markdown-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/microsoft-markitdown-document-to-markdown-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-27">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Turn any document into LLM-ready Markdown: hands-on with Microsoft's MarkItDown", "description": "MarkItDown is back on GitHub's trending list — 198,000 stars for a tool that turns PDFs, Word docs, spreadsheets, and decks into clean Markdown. Install it, convert a whole folder in under a second, plug it into your coding agent as an MCP server, and know exactly where it falls short.", "datePublished": "2026-11-27", "dateModified": "2026-11-27", "author": {"@type": "Person", "name": "Priya Nair", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/microsoft-markitdown-document-to-markdown-tutorial/"}, "image": "https://aifrontierpost.com/articles/microsoft-markitdown-document-to-markdown-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key or a GPU?", "acceptedAnswer": {"@type": "Answer", "text": "No to both, for everything in this tutorial. The core converters run locally on CPU with no account. An API key only enters the picture if you choose the optional paths: LLM image descriptions, YouTube transcription, or the Azure Document Intelligence / Content Understanding backends — none of which this tutorial uses."}}, {"@type": "Question", "name": "How is MarkItDown different from Docling?", "acceptedAnswer": {"@type": "Answer", "text": "MarkItDown converts formats; Docling understands pages. MarkItDown is the lighter tool: one command, one Markdown file, no layout model. Docling parses PDF structure — tables, reading order, figure captions — and is the better choice when you are building an index you will answer questions from. For a single clean conversion, MarkItDown is faster and simpler."}}, {"@type": "Question", "name": "Why did my PDF table come out as plain text?", "acceptedAnswer": {"@type": "Answer", "text": "MarkItDown's PDF converter extracts text lines; it does not detect table structure, so a table's cells arrive as a flat sequence of values with no pipes or alignment. Spreadsheets, Word tables, and HTML tables do survive as Markdown tables. If your PDFs are table-heavy, convert them with Docling instead — or accept the flat text and let the model re-read it."}}, {"@type": "Question", "name": "Why did my image convert to an empty file?", "acceptedAnswer": {"@type": "Answer", "text": "Without an LLM client, image conversion only emits EXIF metadata, and only when the exiftool binary is installed — the metadata comes from exiftool, not from the file's own tags. With no exiftool and no LLM client, an image converts to empty output. Pass an OpenAI-compatible llm_client and llm_model to MarkItDown to get a generated description instead."}}, {"@type": "Question", "name": "Can my coding agent use MarkItDown directly?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, through the markitdown-mcp package: run markitdown-mcp and it serves one tool, convert_to_markdown, over stdio or Streamable HTTP. Point any MCP client at it and the agent can convert a file or URL to Markdown itself. The server has no authentication and runs with your privileges, so keep it on localhost and only feed it files you trust."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Turn any document into LLM-ready Markdown: hands-on with Microsoft&rsquo;s MarkItDown</h1>
+<p class="lede">MarkItDown is back on GitHub&rsquo;s trending list &mdash; 198,000 stars for a tool that turns PDFs, Word docs, spreadsheets, and decks into clean Markdown. Install it, convert a whole folder in under a second, plug it into your coding agent as an MCP server, and know exactly where it falls short.</p>
+<div class="byline"><span class="avatar">PN</span><span class="who"><b>Priya Nair</b><span>Research Editor · November 27, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> MarkItDown 0.1.9 converts PDFs, Word, Excel, PowerPoint, HTML, CSV, JSON, EPUB, and ZIP archives to Markdown with one command and no API key. This tutorial converts a folder of 11 mixed documents &mdash; 0.87 seconds through the Python API &mdash; then answers five questions from the resulting corpus with a 30-line stdlib search, and wires the same converter into an MCP server your coding agent can call. Two honest limits: PDF tables flatten to plain text, and images convert to empty output unless exiftool or an LLM client is configured.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>The project in one sentence:</b> Microsoft&rsquo;s MIT-licensed document-to-Markdown converter &mdash; 198,703 stars, 15,093 forks, 429 commits, created November 2024, version 0.1.9 released October 21, 2026, and on GitHub&rsquo;s Python trending list today.</li><li><b>The verified install:</b> <code>pip install &lsquo;markitdown[all]&rsquo;</code> gives 0.1.9 and a 454&nbsp;MB venv; the core formats alone (<code>[pdf,docx,pptx,xlsx]</code>) still take 366&nbsp;MB, dominated by pandas and onnxruntime. There is no slim build.</li><li><b>The formats that work:</b> PDF, Word, Excel, PowerPoint, HTML, CSV, JSON, EPUB, ZIP archives, plus images, audio, and YouTube URLs through optional web services.</li><li><b>The gotchas:</b> PDF tables arrive as flat text, PDF headings lose their <code>#</code> markers, DOCX tables gain an empty header row, and images yield empty output without exiftool or an LLM client.</li><li><b>The agent angle:</b> the <code>markitdown-mcp</code> package (0.0.1a8) serves exactly one tool, <code>convert_to_markdown</code>, over stdio &mdash; verified here with raw JSON-RPC, no SDK.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/microsoft-markitdown-document-to-markdown-tutorial/cover.webp" alt="A stack of office documents — PDF, spreadsheet, slides — flowing into a single clean Markdown file"><figcaption>Illustration generated for AI Frontier Post.</figcaption></figure>
+<div class="article-body">
+<p>Every RAG pipeline starts with the same unglamorous job: get the documents into text a model can read. The documents are never in one format. The policy is a PDF, the numbers are a spreadsheet, the roadmap is a deck, the meeting notes are a Word file, and the FAQ is an HTML page. The usual answer is a pile of one-off parsers, each with its own quirks, or a heavyweight layout engine for a job that should take one command.</p>
+<p>That is why MarkItDown keeps resurfacing. It is Microsoft&rsquo;s open-source converter that takes a file &mdash; almost any file &mdash; and returns Markdown. It is back on GitHub&rsquo;s Python trending list today, at 198,703 stars, two years after its first release, because the problem it solves has only grown: agents and RAG pipelines need clean text, and Markdown is the format models read best. This tutorial runs it end to end: install, one file, eleven files, a searchable corpus, and the MCP server that lets your coding agent do the converting itself. Every command and every output below was run, not copied from documentation &mdash; including the three places where the output is worse than you would expect, and what to do about each.</p>
+<h2 id="what-you-ll-need">What you&rsquo;ll need<a class="anchor" href="#what-you-ll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li><b>Python 3.10 to 3.14.</b> The README&rsquo;s supported range. Verified here with Python 3.12.3.</li>
+<li><b>About 450&nbsp;MB of free disk</b> for the full install, or about 370&nbsp;MB for the core formats. There is no slim build &mdash; pandas and onnxruntime dominate the footprint either way.</li>
+<li><b>No API key, no account, no GPU, no credit card.</b> The core converters run locally on CPU. A key only matters if you choose the optional Azure or LLM-backed paths, which this tutorial does not use.</li>
+<li><b>Optional: the <code>exiftool</code> binary</b>, if you want image files to yield anything. Without it, images convert to empty output &mdash; see Step&nbsp;3.</li>
+</ul>
+<h2 id="1-install-markitdown">1. Install MarkItDown<a class="anchor" href="#1-install-markitdown" aria-label="Link to section">#</a></h2>
+<p>Install the full package into a virtual environment. The <code>[all]</code> extra pulls in every format converter:</p>
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install 'markitdown[all]'
+markitdown --version</code></pre>
+<pre><code class="language-plaintext">markitdown 0.1.9</code></pre>
+<p>The install resolves to 0.1.9 and pulls roughly 70 packages &mdash; mammoth for Word, python-pptx for decks, openpyxl for spreadsheets, pdfminer and pdfplumber for PDFs, magika for file-type detection, and the Azure SDKs for the optional cloud backends. The resulting venv measures 454&nbsp;MB. If that is more than you want, install only the formats you need:</p>
+<pre><code class="language-bash">pip install 'markitdown[pdf,docx,pptx,xlsx]'</code></pre>
+<p>That still measures 366&nbsp;MB &mdash; pandas (80&nbsp;MB) and onnxruntime (78&nbsp;MB, magika&rsquo;s inference engine) dominate, and both arrive with the core package regardless of extras. The honest version: budget hundreds of megabytes either way; the per-format extras are not where the weight lives. The individual extras are <code>[pdf]</code>, <code>[docx]</code>, <code>[pptx]</code>, <code>[xlsx]</code>, <code>[xls]</code>, <code>[outlook]</code>, <code>[az-doc-intel]</code>, <code>[az-content-understanding]</code>, <code>[audio-transcription]</code>, and <code>[youtube-transcription]</code>.</p>
+<p>Check what you have before converting anything. The CLI&rsquo;s help lists every flag, including the cloud options you will not need:</p>
+<pre><code class="language-bash">markitdown --help
+markitdown --list-plugins</code></pre>
+<pre><code class="language-plaintext">Installed MarkItDown 3rd-party Plugins:
+
+  * No 3rd-party plugins installed.
+
+Find plugins by searching for the hashtag #markitdown-plugin on GitHub.</code></pre>
+<p>Plugins are off by default and loaded only with <code>--use-plugins</code>. One exists that matters for scanned documents: <code>markitdown-ocr</code> adds OCR to PDF, DOCX, PPTX, and XLSX using an LLM vision client. It was not exercised here &mdash; it needs an LLM API key &mdash; but it is the documented path when a PDF has no text layer.</p>
+<h2 id="2-convert-your-first-file">2. Convert your first file<a class="anchor" href="#2-convert-your-first-file" aria-label="Link to section">#</a></h2>
+<p>One file, one command. This is a one-page remote-work policy PDF, built for this tutorial with headings, a paragraph, and a three-row table:</p>
+<pre><code class="language-bash">markitdown remote-work-policy.pdf -o remote-work-policy.md
+cat remote-work-policy.md</code></pre>
+<pre><code class="language-plaintext">Acme Robotics — Remote Work Policy
+
+Effective January 1, 2026. Applies to all full-time staff.
+
+Eligibility
+Employees who have completed their 90-day probation may work remotely up to three days per week.
+Core hours are 10:00–15:00 Eastern, when everyone must be reachable on Slack.
+Equipment
+The company provides one laptop, one monitor, and a $500 home-office stipend per year. Receipts go
+to finance@acme.example.
+
+Approved stipend amounts
+
+Item
+
+Laptop
+
+Monitor
+
+Annual allowance
+
+$2,400
+
+$400
+
+Home-office stipend
+
+$500</code></pre>
+<p>The text is all there, and that is the good news. The bad news is visible in the same output. The headings &ldquo;Eligibility&rdquo; and &ldquo;Equipment&rdquo; arrive as plain lines, not <code>#</code> headings &mdash; a PDF has no heading structure to preserve, only positioned text. And the stipend table is gone as a table: its eight cells arrive as a flat sequence of values with no pipes, no alignment, no rows. That is the PDF converter&rsquo;s real limit, and it shapes everything in Step&nbsp;3: MarkItDown extracts PDF <em>text</em>; it does not understand PDF <em>layout</em>. If your PDFs are table-heavy, this is the wrong tool for them &mdash; the alternatives section names the right one.</p>
+<p>Two more invocations worth knowing. The CLI reads from stdin when no filename is given, with <code>-x</code> hinting the format:</p>
+<pre><code class="language-bash">cat remote-work-policy.pdf | markitdown -x pdf &gt; remote-work-policy.md
+markitdown report.pdf &gt; report.md</code></pre>
+<p>Both work; the stdin form returned the same 527 characters as the file form. Expect each CLI invocation to take about 1.6 seconds, most of it interpreter startup and imports &mdash; the conversion itself is milliseconds. That startup cost is why the batch path in Step&nbsp;4 matters.</p>
+<h2 id="3-what-each-format-actually-produces">3. What each format actually produces<a class="anchor" href="#3-what-each-format-actually-produces" aria-label="Link to section">#</a></h2>
+<p>To see the converter honestly, convert eleven files at once: a PDF, a Word document, a spreadsheet, a deck, an HTML page, a CSV, a JSON file, an EPUB, a ZIP archive, a PNG, and a plain text file. All eleven were built for this tutorial with known content, so every output below can be checked against its input. Each CLI call took 1.6&ndash;1.9 seconds, except the HTML file at 4.6 seconds. Here is what came out:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>File</th><th>What survived</th><th>What did not</th></tr></thead>
+<tbody>
+<tr><td><code>remote-work-policy.pdf</code></td><td>All text, in order</td><td>Headings unmarked; table flattened to bare values</td></tr>
+<tr><td><code>sprint-41-notes.docx</code></td><td>Headings as <code>#</code>, bullets, table as Markdown table</td><td>An empty row appears above the header row</td></tr>
+<tr><td><code>q3-sales.xlsx</code></td><td>Full table, including the totals row</td><td>Number formatting: 184500, not 184,500</td></tr>
+<tr><td><code>roadmap-2027.pptx</code></td><td>Slide titles as <code>#</code>, body text, slide order</td><td>Nothing structural; slide numbers arrive as HTML comments</td></tr>
+<tr><td><code>faq.html</code></td><td>Headings, paragraphs, table &mdash; the cleanest output of the set</td><td>Nothing</td></tr>
+<tr><td><code>customers.csv</code></td><td>Full table with header row</td><td>Nothing</td></tr>
+<tr><td><code>config.json</code></td><td>Passed through verbatim</td><td>No code fence; raw JSON, not Markdown</td></tr>
+<tr><td><code>handbook.epub</code></td><td>Title/language metadata, headings, lists</td><td>Nothing</td></tr>
+<tr><td><code>archive.zip</code></td><td>Each entry converted under a <code>## File:</code> heading</td><td>Nothing</td></tr>
+<tr><td><code>logo.png</code></td><td>&mdash;</td><td>Empty output: no EXIF, no LLM client</td></tr>
+<tr><td><code>readme.txt</code></td><td>Passed through verbatim</td><td>Nothing</td></tr>
+</tbody>
+</table></div>
+<p>Three of those rows deserve a closer look, because they are the difference between a tutorial that works and one that quietly misleads.</p>
+<p><b>The DOCX table quirk is real.</b> The Word file&rsquo;s action-items table has a header row (Owner / Task / Due) and two data rows. The output keeps every cell, but renders the header as an empty first row and the header text as a body row:</p>
+<pre><code class="language-plaintext">|  |  |  |
+| --- | --- | --- |
+| Owner | Task | Due |
+| Priya | Draft the launch announcement | Nov 28 |
+| Marcus | Update the pricing FAQ | Dec 1 |</code></pre>
+<p>This reproduced with a second, plain two-by-two table built with no styling at all, so it is the converter&rsquo;s behavior, not the fixture. Nothing is lost &mdash; every cell is present &mdash; but a downstream parser that trusts the first row as the header will read an empty header. Check DOCX table output before indexing it.</p>
+<p><b>The spreadsheet is the best-behaved format.</b> The Q3 sales sheet came back as a clean Markdown table with the totals row intact:</p>
+<pre><code class="language-plaintext">## Q3 Sales
+| Region | Units | Revenue USD |
+| --- | --- | --- |
+| North | 412 | 184500 |
+| South | 388 | 171200 |
+| East | 521 | 233800 |
+| West | 296 | 129400 |
+| Total | 1617 | 718900 |</code></pre>
+<p>Only the thousands separators are gone. The deck behaved similarly well: each slide&rsquo;s title became a <code>#</code> heading, the body text followed, and the slide number arrived as an HTML comment (<code>&lt;!-- Slide number: 1 --&gt;</code>). The ZIP archive iterated its contents, converting the text file and the CSV inside it under separate <code>## File:</code> headings. The EPUB emitted its metadata as bold fields (Title, Language, Identifier) and then the chapter content with headings and lists intact.</p>
+<p><b>Images need help.</b> The PNG converted to zero characters. A JPEG with EXIF tags written in &mdash; ImageDescription, Make, Orientation &mdash; also converted to empty output. The cause is in the converter&rsquo;s source: image metadata comes from the <code>exiftool</code> binary, and this machine does not have it installed. Without exiftool, the metadata step returns nothing; without an LLM client, there is no description step either, so the result is empty. With an LLM client configured (<code>MarkItDown(llm_client=client, llm_model="gpt-4o")</code>), the converter asks the model to describe the image instead. That path needs an API key and was not exercised here. The rule for your pipeline: never assume an image file produced text. Check the output length, and treat empty results as &ldquo;no text extracted&rdquo;, not as an error.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/microsoft-markitdown-document-to-markdown-tutorial/img2.webp" alt="Diagram of eleven file formats — PDF, Word, spreadsheet, slides, HTML, CSV, JSON, EPUB, ZIP, image — converting into Markdown files"><figcaption>Diagram: eleven formats in, one Markdown corpus out. Generated for AI Frontier Post.</figcaption></figure>
+<h2 id="4-batch-convert-a-folder-with-the-python-api">4. Batch-convert a folder with the Python API<a class="anchor" href="#4-batch-convert-a-folder-with-the-python-api" aria-label="Link to section">#</a></h2>
+<p>The CLI&rsquo;s 1.6-second startup is fine for one file and wasteful for a hundred. The Python API keeps one process and converts the whole folder. This script converts every file in <code>docs/</code> into <code>corpus/</code>:</p>
+<pre><code class="language-python">from pathlib import Path
+from markitdown import MarkItDown
+
+DOCS = Path("docs")
+CORPUS = Path("corpus")
+CORPUS.mkdir(exist_ok=True)
+
+md = MarkItDown(enable_plugins=False)
+for f in sorted(DOCS.iterdir()):
+    result = md.convert(str(f))
+    (CORPUS / (f.stem + ".md")).write_text(result.markdown)</code></pre>
+<p>The measured result on this machine: all 11 files in 0.87 seconds total. The slowest single file was the Word document at 0.47 seconds; the PDF took 0.17 seconds; everything else took 0.08 seconds or less. Compare that with roughly 19 seconds to run the same eleven files through eleven CLI invocations. If you are building an ingestion step, use the API.</p>
+<p>Two API details matter. First, <code>convert()</code> accepts local paths, remote URIs, and byte streams; it is intentionally permissive. If your application only ever reads local files, call the narrower <code>convert_local()</code> instead &mdash; the README&rsquo;s security section recommends it, and it returns identical output for local files (verified here: the Q3 total, 718900, is present in both). Second, <code>MarkItDown(enable_plugins=False)</code> is the default posture: third-party plugins stay off unless you opt in. If you run this on files you did not write, sanitize the inputs first &mdash; the converter runs with your process&rsquo;s privileges and will fetch remote URIs you hand it.</p>
+<h2 id="5-ask-questions-of-the-corpus">5. Ask questions of the corpus<a class="anchor" href="#5-ask-questions-of-the-corpus" aria-label="Link to section">#</a></h2>
+<p>Conversion is only half the job; the point is to answer questions from the result. Before reaching for embeddings, prove the corpus contains the answers with the simplest possible search &mdash; a keyword scan over the Markdown files:</p>
+<pre><code class="language-python">QUESTIONS = {
+    "When is the onboarding flow launch?": ["december 2"],
+    "What is the Q3 total revenue?": ["718900", "total"],
+    "What is the refund window?": ["refund", "30 days"],
+    "What is the home-office stipend?": ["stipend", "500"],
+    "What is the uptime in the archive?": ["uptime", "99.95"],
+}
+
+for question, keys in QUESTIONS.items():
+    hits = []
+    for mdfile in sorted(CORPUS.glob("*.md")):
+        for line in mdfile.read_text(errors="replace").splitlines():
+            if all(k.lower() in line.lower() for k in keys):
+                hits.append((mdfile.name, line.strip()))
+    print(f"Q: {question}")
+    for src, line in hits[:3]:
+        print(f"   [{src}] {line[:120]}")</code></pre>
+<p>All five questions answer correctly from the corpus:</p>
+<pre><code class="language-plaintext">Q: When is the onboarding flow launch?
+   [archive.md] Inside the archive: the launch date is December 2, 2026.
+   [sprint-41-notes.md] * Ship the new onboarding flow on December 2.
+Q: What is the Q3 total revenue?
+   [q3-sales.md] | Total | 1617 | 718900 |
+   [readme.md] The Q3 total revenue is 718900 USD.
+Q: What is the refund window?
+   [faq.md] Refunds are available within 30 days of purchase, no questions asked.
+Q: What is the home-office stipend?
+   [remote-work-policy.md] The company provides one laptop, one monitor, and a $500 home-office stipend per year.
+Q: What is the uptime in the archive?
+   [archive.md] | uptime | 99.95 |</code></pre>
+<p>One lesson from building this: the first version of the launch question used the keywords <code>["launch", "onboarding"]</code> and returned zero hits, because no single line contains both words &mdash; the sprint notes say &ldquo;Ship the new onboarding flow&rdquo; and the archive note says &ldquo;the launch date is&rdquo;. Requiring every keyword on one line is brittle; distinctive single keywords, or matching across the whole file instead of per line, work better. That is also the honest limit of this demo: keyword search proves the corpus is complete, but a real RAG pipeline wants chunking and embeddings on top. The conversion step is what MarkItDown owns; the retrieval step is yours.</p>
+<h2 id="6-give-your-agent-the-same-power-the-mcp-server">6. Give your agent the same power: the MCP server<a class="anchor" href="#6-give-your-agent-the-same-power-the-mcp-server" aria-label="Link to section">#</a></h2>
+<p>MarkItDown also ships as an MCP server, in the <code>markitdown-mcp</code> package. It exposes exactly one tool &mdash; <code>convert_to_markdown</code> &mdash; which takes any <code>http:</code>, <code>https:</code>, <code>file:</code>, or <code>data:</code> URI and returns Markdown. Install it and start it:</p>
+<pre><code class="language-bash">pip install markitdown-mcp
+markitdown-mcp</code></pre>
+<p>That starts the server on stdio. The installed version is 0.0.1a8, and it speaks MCP over the same protocol your coding agent does. To verify it without an agent at all, send it raw JSON-RPC over stdin. This is the actual exchange from this machine:</p>
+<pre><code class="language-json">{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+  "protocolVersion": "2025-03-26", "capabilities": {},
+  "clientInfo": {"name": "afp-verify", "version": "0.1.0"}}}
+→ {"jsonrpc": "2.0", "id": 1, "result": {
+  "protocolVersion": "2025-03-26",
+  "serverInfo": {"name": "markitdown", "version": ""},
+  "capabilities": {"tools": {"listChanged": false}, ...}}}
+
+{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+→ {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{
+  "name": "convert_to_markdown",
+  "description": "Convert a resource described by an http:, https:, file: or data: URI to markdown",
+  "inputSchema": {"type": "object",
+    "properties": {"uri": {"type": "string", "title": "Uri"}},
+    "required": ["uri"]}}]}}
+
+{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+  "name": "convert_to_markdown",
+  "arguments": {"uri": "file:///var/tmp/mid-work/docs/q3-sales.xlsx"}}}
+→ {"jsonrpc": "2.0", "id": 3, "result": {"content": [{
+  "type": "text",
+  "text": "## Q3 Sales\n| Region | Units | Revenue USD |\n| --- | --- | --- |\n| North | 412 | 184500 |\n... | Total | 1617 | 718900 |"}]}}</code></pre>
+<p>The server answers with the same Markdown the CLI produces &mdash; the spreadsheet table, totals row included. A second call with the PDF&rsquo;s <code>file://</code> URI returned the same policy text as Step&nbsp;2. To use it from a real client instead of a hand-rolled one, add it to your MCP configuration. For Claude Desktop, the project README documents the Docker form:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "markitdown": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "markitdown-mcp:latest"]
+    }
+  }
+}</code></pre>
+<p>Mount a directory with <code>-v /home/user/data:/workdir</code> if the agent needs local files; without the mount, the container can only convert remote URIs. The server also runs over Streamable HTTP and SSE with <code>markitdown-mcp --http --host 127.0.0.1 --port 3001</code>, and the MCP Inspector (<code>npx @modelcontextprotocol/inspector</code>) connects to either transport. Two security facts from the package README, stated plainly: the server has no authentication, and it runs with the privileges of the user who started it, so the tool can read any file that user can read. Keep it on localhost, keep it local-only, and do not bind it to another interface.</p>
+<figure class="inline-art"><img class="story-image" src="/articles/microsoft-markitdown-document-to-markdown-tutorial/img3.webp" alt="Diagram of a coding agent calling the MarkItDown MCP server, which converts a document and returns Markdown"><figcaption>Diagram: one tool, any URI in, Markdown out. Generated for AI Frontier Post.</figcaption></figure>
+<h2 id="when-to-use-this-vs-alternatives">When to use this vs alternatives<a class="anchor" href="#when-to-use-this-vs-alternatives" aria-label="Link to section">#</a></h2>
+<p>Four tools cover this space, and the right one depends on what your documents demand:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Tool</th><th>What it does best</th><th>Use it when</th></tr></thead>
+<tbody>
+<tr><td><b>MarkItDown</b> (this tutorial)</td><td>One command, many formats, Markdown out</td><td>You need clean text fast and your documents are mostly Office files, HTML, and CSVs</td></tr>
+<tr><td><b>Docling</b></td><td>Understands PDF pages: tables, reading order, layout</td><td>Your PDFs are table-heavy or scanned, or you are building an index you will cite from</td></tr>
+<tr><td><b>Pandoc</b></td><td>Converts between markup formats with fine control</td><td>You already live in Pandoc&rsquo;s world and need format-to-format fidelity, not LLM ingestion</td></tr>
+<tr><td><b>Azure Document Intelligence / Content Understanding</b></td><td>Cloud layout analysis, OCR, structured field extraction</td><td>You have an Azure account and need fields (invoice amounts, dates) or scanned-document quality</td></tr>
+</tbody>
+</table></div>
+<p>The practical rule: MarkItDown is the default for mixed Office and web documents. Reach for Docling when the PDF converter&rsquo;s flat-text output starts costing you answers &mdash; the blog&rsquo;s <a href="/articles/docling-pdf-markdown-rag-tutorial/">Docling tutorial</a> covers that path with the same fixture discipline. Reach for Azure when you need structured fields or scanned pages at scale; MarkItDown itself can route files to those backends with <code>--use-docintel</code> or <code>--use-cu</code> if you have the endpoints, which keeps one tool in front of two engines.</p>
+<h2 id="what-it-gets-wrong">What it gets wrong<a class="anchor" href="#what-it-gets-wrong" aria-label="Link to section">#</a></h2>
+<p>Stated plainly, with the outputs to back each one:</p>
+<ul>
+<li><b>PDF tables flatten.</b> The PDF converter extracts text lines and never reconstructs table structure. A table&rsquo;s cells arrive in reading order with no rows or columns. If the table is the data, use Docling or the Azure backend.</li>
+<li><b>PDF structure is lost.</b> Headings, lists, and emphasis in a PDF come out as undifferentiated lines. The Markdown is still searchable, but a chunker that relies on headings will find none.</li>
+<li><b>DOCX tables gain an empty header row.</b> Reproduced twice: the header text lands in the first body row and an empty row sits above it. Check the output before indexing.</li>
+<li><b>Images are empty without help.</b> No exiftool binary and no LLM client means zero characters out. Install exiftool for metadata, or configure an LLM client for descriptions.</li>
+<li><b>Numbers lose formatting.</b> Spreadsheet values arrive unformatted (184500, not 184,500). Harmless for a model, worth knowing for a human reader.</li>
+<li><b>Not tested here:</b> YouTube transcription, audio transcription, the Azure backends, LLM image descriptions, and the <code>markitdown-ocr</code> plugin. All exist in the README; all need an account, a key, or a service this sandbox does not have. Treat them as documented options, not verified steps.</li>
+</ul>
+<h2 id="the-takeaway">The takeaway<a class="anchor" href="#the-takeaway" aria-label="Link to section">#</a></h2>
+<p>You now have the whole ingestion step in one tool: install MarkItDown, point it at a folder, and get back a Markdown corpus your retriever can actually use &mdash; eleven files in under a second through the Python API, five test questions answered from the result, and the same converter available to your coding agent as a one-tool MCP server. The cost is $0, no key, no GPU, and about 450&nbsp;MB of disk. The limits are specific and checkable: PDF tables flatten, DOCX tables gain an empty header row, images need exiftool or an LLM. None of them is a reason not to use it; all of them are reasons to check the output before you index it. Start with the folder of documents you already have &mdash; that is the corpus your next RAG pipeline is waiting for.</p>
+<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to section">#</a></h2>
+<ul><li><a href="https://github.com/microsoft/markitdown" rel="nofollow">Microsoft MarkItDown on GitHub</a> — the README: supported formats, installation, CLI flags, Python API, Docker, plugins, and security considerations. Stars, forks, and commit counts observed November 27, 2026.</li><li><a href="https://github.com/microsoft/markitdown/releases/tag/v0.1.9" rel="nofollow">MarkItDown 0.1.9 release notes</a> — published October 21, 2026; changelog v0.1.8 to v0.1.9.</li><li><a href="https://github.com/microsoft/markitdown/tree/main/packages/markitdown-mcp" rel="nofollow">markitdown-mcp package README</a> — the MCP server: one tool (<code>convert_to_markdown</code>), stdio and Streamable HTTP transports, Docker form, Claude Desktop configuration, and the localhost-only security note.</li><li><a href="https://pypi.org/project/markitdown/" rel="nofollow">MarkItDown on PyPI</a> — package 0.1.9 and the optional-dependency extras.</li></ul>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="microsoft-markitdown-document-to-markdown-tutorial"></div><div class="comments" data-comments="microsoft-markitdown-document-to-markdown-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/docling-pdf-markdown-rag-tutorial/"><span class="chip">Tutorials</span><h3>From messy PDFs to structured Markdown your retriever can cite: a hands-on guide to Docling</h3><div class="meta">October 27, 2026 · 18 min read</div></a><a class="rel-card" href="/articles/mastra-local-ollama-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a local AI agent with Mastra and Ollama: no API key, no cloud</h3><div class="meta">November 27, 2026 · 20 min read</div></a><a class="rel-card" href="/articles/qmd-local-search-engine-tutorial/"><span class="chip">Tutorials</span><h3>QMD: turn your notes and docs into a local hybrid search engine your coding agent can query</h3><div class="meta">November 19, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/"><span class="chip">Tutorials</span><h3>Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</h3><div class="meta">November 23, 2026 · 15 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key or a GPU?</h3><p>No to both, for everything in this tutorial. The core converters run locally on CPU with no account. An API key only enters the picture if you choose the optional paths: LLM image descriptions, YouTube transcription, or the Azure Document Intelligence / Content Understanding backends — none of which this tutorial uses.</p><h3>How is MarkItDown different from Docling?</h3><p>MarkItDown converts formats; Docling understands pages. MarkItDown is the lighter tool: one command, one Markdown file, no layout model. Docling parses PDF structure — tables, reading order, figure captions — and is the better choice when you are building an index you will answer questions from. For a single clean conversion, MarkItDown is faster and simpler.</p><h3>Why did my PDF table come out as plain text?</h3><p>MarkItDown's PDF converter extracts text lines; it does not detect table structure, so a table's cells arrive as a flat sequence of values with no pipes or alignment. Spreadsheets, Word tables, and HTML tables do survive as Markdown tables. If your PDFs are table-heavy, convert them with Docling instead — or accept the flat text and let the model re-read it.</p><h3>Why did my image convert to an empty file?</h3><p>Without an LLM client, image conversion only emits EXIF metadata, and only when the exiftool binary is installed — the metadata comes from exiftool, not from the file's own tags. With no exiftool and no LLM client, an image converts to empty output. Pass an OpenAI-compatible llm_client and llm_model to MarkItDown to get a generated description instead.</p><h3>Can my coding agent use MarkItDown directly?</h3><p>Yes, through the markitdown-mcp package: run markitdown-mcp and it serves one tool, convert_to_markdown, over stdio or Streamable HTTP. Point any MCP client at it and the agent can convert a file or URL to Markdown itself. The server has no authentication and runs with your privileges, so keep it on localhost and only feed it files you trust.</p></section>
+</div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
