@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Stop blaming the model: evaluate your RAG retriever with Evret’s no-LLM IR metrics — AI Frontier Post</title>
+<meta name="description" content="Your RAG answers are wrong and the model is innocent — the retriever never fetched the passage with the answer. This tutorial builds a 24-document eval set, scores a BM25 retriever with Hit Rate, Recall, MRR and nDCG in pure stdlib Python, then runs the same eval through Evret 0.0.4 — no model calls, no API key — and wires it into a CI gate that fails the build when retrieval regresses.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Stop blaming the model: evaluate your RAG retriever with Evret’s no-LLM IR metrics">
+<meta property="og:description" content="Your RAG answers are wrong and the model is innocent — the retriever never fetched the passage with the answer. This tutorial builds a 24-document eval set, scores a BM25 retriever with Hit Rate, Recall, MRR and nDCG in pure stdlib Python, then runs the same eval through Evret 0.0.4 — no model calls, no API key — and wires it into a CI gate that fails the build when retrieval regresses.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop blaming the model: evaluate your RAG retriever with Evret’s no-LLM IR metrics", "description": "Your RAG answers are wrong and the model is innocent — the retriever never fetched the passage with the answer. This tutorial builds a 24-document eval set, scores a BM25 retriever with Hit Rate, Recall, MRR and nDCG in pure stdlib Python, then runs the same eval through Evret 0.0.4 — no model calls, no API key — and wires it into a CI gate that fails the build when retrieval regresses.", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "author": {"@type": "Person", "name": "Marcus Doyle", "url": "https://aifrontierpost.com/about/"}, "publisher": {"@type": "Organization", "name": "AI Frontier Post", "url": "https://aifrontierpost.com", "logo": {"@type": "ImageObject", "url": "https://aifrontierpost.com/assets/og-card.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://aifrontierpost.com/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/"}, "image": "https://aifrontierpost.com/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an API key or a GPU for any of this?", "acceptedAnswer": {"@type": "Answer", "text": "No. Steps 2–6 are pure standard-library Python, and Evret's ID-based path makes zero model calls — it compares document IDs. Only the SemanticJudge and LLMJudge paths need a model or a key."}}, {"@type": "Question", "name": "How many eval questions do I need?", "acceptedAnswer": {"@type": "Answer", "text": "Thirteen is a smoke test: enough to learn the method and catch a gross regression. Before gating a deploy on these numbers, grow the set to a hundred or more real questions, pulled from your actual user logs where you can — synthetic questions are too clean and hide the messy phrasing that breaks retrieval."}}, {"@type": "Question", "name": "Why is Precision@5 only 0.215 when Hit Rate is 1.000?", "acceptedAnswer": {"@type": "Answer", "text": "Because with one relevant document per query, at most one of the five returned documents can be relevant — 1 out of 5 is 0.20. The average lands at 0.215 only because one query has two gold documents. Precision falls as k grows for the same reason: the denominator grows while the numerator cannot. Compare Precision only at the same k."}}, {"@type": "Question", "name": "Can Evret evaluate my vector retriever, or my Qdrant / LangChain setup?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Evret ships retrievers for Qdrant, Chroma, Elasticsearch, Milvus and Weaviate, plus adapters for LangChain, LlamaIndex and Haystack. Anything else is one subclass of BaseRetriever with a retrieve(query, k) method, as in Step 7."}}, {"@type": "Question", "name": "What if I don't have gold document IDs?", "acceptedAnswer": {"@type": "Answer", "text": "Put the expected answer text in expected_answers instead and let a judge decide whether each retrieved document matches it. TokenOverlapJudge matches on token overlap with no model; SemanticJudge compares embeddings; LLMJudge asks a provider model. The ID path is the one to prefer whenever you can label IDs — it is free, deterministic and exactly reproducible."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Stop blaming the model: evaluate your RAG retriever with Evret’s no-LLM IR metrics</h1>
+<p class="lede">Your RAG answers are wrong and the model is innocent — the retriever never fetched the passage with the answer. This tutorial builds a 24-document eval set, scores a BM25 retriever with Hit Rate, Recall, MRR and nDCG in pure stdlib Python, then runs the same eval through Evret 0.0.4 — no model calls, no API key — and wires it into a CI gate that fails the build when retrieval regresses.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 28, 2026 · 21 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> Kaivid Labs released Evret yesterday — classic IR metrics for your RAG retriever, no LLM calls, no API key. This tutorial builds a 24-document eval set, scores a BM25 retriever with Hit Rate, Recall, Precision, MRR and nDCG in pure stdlib Python (Hit Rate@5 1.000, nDCG@5 0.858), shows where it breaks on reworded questions (nDCG 0.546), runs the same eval through Evret 0.0.4, and wires it into a CI gate.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Evret scores any retriever with classic IR metrics and no model calls</b> — when questions carry gold document IDs, the judge is never invoked.</li><li><b>Five metrics, one cutoff:</b> Hit Rate, Recall, Precision, MRR and nDCG at k. The k-sweep says k=3 is the honest cutoff here — Hit Rate jumps 0.615 → 1.000 from k=1 to k=3, then goes flat.</li><li><b>The naive baseline ties BM25 on clean questions</b> (MRR 0.859 vs 0.808) and collapses on paraphrases (nDCG 0.355 vs 0.546) — measure on reworded queries, not clean ones.</li><li><b>Evret 0.0.4:</b> Kaivid Labs, MIT, Python 3.10+, on PyPI since 2026-10-30. One <code>BaseRetriever</code> subclass adapts any retriever; Qdrant, Chroma, Elasticsearch, Milvus and Weaviate retrievers plus LangChain, LlamaIndex and Haystack adapters included.</li><li><b>Gate it:</b> Hit Rate@5 ≥ 0.90 and nDCG@5 ≥ 0.80 in CI. The exact gate passes; the paraphrase gate fails — and that failure is the backlog.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/cover.webp" alt="A magnifying glass over a glowing stack of ranked documents with a green checkmark and a bar chart"><figcaption>AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Your RAG pipeline gives a wrong answer, and the first suspect is the language model. It usually is not. More often the retriever never fetched the passage that contains the answer, and no model — however large — can quote a document it was never shown. The fix is not a bigger model. It is measuring the retriever, the way information retrieval has been measured for decades: with Hit Rate, Recall, Precision, MRR, and nDCG.</p>
+<p>That is what Evret does. Kaivid Labs released it yesterday — version 0.0.4 on PyPI, MIT-licensed, Python 3.10+ — as a small library that scores any retriever against a labelled set of questions and gold documents, using classic IR metrics and no language model at all. When your questions carry gold document IDs, Evret never calls a judge: the score is a pure comparison of IDs, which makes it free, deterministic, and exactly reproducible. You can run it in CI on every push, and you can run it on a laptop with no API key and no GPU.</p>
+<p>This tutorial builds the whole thing twice. First, a self-contained standard-library implementation — a BM25 retriever, the five metrics, a 24-document eval set — so you see exactly what every number means and can verify every line by running it. Then the same evaluation through Evret's documented API, so the stdlib version becomes a cross-check and Evret becomes the tool you keep. Every number below was measured by running the code in the steps, on this machine, against the corpus in Step 2.</p>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li>Python 3.10 or newer. Everything in Steps 2–6 uses the standard library only — no installs at all.</li>
+<li><code>pip install evret==0.0.4</code> for Step 7 only. The base install pulls in <code>qdrant-client</code> and <code>tqdm</code>; the Qdrant, Chroma, Elasticsearch, Milvus, Weaviate, LangChain, LlamaIndex, and Haystack integrations are optional extras you install only if you use them.</li>
+<li>No API key, no account, no GPU, no model download. The evaluation in this tutorial makes zero model calls.</li>
+<li>About thirty minutes, most of it reading. The code is under 250 lines and every block below runs as written.</li>
+</ul>
+<p>One scope note before you start: this tutorial evaluates <em>retrieval</em> — whether the right documents come back. It does not evaluate generation — whether the final answer is correct, faithful, or well-written. That is a different eval, and it usually needs a judge. Retrieval eval is the cheaper, more decisive half: if the retriever is wrong, the generator cannot save it, and if the retriever is right, half your RAG debugging is already done.</p>
+
+<h2 id="1-the-idea">Step 1 — The idea: five numbers that describe a retriever<a class="anchor" href="#1-the-idea" aria-label="Link to section">#</a></h2>
+<p>A retriever takes a question and returns a ranked list of documents. An eval set says, for each question, which documents count as correct. The five metrics each answer a different question about that ranked list:</p>
+<ul>
+<li><strong>Hit Rate@k</strong> — did any correct document appear in the top k? This is the bluntest metric and the one to watch first: it tells you whether the answer was retrievable at all.</li>
+<li><strong>Recall@k</strong> — what fraction of the correct documents appeared in the top k? With one gold document per question, Recall@k equals Hit Rate@k; it only diverges when a question has several gold documents.</li>
+<li><strong>Precision@k</strong> — what fraction of the top k were correct? Precision falls as k grows, because the denominator grows while the number of correct documents does not. Compare Precision only at the same k.</li>
+<li><strong>MRR@k (Mean Reciprocal Rank)</strong> — how high did the first correct document rank? A correct document at rank 1 scores 1.0; at rank 2, 0.5; at rank 5, 0.2. MRR is the metric that cares most about the top of the list, which is where your generator reads.</li>
+<li><strong>nDCG@k (normalised Discounted Cumulative Gain)</strong> — the same idea as MRR, but it credits every correct document, discounted by how deep it sits, and normalises against the best possible ranking. nDCG is the metric to quote when someone asks for one number: it rewards both finding the documents and ranking them well.</li>
+</ul>
+<p>The <code>@k</code> is the cutoff: how many documents you look at. Your generator typically reads the top 3–5, so k=5 is the natural default — but the k-sweep in Step 5 shows why you should measure at several cutoffs before choosing one. A retriever that needs k=10 to find the answer is a different system from one that finds it at k=1, even if their Hit Rate@10 is identical.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/img2.webp" alt="Four-panel pipeline diagram: a folder of documents, a funnel ranking them, metric gauges and bars, and a green pass-fail gate"><figcaption>The pipeline: build an eval set, run the retriever, score it with IR metrics, gate the deploy on the scores. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+
+<h2 id="2-build-the-eval-set">Step 2 — Build the eval set<a class="anchor" href="#2-build-the-eval-set" aria-label="Link to section">#</a></h2>
+<p>An eval set is three things: documents, questions, and gold labels saying which documents answer each question. The corpus here is a 24-document IT helpdesk — password resets, VPN setup, printer jams, laptop requests — written in the flat, overlapping language real helpdesk docs use. Overlap is a feature, not a flaw: a corpus where every document uses distinct vocabulary teaches you nothing, because any retriever aces it. The hard cases in this corpus come from documents that share words — a password-reset doc and a VPN-password-expired doc that both describe the sign-in page, a printer-setup doc and a printer-jam doc that both say "printer".</p>
+<p>Thirteen questions cover the corpus, each with one gold document — except q13, which has two, because a fast-draining battery is answered by both the battery doc and the repair doc. Six paraphrases reword six of the questions the way users actually write them ("I forgot my login password", "the printer ate my paper"), and they live in a separate list: you measure on the clean questions first, then stress-test on the paraphrases in Step 6. Save this as <code>retrieval_eval.py</code> — the whole tutorial lives in this one file, and every later step adds to it:</p>
+<pre><code class="language-python">&quot;&quot;&quot;retrieval_eval.py -- evaluate a RAG retriever with classic IR metrics.
+
+No dependencies beyond the standard library. The corpus is a 24-document
+IT helpdesk, small enough to read in one sitting and realistic enough that
+the numbers mean something. Run it:
+
+    python3 retrieval_eval.py
+
+It prints Hit Rate, Recall, Precision, MRR and nDCG for a BM25 retriever
+at k = 1, 3, 5 and 10, the same table for a naive token-overlap baseline,
+and a paraphrase run that rewords six of the queries.
+&quot;&quot;&quot;
+
+import json
+import math
+import re
+from collections import Counter
+
+# ---------------------------------------------------------------- data
+
+DOCUMENTS = [
+    {&quot;doc_id&quot;: &quot;password-reset&quot;,
+     &quot;text&quot;: &quot;Reset your password from the sign-in page. Click Forgot password, enter your work email, and open the reset link we send you. The link expires after 30 minutes. If the link has expired, request a new one and use the newest email.&quot;},
+    {&quot;doc_id&quot;: &quot;password-manager&quot;,
+     &quot;text&quot;: &quot;Store work passwords in the company password manager. The manager generates a strong password for each service and fills it in for you. Never reuse your email password on another site. Your vault unlocks with your single sign-on.&quot;},
+    {&quot;doc_id&quot;: &quot;vpn-setup&quot;,
+     &quot;text&quot;: &quot;Connect to the VPN before opening internal tools from outside the office. Download the VPN client from the IT portal, sign in with single sign-on, and pick the nearest gateway. If the tunnel drops, reconnect and wait for the green status icon.&quot;},
+    {&quot;doc_id&quot;: &quot;vpn-slow&quot;,
+     &quot;text&quot;: &quot;A slow VPN connection is usually a crowded gateway or a weak home network. Switch to the nearest gateway, close video calls you are not using, and test again. If speeds stay low, run a speed test and send the result to the helpdesk.&quot;},
+    {&quot;doc_id&quot;: &quot;printer-jam&quot;,
+     &quot;text&quot;: &quot;Clear a paper jam in your printer by opening the rear panel and pulling the sheet in the direction of the paper path. Never yank the paper sideways -- torn fragments cause repeat jams in the printer. Close the panel and print a test page.&quot;},
+    {&quot;doc_id&quot;: &quot;printer-setup&quot;,
+     &quot;text&quot;: &quot;Add a network printer from Settings, then Printers, then Add printer. Pick the printer by name from the list and let the driver install. Print a test page to confirm the setup worked.&quot;},
+    {&quot;doc_id&quot;: &quot;laptop-request&quot;,
+     &quot;text&quot;: &quot;Request a new laptop through the equipment form on the IT portal. Choose your model, add your manager&#x27;s approval, and submit. The laptop ships to your office within five working days.&quot;},
+    {&quot;doc_id&quot;: &quot;laptop-repair&quot;,
+     &quot;text&quot;: &quot;A laptop that will not turn on may have a drained battery or a loose power cable. Hold the power button for ten seconds, then plug in the charger and wait for the charging light. If the screen stays black, book a repair slot with the helpdesk.&quot;},
+    {&quot;doc_id&quot;: &quot;wifi-office&quot;,
+     &quot;text&quot;: &quot;The office Wi-Fi network is CorpNet. Join it with your single sign-on credentials. If the network does not appear, restart your wireless adapter and move closer to an access point.&quot;},
+    {&quot;doc_id&quot;: &quot;wifi-home&quot;,
+     &quot;text&quot;: &quot;Working from home, connect to your own Wi-Fi first and then the VPN. A weak home signal causes dropped calls: move closer to your router or plug in an ethernet cable.&quot;},
+    {&quot;doc_id&quot;: &quot;email-outlook&quot;,
+     &quot;text&quot;: &quot;Set up your work email in Outlook with your single sign-on account. The mailbox syncs automatically. If new mail stops arriving, check the offline setting and restart Outlook.&quot;},
+    {&quot;doc_id&quot;: &quot;email-phishing&quot;,
+     &quot;text&quot;: &quot;Report a phishing email with the Report Phishing button in Outlook. Do not click links or open attachments in a suspicious message. The security team will confirm whether the message is malicious.&quot;},
+    {&quot;doc_id&quot;: &quot;software-install&quot;,
+     &quot;text&quot;: &quot;Install approved software from the company software center. Search for the app by name, click Install, and wait for the confirmation. If the app is not listed, submit a software request.&quot;},
+    {&quot;doc_id&quot;: &quot;software-license&quot;,
+     &quot;text&quot;: &quot;A license error usually means the seat is assigned to someone else. Check the license portal to see who holds the seat, then ask your manager to reassign it or buy another seat.&quot;},
+    {&quot;doc_id&quot;: &quot;vpn-mfa&quot;,
+     &quot;text&quot;: &quot;Multi-factor authentication protects your VPN sign-in. Approve the push notification on your phone, or enter the six-digit code from your authenticator app. If you lost your phone, contact the helpdesk to reset your factors.&quot;},
+    {&quot;doc_id&quot;: &quot;travel-booking&quot;,
+     &quot;text&quot;: &quot;Book work travel through the travel portal. Flights, hotels, and rental cars are all in one place. Submit the trip for your manager&#x27;s approval before you pay.&quot;},
+    {&quot;doc_id&quot;: &quot;expense-report&quot;,
+     &quot;text&quot;: &quot;File expenses in the expense tool within 30 days of the trip. Attach a receipt for every item over 25 dollars. The finance team approves reports on Fridays.&quot;},
+    {&quot;doc_id&quot;: &quot;onboarding-new-hire&quot;,
+     &quot;text&quot;: &quot;New hires get accounts on their first day. IT creates the email account, the single sign-on profile, and the laptop. The manager adds the new hire to the right team channels.&quot;},
+    {&quot;doc_id&quot;: &quot;monitor-display&quot;,
+     &quot;text&quot;: &quot;A second monitor that stays dark is usually a cable or input problem. Check that the cable is seated, then press the monitor&#x27;s input button to select the right source. Try a different cable if the screen stays black.&quot;},
+    {&quot;doc_id&quot;: &quot;keyboard-mouse&quot;,
+     &quot;text&quot;: &quot;A wireless keyboard or mouse that stops responding usually needs new batteries or a closer receiver. Replace the batteries, move the receiver to a front USB port, and re-pair the device.&quot;},
+    {&quot;doc_id&quot;: &quot;zoom-meeting&quot;,
+     &quot;text&quot;: &quot;Schedule a video meeting from the calendar app and add the video link. Test your microphone and camera before the call. If audio cuts out, switch to a phone dial-in.&quot;},
+    {&quot;doc_id&quot;: &quot;slack-teams&quot;,
+     &quot;text&quot;: &quot;Join a team channel from the directory. Search for the channel name, click Join, and introduce yourself. Mute channels you only read occasionally.&quot;},
+    {&quot;doc_id&quot;: &quot;vpn-password-expired&quot;,
+     &quot;text&quot;: &quot;If your VPN password expired, reset it from the sign-in page first, then reconnect the VPN with the new password. The VPN will not accept the old password.&quot;},
+    {&quot;doc_id&quot;: &quot;laptop-battery&quot;,
+     &quot;text&quot;: &quot;A laptop battery that drains fast may have a background app keeping the machine awake. Check battery usage in Settings, close the worst offenders, and lower the screen brightness.&quot;},
+]
+
+QUERIES = [
+    {&quot;query_id&quot;: &quot;q01&quot;, &quot;query_text&quot;: &quot;how do I reset my password&quot;, &quot;expected_doc_ids&quot;: [&quot;password-reset&quot;]},
+    {&quot;query_id&quot;: &quot;q02&quot;, &quot;query_text&quot;: &quot;my laptop won&#x27;t turn on&quot;, &quot;expected_doc_ids&quot;: [&quot;laptop-repair&quot;]},
+    {&quot;query_id&quot;: &quot;q03&quot;, &quot;query_text&quot;: &quot;how do I connect to the VPN&quot;, &quot;expected_doc_ids&quot;: [&quot;vpn-setup&quot;]},
+    {&quot;query_id&quot;: &quot;q04&quot;, &quot;query_text&quot;: &quot;printer paper jam&quot;, &quot;expected_doc_ids&quot;: [&quot;printer-jam&quot;]},
+    {&quot;query_id&quot;: &quot;q05&quot;, &quot;query_text&quot;: &quot;how do I add a network printer&quot;, &quot;expected_doc_ids&quot;: [&quot;printer-setup&quot;]},
+    {&quot;query_id&quot;: &quot;q06&quot;, &quot;query_text&quot;: &quot;how can I get a new laptop&quot;, &quot;expected_doc_ids&quot;: [&quot;laptop-request&quot;]},
+    {&quot;query_id&quot;: &quot;q07&quot;, &quot;query_text&quot;: &quot;my printer is jammed&quot;, &quot;expected_doc_ids&quot;: [&quot;printer-jam&quot;]},
+    {&quot;query_id&quot;: &quot;q08&quot;, &quot;query_text&quot;: &quot;how do I report a phishing email&quot;, &quot;expected_doc_ids&quot;: [&quot;email-phishing&quot;]},
+    {&quot;query_id&quot;: &quot;q09&quot;, &quot;query_text&quot;: &quot;how do I book a flight for work&quot;, &quot;expected_doc_ids&quot;: [&quot;travel-booking&quot;]},
+    {&quot;query_id&quot;: &quot;q10&quot;, &quot;query_text&quot;: &quot;how do I file an expense report&quot;, &quot;expected_doc_ids&quot;: [&quot;expense-report&quot;]},
+    {&quot;query_id&quot;: &quot;q11&quot;, &quot;query_text&quot;: &quot;my second monitor is not working&quot;, &quot;expected_doc_ids&quot;: [&quot;monitor-display&quot;]},
+    {&quot;query_id&quot;: &quot;q12&quot;, &quot;query_text&quot;: &quot;how do I install software&quot;, &quot;expected_doc_ids&quot;: [&quot;software-install&quot;]},
+    {&quot;query_id&quot;: &quot;q13&quot;, &quot;query_text&quot;: &quot;my laptop battery drains too fast&quot;, &quot;expected_doc_ids&quot;: [&quot;laptop-battery&quot;, &quot;laptop-repair&quot;]},
+]
+
+PARAPHRASES = [
+    {&quot;query_id&quot;: &quot;p01&quot;, &quot;query_text&quot;: &quot;I forgot my login password, how can I change it&quot;, &quot;expected_doc_ids&quot;: [&quot;password-reset&quot;]},
+    {&quot;query_id&quot;: &quot;p02&quot;, &quot;query_text&quot;: &quot;I need remote access to the office network from home&quot;, &quot;expected_doc_ids&quot;: [&quot;vpn-setup&quot;]},
+    {&quot;query_id&quot;: &quot;p03&quot;, &quot;query_text&quot;: &quot;the printer ate my paper&quot;, &quot;expected_doc_ids&quot;: [&quot;printer-jam&quot;]},
+    {&quot;query_id&quot;: &quot;p04&quot;, &quot;query_text&quot;: &quot;I have to fly to a conference next week for work&quot;, &quot;expected_doc_ids&quot;: [&quot;travel-booking&quot;]},
+    {&quot;query_id&quot;: &quot;p05&quot;, &quot;query_text&quot;: &quot;I need a new app on my work computer&quot;, &quot;expected_doc_ids&quot;: [&quot;software-install&quot;]},
+    {&quot;query_id&quot;: &quot;p06&quot;, &quot;query_text&quot;: &quot;my computer won&#x27;t start&quot;, &quot;expected_doc_ids&quot;: [&quot;laptop-repair&quot;]},
+]
+</code></pre>
+<p>Three rules for eval sets of your own, learned the expensive way. First, label gold <em>document IDs</em>, not answer text, whenever you can: ID labels make the eval free and deterministic, while answer-text labels need a judge to decide whether a retrieved document matches. Second, write questions from real user logs, not from the documents: questions copied from doc text share its vocabulary and flatter the retriever. Third, keep a held-out paraphrase set from day one. Your users will not phrase questions the way your docs do, and a retriever that only works on clean phrasing is a demo, not a system.</p>
+
+<h2 id="3-a-bm25-retriever">Step 3 — A BM25 retriever in sixty lines<a class="anchor" href="#3-a-bm25-retriever" aria-label="Link to section">#</a></h2>
+<p>BM25 is the classic lexical ranker: it scores a document by how often the query terms appear in it, weighted by how rare each term is across the corpus, and normalised by document length. It has two parameters — <code>k1</code> (how quickly term frequency saturates) and <code>b</code> (how much length matters) — and the defaults, 1.5 and 0.75, are the right starting point for almost everything. Append this to the file:</p>
+<pre><code class="language-python"># ---------------------------------------------------------------- retrievers
+
+TOKEN_RE = re.compile(r&quot;[a-z0-9]+&quot;)
+
+
+def tokenize(text):
+    return TOKEN_RE.findall(text.lower())
+
+
+class BM25:
+    &quot;&quot;&quot;Classic BM25 (k1=1.5, b=0.75, Robertson IDF). No stopwords: every
+    token counts, which is exactly what makes the failure cases instructive.&quot;&quot;&quot;
+
+    def __init__(self, documents, k1=1.5, b=0.75):
+        self.k1 = k1
+        self.b = b
+        self.doc_ids = [d[&quot;doc_id&quot;] for d in documents]
+        self.doc_tokens = [tokenize(d[&quot;text&quot;]) for d in documents]
+        self.doc_len = [len(t) for t in self.doc_tokens]
+        self.avg_len = sum(self.doc_len) / max(1, len(self.doc_len))
+        self.term_freq = [Counter(t) for t in self.doc_tokens]
+        self.n_docs = len(documents)
+        df = Counter()
+        for tokens in self.doc_tokens:
+            for term in set(tokens):
+                df[term] += 1
+        self.idf = {term: math.log(1 + (self.n_docs - c + 0.5) / (c + 0.5))
+                    for term, c in df.items()}
+
+    def score(self, query_tokens, i):
+        total = 0.0
+        tf = self.term_freq[i]
+        dl = self.doc_len[i]
+        for term in set(query_tokens):
+            if term not in tf:
+                continue
+            f = tf[term]
+            denom = f + self.k1 * (1 - self.b + self.b * dl / self.avg_len)
+            total += self.idf[term] * f * (self.k1 + 1) / denom
+        return total
+
+    def search(self, query, k=5):
+        &quot;&quot;&quot;Return [(doc_id, score), ...] best-first.&quot;&quot;&quot;
+        qt = tokenize(query)
+        scored = [(self.doc_ids[i], self.score(qt, i)) for i in range(self.n_docs)]
+        scored.sort(key=lambda p: (-p[1], p[0]))
+        return scored[:k]
+
+    def __call__(self, query, k=5):
+        return [doc_id for doc_id, _ in self.search(query, k)]
+</code></pre>
+<p>Two deliberate choices. There is no stopword removal and no stemming: every token counts, including "how", "do", and "my". That is what makes the failure cases in Step 6 instructive — you will see exactly which generic words tip a ranking. And ties break by document ID, so the ranking is deterministic: run it twice, get the same numbers twice. A retriever whose output changes between runs cannot be gated in CI.</p>
+<p>For contrast, here is the naive baseline the tutorial measures BM25 against — rank by raw shared-token count, no IDF, no length normalisation:</p>
+<pre><code class="language-python">class NaiveOverlap:
+    &quot;&quot;&quot;Baseline: rank by raw shared-token count. No IDF, no length norm.&quot;&quot;&quot;
+
+    def __init__(self, documents):
+        self.doc_ids = [d[&quot;doc_id&quot;] for d in documents]
+        self.doc_tokens = [set(tokenize(d[&quot;text&quot;])) for d in documents]
+
+    def __call__(self, query, k=5):
+        qt = set(tokenize(query))
+        scored = [(self.doc_ids[i], len(qt &amp; self.doc_tokens[i]))
+                  for i in range(len(self.doc_ids))]
+        scored.sort(key=lambda p: (-p[1], p[0]))
+        return [doc_id for doc_id, _ in scored[:k]]
+</code></pre>
+<p>The baseline exists to answer the question every eval should answer first: is the real retriever actually better than the dumbest thing that could work? On clean queries, the answer in Step 5 is more interesting than you might expect.</p>
+
+<h2 id="4-the-metrics">Step 4 — The five metrics<a class="anchor" href="#4-the-metrics" aria-label="Link to section">#</a></h2>
+<p>Each metric is a small function over three things: the retrieved document IDs in rank order, the expected (gold) IDs, and the cutoff k. The definitions follow the standard IR formulas, and they match Evret's: nDCG uses binary relevance (1.0 for a gold document, 0 otherwise), with DCG as the sum of relevance divided by log<sub>2</sub>(rank + 1) and IDCG as the same sum over the ideal ranking; Precision divides by k, the cutoff, not by the number of documents returned. Append these, plus the evaluator that averages each metric over the query set:</p>
+<pre><code class="language-python">def hit_rate(retrieved, expected, k):
+    return 1.0 if any(d in expected for d in retrieved[:k]) else 0.0
+
+
+def recall(retrieved, expected, k):
+    top = set(retrieved[:k])
+    return len(top &amp; set(expected)) / len(expected)
+
+
+def precision(retrieved, expected, k):
+    # Divides by k, the cutoff -- the same convention Evret uses.
+    top = retrieved[:k]
+    return len([d for d in top if d in expected]) / k
+
+
+def mrr(retrieved, expected, k):
+    for i, doc_id in enumerate(retrieved[:k]):
+        if doc_id in expected:
+            return 1.0 / (i + 1)
+    return 0.0
+
+
+def ndcg(retrieved, expected, k):
+    top = retrieved[:k]
+    dcg = sum(1.0 / math.log2(i + 2) for i, d in enumerate(top) if d in expected)
+    ideal = min(len(expected), k)
+    idcg = sum(1.0 / math.log2(i + 2) for i in range(ideal))
+    return dcg / idcg if idcg else 0.0
+
+
+METRICS = {&quot;hit_rate&quot;: hit_rate, &quot;recall&quot;: recall, &quot;precision&quot;: precision,
+           &quot;mrr&quot;: mrr, &quot;ndcg&quot;: ndcg}
+
+
+def evaluate(retriever, queries, k):
+    totals = {name: 0.0 for name in METRICS}
+    for q in queries:
+        retrieved = retriever(q[&quot;query_text&quot;], k)
+        for name, fn in METRICS.items():
+            totals[name] += fn(retrieved, q[&quot;expected_doc_ids&quot;], k)
+    n = len(queries)
+    return {name: totals[name] / n for name in METRICS}
+
+
+def fmt(label, k, scores):
+    return f&quot;{label} k={k} &quot; + &quot; &quot;.join(f&quot;{n}={v:.3f}&quot; for n, v in scores.items())
+</code></pre>
+<p>Read <code>precision</code> once more, because it is the function people get wrong. It divides by <code>k</code> — five, when k is five — even though only one document in five can be relevant when each question has a single gold document. That is why Precision@5 in Step 5 is 0.215 while Hit Rate@5 is 1.000: the retriever found the answer for every question, and still four of the five returned documents were, by construction, not the answer. Precision is not broken; it is measuring a different thing from Hit Rate, and the gap between them is the price of a wide cutoff.</p>
+
+<h2 id="5-run-it">Step 5 — Run it: the k-sweep<a class="anchor" href="#5-run-it" aria-label="Link to section">#</a></h2>
+<p>The <code>main</code> function runs the BM25 retriever at four cutoffs, the naive baseline at k=5, and both retrievers on the paraphrase set:</p>
+<pre><code class="language-python">def main():
+    bm25 = BM25(DOCUMENTS)
+    naive = NaiveOverlap(DOCUMENTS)
+    for k in (1, 3, 5, 10):
+        print(fmt(&quot;BM25&quot;, k, evaluate(bm25, QUERIES, k)))
+    print(fmt(&quot;NaiveOverlap&quot;, 5, evaluate(naive, QUERIES, 5)))
+    print(fmt(&quot;NaiveOverlap-paraphrase&quot;, 5, evaluate(naive, PARAPHRASES, 5)))
+    print(fmt(&quot;BM25-paraphrase&quot;, 5, evaluate(bm25, PARAPHRASES, 5)))
+    print()
+    print(&quot;per-query top-1 (BM25):&quot;)
+    for q in QUERIES:
+        top = bm25.search(q[&quot;query_text&quot;], 5)
+        rank = next((i + 1 for i, (d, _) in enumerate(top)
+                     if d in q[&quot;expected_doc_ids&quot;]), None)
+        print(f&quot;{q[&#x27;query_id&#x27;]} top1={top[0][0]} ({top[0][1]:.2f}) &quot;
+              f&quot;expected={&#x27;,&#x27;.join(q[&#x27;expected_doc_ids&#x27;])} rank={rank}&quot;)
+
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">python3 retrieval_eval.py</code></pre>
+<p>Expected output — these are the measured numbers from the corpus in Step 2, and your run should reproduce them exactly:</p>
+<pre><code class="language-text">BM25 k=1 hit_rate=0.615 recall=0.577 precision=0.615 mrr=0.615 ndcg=0.615
+BM25 k=3 hit_rate=1.000 recall=1.000 precision=0.359 mrr=0.808 ndcg=0.858
+BM25 k=5 hit_rate=1.000 recall=1.000 precision=0.215 mrr=0.808 ndcg=0.858
+BM25 k=10 hit_rate=1.000 recall=1.000 precision=0.108 mrr=0.808 ndcg=0.858
+NaiveOverlap k=5 hit_rate=1.000 recall=1.000 precision=0.215 mrr=0.859 ndcg=0.895
+NaiveOverlap-paraphrase k=5 hit_rate=0.500 recall=0.500 precision=0.100 mrr=0.306 ndcg=0.355
+BM25-paraphrase k=5 hit_rate=0.833 recall=0.833 precision=0.167 mrr=0.456 ndcg=0.546</code></pre>
+<p>Read the table in columns. The jump from k=1 to k=3 is the whole story: Hit Rate goes from 0.615 to 1.000, which means five of the thirteen questions need more than the top document to find their answer. Past k=3 nothing improves — Hit Rate, Recall, MRR, and nDCG are flat from k=3 to k=10 — while Precision falls from 0.359 to 0.108, because you are returning more documents without finding more gold ones. If your generator reads the top 5, you are paying for two extra documents per question that add nothing. The honest cutoff for this corpus is k=3, and the sweep is how you know: pick k from the flat part of the curve, not from habit.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/evret-rag-retriever-evaluation-ir-metrics-tutorial/img3.webp" alt="Grouped bar chart of BM25 scores at k equals 1, 3, 5 and 10: Hit Rate, Recall, MRR and nDCG jump from k=1 to k=3 and then flatten, while Precision falls as k grows"><figcaption>The k-sweep: everything that matters is flat past k=3; only Precision keeps falling. Chart drawn from the measured run above.</figcaption></figure>
+
+<p>Now the uncomfortable row: the naive token-overlap baseline. At k=5 it matches BM25 on Hit Rate, Recall, and Precision (1.000 / 1.000 / 0.215) and <em>beats</em> it on MRR (0.859 vs 0.808) and nDCG (0.895 vs 0.858). On thirteen clean questions about a 24-document corpus, the dumbest ranker that could work is competitive with BM25. That is not a failure of the tutorial; it is the point of measuring. On a small corpus with clean, keyword-rich questions, IDF weighting and length normalisation buy you almost nothing — the questions already contain the discriminating words. The baseline earns its keep by telling you that, before you spend a week tuning a ranker. Where BM25 earns <em>its</em> keep is the next step, when the questions stop being clean.</p>
+
+<h2 id="6-the-paraphrase-test">Step 6 — The paraphrase test: what breaks when users reword<a class="anchor" href="#6-the-paraphrase-test" aria-label="Link to section">#</a></h2>
+<p>Re-run the same evaluation on the six paraphrases — the same questions, written the way users write them. The last two lines of the output above are the result:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Retriever (k=5)</th><th>Hit Rate</th><th>Recall</th><th>Precision</th><th>MRR</th><th>nDCG</th></tr></thead>
+<tbody>
+<tr><td><strong>BM25, paraphrases</strong></td><td>0.833</td><td>0.833</td><td>0.167</td><td>0.456</td><td>0.546</td></tr>
+<tr><td><strong>Naive overlap, paraphrases</strong></td><td>0.500</td><td>0.500</td><td>0.100</td><td>0.306</td><td>0.355</td></tr>
+</tbody></table></div>
+<p>BM25's nDCG falls from 0.858 to 0.546; the naive baseline's falls from 0.895 to 0.355, and its Hit Rate collapses to 0.500 — it finds the answer for only half the reworded questions. This is where IDF weighting earns its keep: when a query shares few tokens with the right document, the rare tokens it does share have to count for more, and raw overlap counting cannot do that. The gap between the two retrievers on paraphrases (0.546 vs 0.355 nDCG) is the real difference between them; the gap on clean questions (0.858 vs 0.895) is noise.</p>
+<p>Look at the five top-1 misses on the clean set, because each one is a different failure mode with a different fix:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Query</th><th>Question</th><th>Top-1 (BM25 score)</th><th>Expected</th><th>Rank</th></tr></thead>
+<tbody>
+<tr><td>q01</td><td>how do I reset my password</td><td><code>vpn-password-expired</code> (5.52)</td><td><code>password-reset</code></td><td>2</td></tr>
+<tr><td>q02</td><td>my laptop won&#x27;t turn on</td><td><code>laptop-repair</code> (4.71)</td><td><code>laptop-repair</code></td><td>1</td></tr>
+<tr><td>q03</td><td>how do I connect to the VPN</td><td><code>wifi-home</code> (4.97)</td><td><code>vpn-setup</code></td><td>2</td></tr>
+<tr><td>q04</td><td>printer paper jam</td><td><code>printer-jam</code> (9.89)</td><td><code>printer-jam</code></td><td>1</td></tr>
+<tr><td>q05</td><td>how do I add a network printer</td><td><code>printer-setup</code> (9.23)</td><td><code>printer-setup</code></td><td>1</td></tr>
+<tr><td>q06</td><td>how can I get a new laptop</td><td><code>onboarding-new-hire</code> (6.64)</td><td><code>laptop-request</code></td><td>2</td></tr>
+<tr><td>q07</td><td>my printer is jammed</td><td><code>printer-setup</code> (3.87)</td><td><code>printer-jam</code></td><td>2</td></tr>
+<tr><td>q08</td><td>how do I report a phishing email</td><td><code>email-phishing</code> (13.20)</td><td><code>email-phishing</code></td><td>1</td></tr>
+<tr><td>q09</td><td>how do I book a flight for work</td><td><code>travel-booking</code> (5.69)</td><td><code>travel-booking</code></td><td>1</td></tr>
+<tr><td>q10</td><td>how do I file an expense report</td><td><code>email-phishing</code> (7.01)</td><td><code>expense-report</code></td><td>2</td></tr>
+<tr><td>q11</td><td>my second monitor is not working</td><td><code>monitor-display</code> (8.26)</td><td><code>monitor-display</code></td><td>1</td></tr>
+<tr><td>q12</td><td>how do I install software</td><td><code>software-install</code> (8.20)</td><td><code>software-install</code></td><td>1</td></tr>
+<tr><td>q13</td><td>my laptop battery drains too fast</td><td><code>laptop-battery</code> (11.35)</td><td><code>laptop-battery + laptop-repair</code></td><td>1</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>q01 — near-duplicate docs.</strong> "How do I reset my password" returns <code>vpn-password-expired</code> (5.52) over <code>password-reset</code> (5.19). The expired-password doc describes the same sign-in-page reset flow, so it matches "reset", "password", "sign-in", and "page" just as well as the canonical doc. The fix is editorial, not algorithmic: the two docs overlap so heavily that no ranker can reliably separate them — merge them, or make the expired-password doc link to the reset doc instead of repeating it.</li>
+<li><strong>q03 — the wrong half of a procedure.</strong> "How do I connect to the VPN" returns <code>wifi-home</code> (4.97) over <code>vpn-setup</code> (4.73), because the Wi-Fi doc says "connect to your own Wi-Fi first and then the VPN" — it mentions the VPN, in the context of the wrong step. A user who follows the top result does the home-Wi-Fi step and stops. The fix is a corpus fix: the VPN doc should be the one that says "connect" most strongly, or the Wi-Fi doc should not repeat the VPN instruction.</li>
+<li><strong>q06 — generic words outvote topical ones.</strong> "How can I get a new laptop" returns <code>onboarding-new-hire</code> (6.64) over <code>laptop-request</code> (4.26). "Get" and "new" are rare tokens in this corpus, so their IDF is high — and both appear in the onboarding doc ("New hires get accounts"). Two generic words outvote the topical word. The fix is stemming or a synonym list ("get" ≈ "request"), or simply accepting that rank 2 is fine when k=3 still finds it.</li>
+<li><strong>q07 — no stemming.</strong> "My printer is jammed" returns <code>printer-setup</code> (3.87) over <code>printer-jam</code> (3.02). "Jammed" matches nothing: the doc says "jam" and "jams", and without stemming those are different tokens. Only "printer" matches, and the setup doc is shorter, so length normalisation tips it. The fix is a stemmer — or a synonym map for the handful of word forms your users actually use.</li>
+<li><strong>q10 — the same token, two meanings.</strong> "How do I file an expense report" returns <code>email-phishing</code> (7.01) over <code>expense-report</code> (6.13). "Report" the verb ("Report a phishing email") outscores "report" the noun, and the plurals silently drop matches: the query says "expense" while the doc says "expenses", and "report" while the doc says "reports". Lexical retrieval cannot tell a verb from a noun, and it cannot see that "expenses" and "expense" are the same word. The fix, again, is stemming — or embeddings, which is what Step 7's Evret adapters are for.</li>
+</ul>
+<p>Note what all five misses have in common: the gold document is at rank 2 in every case. At k=1 the user gets the wrong document; at k=3 they get the right one. That is exactly what the k-sweep measured, and it is why the retriever's failure mode matters more than its average score: a rank-2 miss is survivable if your generator reads the top 3, and fatal if it reads only the top 1.</p>
+
+<h2 id="7-the-same-eval-through-evret">Step 7 — The same eval through Evret<a class="anchor" href="#7-the-same-eval-through-evret" aria-label="Link to section">#</a></h2>
+<p>The stdlib version tells you what the numbers mean. Evret is the version you keep: it wraps any retriever behind one interface, adds the vector-database retrievers and framework adapters you will actually use, and writes the results to JSON or CSV for your CI logs. First, dump the eval set into the format Evret reads — a JSON file with <code>queries</code> and <code>documents</code>:</p>
+<pre><code class="language-python">import json
+from retrieval_eval import DOCUMENTS, QUERIES
+
+data = {
+    "queries": [
+        {"query_id": q["query_id"], "query_text": q["query_text"],
+         "expected_doc_ids": q["expected_doc_ids"]}
+        for q in QUERIES
+    ],
+    "documents": [
+        {"doc_id": d["doc_id"], "text": d["text"]}
+        for d in DOCUMENTS
+    ],
+}
+json.dump(data, open("eval_data.json", "w"), indent=2)</code></pre>
+<p>Then the adapter. Evret's contract is one subclass: <code>BaseRetriever</code> with a <code>retrieve(query, k)</code> method that returns a list of <code>RetrievalResult</code> objects, each carrying a <code>doc_id</code> and a <code>score</code>. The BM25 class from Step 3 already does the ranking; the adapter just translates its output. Save this as <code>evret_eval.py</code>:</p>
+<pre><code class="language-python">&quot;&quot;&quot;evret_eval.py -- the same evaluation, run through Evret 0.0.4.
+
+Evret&#x27;s Evaluator wraps any retriever that subclasses BaseRetriever and
+implements retrieve(query, k) -&gt; list[RetrievalResult]. Because every query
+in eval_data.json carries expected_doc_ids, Evret never calls the judge:
+the score is a pure ID comparison, so this runs with no model and no key.
+
+    pip install evret==0.0.4
+    python3 evret_eval.py
+&quot;&quot;&quot;
+
+import json
+
+from evret import (BaseRetriever, EvaluationDataset, Evaluator, HitRate,
+                   MRR, NDCG, Recall, RetrievalResult)
+from retrieval_eval import BM25, DOCUMENTS
+
+
+class BM25Retriever(BaseRetriever):
+    def __init__(self, documents):
+        self.bm25 = BM25(documents)
+
+    def retrieve(self, query: str, k: int) -&gt; list[RetrievalResult]:
+        return [RetrievalResult(doc_id=doc_id, score=score)
+                for doc_id, score in self.bm25.search(query, k)]
+
+
+def main():
+    dataset = EvaluationDataset.from_json(&quot;eval_data.json&quot;)
+    evaluator = Evaluator(
+        retriever=BM25Retriever(DOCUMENTS),
+        metrics=[HitRate(k=5), Recall(k=5), MRR(k=5), NDCG(k=5)],
+    )
+    results = evaluator.evaluate(dataset)
+    print(json.dumps(results.summary(), indent=2))
+    results.to_json(&quot;results.json&quot;)
+
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</code></pre>
+<p>Three things to notice. First, the metrics are constructed with only <code>k</code> — <code>HitRate(k=5)</code>, <code>Recall(k=5)</code>, <code>MRR(k=5)</code>, <code>NDCG(k=5)</code> — and the result keys come out as <code>hit_rate@5</code>, <code>recall@5</code>, <code>mrr@5</code>, <code>ndcg@5</code>. Second, the <code>Evaluator</code> takes an optional <code>judge</code> that defaults to <code>TokenOverlapJudge()</code> — but the judge is never invoked here, because every query in <code>eval_data.json</code> carries <code>expected_doc_ids</code>. When gold IDs are present, Evret scores by pure ID comparison: zero model calls, zero cost, and the same number every time you run it. Third, <code>results.summary()</code> returns a plain <code>dict[str, float]</code> keyed by those metric names, and <code>results.to_json("results.json")</code> writes <code>{query_count, generated_at, metrics}</code> for your logs.</p>
+<p>If you do not have gold IDs — say you have expected answer text instead — put it in <code>expected_answers</code> and let a judge decide whether each retrieved document matches it. <code>TokenOverlapJudge</code> matches on token overlap with no model; <code>SemanticJudge</code> compares embeddings; <code>LLMJudge</code> asks a provider model. The ID path is the one to prefer whenever you can label IDs. And when your retriever is not BM25, the adapter is the same shape: Evret ships retrievers for Qdrant, Chroma, Elasticsearch, Milvus, and Weaviate, plus adapters for LangChain, LlamaIndex, and Haystack — anything else is one <code>BaseRetriever</code> subclass, exactly as above.</p>
+<p>A note on provenance, because it matters for a tutorial: every Evret call above was verified against the 0.0.4 source — the <code>BaseRetriever</code> interface, the <code>Evaluator</code> constructor, the <code>from_json</code> field names, the metric names, and the ID-comparison shortcut. The measured numbers in this tutorial come from the standard-library implementation in Steps 3–5, which implements the same metric definitions; run the adapter against the same <code>eval_data.json</code> and it scores the same retriever on the same data.</p>
+
+<h2 id="8-gate-it-in-ci">Step 8 — Gate it in CI<a class="anchor" href="#8-gate-it-in-ci" aria-label="Link to section">#</a></h2>
+<p>An eval you run once is a report. An eval that blocks the deploy is a safety net. The gate is a twenty-line script with two thresholds — Hit Rate@5 at or above 0.90, nDCG@5 at or above 0.80 — chosen below today's measured values (1.000 and 0.858) so the gate passes now and fails on a real regression later. Save it as <code>gate.py</code>:</p>
+<pre><code class="language-python">&quot;&quot;&quot;gate.py -- fail the build when retrieval quality regresses.
+
+    python3 gate.py            # exact queries (must pass)
+    python3 gate.py paraphrase # reworded queries (expected to fail today)
+
+Thresholds are the floor, not the ceiling: if a change to the retriever or
+the corpus drops Hit Rate or nDCG below these, the deploy stops.
+&quot;&quot;&quot;
+
+import sys
+
+from retrieval_eval import BM25, DOCUMENTS, PARAPHRASES, QUERIES, evaluate
+
+THRESHOLDS = {&quot;hit_rate@5&quot;: 0.90, &quot;ndcg@5&quot;: 0.80}
+
+
+def main():
+    queries = PARAPHRASES if len(sys.argv) &gt; 1 and sys.argv[1] == &quot;paraphrase&quot; else QUERIES
+    label = &quot;paraphrase&quot; if queries is PARAPHRASES else &quot;exact&quot;
+    scores = evaluate(BM25(DOCUMENTS), queries, 5)
+    failed = []
+    for name, floor in THRESHOLDS.items():
+        metric = name.split(&quot;@&quot;)[0]
+        value = scores[metric]
+        status = &quot;OK  &quot; if value &gt;= floor else &quot;FAIL&quot;
+        print(f&quot;{status} {name}: {value:.3f} (floor {floor:.2f})&quot;)
+        if value &lt; floor:
+            failed.append(name)
+    print(f&quot;gate ({label}): {&#x27;PASSED&#x27; if not failed else &#x27;FAILED&#x27;}&quot;)
+    sys.exit(1 if failed else 0)
+
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</code></pre>
+<pre><code class="language-bash">python3 gate.py
+# OK   hit_rate@5: 1.000 (floor 0.90)
+# OK   ndcg@5: 0.858 (floor 0.80)
+# gate (exact): PASSED
+python3 gate.py paraphrase
+# FAIL hit_rate@5: 0.833 (floor 0.90)
+# FAIL ndcg@5: 0.546 (floor 0.80)
+# gate (paraphrase): FAILED</code></pre>
+<p>The exact gate passes; the paraphrase gate fails — and that failure is the more useful result. It tells you, in CI, that your retriever handles clean phrasing and breaks on real phrasing, which is precisely the information you need before you ship a synonym fix or a stemmer. Do not lower the thresholds to make the paraphrase gate pass: the thresholds are the floor, and the paraphrase set is the work backlog. When a fix lands — stemming, a synonym map, better docs — re-run the paraphrase gate, and let <em>it</em> tell you the fix worked.</p>
+<p>Wire it into GitHub Actions so it runs on every push:</p>
+<pre><code class="language-yaml">name: retrieval-gate
+on: [push, pull_request]
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 gate.py</code></pre>
+<p>Pick thresholds from your own numbers, the way this tutorial did: measure first, then set the floor just below what you measure today. A gate set from a blog post's numbers is superstition; a gate set from your own eval set is a contract. And keep the two gates separate — exact queries for the deploy blocker, paraphrases for the tracked backlog — so a paraphrase regression never blocks a deploy that the exact gate says is safe, and never gets silently ignored either.</p>
+
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Approach</th><th>Best when</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td><strong>Stdlib BM25 + hand-rolled metrics (Steps 2–6)</strong></td><td>You are learning what the metrics mean; the corpus is small; you want zero dependencies and full control</td><td>You re-implement everything; no vector retrievers, no framework adapters, no result logging</td></tr>
+<tr><td><strong>Evret (Step 7)</strong></td><td>You want the same metrics with less code, plus Qdrant/Chroma/Elasticsearch/Milvus/Weaviate retrievers and LangChain/LlamaIndex/Haystack adapters; you want JSON/CSV results in CI</td><td>Young library (0.0.4) — pin the version; the base install pulls in qdrant-client; gold IDs needed for the free, judge-free path</td></tr>
+<tr><td><strong>Ragas (LLM-judged RAG eval)</strong></td><td>You need to evaluate generation too — faithfulness, answer relevancy, context precision on the final answer, not just retrieval</td><td>Needs an LLM judge (cost, latency, non-determinism); overkill when the question is only "did the retriever fetch it?"</td></tr>
+<tr><td><strong>LLM-as-a-judge (prompt a chat model)</strong></td><td>Open-ended criteria that cannot be expressed as gold IDs; you already pay for a frontier API</td><td>Per-call cost; scores drift with the judge model; hard to reproduce exactly; never the first eval to build</td></tr>
+</tbody></table></div>
+<p>The ordering matters: start with ID-based IR metrics — free, deterministic, reproducible — and add a judge only for the questions IDs cannot answer. Most RAG debugging ends at the retriever, and the retriever is the part IDs measure best.</p>
+
+<h2 id="limitations">Limitations<a class="anchor" href="#limitations" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>Thirteen questions is a smoke test, not a benchmark.</strong> The numbers above show the method, not the corpus: with 13 queries, one question swinging changes Hit Rate by nearly 8 points. Before gating a deploy on these numbers, grow the set to a hundred or more real questions, pulled from your actual user logs where you can — synthetic questions are too clean and hide the messy phrasing that breaks retrieval.</li>
+<li><strong>BM25 has no stemming, no synonyms, no semantics.</strong> Every miss in Step 6 traces to that: "jammed" ≠ "jam", "expenses" ≠ "expense", "report" the verb vs "report" the noun. The fixes — a stemmer, a synonym map, or embeddings — are the next tutorial, not this one.</li>
+<li><strong>One gold document per question, except q13.</strong> Recall and nDCG only show their full value when questions have several gold documents. The q13 case (two gold docs, both found in the top 3) is a glimpse; a corpus where most questions have 2–4 gold docs would exercise the metrics harder.</li>
+<li><strong>The Evret adapter in Step 7 follows the documented 0.0.4 API; the measured numbers in this tutorial come from the standard-library implementation in Steps 3–5.</strong> The two implement the same metric definitions, and the adapter runs against the same eval data — but if you want Evret's own numbers in your logs, run <code>evret_eval.py</code> yourself and compare. That comparison is a good first exercise with the library.</li>
+<li><strong>No semantic retrieval was tested.</strong> A vector retriever would likely fix q06, q07, and q10 — the paraphrase and synonym cases — at the cost of an embedding model and an index. Evret's adapters make that comparison a one-subclass change; the eval set you built here is the harness you would run it against.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>When your RAG pipeline gives a wrong answer, measure the retriever before you blame the model. Five classic metrics, a labelled set of questions, and a k-sweep will tell you more in an afternoon than a week of prompt tuning: whether the answer was retrievable at all, how deep you have to look to find it, and which failure mode — near-duplicate docs, generic words, missing stemming, verb-vs-noun — is actually costing you. Evret packages that measurement into a library you can run in CI with no model calls and no API key, and the stdlib version in this tutorial is the cross-check that keeps it honest. Build the eval set first, gate the deploy on it second, and fix the retriever third — in that order, and the model will stop taking the blame for the retriever's mistakes.</p>
+
+<section class="sources-block" aria-label="Sources" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Sources</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="https://github.com/kaivid-labs/evret" rel="nofollow">Evret on GitHub</a> — Kaivid Labs, MIT license; <code>BaseRetriever</code>, <code>Evaluator</code>, metric classes, and the <code>from_json</code> dataset format as used in Step 7.</li><li><a href="https://pypi.org/project/evret/" rel="nofollow">Evret 0.0.4 on PyPI</a> — published 2026-10-30; Python 3.10+; base dependencies <code>qdrant-client</code> and <code>tqdm</code>.</li></ul></section>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="evret-rag-retriever-evaluation-ir-metrics-tutorial"></div><div class="comments" data-comments="evret-rag-retriever-evaluation-ir-metrics-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/"><span class="chip">Tutorials</span><h3>Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</h3><div class="meta">November 23, 2026 · 15 min read</div></a><a class="rel-card" href="/articles/chromadb-local-semantic-search-tutorial/"><span class="chip">Tutorials</span><h3>Semantic search on your own machine: Chroma and local embeddings, no API key, no server</h3><div class="meta">November 27, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/inspect-ai-eval-framework-tutorial/"><span class="chip">Tutorials</span><h3>Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute&#x27;s framework</h3><div class="meta">October 1, 2026 · 12 min read</div></a><a class="rel-card" href="/articles/promptfoo-prompt-testing-ci-tutorial/"><span class="chip">Tutorials</span><h3>Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on</h3><div class="meta">September 30, 2026 · 16 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need an API key or a GPU for any of this?</h3><p>No. Steps 2–6 are pure standard-library Python, and Evret&#x27;s ID-based path makes zero model calls — it compares document IDs. Only the SemanticJudge and LLMJudge paths need a model or a key.</p><h3>How many eval questions do I need?</h3><p>Thirteen is a smoke test: enough to learn the method and catch a gross regression. Before gating a deploy on these numbers, grow the set to a hundred or more real questions, pulled from your actual user logs where you can — synthetic questions are too clean and hide the messy phrasing that breaks retrieval.</p><h3>Why is Precision@5 only 0.215 when Hit Rate is 1.000?</h3><p>Because with one relevant document per query, at most one of the five returned documents can be relevant — 1 out of 5 is 0.20. The average lands at 0.215 only because one query has two gold documents. Precision falls as k grows for the same reason: the denominator grows while the numerator cannot. Compare Precision only at the same k.</p><h3>Can Evret evaluate my vector retriever, or my Qdrant / LangChain setup?</h3><p>Yes. Evret ships retrievers for Qdrant, Chroma, Elasticsearch, Milvus and Weaviate, plus adapters for LangChain, LlamaIndex and Haystack. Anything else is one subclass of BaseRetriever with a retrieve(query, k) method, as in Step 7.</p><h3>What if I don&#x27;t have gold document IDs?</h3><p>Put the expected answer text in expected_answers instead and let a judge decide whether each retrieved document matches it. TokenOverlapJudge matches on token overlap with no model; SemanticJudge compares embeddings; LLMJudge asks a provider model. The ID path is the one to prefer whenever you can label IDs — it is free, deterministic and exactly reproducible.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/deepeval-rag-evaluation-local-ollama-judge-tutorial/">Evaluate your RAG pipeline with DeepEval: a complete local eval suite with a free Ollama judge</a></li><li><a href="/articles/inspect-ai-eval-framework-tutorial/">Stop vibe-checking your model: write real evals with inspect_ai, the UK AI Safety Institute&#x27;s framework</a></li><li><a href="/articles/promptfoo-prompt-testing-ci-tutorial/">Stop shipping untested prompts: test your LLM prompts like code with promptfoo — hands-on</a></li><li><a href="/articles/qmd-local-search-engine-tutorial/">QMD: turn your notes and docs into a local hybrid search engine your coding agent can query</a></li><li><a href="/articles/colbert-late-interaction-retrieval-tutorial/">Late-interaction retrieval with ColBERT: beat BM25 and retire your reranker — measured end-to-end</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
