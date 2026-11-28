@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Run Qwen3-0.6B from a 14 KB pure-assembly binary: hands-on with llm.asm — AI Frontier Post</title>
+<meta name="description" content="llm.asm is three LLM projects in pure x86-64 assembly — a 14 KB inference engine, a 24 KB bootable OS, and a 32 KB trainer. This tutorial builds all three, runs Qwen3-0.6B, and trains a Mini-GPT from scratch, with every number measured on a 4-core CPU.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Run Qwen3-0.6B from a 14 KB pure-assembly binary: hands-on with llm.asm">
+<meta property="og:description" content="llm.asm is three LLM projects in pure x86-64 assembly — a 14 KB inference engine, a 24 KB bootable OS, and a 32 KB trainer. This tutorial builds all three, runs Qwen3-0.6B, and trains a Mini-GPT from scratch, with every number measured on a 4-core CPU.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Run Qwen3-0.6B from a 14 KB pure-assembly binary: hands-on with llm.asm","description":"llm.asm is three LLM projects in pure x86-64 assembly — a 14 KB inference engine, a 24 KB bootable OS, and a 32 KB trainer. This tutorial builds all three, runs Qwen3-0.6B, and trains a Mini-GPT from scratch, with every number measured on a 4-core CPU.","datePublished":"2026-11-28","dateModified":"2026-11-28","author":{"@type":"Person","name":"Sofia Almeida","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/"},"image":"https://aifrontierpost.com/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a GPU to run llm.asm?","acceptedAnswer":{"@type":"Answer","text":"No. Everything in this tutorial runs on a CPU — the inference was measured at 15–24 tok/s decode on a shared 4-core virtual machine with no GPU. A faster CPU helps; a GPU is not used at all."}},{"@type":"Question","name":"Which models can llm.asm run?","acceptedAnswer":{"@type":"Answer","text":"Only Qwen3-0.6B for inference. The inference engine is hard-wired to that architecture and its .asmbin format. The trainer is a separate Mini-GPT and is not tied to Qwen. For other models, use llama.cpp."}},{"@type":"Question","name":"Is it faster than llama.cpp?","acceptedAnswer":{"@type":"Answer","text":"The project reports 18–36% faster CPU decode than llama.cpp on Qwen3-0.6B Q8_0, measured on a 47-core AMD EPYC 7642. That benchmark was not re-run here — this tutorial measured llm.asm only, at 15–24 tok/s decode on a 4-core sandbox."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Run Qwen3-0.6B from a 14 KB pure-assembly binary: hands-on with llm.asm</h1>
+<p class="lede">llm.asm is three LLM projects in pure x86-64 assembly — a 14 KB inference engine, a 24 KB bootable OS, and a 32 KB trainer. This tutorial builds all three, runs Qwen3-0.6B, and trains a Mini-GPT from scratch, with every number measured on a 4-core CPU.</p>
+<div class="byline"><span class="avatar">SA</span><span class="who"><b>Sofia Almeida</b><span>Tutorials & Reviews Lead · November 28, 2026 · 19 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> llm.asm (alesha-pro/llm.asm, MIT) packs a Qwen3-0.6B inference engine into a 14,712-byte static binary, a bootable LLM operating system into 24,252 bytes, and a from-scratch transformer trainer into 32,944 bytes — all pure x86-64 assembly, zero dependencies. This tutorial builds all three, verifies the math kernels, exports Qwen3-0.6B to the project's .asmbin format, runs real inference at 15–24 tok/s on a 4-core CPU, and trains a Mini-GPT from 4.19 to 1.66 loss on TinyShakespeare.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Three projects, one repo:</b> a 14,712-byte Qwen3-0.6B inference engine, a 24,252-byte bootable LLM OS, and a 32,944-byte Mini-GPT trainer — 17,195 lines of NASM assembly, zero C, zero libc.</li><li><b>It blew up fast:</b> created November 25, 2026, the repo passed 2,400 stars in three days, gaining 966 stars on its best day.</li><li><b>Verified end to end here:</b> all math unit tests pass, the weight export produces exactly 643,469,504 bytes, and inference answers are deterministic across runs and thread counts.</li><li><b>Real speeds on a 4-core CPU:</b> 15–24 tok/s decode for Qwen3-0.6B; training runs at 1,200–2,500 tok/s. The project's EPYC numbers reach 126.8 tok/s.</li><li><b>One model only:</b> inference is hard-wired to Qwen3-0.6B, and the bare-metal boot needs QEMU/KVM — which this sandbox lacks, so the boot is documented, not run here.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/cover.webp" alt="A tiny glowing microchip on a dark circuit board, with a beam of light rising from it into a speech bubble"><figcaption>AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Three days after it appeared on GitHub, a repository called llm.asm had 2,407 stars. The pitch is a stunt with a point: three complete LLM projects — inference, a bootable operating system, and a from-scratch trainer — written in 100% pure x86-64 assembly, with no C, no libc, no runtime, and no dependencies. The inference engine for Qwen3-0.6B is a 14,712-byte static binary. The bootable OS that runs the same model with no Linux underneath is 24,252 bytes. The trainer that teaches a small transformer to write Shakespeare is 32,944 bytes. All three were built and run for this tutorial on a 4-core CPU virtual machine with no GPU, and every number below was measured there.</p>
+<p>The reason it is worth your time is not the byte counts. It is that the whole stack is small enough to actually read. A modern inference engine is millions of lines spread across frameworks, runtimes, and kernels; llm.asm is 17,195 lines of assembly total, and the part that runs the model is small enough to hold in your head. If you have ever wanted to understand what a transformer really does at the metal — the matmuls, the attention, the tokenizer, the KV-cache — this is the shortest path to watching it happen, because there is nothing between you and the silicon except an assembler.</p>
+<p>This tutorial builds all three projects, verifies the math kernels against their own unit tests, downloads Qwen3-0.6B, converts it to the project's compact format, runs real inference, and trains a 2.7-million-parameter Mini-GPT from scratch on TinyShakespeare. The bare-metal OS gets its own section: it builds here, and the boot commands are documented — but booting needs QEMU with KVM, which this sandbox does not have, so that part is labelled as not run here rather than presented as verified.</p>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li>A Linux x86-64 machine with <strong>AVX2, FMA, and F16C</strong> — any Intel Haswell or AMD Excavator chip from 2013 onward qualifies. No AVX-512 needed, no GPU, no model API key.</li>
+<li><code>nasm</code> and <code>binutils</code> (for <code>ld</code> and <code>objcopy</code>): <code>sudo apt install nasm binutils</code> on Debian or Ubuntu. The build in this tutorial used nasm 2.16.01.</li>
+<li>Python 3 with <code>numpy</code> — only for the one-time weight export. Nothing at runtime needs Python.</li>
+<li>About 2.5&nbsp;GB of free disk: the Qwen3-0.6B download is 1,503,300,328 bytes, and the converted file is another 643,469,504 bytes. You can delete the download after the export.</li>
+<li>A note on scope: everything in this tutorial runs <strong>Qwen3-0.6B and only Qwen3-0.6B</strong> for inference. The trainer is a separate, general Mini-GPT. If you want other models, you want llama.cpp — see the alternatives table at the end.</li>
+</ul>
+
+<h2 id="1-build">Step 1 — Build all three binaries<a class="anchor" href="#1-build" aria-label="Link to section">#</a></h2>
+<p>Clone the repository and build everything. There is no configure step, no dependency fetch, and no package manager involved — <code>make</code> runs nasm over the assembly sources and links the objects with <code>ld</code>:</p>
+<pre><code class="language-bash">git clone https://github.com/alesha-pro/llm.asm.git
+cd llm.asm
+make all</code></pre>
+<p>The build takes seconds. Three binaries land in <code>build/</code>, and their sizes are the first thing to check — they are the project's headline claim, and they matched the README exactly on this machine:</p>
+<pre><code class="language-bash">ls -la build/asm-llm build/asm-gpt-train build/asm-llm-os.elf
+file build/asm-llm build/asm-gpt-train build/asm-llm-os.elf</code></pre>
+<pre><code class="language-text">-rwxr-xr-x 1 user user 14712 build/asm-llm
+-rwxr-xr-x 1 user user 32944 build/asm-gpt-train
+-rwxr-xr-x 1 user user 24252 build/asm-llm-os.elf
+build/asm-llm:        ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, stripped
+build/asm-gpt-train:  ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, stripped
+build/asm-llm-os.elf: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), statically linked, stripped</code></pre>
+<p>14,712 bytes for the inference engine, 32,944 for the trainer, 24,252 for the bootable kernel. The <code>file</code> output is worth reading: all three are statically linked and stripped, with no dynamic section at all — <code>readelf -d</code> on any of them reports nothing. There is no loader, no shared library, and no interpreter between the kernel and the first instruction. That is the whole point of the exercise, and it is also why the binaries run anywhere on x86-64 Linux without installing anything.</p>
+<p>If the build fails, the usual cause is a missing nasm — the Makefile calls <code>nasm</code> by name, so it must be on your <code>PATH</code>. A CPU without AVX2 will assemble fine and then crash at runtime; check with <code>grep -m1 avx2 /proc/cpuinfo</code> before going further.</p>
+
+<h2 id="2-math-tests">Step 2 — Prove the math before you trust the model<a class="anchor" href="#2-math-tests" aria-label="Link to section">#</a></h2>
+<p>Before downloading any weights, run the project's own unit tests. They exercise the hand-written AVX2 kernels — exp, sin/cos, RoPE frequencies, RMSNorm, SiLU, and the Q8_0 matmul — against NumPy references:</p>
+<pre><code class="language-bash">python3 scripts/test_math.py build/test_math</code></pre>
+<pre><code class="language-text">Detected matmul mode: FAST_Q8=1 (Q8_0xQ8_0)
+fast_expf_avx2   max_rel_err = 1.394e-07  (target &lt; 1e-6)
+fast_sincosf sin max_abs_err = 2.940e-08  (target &lt; 1e-6)
+fast_sincosf cos max_abs_err = 2.928e-08  (target &lt; 1e-6)
+init_rope_freqs  max_abs_err = 4.363e-14  (target &lt; 1e-12)
+rmsnorm_avx2     max_abs_err = 2.056e-07  (target &lt; 1e-6)
+silu_mul_avx2    max_rel_err = 6.774e-08  (target &lt; 1e-6)
+matmul_q8_0 v1   max_abs_err = 9.537e-07  (target &lt; 1e-5, vs FP32=8.268e-02)
+matmul_q8_0 v2   max_abs_err = 5.960e-07  (target &lt; 1e-5, vs FP32=8.285e-02)
+
+ALL PURE-ASM MATH &amp; SIMD KERNEL UNIT TESTS PASSED!</code></pre>
+<p>Every error matches the project's published table to the last digit. That matters more than it looks: the transformer is built from these kernels, so if exp or the matmul were wrong by more than the tolerance, the model would produce garbage downstream and you would have no idea which layer to blame. Passing this gate first means any weird output later is the model's behaviour, not a broken kernel.</p>
+
+<h2 id="3-download-export">Step 3 — Download Qwen3-0.6B and export it to .asmbin<a class="anchor" href="#3-download-export" aria-label="Link to section">#</a></h2>
+<p>The binary cannot read Hugging Face weights directly. A Python export script converts the BF16 safetensors and <code>tokenizer.json</code> into a single <code>.asmbin</code> file: per-row Q8_0-quantised weights with FP16 block scales, 64-byte aligned throughout, designed to be <code>mmap()</code>-ed straight into memory. Download the three files first — plain <code>curl</code> works, no account needed:</p>
+<pre><code class="language-bash">mkdir -p models/qwen3-0.6b-bf16
+curl -fsSL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/config.json \
+  -o models/qwen3-0.6b-bf16/config.json
+curl -fsSL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/tokenizer.json \
+  -o models/qwen3-0.6b-bf16/tokenizer.json
+curl -fsSL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/model.safetensors \
+  -o models/qwen3-0.6b-bf16/model.safetensors
+ls -la models/qwen3-0.6b-bf16/</code></pre>
+<pre><code class="language-text">-rw-r--r-- 1 user user        726 config.json
+-rw-r--r-- 1 user user   11422654 tokenizer.json
+-rw-r--r-- 1 user user 1503300328 model.safetensors</code></pre>
+<p>Check the sizes — a truncated <code>model.safetensors</code> will fail the export with an unhelpful error, and 1,503,300,328 bytes is the exact count to expect. Then run the export (NumPy is the only dependency):</p>
+<pre><code class="language-bash">python3 scripts/export_weights.py \
+  --model-dir models/qwen3-0.6b-bf16 \
+  --out models/qwen3-0.6b-q8_0.asmbin \
+  --scale-dtype fp16</code></pre>
+<pre><code class="language-text">Verified embed_tokens == lm_head exact (max_diff=0.0)
+Quantizing embed_tokens (151936, 1024) -&gt; Q8_0 (scale_dtype=fp16, v2)...
+  Exported layer 7/28 (stride=16,720,896 B)
+  Exported layer 14/28 (stride=16,720,896 B)
+  Exported layer 21/28 (stride=16,720,896 B)
+  Exported layer 28/28 (stride=16,720,896 B)
+
+Export complete: models/qwen3-0.6b-q8_0.asmbin
+  Format       : .asmbin v2 (scale_dtype=fp16, flags=0x7)
+  Total size   : 643,469,504 bytes (613.66 MiB)
+  off_tokenizer: 128
+  off_embed    : 9,973,952
+  off_layers   : 175,280,320 (stride=16,720,896 x 28)
+  off_final_nrm: 643,465,408
+  Elapsed      : 46.30 s</code></pre>
+<p>Two things to note. First, the export verifies that the tied embeddings and the LM head are bit-identical (<code>max_diff=0.0</code>) and stores them once, which is why the file is 613.66&nbsp;MiB instead of the 1.40&nbsp;GiB the BF16 download occupies. Second, the total — 643,469,504 bytes — is exactly the figure the README states for the v2 format, so you can confirm the export is correct from the byte count alone. Once it exists, the BF16 files can be deleted; the binary never touches them again.</p>
+
+<h2 id="4-first-inference">Step 4 — First inference: a real model answers<a class="anchor" href="#4-first-inference" aria-label="Link to section">#</a></h2>
+<p>Run the example prompt from the project's README. <code>-m</code> is the weights file, <code>-p</code> the prompt, <code>-n</code> the maximum tokens, <code>-t</code> the thread count:</p>
+<pre><code class="language-bash">./build/asm-llm -m models/qwen3-0.6b-q8_0.asmbin \
+  -p "Explain how a CPU cache works in 3 concise sentences." -n 128 -t 4</code></pre>
+<pre><code class="language-text">A CPU cache is a small amount of memory used to store frequently accessed data and instructions. It helps speed up processing by storing data that is likely to be used again. The cache is organized in a way that allows it to quickly retrieve data from memory when needed.
+[asm-llm] prefill: 25 tok in 1633.63 ms (15.30 tok/s)
+[asm-llm] decode : 53 tok in 3304.63 ms (15.74 tok/s, threads=4)</code></pre>
+<p>That is a genuine Qwen3-0.6B answer, produced by 14&nbsp;KB of assembly: three sentences, on topic, and it stopped by itself after 53 tokens when the model emitted the end-of-turn token. The stats line is the honest part — prefill and decode rates, measured, not claimed. On this shared 4-core sandbox the decode ran at 15–24&nbsp;tok/s across repeated runs with 4 threads. The project's own numbers, measured on a 47-core AMD EPYC 7642, are 20.7&nbsp;tok/s on one thread and 126.8&nbsp;tok/s at 40 threads, and 18–36% faster than llama.cpp CPU on the same model and quantisation. Your laptop will land somewhere between the two: this is a small model on a CPU, so expect tens of tokens per second, not hundreds.</p>
+<p>A second prompt checks arithmetic, and it is the one the README uses as its worked example:</p>
+<pre><code class="language-bash">./build/asm-llm -m models/qwen3-0.6b-q8_0.asmbin \
+  -p "If Alice has 3 apples and Bob gives her 4 more, then she eats 2, how many apples does Alice have?" \
+  -n 96 -t 4</code></pre>
+<pre><code class="language-text">Let's break it down step by step:
+
+- Alice starts with **3 apples**.
+- Bob gives her **4 more apples**, so she now has:
+  $$
+  3 + 4 = 7 	ext{ apples}
+  $$
+- Then she eats **2 apples**, so the final number of apples she has is:
+  $$
+  7 - 2 = 5
+  $$
+
+**Answer:** Alice has **5 apples**.
+[asm-llm] prefill: 39 tok in 2199.98 ms (17.73 tok/s)
+[asm-llm] decode : 96 tok in 5714.13 ms (16.63 tok/s, threads=4)</code></pre>
+<p>Correct, with the step-by-step working and the LaTeX intact. Greedy decoding is deterministic here — the same prompt and flags produce byte-identical output on every run, and identical output at any thread count, which the project verifies against PyTorch (64/64 greedy tokens matching).</p>
+<p>Two more flags are worth trying before moving on. <code>--print-tokens</code> shows the tokeniser working — the cache prompt encodes to exactly the 25 tokens the prefill line reports:</p>
+<pre><code class="language-bash">./build/asm-llm -m models/qwen3-0.6b-q8_0.asmbin \
+  -p "Explain how a CPU cache works in 3 concise sentences." -n 8 -t 4 --print-tokens</code></pre>
+<pre><code class="language-text">PROMPT_TOKENS:151644,872,198,840,20772,1246,264,13940,6500,4278,304,220,18,63594,22870,13,151645,198,151644,77091,198,151667,271,151668,271
+A CPU cache is a small amount of
+GEN_TOKENS:32,13940,6500,374,264,2613,3311,315</code></pre>
+<p>And <code>--chat</code> starts an interactive multi-turn session with the KV-cache preserved across turns. Piped input works, which makes it scriptable:</p>
+<pre><code class="language-bash">printf 'What is 2 + 2?
+/quit
+' | ./build/asm-llm \
+  -m models/qwen3-0.6b-q8_0.asmbin --chat -t 4</code></pre>
+<pre><code class="language-text">Interactive Multi-Turn Chat (/clear, /think, /nothink, /quit)
+
+asm-llm&gt; 2 + 2 = 4.
+[asm-llm] prefill: 20 tok in 25315.32 ms (0.79 tok/s)
+[asm-llm] decode : 8 tok in 18817.40 ms (0.37 tok/s, threads=4) ctx=30/2048</code></pre>
+<p>Ignore the speed on that run — a training job was competing for the same cores while it ran. What matters is the behaviour: the prompt is answered, the context line reports <code>ctx=30/2048</code>, and <code>/quit</code> exits cleanly. The chat commands are <code>/clear</code> to reset the conversation, <code>/think</code> and <code>/nothink</code> to toggle reasoning mode, and <code>/quit</code> to leave.</p>
+<p>Reasoning mode deserves a look because it shows the model's limits honestly. With <code>--think</code>, Qwen3-0.6B writes out its working:</p>
+<pre><code class="language-bash">./build/asm-llm -m models/qwen3-0.6b-q8_0.asmbin \
+  -p "What is 17 * 23?" -n 512 -t 4 --think</code></pre>
+<pre><code class="language-text">&lt;think&gt;
+Okay, so I need to figure out what 17 multiplied by 23 is. Hmm, let me think. [...]
+First, maybe I can split 17 into 10 and 7. Then 23 into 20 and 3. [...]
+10*20 is straightforward. 10 times 20 is 200. Then 7*3 is 21. Adding those together, 200 + 21 equals 221. Wait, so is the answer 221? [...]
+17*20 is 340, and 17*3 is 51. Adding those gives 340 + 51 = 391. Wait, hold on, that's conflicting with my previous result. Which one is correct? [...]
+[asm-llm] prefill: 18 tok in 1022.82 ms (17.60 tok/s)
+[asm-llm] decode : 512 tok in 34804.70 ms (14.68 tok/s, threads=4)</code></pre>
+<p>The 0.6B model talks itself into the wrong answer (221), catches the mistake, recomputes correctly (391) — and then runs out of its 512-token budget mid-sentence before giving a final answer. That is a useful thing to see: the reasoning machinery works, the arithmetic is shaky, and the token budget is the binding constraint. For real use, keep <code>--think</code> prompts short and the budget generous; for quick answers, leave it off.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/img2.webp" alt="Diagram of the llm.asm pipeline: model weights flow into an export step, then into a tiny binary that produces text"><figcaption>Pipeline: Hugging Face weights in, one compact .asmbin out, a 14 KB binary doing the inference. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="5-train">Step 5 — Train a Mini-GPT from scratch<a class="anchor" href="#5-train" aria-label="Link to section">#</a></h2>
+<p>The trainer is the most surprising part of the repo, because training is where you would expect assembly to fall over. It does not: <code>asm-gpt-train</code> is a complete transformer trainer — forward pass, analytical backward pass, AdamW with decoupled weight decay, gradient clipping, learning-rate warmup and cosine decay — in 32,944 bytes, with no Python anywhere in the loop. The model is a 6-layer, 192-dimension Mini-GPT with 2,681,664 parameters, trained on TinyShakespeare. Download the corpus and build the trainer:</p>
+<pre><code class="language-bash">mkdir -p data checkpoints
+curl -fsSL https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt \
+  -o data/tinyshakespeare.txt
+make train
+make train-check</code></pre>
+<p>Then run the 400-step demo from the trainer's README. The flags are the full configuration: 6 layers, dim 192, 6 heads, 512 hidden, batch 16, sequence 128, 400 steps, learning rate 0.002, 4 threads, plain logging instead of the Braille TUI (which needs a real terminal):</p>
+<pre><code class="language-bash">./build/asm-gpt-train \
+  --data data/tinyshakespeare.txt \
+  --layers 6 --dim 192 --heads 6 --hidden 512 \
+  --batch 16 --seq 128 --steps 400 \
+  --lr 0.002 --wd 0.15 --grad-clip 1.0 --warmup 40 --seed 42 \
+  -t 4 --plain --log-every 50 --eval-every 40 --sample-every 100 --sample-tokens 200 \
+  --prompt "ROMEO:
+" --save checkpoints/demo.ckpt</code></pre>
+<p>On this sandbox the run took 12 minutes 33 seconds — the project's 35-second figure is for a 24-thread EPYC, and a shared 4-core VM is not that. The loss curve is the point, and it is real:</p>
+<pre><code class="language-text">step 1/400   | train_loss=4.1872 | gnorm=9.50 | lr=0.000050
+step 40/400  | train_loss=2.4509 | val_loss=2.4565 | gnorm=1.03 | lr=0.002000
+step 100/400 | train_loss=2.1542 | gnorm=0.56 | lr=0.001883
+step 200/400 | train_loss=1.9669 | val_loss=2.0067 | gnorm=0.59 | lr=0.001264
+step 300/400 | train_loss=1.7106 | gnorm=0.51 | lr=0.000528
+step 400/400 | train_loss=1.6604 | val_loss=1.8288 | gnorm=0.53 | lr=0.000200</code></pre>
+<p>Training loss falls from 4.19 to 1.66, validation from 2.46 to 1.83, and the final train loss of 1.6604 is identical to the figure in the project's README — same seed, same data, same result, which is the determinism claim holding up on a different machine. The samples show what the loss numbers mean. At step 100 the model has the rhythm of verse but not the words:</p>
+<pre><code class="language-text">--- sample @ step 100 ---
+ROMEO:
+Ang worde the we powes, lophion a seree meart,
+Ther thast the ime at the to no meret,
+The wind fort the cis prang sendathene sils,
+Mus my to stroother to se and as dithen and so my all wou lore, mears</code></pre>
+<p>By step 200 it has speaker turns, and by step 400 it is producing recognisable Shakespeare-shaped dialogue — wrong words, right shape:</p>
+<pre><code class="language-text">--- sample @ step 400 ---
+ROMEO:
+Nay, to lond, in if as my kears, some with death.
+
+DUKE VINCENTIO:
+What in the not the deady uppray, that the abrot
+So so and comman trow of my shall with wife:
+Then the word, me, I say againts and do</code></pre>
+<p>That step-400 sample is also identical to the one in the project's README, character for character. If you run this yourself with the same flags and seed, you will get the same text — which is a stronger reproducibility claim than most ML projects can make.</p>
+<p>Checkpoints are the other half of the workflow: train once, sample later. A shorter 100-step run with <code>--save</code> writes a 10,727,232-byte <code>.gptckpt</code> in 146.72 seconds, and <code>--sample-only</code> loads it back for generation:</p>
+<pre><code class="language-bash">./build/asm-gpt-train --load checkpoints/demo.ckpt --sample-only \
+  --prompt "KING RICHARD:
+" \
+  --sample-tokens 240 --temp 0.75 --topp 0.92 --seed 1337 -t 4</code></pre>
+<pre><code class="language-text">KING RICHARD:
+Ce wing is murd dome are ord say dom core;
+Whing and you and your bat ward mears seres mome bean yourer:
+You hame and sant are frin in sor to fore,
+I whaid you thir aver, the are to matht,
+And lon ond that cough the fion sore,
+Ond ore bet t</code></pre>
+<p>One hundred steps is not much training, so the text is rough — but the pipeline is the point: the checkpoint round-trips, sampling works from a saved model, and the whole train-then-generate loop runs with zero Python. If you want the full convergence run, the README's 1,500-step configuration (sequence 256) takes the validation loss to 1.51 in about four minutes on their hardware; on this box, budget roughly an hour.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/llm-asm-qwen3-pure-assembly-inference-tutorial/img3.webp" alt="A descending training loss curve on a dark grid, with glowing dots marking the steps and a small quill at the end"><figcaption>Training loss, 400 steps: 4.19 down to 1.66, with the samples getting steadily more Shakespeare-shaped. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="6-bare-metal-os">Step 6 — The 24 KB operating system<a class="anchor" href="#6-bare-metal-os" aria-label="Link to section">#</a></h2>
+<p>The third project is the one that sounds impossible: a bootable x86-64 operating system that runs Qwen3-0.6B with no Linux, no Windows, and no disk. The kernel is the same inference code compiled with a bare-metal flag, plus a bootloader, an ACPI/SMP bring-up, VGA and serial drivers, and a PS/2 keyboard driver. Build it and inspect it:</p>
+<pre><code class="language-bash">make os FAST_Q8=1
+make os-check</code></pre>
+<pre><code class="language-text">-rwxr-xr-x 1 user user 24252 build/asm-llm-os.elf
+build/asm-llm-os.elf: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), statically linked, stripped</code></pre>
+<p>That build is verified — it ran here and produced the same 24,252-byte kernel the README specifies. Booting it is a different matter, and this is where the honest labelling matters: <strong>the boot was not run in this sandbox.</strong> It needs QEMU with KVM, and this virtual machine has neither QEMU installed nor <code>/dev/kvm</code> available. The commands below are the project's own, from its README and Makefile — they are documented, not verified here, and you should run them on a machine with KVM:</p>
+<pre><code class="language-bash">qemu-system-x86_64 -enable-kvm -cpu host -m 2G -smp 16 \
+  -kernel build/asm-llm-os.elf \
+  -initrd models/qwen3-0.6b-q8_0.asmbin \
+  -nographic</code></pre>
+<p>Or the Makefile shortcut, including a one-shot batch prompt with a clean ACPI shutdown:</p>
+<pre><code class="language-bash">make os-run MODEL=models/qwen3-0.6b-q8_0.asmbin SMP=16 \
+  CMDLINE='prompt="Explain how a CPU cache works in 3 concise sentences." max_tokens=64 think=0 shutdown=1'</code></pre>
+<p>What the project reports for that boot, measured on its own hardware: 74–94&nbsp;ms from power-on to an interactive <code>asm-llm&gt;</code> chat prompt, 134.9&nbsp;tok/s decode under KVM on 16 vCPUs, and the same tokens as the Linux build — 100% parity across 1 to 32 vCPUs. The model file is passed as an initrd and bound zero-copy from RAM on 2&nbsp;MiB huge pages, which is why the bare-metal build is slightly faster than the Linux one. There is also a bootable hybrid BIOS+UEFI ISO target (<code>make os-iso</code>) for running it on real hardware or a diskless Proxmox VM — the project documents a 0&nbsp;GB-disk VM running at 55.4&nbsp;tok/s on a Xeon E5-2670 v3. Treat those as the project's numbers, not this tutorial's: the kernel builds here, the boot is yours to try on a machine with KVM.</p>
+
+<h2 id="which-approach">When to use this vs alternatives<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Approach</th><th>Best when</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td><strong>llm.asm (this tutorial)</strong></td><td>You want to learn how inference actually works; you need the smallest possible runtime; you want deterministic, dependency-free binaries</td><td>Qwen3-0.6B only; CPU only; no tool use, no server mode, no GPU; a 0.6B model is weak at reasoning</td></tr>
+<tr><td><strong>llama.cpp</strong></td><td>You need real work done: any GGUF model, server mode, tool calling, GPU offload, embeddings</td><td>Larger, more moving parts; you will not read the whole stack in a weekend</td></tr>
+<tr><td><strong>Ollama</strong></td><td>You want a model running with one command and a clean API, and you do not care how it works</td><td>Heavier runtime; less control over quantisation and threading; hides the internals</td></tr>
+<tr><td><strong>PyTorch / transformers</strong></td><td>You are training or fine-tuning, or you need the ecosystem (datasets, evals, PEFT)</td><td>Multi-gigabyte installs; slow on CPU; the opposite of minimal</td></tr>
+</tbody></table></div>
+<p>The honest summary: llm.asm is not the tool you reach for to ship a product. llama.cpp is faster to set up for real models, Ollama is easier, and PyTorch is where training happens at scale. What llm.asm is for is understanding — and for the cases where a 14&nbsp;KB static binary that needs nothing is itself the requirement: embedded systems, air-gapped machines, demos, and teaching. It is also the fastest way to answer the question "what does a transformer cost, really?" — because you can read every line of the answer.</p>
+
+<h2 id="limitations">Limitations<a class="anchor" href="#limitations" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>One model.</strong> Inference is hard-wired to Qwen3-0.6B. There is no model zoo, no GGUF loader, and no path to a bigger model without writing one.</li>
+<li><strong>One architecture family.</strong> The trainer is a fixed Mini-GPT shape. It teaches the mechanics of training; it will not train anything you would deploy.</li>
+<li><strong>CPU only, x86-64 only.</strong> No GPU path, no ARM. The AVX2/FMA/F16C requirement excludes older hardware and every non-x86 machine.</li>
+<li><strong>A 0.6B model is weak.</strong> It answers factual questions cleanly, writes plausible prose, and then — as the <code>--think</code> run showed — talks itself into 221 before catching the error. Treat its outputs as a demonstration, not an oracle.</li>
+<li><strong>The speed claims are the project's, on the project's hardware.</strong> My measured decode on this shared sandbox was 15–24&nbsp;tok/s at 4 threads; their EPYC numbers are 20.7&nbsp;tok/s on one thread and 126.8&nbsp;tok/s at 40 threads. The +18–36% lead over llama.cpp is their benchmark, not mine — I did not build llama.cpp to re-check it.</li>
+<li><strong>The bare-metal boot is unverified here.</strong> The kernel builds; the boot needs QEMU/KVM, which this sandbox lacks. The boot numbers in Step 6 are the project's measurements.</li>
+<li><strong>Four commits, three days old.</strong> The repository was created on November 25, 2026. That is the risk with any fast-rising project: the code is fresh, the issue tracker is thin, and the API can change. Pin the commit (<code>e7d4883</code> is what this tutorial ran) if you build on it.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>A language model is, at the bottom, a few thousand lines of arithmetic: matrix multiplies, a normalisation, an attention pass, a sampler. Frameworks hide that under layers of abstraction until it feels like magic. llm.asm removes the layers. Clone it, run <code>make all</code>, and you have a 14&nbsp;KB binary that runs a real model, a 32&nbsp;KB binary that trains a real transformer from scratch, and a 24&nbsp;KB kernel that boots a computer into a chat prompt with no operating system at all — each one small enough to read end to end. The model it runs is small and the speed on a shared VM is modest, but that is not the point. The point is that you can now see the whole machine, and once you have seen it, every other inference stack makes more sense. That is worth an evening, and it is why 2,400 people starred it in three days.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="llm-asm-qwen3-pure-assembly-inference-tutorial"></div><div class="comments" data-comments="llm-asm-qwen3-pure-assembly-inference-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/gguf-quantization-imatrix-measured/"><span class="chip">Tutorials</span><h3>Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</h3><div class="meta">September 28, 2026 · 14 min read</div></a><a class="rel-card" href="/articles/fast-anything-rust-port-tutorial/"><span class="chip">Tutorials</span><h3>Port the 5% that's slow: hands-on with fast-anything's Rust speedup loop</h3><div class="meta">November 24, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/sherpa-onnx-offline-speech-toolkit-tutorial/"><span class="chip">Tutorials</span><h3>One toolkit, every speech job, zero cloud: hands-on with sherpa-onnx</h3><div class="meta">November 24, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/mastra-local-ollama-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a local AI agent with Mastra and Ollama: no API key, no cloud</h3><div class="meta">November 27, 2026 · 20 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run llm.asm?</h3><p>No. Everything in this tutorial runs on a CPU — the inference was measured at 15–24 tok/s decode on a shared 4-core virtual machine with no GPU. A faster CPU helps; a GPU is not used at all.</p><h3>Which models can llm.asm run?</h3><p>Only Qwen3-0.6B for inference. The inference engine is hard-wired to that architecture and its .asmbin format. The trainer is a separate Mini-GPT and is not tied to Qwen. For other models, use llama.cpp.</p><h3>Is it faster than llama.cpp?</h3><p>The project reports 18–36% faster CPU decode than llama.cpp on Qwen3-0.6B Q8_0, measured on a 47-core AMD EPYC 7642. That benchmark was not re-run here — this tutorial measured llm.asm only, at 15–24 tok/s decode on a 4-core sandbox.</p><h3>Can I boot the bare-metal OS myself?</h3><p>Yes, on a machine with QEMU and KVM: the 24,252-byte kernel builds cleanly and the project documents the boot command. It was not booted in this sandbox, which has neither QEMU nor /dev/kvm, so the boot numbers in Step 6 are the project's measurements.</p><h3>Is llm.asm free for commercial use?</h3><p>Yes. The repository is MIT licensed, and Qwen3-0.6B is Apache 2.0. Check the Qwen license terms in the model repo before shipping anything, but there is no revenue cap or commercial restriction on either.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/gguf-quantization-imatrix-measured/">Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</a></li><li><a href="/articles/speculative-decoding-llamacpp-tutorial/">Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</a></li><li><a href="/articles/qwen3-8-27b-local-setup/">Qwen3.8-27B on your own hardware: the complete local setup guide</a></li><li><a href="/articles/fast-anything-rust-port-tutorial/">Port the 5% that's slow: hands-on with fast-anything's Rust speedup loop</a></li><li><a href="/articles/lean-4-verify-ai-math-proofs-tutorial/">Don’t trust the proof — check it: verify AI-generated math with Lean 4</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
