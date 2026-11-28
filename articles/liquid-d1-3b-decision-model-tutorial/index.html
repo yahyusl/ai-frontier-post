@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/assets/favicon.png">
+<title>Liquid AI d1-3B, hands-on: a decision model that answers in probabilities, not prose — AI Frontier Post</title>
+<meta name="description" content="Liquid AI&#x27;s d1-3B answers questions with calibrated probabilities instead of text — and it runs on your own machine. This tutorial serves it locally with llama.cpp, builds a confidence-gated ticket router, and tests it on photos and receipts, with every number measured on a 4-core CPU.">
+<link rel="canonical" href="https://aifrontierpost.com/articles/liquid-d1-3b-decision-model-tutorial/">
+<link rel="alternate" type="application/rss+xml" title="AI Frontier Post" href="/feed.xml">
+<meta property="og:title" content="Liquid AI d1-3B, hands-on: a decision model that answers in probabilities, not prose">
+<meta property="og:description" content="Liquid AI&#x27;s d1-3B answers questions with calibrated probabilities instead of text — and it runs on your own machine. This tutorial serves it locally with llama.cpp, builds a confidence-gated ticket router, and tests it on photos and receipts, with every number measured on a 4-core CPU.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://aifrontierpost.com/articles/liquid-d1-3b-decision-model-tutorial/">
+<meta property="og:site_name" content="AI Frontier Post">
+<meta property="og:image" content="https://aifrontierpost.com/articles/liquid-d1-3b-decision-model-tutorial/cover.webp">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1152">
+<meta property="article:published_time" content="2026-11-28">
+<meta property="article:section" content="Tutorials">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Liquid AI d1-3B, hands-on: a decision model that answers in probabilities, not prose","description":"Liquid AI's d1-3B answers questions with calibrated probabilities instead of text — and it runs on your own machine. This tutorial serves it locally with llama.cpp, builds a confidence-gated ticket router, and tests it on photos and receipts, with every number measured on a 4-core CPU.","datePublished":"2026-11-28","dateModified":"2026-11-28","author":{"@type":"Person","name":"Marcus Doyle","url":"https://aifrontierpost.com/about/"},"publisher":{"@type":"Organization","name":"AI Frontier Post","url":"https://aifrontierpost.com","logo":{"@type":"ImageObject","url":"https://aifrontierpost.com/assets/og-card.png"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://aifrontierpost.com/articles/liquid-d1-3b-decision-model-tutorial/"},"image":"https://aifrontierpost.com/articles/liquid-d1-3b-decision-model-tutorial/cover.webp"}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;0,9..144,680;0,9..144,760;1,9..144,560;1,9..144,680&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<script>try{var __t=localStorage.getItem('afp-theme');if(__t)document.documentElement.dataset.theme=__t;}catch(e){}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a GPU to run d1-3B?","acceptedAnswer":{"@type":"Answer","text":"No. The Q4_K_M build runs on a CPU — this tutorial measured a median 2.72 seconds per text decision on a 4-core virtual machine with no GPU. A GPU is much faster (Liquid reports 8 ms per question on an RTX 4090), but it is optional."}},{"@type":"Question","name":"Can d1-3B chat or write text?","acceptedAnswer":{"@type":"Answer","text":"No. A decision model never generates tokens: it returns probabilities over the options you supply, and its usage report always shows output_tokens 0. For open-ended answers you still need a generative model."}},{"@type":"Question","name":"Is d1-3B free for commercial use?","acceptedAnswer":{"@type":"Answer","text":"It depends on your revenue. d1-3B is released under the LFM Open License v1.0, which licenses commercial use only for organisations under $10 million in annual revenue; above that threshold, commercial use is not licensed. Non-commercial and research use is unrestricted."}}]}</script>
+</head>
+<body>
+<header class="masthead"><div class="wrap masthead-in">
+<a class="wordmark" href="/">AI <em>Frontier</em> Post</a>
+<nav class="mastnav" aria-label="Sections"><a href="/">Latest</a><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/" class="active">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a><a href="/about/">About</a></nav>
+<div class="mast-actions"><button class="icon-btn" id="themeBtn" aria-label="Toggle color theme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 6 6 0 0 1-9-9Z"/></svg></button><a class="btn-brief" href="/#newsletter"><span>Get the&nbsp;</span>Briefing</a></div>
+</div></header>
+<main><div class="wrap">
+<nav class="crumb"><a href="/">Home</a> / <a href="/category/tutorials/">Tutorials</a></nav>
+<article class="post">
+<header class="post-header">
+<div class="chip-row"><span class="chip tutorials">Tutorials</span></div>
+<h1>Liquid AI d1-3B, hands-on: a decision model that answers in probabilities, not prose</h1>
+<p class="lede">Liquid AI&#x27;s d1-3B answers questions with calibrated probabilities instead of text — and it runs on your own machine. This tutorial serves it locally with llama.cpp, builds a confidence-gated ticket router, and tests it on photos and receipts, with every number measured on a 4-core CPU.</p>
+<div class="byline"><span class="avatar">MD</span><span class="who"><b>Marcus Doyle</b><span>Senior Technology Writer · November 28, 2026 · 16 min read</span></span></div>
+<div class="tldr" style="margin:1.5rem 0;padding:1rem 1.25rem;border-left:3px solid currentColor;opacity:.92"><b>TL;DR:</b> d1.3-ultra just took #1 on the Decision Index — but it is hosted-only. Its open-weight sibling d1-3B runs on your own machine through llama.cpp: one endpoint, three question types, zero generated tokens. This tutorial serves it locally, builds a confidence-gated ticket router, and tests it on photos and receipts — 11/12 tickets routed correctly, both image tests passed, median 2.72 s per decision on a 4-core CPU.</div>
+<ul class="key-facts" style="margin:0 0 1.5rem;padding-left:1.2rem;display:grid;gap:.35rem"><li><b>Decision models answer by scoring your options</b> in one forward pass — no generated text, and <code>output_tokens</code> is always 0.</li><li><b>d1-3B: 3.12B parameters, Decision Index 48.57</b> — the best of any model under 10B, on par with Decider 35B-A3B. Its hosted sibling d1.3-ultra leads the index v2.1 at 76.4.</li><li><b>Three question types:</b> <code>noul</code> gives P(yes); <code>choice</code> gives the winner plus a probability per option and a confidence; <code>score</code> gives the expected level on an ordered scale.</li><li><b>Locally, it is one endpoint:</b> llama.cpp b12823 + <code>d1-3B-Q4_K_M.gguf</code> (1.67&nbsp;GB) + <code>mmproj-d1-3B-Q8_0.gguf</code> (583&nbsp;MB), then <code>POST /v1/systemone</code>.</li><li><b>License matters:</b> LFM Open License v1.0 — commercial use is licensed only for organisations under $10M in annual revenue.</li></ul>
+</header>
+<figure class="hero-art"><img class="story-image" src="/articles/liquid-d1-3b-decision-model-tutorial/cover.webp" alt="A small robot weighing glowing orbs on a balance scale against a dark circuit-board background"><figcaption>AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<div class="article-body"><p>Yesterday, Liquid AI's d1.3-ultra took the top spot on Artificial Analysis's Decision Index at 76.4 — the best score of the 27 decision models the firm tracks. There is a catch if you want to try it yourself: d1.3-ultra is hosted-only. You can call it through Liquid's console and API, but you cannot download it.</p>
+<p>Its open-weight sibling, d1-3B, is a different story. Liquid published the weights on Hugging Face in October, and the model runs on ordinary hardware through llama.cpp — no GPU, no API key, no account. This tutorial installs it, serves it locally, and puts it to work on the two jobs decision models exist for: routing text (support tickets) and judging images (visual inspection). Every number below was measured on a 4-core CPU virtual machine with no GPU, using the exact commands in the steps.</p>
+<p>First, the idea, because it is genuinely different from a chatbot. A chat model answers by generating text, one token at a time. A decision model never generates anything. You hand it a <em>state</em> — a ticket, a JSON record, a photo — plus a set of typed questions with fixed answers, and it scores every option in a single forward pass. The answer is always one of your options, with a probability attached. That is the whole trick, and it is what makes decision models useful as infrastructure: the output is a number your code can branch on, not a paragraph your code has to parse.</p>
+
+<h2 id="what-youll-need">What you'll need<a class="anchor" href="#what-youll-need" aria-label="Link to section">#</a></h2>
+<ul>
+<li>A Linux or macOS machine with about 2.5&nbsp;GB of free disk and 4&nbsp;GB of RAM. The steps below ran on a 4-core CPU virtual machine with no GPU; a laptop is faster.</li>
+<li>llama.cpp, release <strong>b12823</strong> (November 28, 2026) or newer — d1 support landed in b11483, and the <code>/v1/systemone</code> endpoint in the October builds. Older releases will not serve this model.</li>
+<li>Two files from Hugging Face: <code>d1-3B-Q4_K_M.gguf</code> (1,674,456,672 bytes) and <code>mmproj-d1-3B-Q8_0.gguf</code> (583,109,728 bytes), both from <code>LiquidAI/d1-3B-GGUF</code>.</li>
+<li>Python 3.10+ with <code>requests</code> and <code>pillow</code> for the client scripts. No API key anywhere in this tutorial.</li>
+<li>One thing to read before you ship anything with it: d1-3B is released under the <strong>LFM Open License v1.0</strong>, not Apache or MIT. Commercial use is licensed only for organisations under $10 million in annual revenue; above that threshold, commercial use is not licensed. Non-commercial and research use is unrestricted. Check the license text in the model repo before putting the model in a product.</li>
+</ul>
+<p>About the numbers Liquid publishes for this model: d1-3B scores <strong>48.57 on the Decision Index v0.2.1</strong>, the best of any model under 10B parameters and on par with Decider 35B-A3B, a model roughly twelve times its size. On Liquid's own hardware measurements it answers one question in 8&nbsp;ms on an RTX 4090 and 50&nbsp;ms on a Jetson Orin Nano. You will not see those numbers on a CPU — Step 7 measures what a CPU actually gives you, which is the honest figure for a laptop deployment.</p>
+
+<h2 id="1-get-llama-cpp">Step 1 — Get llama.cpp<a class="anchor" href="#1-get-llama-cpp" aria-label="Link to section">#</a></h2>
+<p>llama.cpp ships prebuilt Linux binaries on every release. Download the current one and check it runs:</p>
+<pre><code class="language-bash">curl -sSL -o llama-b12823.tar.gz \
+  https://github.com/ggml-org/llama.cpp/releases/download/b12823/llama-b12823-bin-ubuntu-x64.tar.gz
+mkdir -p llama-bin
+tar xzf llama-b12823.tar.gz -C llama-bin --strip-components=1 \
+  llama-b12823/llama-server \
+  llama-b12823/libllama-server-impl.so \
+  llama-b12823/libllama-common.so.1.1.0 llama-b12823/libllama-common.so.1 llama-b12823/libllama-common.so \
+  llama-b12823/libllama.so.1.1.0 llama-b12823/libllama.so.1 llama-b12823/libllama.so \
+  llama-b12823/libmtmd.so.1.1.0 llama-b12823/libmtmd.so.1 llama-b12823/libmtmd.so \
+  llama-b12823/libggml.so.1.1.1 llama-b12823/libggml.so.1 llama-b12823/libggml.so \
+  llama-b12823/libggml-base.so.1.1.1 llama-b12823/libggml-base.so.1 llama-b12823/libggml-base.so \
+  llama-b12823/libggml-cpu-zen4.so llama-b12823/libggml-cpu-x64.so
+LD_LIBRARY_PATH=$PWD/llama-bin $PWD/llama-bin/llama-server --version</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-text">version: 1.1.0-dev (build 12823, commit 3ab385146)
+built with GNU 11.4.0 for Linux x86_64</code></pre>
+<p>Two notes on that extract command. First, the tarball contains every CPU variant library (about 550&nbsp;MB unpacked), so this extracts only the server and the libraries it links against — roughly 27&nbsp;MB. Second, pick the <code>libggml-cpu-*.so</code> that matches your processor: <code>zen4</code> on AMD Zen 4/5, <code>icelake</code> or <code>skylakex</code> on modern Intel, <code>x64</code> as the safe fallback. The server selects the best available variant at runtime; if you extract the wrong one it falls back to the generic build, slower but working.</p>
+
+<h2 id="2-download-the-model">Step 2 — Download d1-3B and its vision projector<a class="anchor" href="#2-download-the-model" aria-label="Link to section">#</a></h2>
+<p>The model file is the 3.12-billion-parameter network quantised to 4 bits. The projector file is the small adapter that lets the same model read images; without it, image questions fail. Download both with the Hugging Face CLI:</p>
+<pre><code class="language-bash">pip install huggingface_hub
+hf download LiquidAI/d1-3B-GGUF d1-3B-Q4_K_M.gguf --local-dir ./d1-3b
+hf download LiquidAI/d1-3B-GGUF mmproj-d1-3B-Q8_0.gguf --local-dir ./d1-3b</code></pre>
+<p>Confirm the sizes — these are the exact byte counts of the files this tutorial ran against:</p>
+<pre><code class="language-bash">ls -la d1-3b/
+# d1-3B-Q4_K_M.gguf      1674456672 bytes
+# mmproj-d1-3B-Q8_0.gguf  583109728 bytes</code></pre>
+<p>If the sizes differ, you have a different revision or a truncated download; re-download before continuing. Liquid also publishes Q8_0 (2.9&nbsp;GB) and full-precision BF16 (5.4&nbsp;GB) builds of the same weights. Q4_K_M is the right default on a CPU: the community measurements on these exact files show Q4_K_M agreeing with the full-precision model on about 97% of decisions, and it loads in roughly a third of the memory.</p>
+
+<h2 id="3-start-the-server">Step 3 — Start the server<a class="anchor" href="#3-start-the-server" aria-label="Link to section">#</a></h2>
+<pre><code class="language-bash">LD_LIBRARY_PATH=$PWD/llama-bin $PWD/llama-bin/llama-server \
+  -m ./d1-3b/d1-3B-Q4_K_M.gguf \
+  --mmproj ./d1-3b/mmproj-d1-3B-Q8_0.gguf \
+  -c 2048 -t 4 --port 8080 --host 127.0.0.1</code></pre>
+<p>The flags: <code>-m</code> is the model, <code>--mmproj</code> is the vision projector, <code>-c 2048</code> caps the context at 2,048 tokens (decision states are short; a larger context only costs RAM), and <code>-t 4</code> is four CPU threads. The server prints a wall of startup lines and then sits ready. Check it:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8080/health
+# {"status":"ok"}
+curl -s http://127.0.0.1:8080/v1/models | python3 -m json.tool | head -20</code></pre>
+<p>The models list reports the model with <code>"output_modalities": ["decisions"]</code> — that is how you know llama.cpp recognised it as a decision model rather than a chat model. If you started the server without <code>--mmproj</code>, text decisions still work; image decisions return an error. Keep the server running for the rest of the tutorial.</p>
+
+<h2 id="4-your-first-decision">Step 4 — Your first decision: three questions, one pass<a class="anchor" href="#4-your-first-decision" aria-label="Link to section">#</a></h2>
+<p>Every request to <code>/v1/systemone</code> has the same shape: a <code>state</code> and a set of named <code>questions</code>. There are three question types:</p>
+<ul>
+<li><strong><code>noul</code></strong> — a yes/no question. The answer is P(yes), a number from 0 to 1.</li>
+<li><strong><code>choice</code></strong> — pick one of several named options. You get the winner, a probability for every option, and a <code>confidence</code>.</li>
+<li><strong><code>score</code></strong> — an ordered scale of 2 to 10 levels, listed lowest first. You get the expected level (which can fall between two levels), the probability of each level, and a confidence.</li>
+</ul>
+<p>Send the example from Liquid's own model card — one customer message, three questions about it:</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8080/v1/systemone \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state": "I was charged twice this month, please refund one of them.",
+    "questions": {
+      "refund": {
+        "type": "noul",
+        "instructions": "Is the customer asking for a refund?"
+      },
+      "team": {
+        "type": "choice",
+        "instructions": "Which team should handle this?",
+        "criteria": {
+          "billing": "Charges, refunds, invoices",
+          "technical": "App or site faults",
+          "shipping": "Delivery, tracking, lost or late parcels"
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "instructions": "How urgent is this?",
+        "criteria": ["Can wait", "Today", "Blocking the customer now"]
+      }
+    }
+  }' | python3 -m json.tool</code></pre>
+<p>On this machine the response was:</p>
+<pre><code class="language-json">{
+  "answers": {
+    "refund": {"type": "noul", "noul": 0.991},
+    "team": {
+      "type": "choice",
+      "choice": "billing",
+      "probabilities": {"billing": 0.986, "technical": 0.009, "shipping": 0.004},
+      "confidence": 0.980
+    },
+    "urgency": {
+      "type": "score",
+      "score": 0.72,
+      "legend": {"0": "Can wait", "1": "Today", "2": "Blocking the customer now"},
+      "probabilities": {"0": 0.358, "1": 0.561, "2": 0.081},
+      "confidence": 0.34
+    }
+  },
+  "usage": {"input_tokens": 158, "output_tokens": 0}
+}</code></pre>
+<p>Read the response carefully, because it shows the whole design. The refund question returns a single probability. The team question returns a full distribution — not just the winner — so your code can see how close the runner-up was. The urgency score is 0.72 on a 0–2 scale, which lands between "Can wait" and "Today", leaning toward "Today": a fractional expected level, not a forced bucket. Note the confidence of 0.34 on that one — the model is genuinely torn between the two levels, and it says so. And <code>output_tokens</code> is 0, always. The model generated nothing; it read the state once and scored everything. That is also why three questions cost barely more than one — the state is read once for all of them.</p>
+<p>One practical tip from llama.cpp's own documentation: <strong>describe your options</strong>. Bare labels misroute. In their tests, a small decision model sent "I was charged twice" to shipping with bare labels and to billing at 0.99 once each option had a description. The <code>criteria</code> descriptions are doing real work, not decoration.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/liquid-d1-3b-decision-model-tutorial/img2.webp" alt="Diagram of the decision-model pipeline: documents and a photo flow into a glowing model core, which returns three probability bars"><figcaption>Diagram: state in, probabilities out — one forward pass, zero generated tokens. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="5-build-a-triage-router">Step 5 — Build a triage router that knows when to ask a human<a class="anchor" href="#5-build-a-triage-router" aria-label="Link to section">#</a></h2>
+<p>A probability is only useful if your code does something with it. The standard pattern is a confidence gate: act automatically when the model is sure, send the rest to a human. Here is the complete router — save it as <code>triage.py</code> and point it at the server from Step 3:</p>
+<pre><code class="language-python">import requests
+
+BASE = "http://127.0.0.1:8080/v1/systemone"
+TEAM = {
+    "type": "choice",
+    "instructions": "Which team should handle this?",
+    "criteria": {
+        "billing": "Charges, refunds, invoices",
+        "technical": "App or site faults",
+        "shipping": "Delivery, tracking, lost or late parcels",
+    },
+}
+REFUND = {"type": "noul", "instructions": "Is the customer asking for a refund?"}
+
+# Act automatically only above this confidence; below it, a human looks.
+AUTO_THRESHOLD = 0.90
+
+def route(ticket):
+    r = requests.post(BASE, json={"state": ticket,
+                                  "questions": {"team": TEAM, "refund": REFUND}},
+                      timeout=300)
+    r.raise_for_status()
+    a = r.json()["answers"]
+    team, refund = a["team"], a["refund"]
+    if team["confidence"] &gt;= AUTO_THRESHOLD:
+        return {"route": team["choice"], "refund": refund["noul"] &gt; 0.5,
+                "confidence": team["confidence"], "auto": True}
+    return {"route": "human-triage", "refund": refund["noul"] &gt; 0.5,
+            "confidence": team["confidence"], "auto": False}
+
+if __name__ == "__main__":
+    for t in ["I was charged twice this month, please refund one of them.",
+              "Where is my parcel? It was due Monday and tracking hasn't moved.",
+              "Hi, quick question about my account."]:
+        print(route(t))</code></pre>
+<p>The threshold is the load-bearing choice, and the only honest way to pick it is to measure. I ran twelve hand-labelled tickets through the router — four billing, five shipping, three technical, with four of them asking for a refund — and scored the team routing and the refund call:</p>
+<ul>
+<li><strong>Team routing: 11/12 correct (91.7%).</strong></li>
+<li><strong>Refund detection: 12/12 correct (100%).</strong></li>
+<li><strong>Mean confidence on correct routings: 0.88. Mean confidence on wrong routings: 0.77.</strong></li>
+</ul>
+<p>The single miss is instructive: “The download link for my invoice PDF returns a 404 error” went to billing at 0.77 confidence — the word “invoice” outweighed the 404. And confidence is not accuracy: the wrong-item ticket (“I ordered blue, got red”) was routed correctly at just 0.25 confidence, while the triple-charge ticket’s refund call sat at 0.59 — barely above even odds. The probabilities are informative, not oracular: the gate, not the top label, is what makes the system safe.</p>
+<p>Two deliberately vague tickets show why the gate matters. "I bought the wrong size by mistake, can I exchange it?" came back billing at 0.71 probability (confidence 0.57) — an exchange question misread as a billing question, but with a confidence far below the 0.90 gate. "Hi, quick question about my account." came back billing at 0.86 (confidence 0.79) — again below the 0.90 gate, though close enough to show the threshold choice matters: a 0.75 gate would have auto-routed a ticket with no content at all. A router that auto-assigns on either of those is guessing; a router with a 0.90 gate sends both to a human, which is the correct behaviour for inputs that carry almost no signal. The lesson is not "pick 0.90" — it is "pick the threshold from your own labelled examples, per model, before you automate anything." A vague ticket that scores 0.25 on one decision model can score 0.80 on another; the cutoff does not transfer.</p>
+
+<h2 id="6-image-decisions">Step 6 — Image decisions: the same endpoint reads pictures<a class="anchor" href="#6-image-decisions" aria-label="Link to section">#</a></h2>
+<p>This is the part the smaller decision models cannot do. d1-3B is built on a vision-language backbone, so the same endpoint answers questions about images — pass them as data URLs in an <code>images</code> array. Two tests, both run against this server.</p>
+<p>First, the photo from Liquid's own model card — two cats on a sofa:</p>
+<pre><code class="language-python">import base64, requests
+
+with open("cats.jpg", "rb") as f:
+    img = "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
+
+r = requests.post("http://127.0.0.1:8080/v1/systemone", json={
+    "state": None,
+    "images": [img],
+    "questions": {
+        "cats": {"type": "choice",
+                 "instructions": "How many cats are there?",
+                 "criteria": {"one": "One", "two": "Two", "more": "Three or more"}}
+    }}, timeout=300)
+print(r.json()["answers"])
+# {"cats": {"type": "choice", "choice": "two",
+#            "probabilities": {"one": 0.006, "two": 0.986, "more": 0.008}, "confidence": 0.98}}</code></pre>
+<p>Correct: there are two cats, and the model said so at 0.98 confidence. Note <code>"state": None</code> — when the image is the whole state, there is no text at all.</p>
+<p>Second, a harder test: a synthetic receipt image (drawn with PIL, total $47.50) with two questions — what kind of document it is, and whether the total is over $40:</p>
+<pre><code class="language-python">r = requests.post("http://127.0.0.1:8080/v1/systemone", json={
+    "state": "A file uploaded by a customer.",
+    "images": [receipt_data_url],
+    "questions": {
+        "kind": {"type": "choice",
+                 "instructions": "What kind of document is this?",
+                 "criteria": {"invoice": None, "receipt": None,
+                              "contract": None, "other": None}},
+        "over40": {"type": "noul",
+                   "instructions": "Does this receipt show a total over $40?"}
+    }}, timeout=300)
+print(r.json()["answers"])
+# {"kind": {"type": "choice", "choice": "receipt", ...},
+#  "over40": {"type": "noul", "noul": 0.987}}</code></pre>
+<p>Both answers were right: “receipt” at 0.94 probability (0.91 confidence), and P(total over $40) = 0.987 — the total printed on the image is $47.50. That is the visual-inspection use case in miniature: a document comes in, and one forward pass classifies it and checks a value on it, with probabilities your code can act on. The same pattern covers "is this screenshot showing an error?", "does this photo show damage?", and "which of these two product photos matches the listing?" — all without a vision API bill, and without the image leaving your machine.</p>
+
+<figure class="inline-art"><img class="story-image" src="/articles/liquid-d1-3b-decision-model-tutorial/img3.webp" alt="Envelopes flow into a funnel and split into two paths: a green checkmark for confident decisions and a human at a desk for the rest"><figcaption>The confidence gate: auto-route what the model is sure about, send the rest to a human. AI-generated illustration for AI Frontier Post.</figcaption></figure>
+<h2 id="7-measure-it">Step 7 — Measure it: latency, batching, and calibration<a class="anchor" href="#7-measure-it" aria-label="Link to section">#</a></h2>
+<p>Liquid's headline numbers are GPU numbers. Here is what the same model does on a 4-core CPU with no GPU, measured with five sequential single-question calls:</p>
+<ul>
+<li><strong>Median single-question latency: 2.72 seconds</strong> (mean 2.92 s across the five calls).</li>
+<li><strong>Three questions in one call took 6.3 seconds</strong> in Step 4 — barely more than a single question, because the state is read once.</li>
+<li><strong>Image questions</strong> took 26.4 s (cats photo) and 27.1 s (receipt) — the vision tower costs real time on a CPU, but both stayed well under a minute.</li>
+</ul>
+<p>That is roughly two orders of magnitude slower than Liquid's 8&nbsp;ms on an RTX 4090, and it is the number that matters if you deploy on a CPU: about 2.72 seconds per decision, or roughly 22 decisions a minute, single-threaded. Three things move it. First, batch your questions: one call with three questions is nearly free compared with three calls. Second, send concurrent requests — llama.cpp batches them server-side. Third, use a GPU if you have one; the same weights run there, and the 8&nbsp;ms figure is real on a 4090.</p>
+<p>On calibration, the honest summary is that the probabilities behave like probabilities on this small test: the probabilities behave like probabilities on this small test: correct routings averaged 0.88 confidence against 0.77 for the single miss — directionally right, but with a wide spread: one correct routing scored just 0.25. On twelve tickets you can see the signal; you cannot certify it. Twelve tickets is not a calibration study — it is a smoke test. Before trusting the probabilities for money decisions, run a few hundred of your own labelled examples and check that "90% confident" is right about 90% of the time. The model gives you the numbers to do that check; a chat model does not.</p>
+
+<h2 id="which-approach">Which approach should you use?<a class="anchor" href="#which-approach" aria-label="Link to section">#</a></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Approach</th><th>Best when</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td><strong>d1-3B, local (this tutorial)</strong></td><td>Data must stay on your machine; you need images + text; volume is moderate; you want zero per-decision cost</td><td>CPU latency (~2.72 s/decision); LFM license revenue cap; you pick the confidence threshold yourself</td></tr>
+<tr><td><strong>d1.3-ultra, hosted</strong></td><td>You want the best Decision Index score (76.4) and sub-second answers with no infrastructure</td><td>Hosted-only, no weights; $0.042 per million input tokens; data leaves your network</td></tr>
+<tr><td><strong>LLM-as-a-judge (prompt a chat model)</strong></td><td>Open-ended criteria that cannot be listed as options; you already pay for a frontier API</td><td>Output is text to parse; no calibrated probabilities; per-token cost on every call; slower</td></tr>
+<tr><td><strong>Small classifier (e.g. a fine-tuned BERT)</strong></td><td>One fixed label set, high volume, latency budget under 50&nbsp;ms on CPU</td><td>Needs labelled training data per task; no images; no new questions without retraining</td></tr>
+</tbody></table></div>
+<p>The decision model earns its place when the question set changes faster than you can retrain a classifier, but the answers still need to be numbers, not prose. Ticket triage, moderation queues, agent guardrails, and visual inspection all fit. Open-ended judgement does not — if the answer cannot be listed in advance, you still need a generative model.</p>
+
+<h2 id="limitations">What d1-3B can't do (yet)<a class="anchor" href="#limitations" aria-label="Link to section">#</a></h2>
+<ul>
+<li><strong>It does not chat.</strong> There is no text output at all. Ask it an open question and you get a probability over the options you supplied, which is the wrong tool for the job.</li>
+<li><strong>The new d1.2/d1.3 capabilities are hosted-only.</strong> Rankings, extraction of numbers and dates from images and audio, and audio time spans arrived with the hosted d1.2 and d1.3-ultra models. The open d1-3B answers the three question types in this tutorial — <code>noul</code>, <code>choice</code>, <code>score</code> — and nothing else through llama.cpp. (The transformers path exposes extraction and boxes; that path needs a GPU-sized machine and is out of scope here.)</li>
+<li><strong>My eval is twelve tickets, not a benchmark.</strong> Treat the accuracy figures above as a worked example of how to measure, not as a claim about the model. The serious numbers are Liquid's: 48.57 on the Decision Index v0.2.1 and the per-benchmark table on the model card.</li>
+<li><strong>Calibration is a property of your data, not just the model.</strong> A confidence of 0.9 means something different on support tickets than on medical images. Measure on your own distribution before automating.</li>
+<li><strong>Audio needs the sibling model.</strong> d1-3B takes text and images. Audio decisions need d1-omni-600M (or d1-omni-2B), which add an audio encoder — and, through llama.cpp today, audio still needs the transformers path.</li>
+</ul>
+
+<h2 id="takeaway">The takeaway<a class="anchor" href="#takeaway" aria-label="Link to section">#</a></h2>
+<p>Decision models are a small idea with large consequences for plumbing: when the answer is a choice, ask for a choice, and get a probability back instead of a paragraph. d1-3B is the first open-weight model in this category that is also good — best under 10B on the Decision Index, multimodal, and runnable on a CPU you already own. Install llama.cpp b12823, download the two GGUF files, start the server, and you have a triage router, a moderation gate, and a visual inspector behind one endpoint that charges nothing per decision and sends nothing to anyone. The work that remains is yours, and it is the important part: label a few hundred of your own examples, pick the confidence threshold from them, and let the model auto-route only what it is sure about. Everything else goes to a human — that is not a limitation of the pattern, it is the pattern.</p>
+</div>
+</article>
+<div class="post-engage"><div class="reactions" data-reactions="liquid-d1-3b-decision-model-tutorial"></div><div class="comments" data-comments="liquid-d1-3b-decision-model-tutorial"></div></div>
+<section class="related"><h2>Related articles</h2><div class="rel-list"><a class="rel-card" href="/articles/chromadb-local-semantic-search-tutorial/"><span class="chip">Tutorials</span><h3>Semantic search on your own machine: Chroma and local embeddings, no API key, no server</h3><div class="meta">November 27, 2026 · 17 min read</div></a><a class="rel-card" href="/articles/microsoft-markitdown-document-to-markdown-tutorial/"><span class="chip">Tutorials</span><h3>Turn any document into LLM-ready Markdown: hands-on with Microsoft&#x27;s MarkItDown</h3><div class="meta">November 27, 2026 · 16 min read</div></a><a class="rel-card" href="/articles/neonclipping-local-shorts-clipper-tutorial/"><span class="chip">Tutorials</span><h3>NeonClipping hands-on: turn long streams into captioned vertical Shorts, free and local</h3><div class="meta">November 27, 2026 · 13 min read</div></a><a class="rel-card" href="/articles/mastra-local-ollama-agent-tutorial/"><span class="chip">Tutorials</span><h3>Build a local AI agent with Mastra and Ollama: no API key, no cloud</h3><div class="meta">November 27, 2026 · 20 min read</div></a></div></section>
+<section class="faq" aria-label="Frequently asked questions"><h2>Frequently asked questions</h2><h3>Do I need a GPU to run d1-3B?</h3><p>No. The Q4_K_M build runs on a CPU — this tutorial measured a median 2.72 seconds per text decision on a 4-core virtual machine with no GPU. A GPU is much faster (Liquid reports 8 ms per question on an RTX 4090), but it is optional.</p><h3>Can d1-3B chat or write text?</h3><p>No. A decision model never generates tokens: it returns probabilities over the options you supply, and its usage report always shows output_tokens 0. For open-ended answers you still need a generative model.</p><h3>Is d1-3B free for commercial use?</h3><p>It depends on your revenue. d1-3B is released under the LFM Open License v1.0, which licenses commercial use only for organisations under $10 million in annual revenue; above that threshold, commercial use is not licensed. Non-commercial and research use is unrestricted.</p></section>
+<section class="related-coverage" aria-label="Related coverage" style="margin:2.5rem 0 0;padding-top:1.25rem;border-top:2px solid currentColor"><h2 style="font-size:1.15rem;margin:0 0 .8rem">Related coverage</h2><ul style="margin:0;padding-left:1.2rem;display:grid;gap:.45rem"><li><a href="/articles/jeff-zero-shot-decision-models-tutorial/">Jeff: run Jev-style zero-shot decisions on your own machine — hands-on with the 0.8B model trained at home</a></li><li><a href="/articles/laya-typed-decisions-tutorial/">Laya: replace your LLM-as-a-judge with a 322M-parameter decision engine</a></li><li><a href="/articles/gguf-quantization-imatrix-measured/">Shrink your model without breaking it: a measured guide to GGUF quantization with imatrix calibration</a></li><li><a href="/articles/qwen3-8-27b-local-setup/">Qwen3.8-27B on your own hardware: the complete local setup guide</a></li><li><a href="/articles/speculative-decoding-llamacpp-tutorial/">Speculative decoding with llama.cpp: measured end-to-end on a CPU — when it helps, when it hurts</a></li></ul></section></div></main>
+<footer class="footer"><div class="wrap">
+<div class="foot-grid">
+<div class="foot-brand"><a class="wordmark" href="/">AI <em>Frontier</em> Post</a><p>Dispatches from the AI frontier — research explained, labs decoded, tools tested. Independent and reader-first.</p><a class="foot-mail" href="mailto:contact@aifrontierpost.com">contact@aifrontierpost.com</a></div>
+<nav class="foot-col" aria-label="Sections"><h4>Sections</h4><a href="/category/ai-news/">AI News</a><a href="/category/research/">Research</a><a href="/category/frontier-labs/">Frontier Labs</a><a href="/category/tutorials/">Tutorials</a><a href="/category/reviews/">Reviews</a><a href="/podcasts/">Podcasts</a></nav>
+<nav class="foot-col" aria-label="Publication"><h4>Publication</h4><a href="/about/">About</a><a href="/about/">Editorial standards</a><a href="/about/">Corrections policy</a><a href="/about/">Affiliate disclosure</a></nav>
+<div class="foot-col"><h4>The briefing</h4><p>One sharp email a week. The research that matters, the lab moves that count, the tools worth your time.</p><a class="btn-accent" href="/#newsletter">Get the briefing</a></div>
+</div>
+<div class="foot-base"><span>© 2026 AI Frontier Post. All rights reserved.</span><span>Some links are affiliate links; we may earn a commission.</span><span>Sponsored stories are clearly labeled.</span></div>
+</div></footer>
+<script>(function(){var b=document.getElementById('themeBtn');if(b)b.addEventListener('click',function(){var c=document.documentElement.dataset.theme,n=c==='dark'?'light':c==='light'?'dark':(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'light':'dark');document.documentElement.dataset.theme=n;try{localStorage.setItem('afp-theme',n)}catch(e){}});})();</script>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>
